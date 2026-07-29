@@ -1,0 +1,20 @@
+# Ne jamais envoyer ces éléments au démon Docker (et donc jamais dans l'image)
+.git
+.gitignore
+data/
+secrets/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+README.md
+*.md
+!app/**/*.md
+.DS_Store
+@eaDir/

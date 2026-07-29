@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# ConsultAI - Dépendances Python
+# ---------------------------------------------------------------------------
+# Volontairement minimal : l'application doit rester légère pour tourner
+# confortablement sur un NAS Synology (souvent 2-4 Go de RAM disponibles).
+# ---------------------------------------------------------------------------
+
+# --- Serveur web ---
+fastapi>=0.115,<0.117
+uvicorn[standard]>=0.34,<0.36
+python-multipart>=0.0.20,<0.1      # requis par FastAPI pour les uploads de fichiers
+jinja2>=3.1,<4.0                    # rendu de templates/index.html
+
+# --- Base de données ---
+SQLAlchemy>=2.0.36,<2.1
+
+# --- Google Cloud ---
+google-cloud-speech>=2.28,<3.0      # Speech-to-Text v1 (fr-CA)
+google-cloud-storage>=2.18,<4.0     # optionnel : staging GCS pour les longues dictées
+google-genai>=1.0,<2.0              # SDK unifié Gemini (API Studio + Vertex AI)
+
+# --- Autres fournisseurs de modèle de langage ---
+# Sélectionnables depuis le panneau d'administration. Deux SDK légers (httpx
+# + pydantic, déjà présents via FastAPI) : l'image ne grossit presque pas.
+# Deepgram, lui, n'a pas de SDK ici — une seule requête HTTP suffit.
+anthropic>=0.40,<1.0
+openai>=1.60,<3.0

@@ -1,0 +1,171 @@
+# =============================================================================
+# ConsultAI — Stack Docker Compose pour Synology NAS
+# =============================================================================
+# Déploiement :
+#   1. cp .env.example .env       puis éditez .env
+#   2. Déposez la clé du compte de service Google dans ./secrets/gcp-sa.json
+#   3. docker compose up -d --build
+#
+# L'application N'EXPOSE PAS de page de connexion : l'authentification est
+# entièrement déléguée à Pangolin SSO qui doit se trouver devant ce conteneur.
+# =============================================================================
+
+services:
+  consultai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # ⚠️ À FAIRE CORRESPONDRE à l'UID/GID propriétaire de ./data sur le NAS
+        # (en SSH : `id votre_utilisateur`). Les dossiers partagés Synology
+        # portent des ACL qui refusent l'écriture aux UID inconnus, même
+        # lorsque les permissions POSIX affichent 777 : sans le bon UID,
+        # SQLite échoue avec « unable to open database file ».
+        APP_UID: "${APP_UID:-1000}"
+        APP_GID: "${APP_GID:-1000}"
+    image: consultai:latest
+    container_name: consultai
+    restart: unless-stopped
+
+    # --- Réseau -------------------------------------------------------------
+    # BIND_ADDRESS détermine QUI peut atteindre le conteneur :
+    #   127.0.0.1        → NAS uniquement (valable seulement si Pangolin tourne
+    #                      sur ce même NAS ; sinon « Bad Gateway », un proxy
+    #                      distant ne pouvant pas joindre une boucle locale)
+    #   192.168.20.50    → l'interface LAN du NAS, joignable par Pangolin
+    #   0.0.0.0          → toutes les interfaces (à éviter)
+    #
+    # Le port n'est JAMAIS publié sur toutes les interfaces par défaut : on le
+    # lie à une adresse précise, et TRUSTED_PROXIES restreint ensuite les
+    # requêtes acceptées à l'IP réelle de Pangolin.
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${BIND_PORT:-8787}:8000"
+
+    networks:
+      - consultai_net
+      # - pangolin        # décommentez si Pangolin est sur ce réseau externe
+
+    # --- Volumes ------------------------------------------------------------
+    volumes:
+      # Base SQLite persistante (consultations + gabarits).
+      - ./data:/data
+      # Clé du compte de service Google Cloud, en lecture seule.
+      - ./secrets:/secrets:ro
+
+    # --- Variables d'environnement -----------------------------------------
+    # Les valeurs viennent du fichier .env (voir .env.example). La syntaxe
+    # ${VAR:-defaut} garantit un démarrage même si la variable est absente.
+    environment:
+      # ---- Application ----
+      TZ: "${TZ:-America/Toronto}"
+      APP_TITLE: "${APP_TITLE:-ConsultAI — Gériatrie}"
+      DATABASE_URL: "${DATABASE_URL:-sqlite:////data/consultai.db}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+
+      # ---- Authentification / Pangolin SSO ----
+      SSO_HEADER_KEY: "${SSO_HEADER_KEY:-Remote-User}"
+      SSO_HEADER_FALLBACKS: "${SSO_HEADER_FALLBACKS:-X-Forwarded-User,X-Remote-User,X-Authentik-Username}"
+      SSO_EMAIL_HEADER: "${SSO_EMAIL_HEADER:-Remote-Email}"
+      SSO_NAME_HEADER: "${SSO_NAME_HEADER:-Remote-Name}"
+      AUTHORIZED_USERS: "${AUTHORIZED_USERS}"
+      TEMPLATE_ADMINS: "${TEMPLATE_ADMINS:-*}"
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
+      # Mettre à "true" UNIQUEMENT pour un test local sans reverse proxy.
+      AUTH_DISABLED: "${AUTH_DISABLED:-false}"
+      DEV_USER: "${DEV_USER:-dev@local}"
+
+      # ---- Google Cloud Speech-to-Text ----
+      GOOGLE_APPLICATION_CREDENTIALS: "${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/gcp-sa.json}"
+      STT_LANGUAGE_CODE: "${STT_LANGUAGE_CODE:-fr-CA}"
+      STT_MODEL: "${STT_MODEL:-latest_long}"
+      STT_USE_ENHANCED: "${STT_USE_ENHANCED:-true}"
+      STT_API_ENDPOINT: "${STT_API_ENDPOINT:-}"
+      STT_GCS_BUCKET: "${STT_GCS_BUCKET:-}"
+      MAX_AUDIO_MB: "${MAX_AUDIO_MB:-120}"
+
+      # ---- Retrait des longues pauses avant envoi ----
+      # Les trois services facturent à la durée d'audio. Seule la copie
+      # envoyée est raccourcie ; l'enregistrement conservé reste intact.
+      STT_TRIM_SILENCE: "${STT_TRIM_SILENCE:-true}"
+      STT_SILENCE_KEEP_SECONDS: "${STT_SILENCE_KEEP_SECONDS:-0.5}"
+      STT_SILENCE_THRESHOLD_DB: "${STT_SILENCE_THRESHOLD_DB:--40}"
+
+      # ---- Fournisseurs de reconnaissance vocale alternatifs ----
+      # Ces valeurs ne sont que des défauts : le panneau d'administration les
+      # surcharge en base, sans reconstruction d'image.
+      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-}"
+      DEEPGRAM_MODEL: "${DEEPGRAM_MODEL:-nova-2}"
+
+      # ---- AssemblyAI (avec le module médical « medical-v1 ») ----
+      ASSEMBLYAI_API_KEY: "${ASSEMBLYAI_API_KEY:-}"
+      ASSEMBLYAI_MODEL: "${ASSEMBLYAI_MODEL:-universal-3-5-pro}"
+
+      # ---- Soniox (le moins cher, multilingue par conception) ----
+      SONIOX_API_KEY: "${SONIOX_API_KEY:-}"
+      SONIOX_MODEL: "${SONIOX_MODEL:-stt-async-v5}"
+
+      # ---- Déconnexion (Pangolin + fournisseur OIDC) ----
+      LOGOUT_PANGOLIN_UI_URL: "${LOGOUT_PANGOLIN_UI_URL:-}"
+      LOGOUT_OIDC_URL: "${LOGOUT_OIDC_URL:-}"
+      LOGOUT_REDIRECT_URL: "${LOGOUT_REDIRECT_URL:-}"
+      LOGOUT_OIDC_REDIRECT_PARAM: "${LOGOUT_OIDC_REDIRECT_PARAM:-r}"
+
+      # ---- Enregistrements conservés avec les brouillons ----
+      AUDIO_DIR: "${AUDIO_DIR:-/data/audio}"
+
+      # ---- Dictée par segments ----
+      # DICTATION_DIR est sous /data : le volume monté survit au conteneur,
+      # donc une dictée en cours survit à un redémarrage.
+      DICTATION_DIR: "${DICTATION_DIR:-/data/dictations}"
+      DICTATION_CHUNK_SECONDS: "${DICTATION_CHUNK_SECONDS:-5}"
+      DICTATION_SEGMENT_SECONDS: "${DICTATION_SEGMENT_SECONDS:-30}"
+      DICTATION_RETENTION_HOURS: "${DICTATION_RETENTION_HOURS:-72}"
+
+      # ---- Gemini ----
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
+      GEMINI_MODEL_PRO: "${GEMINI_MODEL_PRO:-gemini-2.5-pro}"
+      GEMINI_USE_PRO: "${GEMINI_USE_PRO:-false}"
+      GEMINI_TEMPERATURE: "${GEMINI_TEMPERATURE:-0.15}"
+      GEMINI_MAX_OUTPUT_TOKENS: "${GEMINI_MAX_OUTPUT_TOKENS:-8192}"
+      # Mode Vertex AI (recommandé au Québec : données hébergées à Montréal).
+      # Laissez GEMINI_API_KEY vide et renseignez ces deux variables.
+      GOOGLE_CLOUD_PROJECT: "${GOOGLE_CLOUD_PROJECT:-}"
+      GOOGLE_CLOUD_LOCATION: "${GOOGLE_CLOUD_LOCATION:-northamerica-northeast1}"
+
+      # ---- Autres fournisseurs de modèle de langage ----
+      # Sélectionnables depuis le panneau d'administration, qui peut aussi y
+      # enregistrer les clés sans passer par ce fichier.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+
+    # --- Limites de ressources (protège le NAS) -----------------------------
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    mem_limit: 1g          # équivalent pour `docker compose` v2 sans Swarm
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  consultai_net:
+    driver: bridge
+    # Sous-réseau FIGÉ, et non attribué automatiquement par Docker.
+    # Raison : le NAS Synology publie les ports via le proxy userland
+    # (docker-proxy), qui réécrit l'IP source de toute requête entrante en
+    # celle de la passerelle du pont. C'est donc cette adresse — et non l'IP
+    # réelle de Pangolin — que TRUSTED_PROXIES doit contenir. Si Docker
+    # réattribuait le sous-réseau après un `compose down`, la passerelle
+    # changerait et l'application refuserait toutes les requêtes.
+    ipam:
+      config:
+        - subnet: 172.27.0.0/24
+          gateway: 172.27.0.1
+  # Réseau créé par la stack Pangolin. Décommentez si vous l'utilisez.
+  # pangolin:
+  #   external: true

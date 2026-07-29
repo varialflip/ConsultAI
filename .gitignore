@@ -1,0 +1,33 @@
+# =============================================================================
+# Ce qui ne doit JAMAIS partir dans le dépôt
+# =============================================================================
+# Les trois premières entrées sont les seules qui comptent vraiment : elles
+# contiennent des clés d'API en clair et de la donnée de patient. Tout le reste
+# n'est que du bruit.
+
+# Clés d'API réelles (Gemini, Anthropic, OpenAI, Deepgram, AssemblyAI, Soniox)
+.env
+.env.*
+!.env.example
+
+# Base des consultations, audio des patients, dictées en cours
+data/
+
+# Clé du compte de service Google Cloud
+secrets/
+
+*.db
+*.db-wal
+*.db-shm
+
+# Réglages locaux de Claude Code : contiennent les IP du LAN et de Tailscale.
+.claude/settings.local.json
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Synology (index de la Recherche universelle) et macOS
+@eaDir/
+.DS_Store

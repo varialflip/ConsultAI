@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport-fit=cover : l'interface passe sous l'encoche et la barre
+       d'accueil de l'iPhone ; les marges de sécurité sont reprises en CSS. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
+  <meta name="color-scheme" content="light">
+  <title>{{ app_title }}</title>
+
+  <!-- ================== Application web progressive (PWA) ================== -->
+  <!-- crossorigin="use-credentials" est INDISPENSABLE derrière un SSO.
+       Sans cet attribut, le navigateur récupère le manifeste en omettant les
+       cookies : Pangolin ne voit pas de session, répond par une redirection
+       vers sa page de connexion, et le navigateur conclut qu'il n'y a pas de
+       manifeste — l'option « Installer » n'apparaît jamais, sans message
+       d'erreur. Rendre la ressource publique côté application ne suffit pas,
+       puisque la requête est interceptée avant d'y parvenir. -->
+  <link rel="manifest" href="/static/manifest.webmanifest" crossorigin="use-credentials">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Dictée et mise en forme de consultations gériatriques en français canadien.">
+
+  <!-- iOS : ces balises restent nécessaires, Safari n'exploitant pas encore
+       tout le manifeste pour l'ajout à l'écran d'accueil. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ConsultAI">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+
+  <style>
+    /* =====================================================================
+       COQUILLE D'APPLICATION
+       Hauteur fixe : seuls les panneaux défilent, jamais la page entière.
+       100dvh (et non 100vh) pour que la barre d'URL mobile, qui apparaît et
+       disparaît au défilement, ne décale pas la mise en page.
+       ===================================================================== */
+    html, body { height: 100%; overscroll-behavior-y: none; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      /* Marges de sécurité iPhone (encoche, barre d'accueil) */
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    .app-shell { height: 100dvh; }
+    @supports not (height: 100dvh) { .app-shell { height: 100vh; } }
+
+    /* Empêche le zoom automatique de Safari iOS au focus d'un champ :
+       il se déclenche dès que la taille de police descend sous 16 px. */
+    @media (max-width: 1023px) {
+      input, select, textarea { font-size: 16px !important; }
+    }
+
+    /* Retire le flash gris au toucher sur Android/iOS */
+    button, a, label, summary { -webkit-tap-highlight-color: transparent; }
+
+    .thin-scroll { -webkit-overflow-scrolling: touch; }
+    .thin-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .thin-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+    @keyframes pulse-rec { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .rec-dot { animation: pulse-rec 1.2s ease-in-out infinite; }
+    /* Le canvas se redimensionne par script : sans cette contrainte, sa
+       largeur intrinsèque (300 px) l'empêcherait de rétrécir dans son flex. */
+    #levelWave { width: 100%; }
+
+    /* Barre d'action mobile : respecte la barre d'accueil de l'iPhone */
+    .safe-bottom { padding-bottom: max(0.625rem, env(safe-area-inset-bottom)); }
+
+    /* ---------------------------------------------------------------
+       FEUILLE DE STYLE D'IMPRESSION (« Exporter en PDF »)
+       Neutralise la coquille à hauteur fixe, sinon une seule page sortirait.
+       --------------------------------------------------------------- */
+    @media print {
+      @page { size: letter; margin: 18mm 16mm; }
+
+      html, body, .app-shell {
+        height: auto !important; overflow: visible !important;
+        display: block !important; background: #fff !important;
+      }
+      .no-print { display: none !important; }
+
+      #printArea {
+        display: block !important;
+        position: static !important;
+        font-family: "Times New Roman", Georgia, serif;
+        font-size: 11.5pt;
+        line-height: 1.5;
+        color: #000;
+      }
+      #printArea h1 { font-size: 16pt; margin: 0 0 .6em; text-align: center; }
+      #printArea h2 { font-size: 12.5pt; margin: 1.1em 0 .35em; border-bottom: 1px solid #000;
+                      padding-bottom: 2px; text-transform: uppercase; }
+      #printArea h3 { font-size: 11.5pt; margin: .8em 0 .25em; font-style: italic; }
+      #printArea p, #printArea li { orphans: 3; widows: 3; }
+      #printArea ul, #printArea ol { margin: .3em 0 .3em 1.2em; }
+      #printArea table { width: 100%; border-collapse: collapse; margin: .5em 0; font-size: 10.5pt; }
+      #printArea th, #printArea td { border: 1px solid #444; padding: 4px 6px; text-align: left; }
+      #printArea h2, #printArea h3 { break-after: avoid; page-break-after: avoid; }
+
+      .print-footer { display: block !important; margin-top: 1.5em; padding-top: .5em;
+                      border-top: 1px solid #999; font-size: 9pt; color: #333; }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800">
+<div class="app-shell flex flex-col overflow-hidden">
+
+  <!-- ===================================================================
+       EN-TÊTE
+       =================================================================== -->
+  <header class="no-print shrink-0 bg-white border-b border-slate-200 shadow-sm"
+          style="padding-top: env(safe-area-inset-top)">
+    <div class="px-3 sm:px-4 py-2 flex items-center gap-2">
+      <!-- Onde vocale, reprise de l'icône de l'application. À 20 px, le motif
+           complet (page repliée + onde) deviendrait illisible : on ne garde
+           que l'onde, comme pour le favicon. -->
+      <div id="appLogo" class="w-9 h-9 rounded-lg bg-teal-700 text-white grid place-items-center shrink-0">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="2.0"  y="9.5" width="2.6" height="5"  rx="1.3"/>
+          <rect x="6.4"  y="6.5" width="2.6" height="11" rx="1.3"/>
+          <rect x="10.8" y="3.5" width="2.6" height="17" rx="1.3"/>
+          <rect x="15.2" y="6.5" width="2.6" height="11" rx="1.3"/>
+          <rect x="19.6" y="9.5" width="2.6" height="5"  rx="1.3"/>
+        </svg>
+      </div>
+
+      <div class="leading-tight mr-auto min-w-0">
+        <h1 class="font-semibold text-slate-900 text-sm sm:text-[15px] truncate">{{ app_title }}</h1>
+        <!-- Quels moteurs travaillent réellement. La question se pose dès
+             qu'une note sort différente de d'habitude, et la réponse n'est
+             visible nulle part ailleurs. -->
+        <p class="text-[11px] text-slate-500 hidden sm:block">
+          Dictée assistée — fr-CA
+          <span id="engineLabel" class="text-slate-400"></span>
+        </p>
+      </div>
+
+      <!-- Actions : libellés masqués sur petit écran, icônes conservées -->
+      <button id="btnNew" type="button" title="Nouvelle consultation"
+              class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm rounded-lg border border-slate-300
+                     hover:bg-slate-50 active:bg-slate-100 transition">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        <span class="hidden md:inline">Nouvelle</span>
+      </button>
+
+      <button id="btnDrafts" type="button" title="Mes brouillons"
+              class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm rounded-lg border border-slate-300
+                     hover:bg-slate-50 active:bg-slate-100 transition">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
+        <span class="hidden md:inline">Brouillons</span>
+      </button>
+
+      <button id="btnManageTemplates" type="button" title="Gérer les gabarits"
+              class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm rounded-lg border border-slate-300
+                     hover:bg-slate-50 active:bg-slate-100 transition">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/></svg>
+        <span class="hidden md:inline">Gabarits</span>
+      </button>
+
+      <!-- Affiché seulement aux administrateurs (app.js, d'après /api/config).
+           Le masquage n'est qu'une commodité : le contrôle qui compte est
+           celui des routes /api/admin, côté serveur. -->
+      <button id="btnAdmin" type="button" title="Panneau d'administration"
+              class="hidden items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm rounded-lg border border-slate-300
+                     hover:bg-slate-50 active:bg-slate-100 transition">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.44.62.8.75H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="hidden md:inline">Réglages</span>
+      </button>
+
+      <!-- Identité et déconnexion.
+           Deux sessions à clore : celle de Pangolin et celle du fournisseur
+           OIDC, Pangolin ne propageant pas la seconde quand il ferme la
+           première. La partie Pangolin passe par le serveur — voir
+           main.api_logout pour la raison. -->
+      <div class="relative shrink-0 ml-0.5">
+        <button id="btnIdentity" type="button" title="{{ user.label }}"
+                aria-haspopup="true" aria-expanded="false"
+                class="w-8 h-8 rounded-full bg-slate-200 grid place-items-center text-[11px]
+                       font-semibold text-slate-600 hover:bg-slate-300 transition">
+          {{ user.initials }}
+        </button>
+
+        <div id="identityMenu" role="menu"
+             class="hidden absolute right-0 mt-1 w-72 z-50 rounded-lg border border-slate-200
+                    bg-white shadow-xl py-1 text-sm">
+          <div class="px-3 py-2 border-b border-slate-100">
+            <p class="font-medium text-slate-800 truncate">{{ user.display_name or user.label }}</p>
+            <p class="text-[11px] text-slate-500 truncate">{{ user.email or user.username }}</p>
+          </div>
+          <button id="btnLogout" type="button" role="menuitem"
+                  class="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-50
+                         active:bg-slate-100 transition">
+            Se déconnecter
+          </button>
+          <!-- Seconde étape, explicite plutôt que silencieuse : Pangolin refuse
+               tout POST sans jeton CSRF, et ce jeton n'existe que dans ses
+               propres pages. Sa session ne peut donc être fermée que chez lui. -->
+          <a id="lnkPangolinLogout" role="menuitem" target="_blank" rel="noopener"
+             class="hidden px-3 py-2 text-slate-700 hover:bg-slate-50 active:bg-slate-100
+                    transition border-t border-slate-100 items-center gap-1.5">
+            Fermer la session Pangolin
+            <svg class="w-3 h-3 text-slate-400" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <path d="M15 3h6v6M10 14L21 3"/></svg>
+          </a>
+          <p id="logoutHint" class="hidden px-3 pb-2 pt-1 text-[11px] leading-relaxed"></p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================================================================
+       BARRE D'OUTILS : gabarit, enregistrement, contexte
+       =================================================================== -->
+  <section class="no-print shrink-0 bg-white border-b border-slate-200
+                  overflow-y-auto max-h-[45dvh] thin-scroll">
+    <div class="px-3 sm:px-4 py-2 space-y-2">
+
+      <!-- Rangée unique : gabarit, commandes, chronomètre et waveform.
+           Tout ce qui servait à chaque dictée tient ici ; le reste est sous
+           « Détails ». Le haut de l'écran mangeait la moitié de la hauteur
+           utile alors que c'est la note qu'on relit. -->
+      <div class="flex flex-col lg:flex-row lg:items-center gap-2">
+        <select id="templateSelect" aria-label="Gabarit de consultation"
+                class="lg:w-56 shrink-0 rounded-lg border-slate-300 text-sm
+                       focus:border-teal-600 focus:ring-teal-600">
+          <option value="">Chargement…</option>
+        </select>
+
+        <div class="flex items-stretch gap-2 shrink-0">
+          <button id="btnRecord" type="button"
+                  class="flex-1 lg:flex-none lg:w-40 inline-flex items-center justify-center gap-2
+                         px-4 py-3 lg:py-1.5 rounded-lg bg-red-600 text-white font-semibold
+                         text-[15px] lg:text-sm hover:bg-red-700 active:bg-red-800 transition
+                         shadow-sm disabled:opacity-40">
+            <span class="w-2.5 h-2.5 rounded-full bg-white"></span>
+            <span id="btnRecordLabel">Enregistrer</span>
+          </button>
+
+          <button id="btnPause" type="button" disabled title="Pause / Reprendre"
+                  class="w-12 lg:w-10 grid place-items-center rounded-lg border transition disabled:opacity-30 border-slate-300 hover:bg-slate-50 active:bg-slate-100">
+            <svg id="iconPause" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>
+            </svg>
+          </button>
+
+          <!-- Terminer : conclut la dictée et transcrit ce qui reste. -->
+          <button id="btnFinish" type="button" disabled title="Terminer et transcrire"
+                  class="w-12 lg:w-10 grid place-items-center rounded-lg border transition disabled:opacity-30 border-teal-600 text-teal-700 hover:bg-teal-50 active:bg-teal-100">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+
+          <!-- Arrêter sans envoyer : n'apparaît que pendant l'enregistrement,
+               où il prend la place du bouton d'import. Les deux ne servent
+               jamais en même temps. -->
+          <button id="btnAbort" type="button" title="Arrêter sans envoyer"
+                  class="hidden w-12 lg:w-10 place-items-center rounded-lg border border-red-300
+                         text-red-600 hover:bg-red-50 active:bg-red-100 transition">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+
+          <label id="importAudioLabel" title="Importer un fichier audio"
+                 class="w-12 lg:w-10 grid place-items-center rounded-lg border transition disabled:opacity-30 border-slate-300 hover:bg-slate-50 active:bg-slate-100 cursor-pointer">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+            <input id="audioFileInput" type="file" accept="audio/*" class="hidden">
+          </label>
+        </div>
+
+        <!-- Chronomètre et waveform. Une barre plate alors qu'on parle signale
+             immédiatement un micro coupé ou capté par une autre application. -->
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <span id="recDot" class="w-2.5 h-2.5 rounded-full bg-slate-300 shrink-0"></span>
+          <span id="timer" class="font-mono text-sm tabular-nums text-slate-700 shrink-0">00:00</span>
+          <canvas id="levelWave" class="flex-1 h-7 min-w-0 rounded bg-slate-100"
+                  role="img" aria-label="Niveau sonore du micro"></canvas>
+          <span id="transcriptMeta" class="hidden sm:inline text-[11px] text-slate-400 shrink-0 text-right"></span>
+        </div>
+      </div>
+
+      <p id="templateDescription" class="hidden text-[11px] text-slate-500 px-0.5"></p>
+
+      <!-- État du téléversement : seul signe visible d'une coupure réseau. -->
+      <p id="dictationStatus" class="hidden text-xs px-1"></p>
+
+      <!-- Récupération d'une dictée interrompue (onglet fermé, app iOS tuée). -->
+      <div id="recoveryBanner" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2">
+        <p class="text-sm font-semibold text-amber-900">Dictée interrompue retrouvée</p>
+        <ul id="recoveryList" class="space-y-2"></ul>
+      </div>
+
+      <!-- Détails : tout ce qui ne sert pas à chaque dictée.
+           Les métadonnées n'ont pas à être saisies — elles sont renseignées
+           depuis la dictée après la mise en forme — et le panneau s'ouvre de
+           lui-même à ce moment-là pour qu'on puisse les vérifier. -->
+      <details id="metaDetails" class="border-t border-slate-100 pt-1">
+        <summary class="cursor-pointer text-xs text-teal-700 active:text-teal-900 select-none
+                        font-medium py-0.5 flex items-center gap-2">
+          Détails
+          <span class="font-normal text-slate-400">métadonnées, consigne ponctuelle, enregistrements</span>
+        </summary>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+          <div>
+            <label for="metaName" class="block text-[11px] text-slate-500 mb-0.5">Nom du patient</label>
+            <input id="metaName" type="text" placeholder="Reconnu dans la dictée" class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600">
+          </div>
+          <div>
+            <label for="metaRecord" class="block text-[11px] text-slate-500 mb-0.5">Numéro de dossier</label>
+            <input id="metaRecord" type="text" inputmode="text" placeholder="Reconnu dans la dictée" class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600">
+          </div>
+          <div>
+            <label for="metaDate" class="block text-[11px] text-slate-500 mb-0.5">Date de la consultation</label>
+            <input id="metaDate" type="date" class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600">
+          </div>
+          <div>
+            <label for="metaReason" class="block text-[11px] text-slate-500 mb-0.5">Raison de consultation</label>
+            <input id="metaReason" type="text" placeholder="Ex. Chutes à répétition" class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600">
+          </div>
+          <div>
+            <label for="metaRequester" class="block text-[11px] text-slate-500 mb-0.5">Demande de</label>
+            <input id="metaRequester" type="text" placeholder="Dr X, CLSC, urgence…" class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600">
+          </div>
+          <div>
+            <label for="metaAccompanied" class="block text-[11px] text-slate-500 mb-0.5">Accompagné de</label>
+            <input id="metaAccompanied" type="text" placeholder="Conjointe, fille…" class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600">
+          </div>
+        </div>
+
+        <!-- Consigne ponctuelle : ce n'est pas une métadonnée mais une
+             instruction adressée au modèle pour cette dictée-ci. -->
+        <div class="mt-2">
+          <label for="ctxExtra" class="block text-[11px] text-slate-500 mb-0.5">
+            Consigne ponctuelle pour cette dictée (facultatif)
+          </label>
+          <input id="ctxExtra" type="text" placeholder="Ex. insister sur la déprescription" class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600">
+        </div>
+
+        <!-- Enregistrements conservés avec le brouillon : réécouter le passage
+             dont on doute est le seul moyen de trancher sans refaire l'entrevue.
+             Ils s'effacent avec le brouillon. -->
+        <div id="recordingsBlock" class="hidden mt-3 pt-2 border-t border-slate-100">
+          <p class="text-[11px] font-medium text-slate-600 mb-1">
+            Enregistrements <span id="recordingsCount" class="font-normal text-slate-400"></span>
+          </p>
+          <ul id="recordingsList" class="space-y-2"></ul>
+          <p class="text-[11px] text-slate-400 mt-2">
+            Supprimer le brouillon efface aussi ses enregistrements.
+          </p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       SÉLECTEUR DE PANNEAU — mobile uniquement
+       Sur grand écran les deux panneaux sont côte à côte, ce sélecteur
+       devient inutile.
+       =================================================================== -->
+  <div class="no-print shrink-0 lg:hidden bg-white border-b border-slate-200 px-3 py-2">
+    <div class="grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1">
+      <button id="paneTabDictee" type="button" data-pane="dictee"
+              class="py-2 rounded-md text-sm font-medium bg-white shadow-sm text-slate-800">
+        Dictée
+      </button>
+      <button id="paneTabNote" type="button" data-pane="note"
+              class="py-2 rounded-md text-sm font-medium text-slate-500">
+        Note structurée
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       PANNEAUX
+       =================================================================== -->
+  <!-- Colonne unique sur mobile (flex), deux colonnes sur grand écran (grille).
+       lg:grid-rows-1 est indispensable : sans rangée explicite en 1fr, la
+       rangée implicite se dimensionne sur le contenu et les panneaux ne
+       remplissent pas la hauteur disponible. -->
+  <main class="no-print flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-2 lg:grid-rows-1
+               gap-0 lg:gap-3 lg:p-3">
+
+    <!-- PANNEAU : transcription brute -->
+    <section id="paneDictee" data-pane="dictee"
+             class="flex-1 min-h-0 bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
+      <div class="hidden lg:flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 shrink-0">
+        <h2 class="font-semibold text-sm text-slate-700">Transcription brute</h2>
+        <div class="ml-auto flex items-center gap-2">
+          <button id="btnClearTranscript" type="button"
+                  class="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600">
+            Vider
+          </button>
+          <button id="btnGenerate" type="button"
+                  class="px-4 py-1.5 rounded-lg bg-teal-700 text-white text-sm font-semibold
+                         hover:bg-teal-800 transition shadow-sm disabled:opacity-40">
+            Mettre en forme
+          </button>
+        </div>
+      </div>
+      <textarea id="transcript" spellcheck="true"
+                class="flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 text-[15px]
+                       leading-relaxed text-slate-700 thin-scroll"
+                placeholder="Appuyez sur « Enregistrer » et dictez la consultation, ou collez ici un texte existant.&#10;&#10;Astuce : vous pouvez dicter en plusieurs fois, chaque nouvelle dictée s'ajoute à la suite."></textarea>
+    </section>
+
+    <!-- PANNEAU : note structurée -->
+    <section id="paneNote" data-pane="note"
+             class="max-lg:hidden flex-1 min-h-0 bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
+      <div class="flex items-center gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-200 shrink-0 flex-wrap">
+        <h2 class="font-semibold text-sm text-slate-700 hidden lg:block">Note structurée</h2>
+        <span id="saveStatus" class="text-[11px] text-slate-400"></span>
+        <!-- Moteurs qui ont réellement produit CE document, et non la
+             configuration du moment : c'est ce qu'on veut savoir en rouvrant
+             un brouillon d'il y a deux semaines. -->
+        <span id="noteEngines" class="hidden text-[11px] text-slate-400 truncate max-w-[16rem]"></span>
+
+        <div class="ml-auto flex items-center gap-1.5">
+          <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+            <button id="tabPreview" type="button" class="px-3 py-2 bg-teal-700 text-white font-medium">Aperçu</button>
+            <button id="tabEdit" type="button" class="px-3 py-2 hover:bg-slate-50 text-slate-600">Éditer</button>
+          </div>
+
+          <!-- Copier n'est pas quatre actions mais une seule, en trois
+               formats : ils sont donc groupés comme Aperçu/Éditer au-dessus,
+               et non alignés en boutons de même poids. Les séparateurs sont
+               portés par la bordure GAUCHE des boutons suivants : masquer le
+               dernier sur petit écran ne laisse ainsi pas de filet orphelin.
+               PDF reste à part — ce n'est pas une copie. -->
+          <span class="hidden lg:inline text-[11px] text-slate-400">Copier</span>
+          <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+            <button id="btnCopyRich" type="button"
+                    title="Copie mise en forme : titres et tableaux conservés. Pour Word, ou un DME qui accepte le HTML."
+                    class="px-2.5 py-2 hover:bg-slate-50 text-slate-600">
+              <span class="sm:hidden">Forme</span><span class="hidden sm:inline">Mise en forme</span>
+            </button>
+            <button id="btnCopyPlain" type="button"
+                    title="Copie en texte seul, sections soulignées et tableaux alignés en ASCII. Pour un DME qui n'accepte pas le HTML."
+                    class="px-2.5 py-2 border-l border-slate-200 hover:bg-slate-50 text-slate-600">
+              <span class="sm:hidden">Texte</span><span class="hidden sm:inline">Texte simple</span>
+            </button>
+            <button id="btnCopyMd" type="button" title="Copier le Markdown brut, tel qu'il est dans l'éditeur"
+                    class="hidden sm:block px-2.5 py-2 border-l border-slate-200 hover:bg-slate-50 text-slate-600">
+              Markdown
+            </button>
+          </div>
+
+          <button id="btnPdf" type="button" title="Imprimer ou enregistrer en PDF"
+                  class="text-xs px-2.5 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600">
+            PDF
+          </button>
+        </div>
+      </div>
+
+      <div id="previewPane"
+           class="flex-1 min-h-0 overflow-auto p-4 sm:p-6 thin-scroll prose prose-slate prose-sm max-w-none
+                  prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h2:uppercase
+                  prose-h2:tracking-wide prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-1
+                  prose-h3:text-sm prose-h3:italic prose-table:text-xs">
+        <p class="text-slate-400 italic">La note structurée apparaîtra ici après la mise en forme.</p>
+      </div>
+
+      <textarea id="markdownEditor" spellcheck="true"
+                class="hidden flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 font-mono
+                       text-[13px] leading-relaxed text-slate-700 thin-scroll"></textarea>
+    </section>
+  </main>
+
+  <!-- ===================================================================
+       BARRE D'ACTION — mobile uniquement
+       « Mettre en forme » doit rester atteignable même depuis l'onglet
+       « Note structurée », d'où ce bouton distinct du bouton de bureau.
+       =================================================================== -->
+  <div class="no-print shrink-0 lg:hidden bg-white border-t border-slate-200 px-3 pt-2.5 safe-bottom
+              flex items-center gap-2">
+    <button id="btnClearTranscriptMobile" type="button" title="Vider la transcription"
+            class="w-12 h-11 grid place-items-center rounded-xl border border-slate-300
+                   hover:bg-slate-50 active:bg-slate-100 transition text-slate-600">
+      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+    </button>
+    <button id="btnGenerateMobile" type="button"
+            class="flex-1 h-11 rounded-xl bg-teal-700 text-white font-semibold text-[15px]
+                   hover:bg-teal-800 active:bg-teal-900 transition shadow-sm disabled:opacity-40">
+      Mettre en forme
+    </button>
+  </div>
+</div>
+
+<!-- Zone d'impression, hors coquille -->
+<div id="printArea" class="hidden absolute -left-[9999px]"></div>
+
+<!-- ===================================================================
+     MODALE — GABARITS (plein écran sur mobile)
+     =================================================================== -->
+<div id="templatesModal" class="no-print hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm
+                                lg:p-6 overflow-hidden">
+  <div class="bg-white lg:rounded-xl shadow-2xl max-w-6xl mx-auto flex flex-col h-full lg:max-h-[92vh]"
+       style="padding-top: env(safe-area-inset-top)">
+
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 shrink-0">
+      <h2 class="font-semibold text-slate-800">Gabarits</h2>
+      <span id="templateAdminBadge" class="hidden text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+        Lecture seule
+      </span>
+      <button id="btnNewTemplate" type="button"
+              class="ml-auto px-3 py-2 text-sm rounded-lg bg-teal-700 text-white hover:bg-teal-800 transition">
+        Nouveau
+      </button>
+      <button id="btnCloseTemplates" type="button"
+              class="w-9 h-9 grid place-items-center rounded-lg hover:bg-slate-100 text-slate-500 text-2xl leading-none">
+        &times;
+      </button>
+    </div>
+
+    <!-- Mobile : liste OU formulaire, jamais les deux — pilotés par JS -->
+    <div class="lg:hidden shrink-0 px-3 py-2 border-b border-slate-200">
+      <button id="btnBackToTemplateList" type="button"
+              class="hidden text-sm text-teal-700 font-medium flex items-center gap-1">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Retour à la liste
+      </button>
+      <span id="templateListHint" class="text-xs text-slate-500">Touchez un gabarit pour le modifier.</span>
+    </div>
+
+    <!-- Même contrainte que la zone principale : rangée explicite en 1fr sur
+         grand écran, colonne flex sur mobile. -->
+    <div class="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[300px_1fr] lg:grid-rows-1">
+      <aside id="templateListPane"
+             class="flex-1 min-h-0 lg:border-r border-slate-200 overflow-auto thin-scroll bg-slate-50">
+        <ul id="templateList" class="divide-y divide-slate-200"></ul>
+      </aside>
+
+      <form id="templateForm"
+            class="max-lg:hidden flex-1 min-h-0 overflow-auto thin-scroll p-4 sm:p-5 space-y-4">
+        <input type="hidden" id="tplId">
+
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_110px] gap-3">
+          <div>
+            <label for="tplName" class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+              Nom du gabarit
+            </label>
+            <input id="tplName" type="text" required maxlength="200"
+                   class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600"
+                   placeholder="Ex. Évaluation pré-hébergement">
+          </div>
+          <div>
+            <label for="tplOrder" class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+              Ordre
+            </label>
+            <input id="tplOrder" type="number" inputmode="numeric" min="0" max="9999" value="100"
+                   class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600">
+          </div>
+        </div>
+
+        <div>
+          <label for="tplDescription" class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+            Description
+          </label>
+          <input id="tplDescription" type="text" maxlength="2000"
+                 class="w-full rounded-lg border-slate-300 text-sm focus:border-teal-600 focus:ring-teal-600"
+                 placeholder="Affichée sous le menu de sélection">
+        </div>
+
+        <div>
+          <label for="tplInstructions" class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+            Instructions cliniques
+          </label>
+          <p class="text-xs text-slate-500 mb-1.5">
+            Ce sur quoi le modèle doit se concentrer : éléments à rechercher, distinctions à faire,
+            éléments à ne jamais omettre.
+          </p>
+          <textarea id="tplInstructions" rows="8" required
+                    class="w-full rounded-lg border-slate-300 font-mono text-[12.5px] leading-relaxed
+                           focus:border-teal-600 focus:ring-teal-600 thin-scroll lg:min-h-[16rem]"></textarea>
+        </div>
+
+        <div>
+          <label for="tplLayout" class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+            Mise en page (squelette Markdown)
+          </label>
+          <p class="text-xs text-slate-500 mb-1.5">
+            Les titres <code class="bg-slate-100 px-1 rounded">#</code> et
+            <code class="bg-slate-100 px-1 rounded">##</code> définissent la structure exacte du document.
+            {# {% raw %} empêche Jinja d'interpréter les accolades de la documentation #}
+            {% raw %}
+            Champs disponibles : <code class="bg-slate-100 px-1 rounded">{{PATIENT}}</code>,
+            <code class="bg-slate-100 px-1 rounded">{{DOSSIER}}</code>,
+            <code class="bg-slate-100 px-1 rounded">{{DATE}}</code>,
+            <code class="bg-slate-100 px-1 rounded">{{DEMANDEUR}}</code>,
+            <code class="bg-slate-100 px-1 rounded">{{ACCOMPAGNATEUR}}</code>.
+            Une ligne dont le champ reste inconnu est simplement retirée du document.
+            {% endraw %}
+          </p>
+          <textarea id="tplLayout" rows="10" required
+                    class="w-full rounded-lg border-slate-300 font-mono text-[12.5px] leading-relaxed
+                           focus:border-teal-600 focus:ring-teal-600 thin-scroll lg:min-h-[20rem]"></textarea>
+        </div>
+
+        <div>
+          <label for="tplHints" class="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+            Vocabulaire additionnel
+          </label>
+          <p class="text-xs text-slate-500 mb-1.5">
+            Termes séparés par des virgules, ajoutés au lexique gériatrique québécois déjà intégré.
+          </p>
+          <textarea id="tplHints" rows="3"
+                    class="w-full rounded-lg border-slate-300 text-[12.5px]
+                           focus:border-teal-600 focus:ring-teal-600"></textarea>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200 sticky bottom-0 bg-white pb-1">
+          <button type="submit"
+                  class="px-4 py-2.5 rounded-lg bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 transition">
+            Enregistrer
+          </button>
+          <button type="button" id="btnDuplicateTemplate"
+                  title="Créer une copie modifiable de ce gabarit"
+                  class="px-4 py-2.5 rounded-lg border border-slate-300 text-slate-700 text-sm hover:bg-slate-50 transition">
+            Dupliquer
+          </button>
+          <button type="button" id="btnDeleteTemplate"
+                  class="px-4 py-2.5 rounded-lg border border-red-300 text-red-700 text-sm hover:bg-red-50 transition">
+            Supprimer
+          </button>
+          <span id="templateFormStatus" class="text-xs text-slate-500"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================
+     MODALE — BROUILLONS
+     =================================================================== -->
+<div id="draftsModal" class="no-print hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm
+                             lg:p-6 overflow-hidden">
+  <div class="bg-white lg:rounded-xl shadow-2xl max-w-3xl mx-auto flex flex-col h-full lg:max-h-[88vh]"
+       style="padding-top: env(safe-area-inset-top)">
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 shrink-0">
+      <h2 class="font-semibold text-slate-800">Mes brouillons</h2>
+      <button id="btnCloseDrafts" type="button"
+              class="ml-auto w-9 h-9 grid place-items-center rounded-lg hover:bg-slate-100 text-slate-500 text-2xl leading-none">
+        &times;
+      </button>
+    </div>
+    <!-- Les séparateurs sont portés par chaque ligne et non par une classe
+         divide-y : les en-têtes de date insérés dans la même liste ont leur
+         propre bordure, qui doublerait celle du groupe. -->
+    <ul id="draftList" class="overflow-auto thin-scroll flex-1 min-h-0 relative"></ul>
+  </div>
+</div>
+
+<!-- ===================================================================
+     MODALE — PANNEAU D'ADMINISTRATION
+     ===================================================================
+     Les champs sont construits par app.js à partir du schéma renvoyé par
+     /api/admin/settings : ajouter un réglage ne demande de toucher qu'à
+     app/runtime_config.py, pas à cette page.
+     =================================================================== -->
+<div id="adminModal" class="no-print hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm
+                            lg:p-6 overflow-hidden">
+  <div class="bg-white lg:rounded-xl shadow-2xl max-w-3xl mx-auto flex flex-col h-full lg:max-h-[90vh]"
+       style="padding-top: env(safe-area-inset-top)">
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 shrink-0">
+      <h2 class="font-semibold text-slate-800">Réglages</h2>
+      <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+        Administrateur
+      </span>
+      <button id="btnCloseAdmin" type="button"
+              class="ml-auto w-9 h-9 grid place-items-center rounded-lg hover:bg-slate-100 text-slate-500 text-2xl leading-none">
+        &times;
+      </button>
+    </div>
+
+    <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
+      <p class="text-xs text-slate-600 leading-relaxed">
+        Ces réglages sont enregistrés en base et <strong>surchargent le fichier
+        <code>.env</code></strong> : ils prennent effet immédiatement, sans
+        reconstruire l'image. Vider un champ le remet à la valeur du
+        <code>.env</code>.
+      </p>
+      <p class="text-xs text-slate-500 mt-1">
+        Ce qui gouverne l'accès — usagers autorisés, plages de proxy de
+        confiance — reste dans le <code>.env</code>, hors d'atteinte du
+        navigateur.
+      </p>
+    </div>
+
+    <form id="adminForm" class="overflow-auto thin-scroll flex-1 min-h-0 p-4 space-y-6">
+      <div id="adminFields" class="space-y-6">
+        <p class="text-sm text-slate-500">Chargement…</p>
+      </div>
+    </form>
+
+    <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-slate-200 shrink-0">
+      <button id="btnSaveAdmin" type="button"
+              class="px-4 py-2 rounded-lg bg-teal-700 text-white text-sm font-medium
+                     hover:bg-teal-800 active:bg-teal-900 transition">
+        Enregistrer
+      </button>
+      <button id="btnListModels" type="button"
+              class="px-3 py-2 rounded-lg border border-slate-300 text-sm hover:bg-slate-50 transition">
+        Modèles disponibles
+      </button>
+      <span id="adminStatus" class="text-xs text-slate-500 ml-auto"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================
+     VOILE DE CHARGEMENT + NOTIFICATIONS
+     =================================================================== -->
+<div id="busyOverlay" class="no-print hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm grid place-items-center p-6">
+  <div class="bg-white rounded-xl px-8 py-6 shadow-2xl text-center max-w-sm">
+    <div class="w-10 h-10 mx-auto mb-3 border-[3px] border-slate-200 border-t-teal-600 rounded-full animate-spin"></div>
+    <p id="busyMessage" class="text-sm font-medium text-slate-700">Traitement en cours…</p>
+    <p class="text-xs text-slate-400 mt-1">Ne fermez pas cette fenêtre.</p>
+  </div>
+</div>
+
+<div id="toastZone" class="no-print fixed left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-50
+                           flex flex-col gap-2 items-stretch sm:items-end"
+     style="bottom: max(1rem, env(safe-area-inset-bottom))"></div>
+
+<script>
+  window.CONSULTAI = {
+    user: {{ user | tojson }},
+    version: "{{ version }}"
+  };
+</script>
+<script src="/static/app.js"></script>
+</body>
+</html>

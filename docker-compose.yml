@@ -1,24 +1,16 @@
 # =============================================================================
-# ConsultAI — Stack Docker Compose
+# ConsultAI
 # =============================================================================
-# Déploiement — ces DEUX fichiers suffisent, pas besoin de cloner le dépôt :
-#   1. Téléchargez docker-compose.yml et .env.example dans un même dossier
-#   2. cp .env.example .env       puis éditez .env (voir ses commentaires)
-#   3. Google Speech-to-Text/Vertex AI seulement : déposez la clé de service
-#      dans ./secrets/gcp-sa.json (les autres fournisseurs n'en ont pas besoin)
-#   4. docker compose up -d
+#   1. cp .env.example .env   puis remplissez sa PARTIE 1 (voir ses commentaires)
+#   2. docker compose up -d
 #
-# L'image est publiée sur GitHub Container Registry — rien à construire.
-# Pour reconstruire depuis les sources à la place (contribution, audit) :
-# clonez le dépôt et remplacez `image:` ci-dessous par `build: .`.
-#
-# L'application authentifie ELLE-MÊME par OpenID Connect (routes /auth/login,
-# /auth/callback, /auth/logout — voir app/auth.py et app/oidc.py). Le reverse
-# proxy placé devant ce conteneur ne fait que RELAYER les requêtes ; sa propre
-# authentification doit être désactivée pour cette ressource (voir README §4).
-#
-# Écrite pour tourner sur n'importe quel hôte Docker. Le seul réglage
-# spécifique à un NAS Synology est marqué « SYNOLOGY » ci-dessous.
+# L'image est publiée sur GitHub Container Registry : rien à construire.
+# Toute la configuration vit dans .env — ce fichier-ci n'a presque rien à
+# toucher. Détails utiles :
+#   • Authentification OIDC, gérée par l'application elle-même. Un reverse
+#     proxy HTTPS devant ce conteneur est requis, mais en simple relais : sa
+#     propre authentification doit rester désactivée (README §4).
+#   • [SYNOLOGY] seul réglage propre à ce NAS : "user:" ci-dessous.
 # =============================================================================
 
 services:
@@ -26,179 +18,32 @@ services:
     image: ghcr.io/varialflip/consultai:latest
     container_name: consultai
     restart: unless-stopped
-    # [SYNOLOGY] ⚠️ À FAIRE CORRESPONDRE à l'UID/GID propriétaire de ./data
-    # sur le NAS (en SSH : `id votre_utilisateur`). Les dossiers partagés
-    # Synology portent des ACL qui refusent l'écriture aux UID inconnus, même
-    # lorsque les permissions POSIX affichent 777 : avec le mauvais UID,
-    # SQLite échoue au démarrage avec « unable to open database file ».
-    # Sur un hôte Docker générique, le défaut (1000:1000, celui de l'image)
-    # convient presque toujours — rien à changer ici.
+    env_file: .env
+
+    # [SYNOLOGY] Fait tourner le conteneur sous l'UID/GID propriétaire de
+    # ./data (voir APP_UID/APP_GID dans .env) plutôt que le défaut de l'image
+    # — les ACL Synology l'exigent. Ailleurs, 1000:1000 convient tel quel.
     user: "${APP_UID:-1000}:${APP_GID:-1000}"
 
-    # --- Réseau -------------------------------------------------------------
-    # BIND_ADDRESS détermine QUI peut atteindre le conteneur :
-    #   127.0.0.1        → cet hôte uniquement (valable seulement si le proxy
-    #                      tourne sur cette même machine ; sinon « Bad
-    #                      Gateway », un proxy distant ne pouvant pas joindre
-    #                      une boucle locale)
-    #   192.168.x.x      → l'interface LAN de l'hôte, joignable par le proxy
-    #   0.0.0.0          → toutes les interfaces (à éviter)
-    #
-    # Le port n'est JAMAIS publié sur toutes les interfaces par défaut : on le
-    # lie à une adresse précise. Le périmètre de sécurité réel est ici — et,
-    # en complément, une règle de pare-feu qui n'autorise ce port que depuis
-    # l'IP du proxy (voir README §4). L'authentification elle-même est faite
-    # par l'application via OIDC, pas par ce filtrage réseau.
+    # Voir BIND_ADDRESS/BIND_PORT dans .env : c'est le rempart réseau
+    # principal, à compléter par une règle de pare-feu (README §4).
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${BIND_PORT:-8787}:8000"
 
-    networks:
-      - consultai_net
-      # - pangolin        # décommentez si Pangolin est sur ce réseau externe
-
-    # --- Volumes ------------------------------------------------------------
     volumes:
-      # Base SQLite persistante (consultations + gabarits).
-      - ./data:/data
-      # Clé du compte de service Google Cloud, en lecture seule.
-      - ./secrets:/secrets:ro
+      - ./data:/data           # base SQLite, audio, dictées en cours
+      - ./secrets:/secrets:ro  # clé de service Google Cloud, si utilisée
 
-    # --- Variables d'environnement -----------------------------------------
-    # Les valeurs viennent du fichier .env (voir .env.example). La syntaxe
-    # ${VAR:-defaut} garantit un démarrage même si la variable est absente.
-    environment:
-      # ---- Application ----
-      TZ: "${TZ:-America/Toronto}"
-      APP_TITLE: "${APP_TITLE:-ConsultAI}"
-      # Langue par DÉFAUT : « fr » ou « en ». Chaque usager choisit la sienne
-      # depuis le menu de la pastille d'identité ; cette valeur ne sert qu'à
-      # ceux qui n'ont jamais choisi.
-      APP_LANGUAGE: "${APP_LANGUAGE:-fr}"
-      DATABASE_URL: "${DATABASE_URL:-sqlite:////data/consultai.db}"
-      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
-
-      # ---- Authentification OpenID Connect ----
-      # L'application authentifie elle-même : le proxy ne fait que relayer, et
-      # sa propre authentification doit être désactivée pour cette ressource.
-      OIDC_PROVIDER_URL: "${OIDC_PROVIDER_URL:-}"
-      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-}"
-      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-}"
-      OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-}"
-      BASE_URL: "${BASE_URL:-}"
-      OIDC_SCOPES: "${OIDC_SCOPES:-openid,profile,email,groups}"
-      OIDC_GROUPS_CLAIM: "${OIDC_GROUPS_CLAIM:-groups}"
-      # Revendication du nom affiché, et de l'avatar. Vides = défauts « name »
-      # et « picture ». À renseigner seulement si votre fournisseur diffère
-      # (ex. Keycloak envoie parfois le nom sous une autre revendication).
-      OIDC_NAME_CLAIM: "${OIDC_NAME_CLAIM:-}"
-      OIDC_PICTURE_CLAIM: "${OIDC_PICTURE_CLAIM:-}"
-      SSO_DISPLAY_NAME: "${SSO_DISPLAY_NAME:-}"
-      SESSION_SECRET: "${SESSION_SECRET:-}"
-      SESSION_MAX_AGE_SECONDS: "${SESSION_MAX_AGE_SECONDS:-43200}"
-      SESSION_HTTPS_ONLY: "${SESSION_HTTPS_ONLY:-true}"
-      ALLOW_SIGNUP: "${ALLOW_SIGNUP:-false}"
-
-      # ---- Amorçage des comptes (premier démarrage seulement) ----
-      # Le TOUT PREMIER usager qui se connecte devient administrateur quoi
-      # qu'il arrive ; cette liste ne sert qu'à créer d'autres comptes dès le
-      # départ plutôt que de partir d'une base vide.
-      AUTHORIZED_USERS: "${AUTHORIZED_USERS}"
-      # Mettre à "true" UNIQUEMENT pour un test local sans reverse proxy.
-      AUTH_DISABLED: "${AUTH_DISABLED:-false}"
-      DEV_USER: "${DEV_USER:-dev@local}"
-
-      # ---- Google Cloud Speech-to-Text ----
-      GOOGLE_APPLICATION_CREDENTIALS: "${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/gcp-sa.json}"
-      # Vide = suit APP_LANGUAGE. Une valeur ici FORCE la langue du service
-      # vocal et survit au changement de langue de l'application.
-      STT_LANGUAGE_CODE: "${STT_LANGUAGE_CODE:-}"
-      STT_MODEL: "${STT_MODEL:-latest_long}"
-      STT_USE_ENHANCED: "${STT_USE_ENHANCED:-true}"
-      STT_API_ENDPOINT: "${STT_API_ENDPOINT:-}"
-      STT_GCS_BUCKET: "${STT_GCS_BUCKET:-}"
-      MAX_AUDIO_MB: "${MAX_AUDIO_MB:-120}"
-
-      # ---- Retrait des longues pauses avant envoi ----
-      # Les trois services facturent à la durée d'audio. Seule la copie
-      # envoyée est raccourcie ; l'enregistrement conservé reste intact.
-      STT_TRIM_SILENCE: "${STT_TRIM_SILENCE:-true}"
-      STT_SILENCE_KEEP_SECONDS: "${STT_SILENCE_KEEP_SECONDS:-0.5}"
-      STT_SILENCE_THRESHOLD_DB: "${STT_SILENCE_THRESHOLD_DB:--40}"
-
-      # ---- Fournisseurs de reconnaissance vocale alternatifs ----
-      # Ces valeurs ne sont que des défauts : le panneau d'administration les
-      # surcharge en base, sans reconstruction d'image.
-      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-}"
-      DEEPGRAM_MODEL: "${DEEPGRAM_MODEL:-nova-2}"
-
-      # ---- AssemblyAI (avec le module médical « medical-v1 ») ----
-      ASSEMBLYAI_API_KEY: "${ASSEMBLYAI_API_KEY:-}"
-      ASSEMBLYAI_MODEL: "${ASSEMBLYAI_MODEL:-universal-3-5-pro}"
-
-      # ---- Soniox (le moins cher, multilingue par conception) ----
-      SONIOX_API_KEY: "${SONIOX_API_KEY:-}"
-      SONIOX_MODEL: "${SONIOX_MODEL:-stt-async-v5}"
-
-      # ---- Cohere Transcribe ----
-      # ⚠️ 5 requêtes/minute sur une clé d'essai : déconseillé pour des dictées
-      # simultanées, et aucune adaptation au vocabulaire. Voir .env.example.
-      COHERE_API_KEY: "${COHERE_API_KEY:-}"
-      COHERE_MODEL: "${COHERE_MODEL:-cohere-transcribe-03-2026}"
-
-      # ---- Enregistrements conservés avec les brouillons ----
-      AUDIO_DIR: "${AUDIO_DIR:-/data/audio}"
-
-      # ---- Dictée par segments ----
-      # DICTATION_DIR est sous /data : le volume monté survit au conteneur,
-      # donc une dictée en cours survit à un redémarrage.
-      DICTATION_DIR: "${DICTATION_DIR:-/data/dictations}"
-      DICTATION_CHUNK_SECONDS: "${DICTATION_CHUNK_SECONDS:-5}"
-      DICTATION_SEGMENT_SECONDS: "${DICTATION_SEGMENT_SECONDS:-30}"
-      DICTATION_RETENTION_HOURS: "${DICTATION_RETENTION_HOURS:-72}"
-
-      # ---- Gemini ----
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
-      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
-      GEMINI_MODEL_PRO: "${GEMINI_MODEL_PRO:-gemini-2.5-pro}"
-      GEMINI_USE_PRO: "${GEMINI_USE_PRO:-false}"
-      GEMINI_TEMPERATURE: "${GEMINI_TEMPERATURE:-0.15}"
-      GEMINI_MAX_OUTPUT_TOKENS: "${GEMINI_MAX_OUTPUT_TOKENS:-8192}"
-      # Mode Vertex AI (recommandé au Québec : données hébergées à Montréal).
-      # Laissez GEMINI_API_KEY vide et renseignez ces deux variables.
-      GOOGLE_CLOUD_PROJECT: "${GOOGLE_CLOUD_PROJECT:-}"
-      GOOGLE_CLOUD_LOCATION: "${GOOGLE_CLOUD_LOCATION:-northamerica-northeast1}"
-
-      # ---- Autres fournisseurs de modèle de langage ----
-      # Sélectionnables depuis le panneau d'administration, qui peut aussi y
-      # enregistrer les clés sans passer par ce fichier.
-      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-
-    # --- Limites de ressources (protège l'hôte) ------------------------------
-    deploy:
-      resources:
-        limits:
-          memory: 1g
-    mem_limit: 1g          # équivalent pour `docker compose` v2 sans Swarm
+    mem_limit: 1g
 
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
 
-networks:
-  consultai_net:
-    driver: bridge
-    # Sous-réseau attribué automatiquement par Docker : rien dans
-    # l'application ne dépend plus d'une adresse de passerelle précise
-    # (l'authentification est OIDC, pas fondée sur l'IP source — voir plus
-    # haut). Si vous devez néanmoins fixer ce sous-réseau (collision avec un
-    # autre réseau Docker de l'hôte, par exemple), ajoutez ici :
-    #   ipam:
-    #     config:
-    #       - subnet: 172.27.0.0/24
-    #         gateway: 172.27.0.1
-  # Réseau créé par la stack Pangolin. Décommentez si vous l'utilisez.
-  # pangolin:
-  #   external: true
+# Pour rejoindre le réseau Docker d'un reverse proxy existant (ex. Pangolin) :
+# ajoutez `networks: [proxy]` au service ci-dessus, puis décommentez :
+# networks:
+#   proxy:
+#     external: true

@@ -77,11 +77,50 @@
     .safe-bottom { padding-bottom: max(0.625rem, env(safe-area-inset-bottom)); }
 
     /* ---------------------------------------------------------------
+       PANNEAUX DE BUREAU — MÊME HAUTEUR UTILE
+       Les deux cadres blancs faisaient déjà la même hauteur (grille en
+       1fr), mais pas les deux zones de travail : l'en-tête de la note
+       porte le groupe « Copier » coiffé de son accolade, une quinzaine de
+       pixels plus haut que la rangée de boutons de la dictée. La
+       transcription descendait donc plus bas que l'aperçu.
+       Le sous-quadrillage (« subgrid ») fait partager aux deux panneaux
+       les MÊMES deux rangées — en-têtes d'un côté, contenus de l'autre —
+       si bien que la rangée d'en-tête prend la hauteur du plus haut des
+       deux et que les contenus s'alignent d'eux-mêmes. Aucune hauteur
+       codée en dur : rien à corriger si un bouton change plus tard.
+       Le @supports laisse intacte la disposition en colonnes flex là où
+       le sous-quadrillage manque ; le décalage y subsiste, sans casse.
+       --------------------------------------------------------------- */
+    @supports (grid-template-rows: subgrid) {
+      @media (min-width: 1024px) {
+        main.panes-grid { grid-template-rows: auto minmax(0, 1fr); }
+        main.panes-grid > section[data-pane] {
+          display: grid;
+          grid-template-rows: subgrid;
+          grid-row: span 2;
+        }
+      }
+    }
+
+    /* ---------------------------------------------------------------
        FEUILLE DE STYLE D'IMPRESSION (« Exporter en PDF »)
        Neutralise la coquille à hauteur fixe, sinon une seule page sortirait.
        --------------------------------------------------------------- */
     @media print {
       @page { size: letter; margin: 18mm 16mm; }
+
+      /* Bandeau d'adressographe : 2,5 po d'espace blanc au haut des pages
+         IMPAIRES, pour y apposer l'étiquette d'identification.
+         En média paginé, la première page d'un document écrit de gauche à
+         droite est une page « :right » : :right vaut donc « impaire », et
+         :left « paire ». Il n'existe pas de sélecteur :nth().
+         @page :first répète la même valeur à dessein : les navigateurs
+         honorent :first depuis longtemps, :left/:right plus récemment. Sur un
+         moteur en retard, la page 1 — la seule de la plupart des notes —
+         conserve malgré tout son espace, au lieu de voir l'étiquette
+         recouvrir le motif de consultation. */
+      @page :right { margin-top: calc(18mm + 2.5in); }
+      @page :first { margin-top: calc(18mm + 2.5in); }
 
       html, body, .app-shell {
         height: auto !important; overflow: visible !important;
@@ -93,22 +132,27 @@
         display: block !important;
         position: static !important;
         font-family: "Times New Roman", Georgia, serif;
-        font-size: 11.5pt;
-        line-height: 1.5;
+        /* Corps réduit d'environ un sixième par rapport au réglage d'origine
+           (11,5 pt) : le bandeau d'adressographe consomme 2,5 po de la
+           première page, et une note qui tenait sur une page doit continuer d'y
+           tenir. Les marges verticales restent exprimées en « em » et suivent
+           donc la réduction. */
+        font-size: 9.5pt;
+        line-height: 1.45;
         color: #000;
       }
-      #printArea h1 { font-size: 16pt; margin: 0 0 .6em; text-align: center; }
-      #printArea h2 { font-size: 12.5pt; margin: 1.1em 0 .35em; border-bottom: 1px solid #000;
+      #printArea h1 { font-size: 13pt; margin: 0 0 .6em; text-align: center; }
+      #printArea h2 { font-size: 10.5pt; margin: 1.1em 0 .35em; border-bottom: 1px solid #000;
                       padding-bottom: 2px; text-transform: uppercase; }
-      #printArea h3 { font-size: 11.5pt; margin: .8em 0 .25em; font-style: italic; }
+      #printArea h3 { font-size: 9.5pt; margin: .8em 0 .25em; font-style: italic; }
       #printArea p, #printArea li { orphans: 3; widows: 3; }
       #printArea ul, #printArea ol { margin: .3em 0 .3em 1.2em; }
-      #printArea table { width: 100%; border-collapse: collapse; margin: .5em 0; font-size: 10.5pt; }
+      #printArea table { width: 100%; border-collapse: collapse; margin: .5em 0; font-size: 8.5pt; }
       #printArea th, #printArea td { border: 1px solid #444; padding: 4px 6px; text-align: left; }
       #printArea h2, #printArea h3 { break-after: avoid; page-break-after: avoid; }
 
       .print-footer { display: block !important; margin-top: 1.5em; padding-top: .5em;
-                      border-top: 1px solid #999; font-size: 9pt; color: #333; }
+                      border-top: 1px solid #999; font-size: 7.5pt; color: #333; }
     }
   </style>
 </head>
@@ -430,7 +474,7 @@
        lg:grid-rows-1 est indispensable : sans rangée explicite en 1fr, la
        rangée implicite se dimensionne sur le contenu et les panneaux ne
        remplissent pas la hauteur disponible. -->
-  <main class="no-print flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-2 lg:grid-rows-1
+  <main class="panes-grid no-print flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-2 lg:grid-rows-1
                gap-0 lg:gap-3 lg:p-3">
 
     <!-- PANNEAU : transcription brute -->

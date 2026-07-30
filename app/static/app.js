@@ -2596,7 +2596,26 @@
     soniox_api_key: { key: 'stt_provider', value: 'soniox' },
     soniox_model: { key: 'stt_provider', value: 'soniox' },
     soniox_language: { key: 'stt_provider', value: 'soniox' },
+    cohere_api_key: { key: 'stt_provider', value: 'cohere' },
+    cohere_model: { key: 'stt_provider', value: 'cohere' },
+    cohere_language: { key: 'stt_provider', value: 'cohere' },
   };
+
+  /**
+   * Avertissements affichés en tête d'un groupe, selon la valeur d'un réglage.
+   *
+   * Cohere plafonne à 5 requêtes/minute : c'est une contrainte qui décide de
+   * l'usage qu'on peut en faire, pas un détail à enterrer dans un texte
+   * d'aide. Elle s'affiche donc en évidence dès qu'on le sélectionne.
+   */
+  const PROVIDER_WARNINGS = [
+    {
+      group: 'group.stt',
+      key: 'stt_provider',
+      value: 'cohere',
+      messages: ['admin.cohere_warning', 'admin.cohere_no_vocab'],
+    },
+  ];
 
   /** Valeur courante d'un réglage : celle à l'écran si le champ est rendu. */
   function adminValueOf(key) {
@@ -2631,9 +2650,18 @@
         .filter((field) => field.group === group.key)
         .filter(isFieldRelevant);
       if (!fields.length) return '';
+      const avertissements = PROVIDER_WARNINGS
+        .filter((a) => a.group === group.key && adminValueOf(a.key) === a.value)
+        .flatMap((a) => a.messages)
+        .map((cle) => `<p class="rounded-lg border border-amber-300 bg-amber-50 p-2.5
+                                 text-[11px] leading-relaxed text-amber-900">
+                         ${esc(T(cle))}</p>`)
+        .join('');
+
       return `<section data-group-index="${index}" class="space-y-3">
         <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
           ${esc(group.label)}</h3>
+        ${avertissements}
         ${fields.map(adminFieldMarkup).join('')}
       </section>`;
     }).join('');

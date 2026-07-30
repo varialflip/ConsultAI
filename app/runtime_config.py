@@ -80,6 +80,7 @@ STT_PROVIDERS = (
     ("deepgram", "Deepgram"),
     ("assemblyai", "AssemblyAI"),
     ("soniox", "Soniox"),
+    ("cohere", "Cohere Transcribe"),
 )
 
 #: Un booléen présenté comme un choix : le panneau sait déjà afficher un
@@ -167,6 +168,20 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting(
         "soniox_language", "text", "group.stt",
         default=lambda: "", placeholder="fr / en / auto",
+    ),
+
+    Setting(
+        "cohere_api_key", "secret", "group.stt",
+        default=lambda: settings.cohere_api_key,
+    ),
+    Setting(
+        "cohere_model", "text", "group.stt",
+        default=lambda: settings.cohere_model,
+        placeholder="cohere-transcribe-03-2026",
+    ),
+    Setting(
+        "cohere_language", "text", "group.stt",
+        default=lambda: "", placeholder="fr / en",
     ),
 
     # --- Modèle de langage --------------------------------------------------
@@ -331,6 +346,7 @@ def stt_language(provider: str) -> str:
         "deepgram": "deepgram_language",
         "assemblyai": "assemblyai_language",
         "soniox": "soniox_language",
+        "cohere": "cohere_language",
     }.get(provider)
 
     if cle is not None:

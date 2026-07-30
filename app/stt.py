@@ -41,6 +41,8 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 import uuid
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
@@ -491,6 +493,8 @@ def transcribe_payload(
         return _transcribe_assemblyai(payload, extra_phrase_hints)
     if provider == "soniox":
         return _transcribe_soniox(payload, extra_phrase_hints)
+    if provider == "cohere":
+        return _transcribe_cohere(payload, extra_phrase_hints)
     return _transcribe_google(payload, extra_phrase_hints, boost)
 
 
@@ -1049,6 +1053,37 @@ def _multipart_body(field: str, filename: str, content: bytes) -> Tuple[bytes, s
     return corps, f"multipart/form-data; boundary={frontiere}"
 
 
+def _multipart_body_fields(
+    fields: dict, file_field: str, filename: str, content: bytes
+) -> Tuple[bytes, str]:
+    """
+    Corps multipart/form-data : des champs texte PUIS un fichier.
+
+    Distinct de ``_multipart_body``, qui n'envoie qu'un fichier : Cohere attend
+    « model » et « language » dans le même formulaire que l'audio.
+    """
+    frontiere = f"----consultai{uuid.uuid4().hex}"
+    morceaux = []
+    for nom, valeur in fields.items():
+        morceaux.append(
+            (
+                f"--{frontiere}\r\n"
+                f'Content-Disposition: form-data; name="{nom}"\r\n\r\n'
+                f"{valeur}\r\n"
+            ).encode()
+        )
+    morceaux.append(
+        (
+            f"--{frontiere}\r\n"
+            f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+            f"Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+    )
+    morceaux.append(content)
+    morceaux.append(f"\r\n--{frontiere}--\r\n".encode())
+    return b"".join(morceaux), f"multipart/form-data; boundary={frontiere}"
+
+
 def _transcribe_soniox(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
     import time
 
@@ -1368,3 +1403,178 @@ def extract_segment(path: str, start: float, length: float) -> AudioPayload:
         return _apply_silence_trim(payload, dst)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+# ===========================================================================
+# Cohere Transcribe
+# ===========================================================================
+# Contrat vérifié sur la documentation courante :
+#   POST https://api.cohere.com/v2/audio/transcriptions
+#   Authorization: Bearer <clé>
+#   multipart/form-data : model, language (ISO-639-1), file
+#   réponse : {"text": "..."}
+#
+# LA CONTRAINTE QUI GOUVERNE CE CODE : 5 REQUÊTES / MINUTE
+# --------------------------------------------------------
+# C'est la limite des clés d'essai — une clé de production se négocie avec
+# Cohere. Or la dictée par tranches envoie une requête toutes les ~30 s et par
+# usager : un seul médecin tient (2/min), deux tiennent à peine (4/min), trois
+# dépassent. Ce service n'est donc pas adapté à un usage simultané, et
+# l'application le dit dans le panneau au lieu de laisser découvrir des
+# tranches perdues au milieu d'une consultation.
+#
+# Deux protections, dans cet ordre :
+#   1. un ÉTALEMENT préventif — on ne laisse pas partir plus de 5 requêtes par
+#      minute, en faisant patienter la suivante. Mieux vaut une tranche en
+#      retard qu'une tranche refusée ;
+#   2. une REPRISE sur 429, en respectant « Retry-After » quand il est fourni.
+#
+# Le découpage de la dictée tourne dans un fil d'exécution séparé (voir
+# main._schedule_dictation_processing) : y patienter ne bloque pas la boucle
+# asyncio ni la réception des fragments suivants.
+# ===========================================================================
+_COHERE_URL = "https://api.cohere.com/v2/audio/transcriptions"
+_COHERE_MODEL_DEFAUT = "cohere-transcribe-03-2026"
+#: Documenté : 25 Mo maximum par fichier.
+_COHERE_MAX_BYTES = 25 * 1024 * 1024
+#: Fenêtre d'étalement. Volontairement un cran sous la limite annoncée : une
+#: requête refusée coûte plus cher qu'une requête retardée.
+_COHERE_MAX_PAR_FENETRE = 4
+_COHERE_FENETRE_SECONDES = 60.0
+_COHERE_TENTATIVES = 3
+
+_cohere_envois: List[float] = []
+_cohere_verrou = threading.Lock()
+
+
+def _cohere_attendre_son_tour() -> None:
+    """
+    Étale les envois pour rester sous la limite du fournisseur.
+
+    Bloquant à dessein, et sans danger : l'appelant est un fil du pool, pas la
+    boucle asyncio. Le verrou n'est pas tenu pendant l'attente — le garder
+    sérialiserait tous les appels au lieu de les étaler.
+    """
+    while True:
+        with _cohere_verrou:
+            maintenant = time.monotonic()
+            # On ne garde que les envois de la dernière minute : la liste ne
+            # peut donc pas croître, et l'historique reste exact.
+            recents = [t for t in _cohere_envois if maintenant - t < _COHERE_FENETRE_SECONDES]
+            _cohere_envois[:] = recents
+            if len(recents) < _COHERE_MAX_PAR_FENETRE:
+                _cohere_envois.append(maintenant)
+                return
+            attente = _COHERE_FENETRE_SECONDES - (maintenant - recents[0]) + 0.05
+
+        logger.info(
+            "Cohere : limite de %d requêtes/minute atteinte, attente de %.1f s "
+            "avant l'envoi de la tranche.",
+            _COHERE_MAX_PAR_FENETRE, attente,
+        )
+        time.sleep(max(0.1, min(attente, _COHERE_FENETRE_SECONDES)))
+
+
+def _transcribe_cohere(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
+    """
+    Transcription par Cohere Transcribe.
+
+    ``extra_phrase_hints`` est ignoré : l'API n'offre aucune adaptation au
+    vocabulaire — ni mots-clés, ni contexte. C'est la contrepartie de sa
+    simplicité, et cela vaut d'être su pour une dictée clinique, où les noms de
+    molécules et les acronymes sont précisément ce qui se transcrit mal.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    api_key = runtime_config.value("cohere_api_key")
+    if not api_key:
+        raise TranscriptionError(
+            "Cohere est sélectionné mais aucune clé API n'est renseignée. "
+            "Panneau d'administration → Reconnaissance vocale."
+        )
+
+    if len(payload.content) > _COHERE_MAX_BYTES:
+        raise TranscriptionError(
+            f"Tranche de {len(payload.content) / 1048576:.1f} Mo : Cohere refuse "
+            "au-delà de 25 Mo. Réduisez DICTATION_SEGMENT_SECONDS."
+        )
+
+    model = runtime_config.value("cohere_model") or _COHERE_MODEL_DEFAUT
+    # ISO-639-1 : « fr », « en ». Le code régional de Google (« fr-CA ») serait
+    # refusé, d'où une entrée propre dans la table de correspondance.
+    langue = runtime_config.stt_language("cohere") or "en"
+
+    logger.info(
+        "Envoi à Cohere : %.2f Mo, %s s facturées, modèle %s, langue %s",
+        len(payload.content) / 1048576,
+        round(payload.effective_seconds, 1) or "?", model, langue,
+    )
+
+    corps, ctype = _multipart_body_fields(
+        {"model": model, "language": langue},
+        "file", "dictee.ogg", payload.content,
+    )
+
+    derniere_erreur = ""
+    for tentative in range(1, _COHERE_TENTATIVES + 1):
+        _cohere_attendre_son_tour()
+        requete = urllib.request.Request(
+            _COHERE_URL,
+            data=corps,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": ctype},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(requete, timeout=240) as reponse:
+                data = _json.loads(reponse.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            if exc.code == 429 and tentative < _COHERE_TENTATIVES:
+                # « Retry-After » quand il est fourni, sinon un recul qui
+                # double : la fenêtre du fournisseur est glissante, réessayer
+                # trop tôt ne fait que consommer une tentative.
+                entete = exc.headers.get("Retry-After") if exc.headers else None
+                try:
+                    pause = float(entete) if entete else 0.0
+                except (TypeError, ValueError):
+                    pause = 0.0
+                pause = pause or min(60.0, 5.0 * (2 ** (tentative - 1)))
+                logger.warning(
+                    "Cohere a refusé la tranche (429, limite de débit). "
+                    "Nouvelle tentative dans %.0f s (%d/%d).",
+                    pause, tentative, _COHERE_TENTATIVES,
+                )
+                time.sleep(pause)
+                derniere_erreur = detail
+                continue
+            if exc.code == 429:
+                raise TranscriptionError(
+                    "Cohere a refusé la tranche : limite de 5 requêtes par "
+                    "minute atteinte malgré les tentatives. Ce service ne "
+                    "convient pas à plusieurs dictées simultanées — changez de "
+                    "fournisseur dans le panneau d'administration."
+                ) from exc
+            raise TranscriptionError(f"Erreur Cohere ({exc.code}) : {detail}") from exc
+        except Exception as exc:
+            logger.exception("Échec de l'appel Cohere")
+            raise TranscriptionError(f"Erreur Cohere : {exc}") from exc
+    else:
+        raise TranscriptionError(
+            f"Cohere injoignable après {_COHERE_TENTATIVES} tentatives. "
+            f"{derniere_erreur}"
+        )
+
+    texte = str(data.get("text") or "").strip()
+    return {
+        "transcript": texte,
+        # L'API ne renvoie aucun indice de confiance : on n'en invente pas.
+        # 0.0 signifie « non fourni », comme pour les autres services muets.
+        "confidence": 0.0,
+        "duration_seconds": int(round(payload.duration_seconds)),
+        "segments": 1 if texte else 0,
+        "provider": "cohere",
+        "model": model,
+    }

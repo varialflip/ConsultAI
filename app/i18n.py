@@ -83,12 +83,15 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         "deepgram": "fr-CA",
         "assemblyai": "fr",
         "soniox": "fr",
+        # Cohere attend de l'ISO-639-1 strict : « fr-CA » serait refusé.
+        "cohere": "fr",
     },
     "en": {
         "google": "en-CA",
         "deepgram": "en-CA",
         "assemblyai": "en",
         "soniox": "en",
+        "cohere": "en",
     },
 }
 
@@ -919,6 +922,53 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "automatic detection: Soniox is multilingual by design, which suits a "
         "consultation that alternates between two languages.",
     ),
+    "set.cohere_api_key.label": ("Clé API Cohere", "Cohere API key"),
+    "set.cohere_api_key.help": (
+        "dashboard.cohere.com → API Keys. Une clé d'ESSAI est limitée à "
+        "5 requêtes par minute, toutes dictées confondues ; une clé de "
+        "production se négocie avec Cohere.",
+        "dashboard.cohere.com → API Keys. A TRIAL key is limited to 5 requests "
+        "per minute across all dictations; a production key must be arranged "
+        "with Cohere.",
+    ),
+    "set.cohere_model.label": ("Modèle Cohere", "Cohere model"),
+    "set.cohere_model.help": (
+        "cohere-transcribe-03-2026 au moment de l'intégration. Modèle de "
+        "reconnaissance vocale dédié, 14 langues dont le français.",
+        "cohere-transcribe-03-2026 at the time of integration. A dedicated "
+        "speech recognition model covering 14 languages, French included.",
+    ),
+    "set.cohere_language.label": ("Langue Cohere", "Cohere language"),
+    "set.cohere_language.help": (
+        "Laisser vide pour suivre la langue du gabarit. Cohere n'accepte que "
+        "de l'ISO-639-1 : « fr », « en » — jamais « fr-CA ».",
+        "Leave empty to follow the template language. Cohere only accepts "
+        "ISO-639-1: “fr”, “en” — never “fr-CA”.",
+    ),
+
+    # Avertissement affiché dans le panneau quand Cohere est sélectionné.
+    "admin.cohere_warning": (
+        "Cohere est limité à 5 requêtes par minute. La dictée envoie une "
+        "tranche toutes les 30 secondes et par usager : une dictée passe, deux "
+        "passent à peine, trois dépassent. Déconseillé pour des dictées "
+        "simultanées. L'application étale les envois et réessaie, mais une "
+        "tranche peut être retardée.",
+        "Cohere is rate-limited to 5 requests per minute. Dictation sends one "
+        "segment every 30 seconds per user: one dictation fits, two barely, "
+        "three exceed it. Not recommended for concurrent dictation sessions. "
+        "The application spaces out requests and retries, but a segment may be "
+        "delayed.",
+    ),
+    "admin.cohere_no_vocab": (
+        "Cohere n'offre aucune adaptation au vocabulaire : ni mots-clés, ni "
+        "contexte. Le lexique clinique et le vocabulaire des gabarits ne lui "
+        "sont pas transmis — les noms de molécules et les acronymes sont "
+        "précisément ce qui s'y transcrit le moins bien.",
+        "Cohere offers no vocabulary adaptation: no keywords, no context. The "
+        "clinical lexicon and template vocabulary are not sent to it — drug "
+        "names and acronyms are exactly what it transcribes least well.",
+    ),
+
     "set.llm_provider.label": ("Fournisseur", "Provider"),
     "set.llm_provider.help": ("", ""),
     "set.llm_model.label": ("Modèle", "Model"),

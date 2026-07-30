@@ -174,6 +174,11 @@ class Settings:
     soniox_api_key: str = ""
     soniox_model: str = "stt-async-v5"
 
+    # --- Cohere Transcribe (cinquième) ---
+    # ⚠️ 5 requêtes/minute sur une clé d'essai : voir stt._transcribe_cohere.
+    cohere_api_key: str = ""
+    cohere_model: str = "cohere-transcribe-03-2026"
+
     # --- Dictée par segments ---
     # La dictée n'est plus envoyée en un seul bloc à la fin : le navigateur
     # téléverse l'audio au fil de l'eau et le serveur le transcrit par
@@ -340,6 +345,8 @@ class Settings:
             assemblyai_model=_env("ASSEMBLYAI_MODEL", "universal-3-5-pro"),
             soniox_api_key=_env("SONIOX_API_KEY"),
             soniox_model=_env("SONIOX_MODEL", "stt-async-v5"),
+            cohere_api_key=_env("COHERE_API_KEY"),
+            cohere_model=_env("COHERE_MODEL", "cohere-transcribe-03-2026"),
 
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
             logout_pangolin_ui_url=_env("LOGOUT_PANGOLIN_UI_URL"),

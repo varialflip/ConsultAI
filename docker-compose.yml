@@ -125,6 +125,12 @@ services:
       SONIOX_API_KEY: "${SONIOX_API_KEY:-}"
       SONIOX_MODEL: "${SONIOX_MODEL:-stt-async-v5}"
 
+      # ---- Cohere Transcribe ----
+      # ⚠️ 5 requêtes/minute sur une clé d'essai : déconseillé pour des dictées
+      # simultanées, et aucune adaptation au vocabulaire. Voir .env.example.
+      COHERE_API_KEY: "${COHERE_API_KEY:-}"
+      COHERE_MODEL: "${COHERE_MODEL:-cohere-transcribe-03-2026}"
+
       # ---- Déconnexion (Pangolin + fournisseur OIDC) ----
       LOGOUT_PANGOLIN_UI_URL: "${LOGOUT_PANGOLIN_UI_URL:-}"
       LOGOUT_OIDC_URL: "${LOGOUT_OIDC_URL:-}"

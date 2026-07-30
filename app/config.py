@@ -191,7 +191,7 @@ class Settings:
     # tranches. Une coupure réseau ne coûte donc plus la consultation entière.
     dictation_dir: str = "/data/dictations"
     dictation_chunk_seconds: int = 5      # cadence de téléversement (navigateur)
-    dictation_segment_seconds: int = 30   # durée visée d'une tranche transcrite
+    dictation_segment_seconds: int = 10   # durée visée d'une tranche transcrite
     dictation_retention_hours: int = 72   # purge des dictées abandonnées
 
     # --- Gemini ---
@@ -361,7 +361,7 @@ class Settings:
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
             dictation_dir=_env("DICTATION_DIR", "/data/dictations"),
             dictation_chunk_seconds=_env_int("DICTATION_CHUNK_SECONDS", 5),
-            dictation_segment_seconds=_env_int("DICTATION_SEGMENT_SECONDS", 30),
+            dictation_segment_seconds=_env_int("DICTATION_SEGMENT_SECONDS", 10),
             dictation_retention_hours=_env_int("DICTATION_RETENTION_HOURS", 72),
 
             gemini_api_key=_env("GEMINI_API_KEY"),

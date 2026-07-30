@@ -21,7 +21,7 @@
 
 // Incrémentez cette version à chaque modification d'un fichier statique :
 // cela purge l'ancien cache et force le rechargement chez tous les usagers.
-const VERSION = 'consultai-v16';
+const VERSION = 'consultai-v17';
 const SHELL_CACHE = `${VERSION}-shell`;
 const VENDOR_CACHE = `${VERSION}-vendor`;
 

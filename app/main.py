@@ -1254,12 +1254,17 @@ async def api_transcribe(
             ),
         )
 
-    # Vocabulaire additionnel provenant du gabarit sélectionné.
+    # Vocabulaire additionnel provenant du gabarit sélectionné, et surtout sa
+    # langue : sans ce lien, un fichier importé partait avec la langue de
+    # l'interface — donc le code de langue et le lexique francophone d'un
+    # usager français sur un enregistrement anglais. La dictée par tranches, elle,
+    # faisait déjà ce lien (voir dictation._bind_template_language).
     extra_hints = ""
     if template_id:
         template_row = db.get(TemplateModel, template_id)
         if template_row is not None:
             extra_hints = template_row.phrase_hints or ""
+            preferences.bind_document_language(template_row.language)
 
     try:
         # Appel bloquant (réseau + ffmpeg) : exécuté hors de la boucle asyncio.
@@ -1285,9 +1290,13 @@ async def api_transcribe(
         if result.get("provider"):
             consultation.stt_provider = result["provider"]
             consultation.stt_model = result.get("model") or ""
+        consultation.stt_language = preferences.document_language()
         consultation.updated_at = utcnow()
         db.commit()
         result["consultation_id"] = consultation.id
+        # L'interface la garde pour comparer, plus tard, à la langue du
+        # gabarit choisi (proposition de retranscription).
+        result["stt_language"] = consultation.stt_language
 
         # Le fichier importé est conservé au même titre qu'une dictée : il
         # sert à trancher un doute sur une posologie, et il s'effacera avec
@@ -1421,6 +1430,31 @@ def get_dictation(session_id: str, request: Request):
     return _dictation_session(session_id, user).to_public()
 
 
+class DictationTemplateIn(BaseModel):
+    template_id: Optional[int] = None
+
+
+@app.patch("/api/dictation/{session_id}")
+def update_dictation_template(session_id: str, payload: DictationTemplateIn, request: Request):
+    """
+    Rattache la dictée en cours à un autre gabarit.
+
+    Le médecin choisit souvent son gabarit une fois la dictée lancée. Sans cet
+    appel, la session gardait celui de son ouverture et toutes les tranches
+    suivantes partaient dans l'ancienne langue, avec l'ancien vocabulaire —
+    l'écart se creusait au lieu de se refermer.
+
+    Ne retouche rien de ce qui est déjà transcrit : c'est le rôle de
+    ``/api/consultations/{id}/retranscribe``, qui, lui, repart de l'audio.
+    """
+    user = current_user(request)
+    session = _dictation_session(session_id, user)
+    session.template_id = payload.template_id
+    session.save()
+    logger.info("Dictée %s : gabarit passé à %s", session_id, payload.template_id)
+    return session.to_public()
+
+
 @app.post("/api/dictation/{session_id}/finish")
 async def finish_dictation(session_id: str, request: Request, db: Session = Depends(get_db)):
     """
@@ -1453,6 +1487,9 @@ async def finish_dictation(session_id: str, request: Request, db: Session = Depe
     # doute sur une posologie, et sera effacé avec lui.
     consultation = db.get(Consultation, session.consultation_id)
     if consultation is not None and consultation.owner == user.username:
+        # Langue réellement employée par les tranches : l'interface s'en sert
+        # pour proposer une retranscription si le gabarit choisi diverge.
+        result["stt_language"] = consultation.stt_language
         try:
             stored = await run_in_threadpool(
                 recordings.store_path, db, consultation, session.audio_path,
@@ -1706,6 +1743,112 @@ def list_recordings(consultation_id: int, request: Request, db: Session = Depend
     _get_owned_consultation(db, consultation_id, user)
     return {
         "recordings": [row.to_dict() for row in recordings.for_consultation(db, consultation_id)]
+    }
+
+
+class RetranscribeIn(BaseModel):
+    template_id: Optional[int] = None
+
+
+@app.post("/api/consultations/{consultation_id}/retranscribe")
+async def retranscribe_consultation(
+    consultation_id: int,
+    payload: RetranscribeIn,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Renvoie l'audio conservé au service vocal, dans la langue du gabarit donné.
+
+    Raison d'être : la dictée commence souvent avant que le gabarit soit
+    choisi. La transcription part alors dans la langue par défaut, et le
+    médecin se retrouve avec une consultation anglaise transcrite en français —
+    illisible, et irrécupérable par la mise en forme, puisque le modèle reçoit
+    déjà des mots faux.
+
+    Remplace la transcription au lieu de s'y ajouter : c'est le MÊME audio,
+    reconnu autrement. L'ajouter à la suite donnerait le texte en double.
+    L'appel est bloquant — le médecin attend le résultat pour continuer.
+    """
+    user = current_user(request)
+    consultation = _get_owned_consultation(db, consultation_id, user)
+
+    pistes = recordings.for_consultation(db, consultation_id)
+    if not pistes:
+        raise HTTPException(status_code=409, detail=_t("err.retranscribe_no_audio"))
+
+    # Langue et vocabulaire du gabarit visé. Le gabarit commande toute la
+    # chaîne — code de langue envoyé au service, lexique francophone joint ou
+    # non ; c'est exactement ce qu'on cherche à changer ici.
+    hints, langue = "", ""
+    if payload.template_id:
+        gabarit = db.get(TemplateModel, payload.template_id)
+        if gabarit is None:
+            raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
+        hints = gabarit.phrase_hints or ""
+        langue = gabarit.language or ""
+    preferences.bind_document_language(langue or None)
+
+    # Plusieurs enregistrements = plusieurs passes de dictée sur le même
+    # brouillon. On les reprend dans l'ordre de création, comme ils ont été
+    # dictés, et on recompose le texte dans le même ordre.
+    morceaux: List[str] = []
+    secondes = 0.0
+    moteur = ("", "")
+    for piste in pistes:
+        chemin = recordings.absolute_path(piste)
+        if not os.path.exists(chemin):
+            logger.warning(
+                "Retranscription %s : fichier absent pour l'enregistrement %s",
+                consultation_id, piste.id,
+            )
+            continue
+        with open(chemin, "rb") as handle:
+            brut = handle.read()
+        try:
+            resultat = await run_in_threadpool(transcribe, brut, piste.mime_type, hints)
+        except TranscriptionError as exc:
+            logger.warning("Retranscription %s refusée : %s", consultation_id, exc)
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:  # pragma: no cover
+            logger.exception("Erreur inattendue pendant la retranscription %s", consultation_id)
+            raise HTTPException(
+                status_code=502, detail=_t("err.transcription", error=exc)
+            ) from exc
+
+        texte = (resultat.get("transcript") or "").strip()
+        if texte:
+            morceaux.append(texte)
+        secondes += float(resultat.get("duration_seconds") or 0)
+        if resultat.get("provider"):
+            moteur = (resultat["provider"], resultat.get("model") or "")
+
+    if not morceaux:
+        # Aucun fichier lisible, ou du silence partout : mieux vaut refuser que
+        # remplacer une transcription existante par du vide.
+        raise HTTPException(status_code=422, detail=_t("err.retranscribe_empty"))
+
+    consultation.raw_transcript = "\n\n".join(morceaux)
+    consultation.audio_seconds = int(round(secondes))
+    consultation.status = "transcrit"
+    if moteur[0]:
+        consultation.stt_provider, consultation.stt_model = moteur
+    consultation.stt_language = preferences.document_language()
+    consultation.updated_at = utcnow()
+    db.commit()
+
+    logger.info(
+        "Retranscription de la consultation %s pour %s : %d enregistrement(s), "
+        "langue %s, %d caractères",
+        consultation_id, user.username, len(morceaux),
+        consultation.stt_language, len(consultation.raw_transcript),
+    )
+    return {
+        "transcript": consultation.raw_transcript,
+        "stt_language": consultation.stt_language,
+        "stt_used": " / ".join(p for p in moteur if p),
+        "duration_seconds": consultation.audio_seconds,
+        "recordings": len(morceaux),
     }
 
 

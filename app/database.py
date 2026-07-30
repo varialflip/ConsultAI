@@ -223,6 +223,12 @@ class Consultation(Base):
     llm_provider: Mapped[str] = mapped_column(String(40), default="", nullable=False)
     stt_provider: Mapped[str] = mapped_column(String(40), default="", nullable=False)
     stt_model: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    # Langue dans laquelle l'audio a RÉELLEMENT été transcrit. Distincte de
+    # celle du gabarit courant : la dictée commence souvent avant que le
+    # gabarit soit choisi, et c'est justement l'écart entre les deux qui doit
+    # déclencher la proposition de retranscription. La déduire du gabarit ne
+    # marcherait pas — il a pu changer depuis, ou être traduit après coup.
+    stt_language: Mapped[str] = mapped_column(String(8), default="", nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -254,6 +260,9 @@ class Consultation(Base):
             # Chaînes déjà composées : l'interface n'a pas à connaître la
             # façon dont on stocke fournisseur et modèle séparément.
             "stt_used": " / ".join(p for p in (self.stt_provider, self.stt_model) if p),
+            # Brute, celle-ci : l'interface la compare à la langue du gabarit
+            # choisi pour décider s'il y a lieu de proposer une retranscription.
+            "stt_language": self.stt_language,
             "llm_used": " / ".join(p for p in (self.llm_provider, self.model_used) if p),
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
@@ -1125,6 +1134,7 @@ _ADDED_COLUMNS = {
         ("llm_provider", "VARCHAR(40) NOT NULL DEFAULT ''"),
         ("stt_provider", "VARCHAR(40) NOT NULL DEFAULT ''"),
         ("stt_model", "VARCHAR(80) NOT NULL DEFAULT ''"),
+        ("stt_language", "VARCHAR(8) NOT NULL DEFAULT ''"),
     ],
 }
 

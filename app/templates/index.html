@@ -449,9 +449,23 @@
              dont on doute est le seul moyen de trancher sans refaire l'entrevue.
              Ils s'effacent avec le brouillon. -->
         <div id="recordingsBlock" class="hidden mt-3 pt-2 border-t border-slate-100">
-          <p class="text-[11px] font-medium text-slate-600 mb-1">
-            {{ t('recordings.title') }} <span id="recordingsCount" class="font-normal text-slate-400"></span>
-          </p>
+          <div class="flex items-center gap-2 mb-1">
+            <p class="text-[11px] font-medium text-slate-600">
+              {{ t('recordings.title') }} <span id="recordingsCount" class="font-normal text-slate-400"></span>
+            </p>
+            <!-- Retranscrire est offert en permanence, et pas seulement quand
+                 la langue du gabarit change : on change aussi de service vocal
+                 en cours de route, et rejuger un passage douteux avec un autre
+                 moteur est le seul recours quand le texte est faux. Placé ici,
+                 avec l'audio dont il repart, et donc visible exactement quand
+                 il est possible — ce bloc n'existe pas sans enregistrement. -->
+            <button id="btnRetranscribe" type="button"
+                    title="{{ t('retranscribe.action_title') }}"
+                    class="ml-auto shrink-0 text-[11px] px-2 py-1 rounded border border-slate-200
+                           hover:bg-slate-50 text-slate-600 disabled:opacity-40">
+              {{ t('retranscribe.action') }}
+            </button>
+          </div>
           <ul id="recordingsList" class="space-y-2"></ul>
           <p class="text-[11px] text-slate-400 mt-2">
             {{ t('recordings.note') }}

@@ -447,6 +447,12 @@ def _store_part(session: DictationSession, text: str, moteur: tuple = ("", "")) 
         # veut voir — pas celui de la première tranche.
         if moteur[0]:
             consultation.stt_provider, consultation.stt_model = moteur[0], moteur[1]
+        # Langue réellement employée pour CETTE tranche. Comme le moteur, la
+        # dernière gagne : c'est celle du gabarit lié à la session, et si le
+        # gabarit a changé en cours de dictée, c'est la plus récente qui décrit
+        # le mieux ce que contient le texte accumulé.
+        from app import preferences
+        consultation.stt_language = preferences.document_language()
         consultation.updated_at = utcnow()
         db.commit()
 

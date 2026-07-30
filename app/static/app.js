@@ -199,6 +199,10 @@
     paused: false,
     recordedSeconds: 0,
     lastSavedSnapshot: '',
+    // Langue dans laquelle l'audio a réellement été reconnu — pas celle du
+    // gabarit courant. C'est l'écart entre les deux qui déclenche la
+    // proposition de retranscription (voir maybeOfferRetranscription).
+    transcriptLanguage: '',
     editingMarkdown: false,
     mobilePane: 'dictee',   // panneau visible sur petit écran
   };
@@ -239,7 +243,7 @@
   };
 
   /** Cadences réglées par le serveur (/api/config), avec des valeurs de repli. */
-  const dictationConfig = { chunkSeconds: 5, segmentSeconds: 30 };
+  const dictationConfig = { chunkSeconds: 5, segmentSeconds: 10 };
 
   /** Le point de rupture « lg » de Tailwind, seuil du double panneau. */
   const isMobileLayout = () => window.matchMedia('(max-width: 1023px)').matches;
@@ -291,6 +295,102 @@
     desc.textContent = tpl ? (tpl.description || '') : '';
     desc.classList.toggle('hidden', !desc.textContent);
     if (tpl) localStorage.setItem('consultai.lastTemplate', String(tpl.id));
+  }
+
+  /**
+   * Nom lisible d'une langue, lu dans le sélecteur des gabarits — lui-même
+   * rempli par le serveur depuis i18n.LANGUAGES. Évite de tenir une seconde
+   * liste ici, qui divergerait le jour où une langue s'ajoute.
+   */
+  function languageName(code) {
+    const option = document.querySelector(`#tplLanguage option[value="${code}"]`);
+    return option ? option.textContent.trim() : (code || '?');
+  }
+
+  /**
+   * Propose de retranscrire quand le gabarit choisi n'est pas dans la langue
+   * où l'audio a été reconnu.
+   *
+   * La dictée démarre presque toujours avant que le gabarit soit choisi : le
+   * texte part alors dans la langue par défaut, et une consultation anglaise
+   * revient transcrite en français — illisible, et que la mise en forme ne
+   * peut pas rattraper puisque le modèle reçoit déjà des mots faux.
+   *
+   * Jamais automatique : retranscrire coûte un appel facturé et écrase le
+   * texte en place. C'est donc une question, pas une correction.
+   */
+  async function maybeOfferRetranscription() {
+    const tpl = currentTemplate();
+    const ancienne = state.transcriptLanguage;
+    // Rien de transcrit, gabarit sans langue, ou déjà la bonne : rien à dire.
+    if (!tpl || !tpl.language || !ancienne || ancienne === tpl.language) return;
+
+    const nouvelle = languageName(tpl.language);
+    const avant = languageName(ancienne);
+
+    // Dictée en cours : l'audio vit encore dans la session, pas dans le
+    // brouillon — il n'y a rien à retranscrire depuis les enregistrements. On
+    // rattache la session au nouveau gabarit pour que la SUITE parte dans la
+    // bonne langue, et on annonce l'écart qui subsiste.
+    if (dictation.active) {
+      if (dictation.sessionId) {
+        try {
+          await api(`/api/dictation/${dictation.sessionId}`, {
+            method: 'PATCH', body: { template_id: tpl.id },
+          });
+        } catch (err) {
+          console.warn('Gabarit de la dictée non mis à jour', err);
+        }
+      }
+      state.transcriptLanguage = tpl.language;
+      toast(T('retranscribe.during_dictation', { nouvelle, ancienne: avant }), 'info', 9000);
+      return;
+    }
+
+    if (!state.consultationId || !$('transcript').value.trim()) return;
+    await runRetranscription(tpl, T('retranscribe.confirm', { nouvelle, ancienne: avant }));
+  }
+
+  /**
+   * Renvoie l'audio conservé au service vocal et remplace la transcription.
+   *
+   * Partagée par les deux déclencheurs : la proposition automatique sur
+   * changement de langue, et le bouton « Retranscrire », toujours offert — on
+   * change aussi de service vocal en cours de route, et c'est alors le seul
+   * moyen de rejuger un enregistrement déjà transcrit.
+   *
+   * Le message de confirmation vient de l'appelant : ce qu'on perd est le même
+   * dans les deux cas, mais ce qui le motive ne l'est pas.
+   */
+  async function runRetranscription(tpl, message) {
+    if (!state.consultationId) return;
+    if (!window.confirm(message)) return;
+
+    const langue = languageName(
+      (tpl && tpl.language) ? tpl.language : state.transcriptLanguage,
+    );
+    const bouton = $('btnRetranscribe');
+    if (bouton) bouton.disabled = true;
+    toast(T('retranscribe.running', { langue }), 'info', 60000);
+    try {
+      const data = await api(`/api/consultations/${state.consultationId}/retranscribe`, {
+        method: 'POST', body: { template_id: tpl ? tpl.id : null },
+      });
+      $('transcript').value = data.transcript || '';
+      state.transcriptLanguage = data.stt_language || (tpl ? tpl.language : '');
+      // Le serveur a déjà écrit ce texte en base. On force malgré tout une
+      // sauvegarde : elle emporte aussi le gabarit qui vient de changer, et
+      // écrase une éventuelle sauvegarde différée partie avec l'ancien texte.
+      state.lastSavedSnapshot = '';
+      scheduleSave();
+      toast(T('retranscribe.done', {
+        langue, count: (data.transcript || '').length,
+      }), 'success');
+    } catch (err) {
+      toast(T('retranscribe.failed', { error: err.message || err }), 'error', 8000);
+    } finally {
+      if (bouton) bouton.disabled = false;
+    }
   }
 
   /* =========================================================================
@@ -1011,6 +1111,7 @@
         await drainQueue();
         const result = await api(`/api/dictation/${dictation.sessionId}/finish`, { method: 'POST' });
         applyDictationParts(result);
+        if (result.stt_language) state.transcriptLanguage = result.stt_language;
         await bestEffort(() => audioStore.remove(dictation.localId), 'nettoyage');
       }
 
@@ -1396,6 +1497,7 @@
         ? `${existing}\n\n${result.transcript}`
         : result.transcript;
 
+      if (result.stt_language) state.transcriptLanguage = result.stt_language;
       updateTranscriptMeta(result);
       loadRecordings();
       toast(
@@ -2347,6 +2449,7 @@
       state.lastSavedSnapshot = workspaceSnapshot();
       loadRecordings();
       showNoteEngines(draft.stt_used, draft.llm_used);
+      state.transcriptLanguage = draft.stt_language || '';
       setSaveStatus(T('save.loaded_at', { date: formatDateTime(draft.updated_at) }));
       $('draftsModal').classList.add('hidden');
       toast(T('drafts.loaded', { title: draft.title }), 'success');
@@ -2376,6 +2479,7 @@
     $('timer').textContent = '00:00';
     $('transcriptMeta').textContent = '';
     setSaveStatus('');
+    state.transcriptLanguage = '';
     showNoteEngines('', '');
     loadRecordings();
     showPreview();
@@ -3583,6 +3687,16 @@
     $('templateSelect').addEventListener('change', () => {
       updateTemplateDescription();
       scheduleSave();
+      // Le seul moment où l'on peut s'apercevoir que la dictée a été
+      // transcrite dans la mauvaise langue.
+      maybeOfferRetranscription();
+    });
+    $('btnRetranscribe').addEventListener('click', () => {
+      const tpl = currentTemplate();
+      const langue = languageName(
+        (tpl && tpl.language) ? tpl.language : state.transcriptLanguage,
+      );
+      runRetranscription(tpl, T('retranscribe.confirm_manual', { langue }));
     });
     $('btnManageTemplates').addEventListener('click', openTemplatesModal);
     $('btnCloseTemplates').addEventListener('click', closeTemplatesModal);

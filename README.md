@@ -361,8 +361,9 @@ enregistrer.
 
 > ⚠️ **Cohere est déconseillé pour la dictée clinique.** Plafonné à 5
 > requêtes/minute sur une clé d'essai — la dictée envoie une tranche toutes les
-> 30 s **et par usager**, donc une dictée passe, deux passent à peine, trois
-> dépassent. Il n'offre aucune adaptation au vocabulaire et s'est montré
+> 10 s **et par usager**, soit 6 requêtes/minute : **une seule dictée dépasse
+> déjà le plafond**. Remontez `DICTATION_SEGMENT_SECONDS` à 30 pour rester sous
+> la barre. Il n'offre aucune adaptation au vocabulaire et s'est montré
 > nettement moins fiable sur les noms de médicaments à l'essai, jusqu'à en
 > inventer. L'application étale les envois et réessaie sur 429, mais une tranche
 > peut être retardée.
@@ -420,6 +421,29 @@ tromperait sur une consultation bilingue.
 
 La langue d'**interface** est distincte et propre à chaque usager : on peut lire
 l'écran en français et produire une note anglaise.
+
+#### Dicter avant d'avoir choisi son gabarit
+
+C'est le cas courant : on démarre la dictée, on choisit le gabarit ensuite. Les
+premières tranches partent alors dans la langue par défaut, et une consultation
+anglaise revient transcrite en français — que la mise en forme ne peut pas
+rattraper, puisque le modèle reçoit déjà des mots faux.
+
+Choisir un gabarit d'une **autre langue que celle de la transcription** déclenche
+donc une proposition :
+
+| Moment | Ce qui se passe |
+|---|---|
+| **Pendant** la dictée | La session bascule sur le nouveau gabarit : les tranches à venir suivent la nouvelle langue. Celles déjà transcrites restent en l'état — l'application le dit. |
+| **Après** la dictée | Une question propose de renvoyer l'enregistrement au service vocal. La transcription est alors **remplacée**, pas complétée : c'est le même audio, reconnu autrement. |
+
+La retranscription ne touche pas la note déjà mise en forme, et n'a lieu que sur
+réponse affirmative : c'est un appel facturé de plus, sur toute la durée de
+l'enregistrement. Elle exige que l'audio ait été conservé — ce qui est le cas
+par défaut (§ 11).
+
+> Rien de tout cela n'est automatique. Retranscrire écrase du texte que le
+> médecin a pu déjà corriger à la main.
 
 > Un gabarit n'est jamais traduit. Un gabarit français avec l'interface en
 > anglais produit une note aux **titres de rubriques français** et au corps
@@ -513,6 +537,7 @@ Incluez `/volume1/docker/ConsultAI/data` dans Hyper Backup.
 | « Enregistrement trop long pour un envoi direct » | Au-delà de ~55 min. Configurez `STT_GCS_BUCKET` ou dictez en plusieurs parties. |
 | La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS` ; l'interface le signale. Malgré son nom, ce plafond vaut pour les quatre fournisseurs, et chacun a sa propre limite — l'application ramène la valeur sous celle du fournisseur retenu. |
 | Acronymes mal transcrits | Ajoutez-les au **Vocabulaire additionnel** du gabarit. |
+| Dictée transcrite dans la mauvaise langue | Choisissez le gabarit de la bonne langue : l'application propose de retranscrire l'enregistrement (§ 7.5). Sans enregistrement conservé, elle refuse — il n'y a plus de source. |
 | Tranches retardées avec Cohere | Limite de 5 req/min atteinte. Changez de service (§ 7.2). |
 
 ### Diagnostic

@@ -347,6 +347,65 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Aucune parole n'a été détectée dans cette dictée.",
         "No speech was detected in this dictation.",
     ),
+
+    # --- Changement de gabarit et retranscription -------------------------
+    # La dictée démarre souvent avant le choix du gabarit : le texte déjà
+    # transcrit peut donc l'avoir été dans la mauvaise langue.
+    "retranscribe.confirm": (
+        "Ce gabarit est en {nouvelle}, alors que la dictée a été transcrite "
+        "en {ancienne}.\n\nRenvoyer l'enregistrement au service vocal pour le "
+        "retranscrire en {nouvelle} ?\n\nLa transcription actuelle sera "
+        "REMPLACÉE. La note déjà mise en forme, elle, n'est pas touchée.",
+        "This template is in {nouvelle}, but the dictation was transcribed in "
+        "{ancienne}.\n\nSend the recording back to the speech service to "
+        "re-transcribe it in {nouvelle}?\n\nThe current transcript will be "
+        "REPLACED. The formatted note itself is left untouched.",
+    ),
+    "retranscribe.action": ("Retranscrire", "Re-transcribe"),
+    "retranscribe.action_title": (
+        "Renvoyer l'enregistrement au service vocal, dans la langue du gabarit "
+        "choisi et avec le service configuré actuellement. Utile après un "
+        "changement de service ou de gabarit.",
+        "Send the recording back to the speech service, in the selected "
+        "template's language and with the currently configured service. Useful "
+        "after switching service or template.",
+    ),
+    # Déclenchement manuel : aucun écart de langue ne le motive, c'est un choix
+    # délibéré — d'où un avertissement plus net sur ce qu'on perd.
+    "retranscribe.confirm_manual": (
+        "Renvoyer l'enregistrement au service vocal ?\n\nIl sera retranscrit "
+        "en {langue}, avec le service vocal configuré actuellement.\n\nLa "
+        "transcription actuelle sera REMPLACÉE, y compris les corrections que "
+        "vous y auriez faites à la main. La note déjà mise en forme, elle, "
+        "n'est pas touchée.",
+        "Send the recording back to the speech service?\n\nIt will be "
+        "re-transcribed in {langue}, using the currently configured speech "
+        "service.\n\nThe current transcript will be REPLACED, including any "
+        "manual corrections you made to it. The formatted note itself is left "
+        "untouched.",
+    ),
+    "retranscribe.running": (
+        "Retranscription en {langue}…",
+        "Re-transcribing in {langue}…",
+    ),
+    "retranscribe.done": (
+        "Retranscrit en {langue} — {count} caractères.",
+        "Re-transcribed in {langue} — {count} characters.",
+    ),
+    "retranscribe.failed": (
+        "Retranscription impossible : {error}",
+        "Re-transcription failed: {error}",
+    ),
+    # Pendant la dictée, l'audio n'est pas encore attaché au brouillon : on ne
+    # peut pas repartir de zéro, seulement corriger la suite.
+    "retranscribe.during_dictation": (
+        "Gabarit changé pour {nouvelle}. Les tranches à venir suivront cette "
+        "langue ; celles déjà transcrites restent en {ancienne}. Vous pourrez "
+        "tout retranscrire une fois la dictée terminée.",
+        "Template switched to {nouvelle}. Upcoming slices will follow that "
+        "language; those already transcribed stay in {ancienne}. You can "
+        "re-transcribe everything once the dictation is finished.",
+    ),
     "dictation.confirm_abort_transcribed": (
         "Arrêter sans envoyer ?\n\nL'enregistrement sera supprimé du serveur "
         "et du navigateur. Le texte déjà transcrit reste dans la "
@@ -1159,6 +1218,16 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "err.transcription": ("Erreur de transcription : {error}", "Transcription error: {error}"),
     "err.generation": ("Erreur de génération : {error}", "Generation error: {error}"),
     "err.recording_not_found": ("Enregistrement introuvable.", "Recording not found."),
+    "err.retranscribe_no_audio": (
+        "Aucun enregistrement conservé pour cette consultation : "
+        "il n'y a rien à retranscrire.",
+        "No recording kept for this consultation: there is nothing to re-transcribe.",
+    ),
+    "err.retranscribe_empty": (
+        "La nouvelle transcription n'a rien produit. La transcription "
+        "existante est conservée.",
+        "The new transcription produced nothing. The existing transcript is kept.",
+    ),
     "err.setting_rejected": (
         "Valeur refusée pour « {label} » : {value}",
         "Value rejected for “{label}”: {value}",

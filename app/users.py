@@ -169,6 +169,7 @@ def link_or_create(
     email: str,
     display_name: str,
     provider_groups: Sequence[str] = (),
+    avatar_url: str = "",
 ) -> Tuple[User, List[Group]]:
     """
     Retourne le compte correspondant à cette identité, en le créant s'il y a lieu.
@@ -192,6 +193,7 @@ def link_or_create(
             username=username or email or subject,
             email=email,
             display_name=display_name or username or email,
+            avatar_url=avatar_url,
         )
         db.add(user)
         db.flush()
@@ -218,6 +220,11 @@ def link_or_create(
             user.email = email
         if display_name and not user.display_name:
             user.display_name = display_name
+        # L'avatar, lui, est RAFRAÎCHI à chaque connexion : il n'est pas modifiable
+        # dans l'application, et une photo changée chez le fournisseur doit
+        # suivre. Le retrait de la revendication vide donc le champ.
+        if user.avatar_url != avatar_url:
+            user.avatar_url = avatar_url
         # Un compte amorcé sans groupe entrerait sans aucun droit.
         if not groups_of(db, user.id):
             _assign_group(db, user, ADMIN_GROUP if count_users(db) == 1 else DEFAULT_GROUP)

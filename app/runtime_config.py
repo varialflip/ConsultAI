@@ -200,6 +200,20 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: settings.openai_api_key,
     ),
 
+    # --- Identité affichée ---------------------------------------------------
+    # Quelle revendication du fournisseur porte le nom et l'avatar. Rangées
+    # dans le groupe des comptes : c'est là qu'on regarde quand un nom
+    # s'affiche mal.
+    Setting(
+        "oidc_name_claim", "text", "group.users",
+        default=lambda: settings.oidc_name_claim,
+        placeholder="name / preferred_username / nickname",
+    ),
+    Setting(
+        "oidc_picture_claim", "text", "group.users",
+        default=lambda: settings.oidc_picture_claim, placeholder="picture",
+    ),
+
     # --- Consignes ----------------------------------------------------------
     Setting(
         "general_prompt", "textarea", "group.prompts",
@@ -209,7 +223,9 @@ SETTINGS: Tuple[Setting, ...] = (
 )
 
 #: Ordre d'affichage des groupes dans le panneau.
-GROUPS: Tuple[str, ...] = ("group.system", "group.stt", "group.llm", "group.prompts")
+GROUPS: Tuple[str, ...] = (
+    "group.system", "group.stt", "group.llm", "group.prompts", "group.users",
+)
 
 BY_KEY: Dict[str, Setting] = {item.key: item for item in SETTINGS}
 
@@ -361,7 +377,11 @@ def describe(language_code: Optional[str] = None) -> List[dict]:
             "key": setting.key,
             "label": setting.label(langue),
             "kind": setting.kind,
-            "group": i18n.t(setting.group, langue),
+            # La clé ET le libellé : le client identifie un onglet par sa clé,
+            # jamais par un texte traduit — voir l'onglet des comptes, qui a un
+            # comportement propre.
+            "group": setting.group,
+            "group_label": i18n.t(setting.group, langue),
             "help": setting.help(langue),
             # Un nom propre ou une valeur technique traverse ``t`` inchangé :
             # seules les clés connues du catalogue sont remplacées.

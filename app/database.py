@@ -399,6 +399,9 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    #: Adresse de l'avatar annoncée par le fournisseur. Vide = on retombe sur
+    #: les initiales, calculées côté application.
+    avatar_url: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
     #: Un compte désactivé conserve ses consultations mais ne peut plus entrer.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -412,6 +415,7 @@ class User(Base):
             "username": self.username,
             "email": self.email,
             "display_name": self.display_name,
+            "avatar_url": self.avatar_url,
             "is_active": self.is_active,
             "has_signed_in": bool(self.subject),
             "created_at": _iso(self.created_at),
@@ -908,6 +912,9 @@ def refresh_default_templates(db: Session) -> int:
 # suffit largement pour des colonnes texte.
 # ---------------------------------------------------------------------------
 _ADDED_COLUMNS = {
+    "users": [
+        ("avatar_url", "VARCHAR(1000) NOT NULL DEFAULT ''"),
+    ],
     "consultations": [
         ("patient_name", "VARCHAR(200) NOT NULL DEFAULT ''"),
         ("reason", "VARCHAR(300) NOT NULL DEFAULT ''"),

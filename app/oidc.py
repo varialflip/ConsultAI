@@ -221,6 +221,72 @@ def username_from(claims: Dict[str, Any]) -> str:
     return ""
 
 
+#: Revendications essayées après celle configurée, pour le nom affiché.
+#:
+#: L'ordre va du plus humain au plus technique. Le nom d'usager arrive en
+#: dernier des noms lisibles, et le « sub » n'y figure pas du tout : un
+#: identifiant opaque affiché en haut de l'écran n'aide personne — mieux vaut
+#: alors ne rien afficher et laisser le nom d'usager tenir ce rôle.
+_NAME_FALLBACKS = ("name", "given_name", "nickname", "preferred_username", "email")
+
+
+def display_name_from(claims: Dict[str, Any], claim: str = "") -> str:
+    """
+    Nom à afficher, d'après la revendication choisie puis des replis.
+
+    ``claim`` l'emporte : c'est le réglage du panneau. S'il est vide ou si le
+    fournisseur ne l'a pas envoyé, on descend la liste des replis plutôt que de
+    laisser l'écran vide — un compte sans nom affiché n'est pas une erreur de
+    configuration qu'il faut faire payer à l'usager.
+    """
+    candidats = [claim] if claim else []
+    candidats += [c for c in _NAME_FALLBACKS if c != claim]
+    for nom in candidats:
+        valeur = claims.get(nom)
+        if isinstance(valeur, str) and valeur.strip():
+            return valeur.strip()
+    return ""
+
+
+def picture_from(claims: Dict[str, Any], claim: str = "") -> str:
+    """
+    Adresse de l'avatar, ou chaîne vide.
+
+    Seules les adresses ``https:`` sont retenues. Deux raisons : une adresse
+    ``http:`` serait bloquée comme contenu mixte sur une page servie en HTTPS,
+    et un ``data:`` ou un ``javascript:`` venus du fournisseur n'ont rien à
+    faire dans un attribut ``src`` — la revendication est du texte contrôlé par
+    un tiers, même si ce tiers est de confiance.
+
+    Une chaîne vide fait retomber l'affichage sur les initiales.
+    """
+    nom = claim or settings.oidc_picture_claim or "picture"
+    valeur = claims.get(nom)
+    if not isinstance(valeur, str):
+        return ""
+    valeur = valeur.strip()
+    if not valeur:
+        return ""
+    if not valeur.lower().startswith("https://"):
+        logger.info(
+            "Avatar ignoré : « %s » n'est pas une adresse https. La pastille "
+            "affichera les initiales.", valeur[:60],
+        )
+        return ""
+
+    # Défense en profondeur. Le gabarit échappe déjà cette valeur (Jinja est en
+    # autoescape, vérifié), mais elle finit dans un attribut « src » et vient
+    # d'un tiers : une adresse contenant un guillemet ou un espace n'est de
+    # toute façon pas une adresse valide, et la refuser évite de faire reposer
+    # la sûreté sur une seule couche.
+    if any(c in valeur for c in '"\'<>` ') or any(ord(c) < 32 for c in valeur):
+        logger.warning(
+            "Avatar ignoré : l'adresse contient des caractères interdits."
+        )
+        return ""
+    return valeur[:1000]
+
+
 def groups_from(claims: Dict[str, Any]) -> List[str]:
     """
     Groupes annoncés par le fournisseur, normalisés en minuscules.

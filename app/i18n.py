@@ -774,6 +774,36 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "closed at the provider — otherwise anyone who can register there gets "
         "in here.",
     ),
+    "set.oidc_name_claim.label": (
+        "Revendication du nom affiché",
+        "Display-name claim",
+    ),
+    "set.oidc_name_claim.help": (
+        "Quelle propriété du fournisseur d'identité sert de nom affiché : "
+        "« name » (nom complet), « preferred_username » (nom d'usager), "
+        "« nickname », « given_name »… Si elle est absente de la réponse, "
+        "l'application essaie les autres dans cet ordre, puis le courriel. "
+        "Le nom d'usager, lui, ne change pas : c'est la clé de propriété des "
+        "consultations.",
+        "Which identity-provider property is used as the display name: “name” "
+        "(full name), “preferred_username”, “nickname”, “given_name”… If it is "
+        "absent from the response, the application tries the others in that "
+        "order, then the email. The username itself never changes: it is the "
+        "ownership key of consultations.",
+    ),
+    "set.oidc_picture_claim.label": (
+        "Revendication de l'avatar",
+        "Avatar claim",
+    ),
+    "set.oidc_picture_claim.help": (
+        "Propriété portant l'adresse de la photo, « picture » chez la plupart "
+        "des fournisseurs. Si elle est absente — ou si son adresse n'est pas en "
+        "https — la pastille affiche les initiales. L'avatar est rafraîchi à "
+        "chaque connexion.",
+        "The property carrying the photo URL, “picture” with most providers. If "
+        "it is absent — or if the URL is not https — the badge shows initials "
+        "instead. The avatar is refreshed on each sign-in.",
+    ),
     "set.stt_provider.label": (
         "Service de reconnaissance vocale",
         "Speech recognition service",

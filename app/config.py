@@ -104,6 +104,12 @@ class Settings:
     #: Pocket ID et Authentik disent « groups », Keycloak « roles » selon la
     #: configuration du client.
     oidc_groups_claim: str = "groups"
+    #: Revendication portant le nom à afficher, et celle portant l'avatar.
+    #: Configurables parce que les fournisseurs ne s'accordent pas : « name »,
+    #: « preferred_username », « nickname », « given_name »… Surchargeables
+    #: depuis le panneau d'administration.
+    oidc_name_claim: str = "name"
+    oidc_picture_claim: str = "picture"
 
     #: Clé de signature du témoin de session. **Doit être fixée** : sans elle,
     #: une clé aléatoire est tirée au démarrage et tout le monde est déconnecté
@@ -297,6 +303,8 @@ class Settings:
             base_url=_env("BASE_URL").rstrip("/"),
             oidc_scopes=_env_list("OIDC_SCOPES", "openid,profile,email,groups"),
             oidc_groups_claim=_env("OIDC_GROUPS_CLAIM", "groups"),
+            oidc_name_claim=_env("OIDC_NAME_CLAIM", "name"),
+            oidc_picture_claim=_env("OIDC_PICTURE_CLAIM", "picture"),
 
             session_secret=_env("SESSION_SECRET"),
             session_max_age_seconds=_env_int("SESSION_MAX_AGE_SECONDS", 60 * 60 * 12),

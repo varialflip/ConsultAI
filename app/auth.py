@@ -101,6 +101,9 @@ class Principal:
     source_header: str = "oidc"
     is_dev: bool = False
     user_id: Optional[int] = None
+    #: Avatar annoncé par le fournisseur. Vide = la pastille affiche les
+    #: initiales, ce qui est le cas le plus fréquent.
+    avatar_url: str = ""
     #: Noms des groupes, et permissions qui en découlent. Relus en base à chaque
     #: requête : un droit retiré prend effet immédiatement.
     groups: Tuple[str, ...] = ()
@@ -158,6 +161,7 @@ class Principal:
             "display_name": self.display_name,
             "label": self.label,
             "initials": self.initials,
+            "avatar_url": self.avatar_url,
             "is_template_admin": self.is_template_admin,
             "is_admin": self.is_admin,
             "groups": list(self.groups),
@@ -259,6 +263,7 @@ def _principal_from_db(identity: dict) -> Optional[Principal]:
             username=user.username,
             email=user.email,
             display_name=user.display_name,
+            avatar_url=user.avatar_url,
             user_id=user.id,
             groups=tuple(g.name for g in groupes),
             is_admin=droits["is_admin"],

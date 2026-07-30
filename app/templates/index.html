@@ -195,8 +195,20 @@
         <button id="btnIdentity" type="button" title="{{ user.label }}"
                 aria-haspopup="true" aria-expanded="false"
                 class="w-8 h-8 rounded-full bg-slate-200 grid place-items-center text-[11px]
-                       font-semibold text-slate-600 hover:bg-slate-300 transition">
-          {{ user.initials }}
+                       font-semibold text-slate-600 hover:bg-slate-300 transition
+                       overflow-hidden shrink-0">
+          {% if user.avatar_url %}
+          {# L'avatar vient du fournisseur d'identité. « onerror » est
+             indispensable : une adresse devenue morte laisserait une pastille
+             vide, alors que les initiales sont toujours calculables. Le repli
+             est déjà dans le DOM, masqué. #}
+          <img src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer"
+               class="w-full h-full object-cover"
+               onerror="this.remove(); document.getElementById('identityInitials').classList.remove('hidden');">
+          <span id="identityInitials" class="hidden">{{ user.initials }}</span>
+          {% else %}
+          <span id="identityInitials">{{ user.initials }}</span>
+          {% endif %}
         </button>
 
         <div id="identityMenu" role="menu"

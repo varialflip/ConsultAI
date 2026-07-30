@@ -560,14 +560,20 @@ async def auth_callback(request: Request):
     username = oidc.username_from(claims)
     groupes_fournisseur = oidc.groups_from(claims)
 
+    # Nom affiché et avatar : la revendication à lire est un réglage, les
+    # fournisseurs ne s'accordant pas sur son nom.
+    nom_affiche = oidc.display_name_from(claims, runtime_config.value("oidc_name_claim"))
+    avatar = oidc.picture_from(claims, runtime_config.value("oidc_picture_claim"))
+
     try:
         user, groupes = await run_in_threadpool(
             _link_account,
             str(claims.get("sub") or ""),
             username,
             str(claims.get("email") or ""),
-            str(claims.get("name") or claims.get("preferred_username") or ""),
+            nom_affiche,
             groupes_fournisseur,
+            avatar,
         )
     except users_service.SignupRefused as exc:
         logger.warning("Inscription refusée : %s", exc)
@@ -606,11 +612,11 @@ async def auth_callback(request: Request):
     return RedirectResponse(suite, status_code=302)
 
 
-def _link_account(subject, username, email, display_name, provider_groups):
+def _link_account(subject, username, email, display_name, provider_groups, avatar_url=""):
     """Partie synchrone du rattachement, exécutée hors de la boucle asyncio."""
     with SessionLocal() as db:
         return users_service.link_or_create(
-            db, subject, username, email, display_name, provider_groups
+            db, subject, username, email, display_name, provider_groups, avatar_url
         )
 
 
@@ -832,10 +838,12 @@ def get_admin_settings(request: Request, admin: Principal = Depends(require_temp
     langue = runtime_config.language()
     return {
         "settings": runtime_config.describe(langue),
-        # Les groupes sont renvoyés traduits et dans l'ordre voulu : le
-        # navigateur ne fait que les afficher, il n'a pas à connaître leur
-        # nombre ni leur intitulé.
-        "groups": [i18n.t(groupe, langue) for groupe in runtime_config.GROUPS],
+        # Clé ET libellé, dans l'ordre voulu : le navigateur affiche le
+        # libellé mais raisonne sur la clé.
+        "groups": [
+            {"key": groupe, "label": i18n.t(groupe, langue)}
+            for groupe in runtime_config.GROUPS
+        ],
     }
 
 
@@ -856,7 +864,10 @@ def put_admin_settings(
     return {
         "changed": changed,
         "settings": runtime_config.describe(langue),
-        "groups": [i18n.t(groupe, langue) for groupe in runtime_config.GROUPS],
+        "groups": [
+            {"key": groupe, "label": i18n.t(groupe, langue)}
+            for groupe in runtime_config.GROUPS
+        ],
         "language": langue,
     }
 

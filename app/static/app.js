@@ -2508,17 +2508,16 @@
   };
 
   /**
-    * Onglet artificiel : il ne vient pas du schéma des réglages.
+    * Clé du groupe de réglages qui porte AUSSI la gestion des comptes.
     *
-    * Chaîne ordinaire, et surtout PAS de caractère de contrôle : un U+0000
-    * placé dans une valeur d'attribut est remplacé par U+FFFD par l'analyseur
-    * HTML, si bien que la valeur relue ne correspondait plus jamais et que le
-    * clic retombait sur le premier onglet.
+    * Ce n'est plus un onglet artificiel : « group.users » est un vrai groupe,
+    * avec ses propres réglages (quelle revendication porte le nom, laquelle
+    * porte l'avatar). L'onglet affiche donc ces champs, puis les comptes et les
+    * groupes — c'est au même endroit qu'on regarde quand un nom s'affiche mal.
     *
-    * Aucune collision possible avec un groupe de réglages : ceux-ci portent des
-    * libellés traduits (« Système », « Speech recognition »…).
+    * On compare des CLÉS et jamais des libellés : ceux-ci sont traduits.
     */
-  const PEOPLE_TAB = '__people__';
+  const PEOPLE_GROUP = 'group.users';
 
   function adminFieldMarkup(field) {
     const id = `adm_${field.key}`;
@@ -2615,20 +2614,26 @@
 
   function renderAdminFields(groups) {
     const container = $('adminFields');
-    const order = groups && groups.length
-      ? groups
-      : Array.from(new Set(adminState.fields.map((f) => f.group)));
+    // Le serveur envoie [{key, label}]. Repli : on reconstruit depuis les
+    // champs, qui portent les deux.
+    const order = (groups && groups.length)
+      ? groups.slice()
+      : Array.from(new Set(adminState.fields.map((f) => f.group)))
+        .map((key) => ({
+          key,
+          label: (adminState.fields.find((f) => f.group === key) || {}).group_label || key,
+        }));
 
-    adminState.groups = order.slice();
+    adminState.groups = order;
 
-    container.innerHTML = '<datalist id="modelOptions"></datalist>' + order.map((group) => {
+    container.innerHTML = '<datalist id="modelOptions"></datalist>' + order.map((group, index) => {
       const fields = adminState.fields
-        .filter((field) => field.group === group)
+        .filter((field) => field.group === group.key)
         .filter(isFieldRelevant);
       if (!fields.length) return '';
-      return `<section data-group-index="${order.indexOf(group)}" class="space-y-3">
+      return `<section data-group-index="${index}" class="space-y-3">
         <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
-          ${esc(group)}</h3>
+          ${esc(group.label)}</h3>
         ${fields.map(adminFieldMarkup).join('')}
       </section>`;
     }).join('');
@@ -2683,12 +2688,9 @@
     const barre = $('adminTabs');
     if (!barre) return;
 
-    const onglets = adminState.groups.map((g) => ({ id: g, label: g }));
-    if (state.isAdmin) {
-      onglets.push({ id: PEOPLE_TAB, label: T('group.users') });
-    }
-    if (!adminState.tab || !onglets.some((o) => o.id === adminState.tab)) {
-      adminState.tab = onglets.length ? onglets[0].id : null;
+    const onglets = adminState.groups.slice();
+    if (!adminState.tab || !onglets.some((o) => o.key === adminState.tab)) {
+      adminState.tab = onglets.length ? onglets[0].key : null;
     }
     adminState.tabs = onglets;
 
@@ -2697,7 +2699,7 @@
     // groupe sont des chaînes traduites, et esc() n'échappe pas les guillemets :
     // faire voyager la valeur dans un attribut, c'est en dépendre.
     barre.innerHTML = onglets.map((onglet, index) => {
-      const actif = onglet.id === adminState.tab;
+      const actif = onglet.key === adminState.tab;
       return `<button type="button" data-tab-index="${index}"
                 class="shrink-0 px-3 py-2 text-xs font-medium border-b-2 transition ${
                   actif
@@ -2710,7 +2712,7 @@
       bouton.addEventListener('click', () => {
         const onglet = adminState.tabs[Number(bouton.dataset.tabIndex)];
         if (!onglet) return;
-        adminState.tab = onglet.id;
+        adminState.tab = onglet.key;
         renderAdminTabs();
         showAdminTab(adminState.tab);
       });
@@ -2718,19 +2720,21 @@
   }
 
   function showAdminTab(tab) {
-    const comptes = tab === PEOPLE_TAB;
-    $('adminFields').classList.toggle('hidden', comptes);
+    const comptes = tab === PEOPLE_GROUP;
+
+    // L'onglet des comptes affiche ses propres réglages EN PLUS des comptes :
+    // #adminFields reste donc visible, seule la section correspondante étant
+    // dévoilée. « Modèles disponibles » n'a en revanche rien à y faire.
+    $('adminFields').classList.remove('hidden');
     $('adminPeople').classList.toggle('hidden', !comptes);
-    // « Enregistrer » ne concerne que les réglages : les comptes et les groupes
-    // s'appliquent au clic, chaque ligne étant indépendante.
-    $('btnSaveAdmin').classList.toggle('hidden', comptes);
     $('btnListModels').classList.toggle('hidden', comptes);
 
-    // Comparaison par index, pour la même raison que les onglets.
-    const indexActif = adminState.groups.indexOf(tab);
+    // Comparaison par index, pour la même raison que les onglets : les
+    // libellés sont traduits, les clés ne le sont pas.
+    const indexActif = adminState.groups.findIndex((g) => g.key === tab);
     $('adminFields').querySelectorAll('section[data-group-index]').forEach((section) => {
       section.classList.toggle(
-        'hidden', comptes || Number(section.dataset.groupIndex) !== indexActif,
+        'hidden', Number(section.dataset.groupIndex) !== indexActif,
       );
     });
 
@@ -2753,6 +2757,20 @@
     } catch (err) {
       boite.innerHTML = `<p class="text-sm text-red-600">${esc(err.message)}</p>`;
     }
+  }
+
+  /**
+   * Initiales d'un libellé, pour le repli d'avatar dans la liste des comptes.
+   *
+   * Volontairement plus simple que la version du serveur (app/auth.py), qui
+   * écarte les titres de civilité : ici il ne s'agit que d'un carré de 28 px
+   * dans une liste d'administration, pas de l'identité affichée en permanence.
+   */
+  function initialsOf(libelle) {
+    const mots = String(libelle || '').split(/[^\p{L}]+/u).filter(Boolean);
+    if (!mots.length) return '?';
+    if (mots.length === 1) return mots[0].slice(0, 2).toUpperCase();
+    return (mots[0][0] + mots[mots.length - 1][0]).toUpperCase();
   }
 
   function permissionBadges(groupe) {
@@ -2799,8 +2817,23 @@
           : T('people.never_signed_in'),
       ].filter(Boolean).join(' · ');
 
+      // Avatar du fournisseur, repli sur les initiales. « onerror » retire
+      // l'image et dévoile le repli : une adresse morte laisserait sinon un
+      // carré vide, alors que les initiales sont toujours calculables.
+      const initiales = initialsOf(user.display_name || user.username);
+      const pastille = user.avatar_url
+        ? `<span class="w-7 h-7 rounded-full bg-slate-200 overflow-hidden shrink-0
+                       grid place-items-center text-[10px] font-semibold text-slate-600">
+             <img src="${esc(user.avatar_url)}" alt="" referrerpolicy="no-referrer"
+                  class="w-full h-full object-cover"
+                  onerror="this.replaceWith(document.createTextNode('${esc(initiales)}'))">
+           </span>`
+        : `<span class="w-7 h-7 rounded-full bg-slate-200 shrink-0 grid place-items-center
+                       text-[10px] font-semibold text-slate-600">${esc(initiales)}</span>`;
+
       return `<li class="rounded-lg border border-slate-200 p-3 space-y-2">
         <div class="flex items-center gap-2 flex-wrap">
+          ${pastille}
           <span class="font-medium text-sm text-slate-800">${esc(user.display_name || user.username)}</span>
           <span class="text-xs text-slate-500">${esc(user.username)}</span>
           ${moi ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">${

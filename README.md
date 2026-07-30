@@ -19,6 +19,17 @@ dépôt ni de construire quoi que ce soit soi-même.
 Conçue à l'origine pour un NAS Synology, mais rien n'y est spécifique hormis
 un point signalé comme tel.
 
+> ### 🤖 Projet entièrement *vibe-codé* avec Claude Code
+>
+> L'intégralité de ce dépôt — application, Dockerfile, gabarits livrés et la
+> présente documentation — a été écrite par [Claude Code](https://claude.com/claude-code)
+> à partir d'échanges en langage naturel : aucune ligne n'a été tapée à la main.
+>
+> À prendre en compte dans votre analyse de risque : le code est ouvert et
+> lisible, mais il n'a pas été relu ligne à ligne par un développeur tiers.
+> Auditez-le avant tout usage clinique réel, et voir le § 11 pour ce que
+> l'application fait des renseignements de santé.
+
 ---
 
 ## Sommaire

@@ -1610,6 +1610,35 @@
       llm ? T('note.engine_llm_title', { engine: llm }) : '',
     ].filter(Boolean).join('\n');
     el.classList.toggle('hidden', !parts.length);
+    refreshNoteFooter();
+  }
+
+  /**
+   * Le pied de la note n'existe que s'il a quelque chose à dire : sans cela son
+   * filet supérieur laisserait une bande vide sous le texte. Ses deux occupants
+   * apparaissent et disparaissent indépendamment — les moteurs à la génération
+   * ou à l'ouverture d'un brouillon, l'état de sauvegarde au fil de la frappe —
+   * d'où ce point unique consulté par les deux.
+   */
+  function refreshNoteFooter() {
+    const pied = $('noteFooter');
+    if (!pied) return;
+    const moteurs = $('noteEngines');
+    const etat = $('saveStatus');
+    const visible = (moteurs && !moteurs.classList.contains('hidden') && moteurs.textContent.trim())
+                 || (etat && etat.textContent.trim());
+    pied.classList.toggle('hidden', !visible);
+  }
+
+  /**
+   * Seule écriture de l'état de sauvegarde : passer par ici garantit que le
+   * pied s'ouvre et se referme avec lui.
+   */
+  function setSaveStatus(texte) {
+    const el = $('saveStatus');
+    if (!el) return;
+    el.textContent = texte || '';
+    refreshNoteFooter();
   }
 
   function renderMarkdown() {
@@ -1678,8 +1707,7 @@
     // Rien à sauvegarder tant qu'aucun contenu n'existe.
     if (!$('transcript').value.trim() && !$('markdownEditor').value.trim()) return;
 
-    const status = $('saveStatus');
-    status.textContent = T('save.saving');
+    setSaveStatus(T('save.saving'));
     try {
       const consultationId = await ensureConsultation();
       const tpl = currentTemplate();
@@ -1698,11 +1726,11 @@
 
       await api(`/api/consultations/${consultationId}`, { method: 'PATCH', body });
       state.lastSavedSnapshot = snapshot;
-      status.textContent = T('save.saved_at', {
+      setSaveStatus(T('save.saved_at', {
         time: new Date().toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }),
-      });
+      }));
     } catch (err) {
-      status.textContent = T('save.failed');
+      setSaveStatus(T('save.failed'));
       console.error(err);
     }
   }, 1500);
@@ -2319,7 +2347,7 @@
       state.lastSavedSnapshot = workspaceSnapshot();
       loadRecordings();
       showNoteEngines(draft.stt_used, draft.llm_used);
-      $('saveStatus').textContent = T('save.loaded_at', { date: formatDateTime(draft.updated_at) });
+      setSaveStatus(T('save.loaded_at', { date: formatDateTime(draft.updated_at) }));
       $('draftsModal').classList.add('hidden');
       toast(T('drafts.loaded', { title: draft.title }), 'success');
     } catch (err) {
@@ -2347,7 +2375,7 @@
     clearMetadata();
     $('timer').textContent = '00:00';
     $('transcriptMeta').textContent = '';
-    $('saveStatus').textContent = '';
+    setSaveStatus('');
     showNoteEngines('', '');
     loadRecordings();
     showPreview();

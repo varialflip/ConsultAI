@@ -30,8 +30,40 @@ services:
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${BIND_PORT:-8787}:8000"
 
+    # Les deux seuls dossiers qui survivent au conteneur. Format d'une ligne :
+    #   <chemin sur l'hôte>:<chemin dans le conteneur>[:ro]
+    # Ne changez que la partie GAUCHE : la partie droite est celle qu'attend
+    # l'application (DATABASE_URL, AUDIO_DIR, DICTATION_DIR,
+    # GOOGLE_APPLICATION_CREDENTIALS dans .env pointent vers elle).
+    #
+    # `./data` est relatif au dossier de CE fichier. Pour ranger les données
+    # ailleurs — autre volume, disque plus grand, partage chiffré — mettez un
+    # chemin absolu :
+    #     - /volume2/chiffre/consultai:/data
+    #
+    # ⚠️ Créez le dossier hôte AVANT le premier `up`. Docker le crée sinon
+    # lui-même, mais appartenant à root : le conteneur, qui tourne sous
+    # APP_UID:APP_GID (voir `user:` plus haut), ne pourra pas y écrire et
+    # s'arrêtera sur `unable to open database file`.
+    #     mkdir -p /volume2/chiffre/consultai
+    #     chown "$APP_UID:$APP_GID" /volume2/chiffre/consultai
+    #
+    # Pour ne déplacer QUE l'audio (le plus volumineux, et le plus sensible —
+    # README § 11), ajoutez un montage imbriqué sous /data ; il faut qu'il
+    # concorde avec AUDIO_DIR du .env :
+    #     - /volume2/chiffre/audio:/data/audio
+    #
+    # DÉVELOPPEMENT — voir son propre code sans reconstruire l'image. Le code
+    # vit dans /app/app ; ce montage le recouvre par celui du dépôt cloné :
+    #     - ./app:/app/app
+    # `docker compose restart consultai` suffit alors à recharger (et un
+    # rafraîchissement forcé du navigateur pour les fichiers de app/static/).
+    # À RETIRER en production : l'image redeviendrait sinon dépendante d'un
+    # dossier de l'hôte, et une mise à jour par `pull` n'aurait plus d'effet.
     volumes:
       - ./data:/data           # base SQLite, audio, dictées en cours
+      # `:ro` = lecture seule. Le conteneur n'a aucune raison d'écrire ici :
+      # gardez-le. Omettez cette ligne entière si vous n'utilisez pas Google.
       - ./secrets:/secrets:ro  # clé de service Google Cloud, si utilisée
 
     mem_limit: 1g
@@ -41,6 +73,14 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+# Alternative aux montages ci-dessus : un volume nommé, rangé par Docker dans
+# ses propres dossiers. Il esquive les ACL Synology, mais les données ne sont
+# plus visibles depuis File Station ni prises par Hyper Backup (README § 9) —
+# d'où le montage sur ./data par défaut. Si vous y tenez : remplacez la ligne
+# `- ./data:/data` par `- consultai-data:/data`, puis décommentez :
+# volumes:
+#   consultai-data:
 
 # Pour rejoindre le réseau Docker d'un reverse proxy existant (ex. Pangolin) :
 # ajoutez `networks: [proxy]` au service ci-dessus, puis décommentez :

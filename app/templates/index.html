@@ -94,6 +94,16 @@
        Le @supports laisse intacte la disposition en colonnes flex là où
        le sous-quadrillage manque ; le décalage y subsiste, sans casse.
        --------------------------------------------------------------- */
+    /* ---------------------------------------------------------------
+       PIED DE LA NOTE
+       Sa mise en page est déclarée ici plutôt que par un `flex` en classe
+       utilitaire : `hidden` et `flex` sont deux utilitaires de MÊME rang, et
+       leur départage dépend de l'ordre où Tailwind les émet. Le JavaScript se
+       contente donc d'ôter ou de remettre `hidden`, et c'est cette règle-ci,
+       sans ambiguïté possible, qui décide de l'affichage.
+       --------------------------------------------------------------- */
+    #noteFooter:not(.hidden) { display: flex; }
+
     @supports (grid-template-rows: subgrid) {
       @media (min-width: 1024px) {
         main.panes-grid { grid-template-rows: auto minmax(0, 1fr); }
@@ -482,9 +492,23 @@
     <!-- PANNEAU : transcription brute -->
     <section id="paneDictee" data-pane="dictee"
              class="flex-1 min-h-0 bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
-      <div class="hidden lg:flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 shrink-0">
-        <h2 class="font-semibold text-sm text-slate-700">{{ t('pane.raw') }}</h2>
-        <div class="ml-auto flex items-center gap-2">
+      <!-- items-end, et non items-center : les deux en-têtes partagent la même
+           rangée (subgrid plus haut), et l'œil compare les DEUX rangées de
+           boutons. C'est donc leur ligne du bas qui doit concorder, pas le
+           centre de blocs de hauteurs différentes. -->
+      <div class="hidden lg:flex items-end gap-2 px-4 py-2.5 border-b border-slate-200 shrink-0">
+        <!-- Coiffe fantôme : réplique invisible du libellé « Copier » et de son
+             accolade, en face. Sans elle, les boutons de ce panneau-ci se
+             posent 16 px plus haut que ceux d'en face. C'est une réplique du
+             balisage et non une hauteur codée en dur : si la coiffe change,
+             le fantôme suit. La h-8 aligne le titre sur le centre des
+             boutons, et non sur le bas du bloc. -->
+        <div class="flex flex-col min-w-0">
+          <span aria-hidden="true" class="invisible text-[10px] leading-none mb-0.5">{{ t('note.copy') }}</span>
+          <span aria-hidden="true" class="invisible h-1"></span>
+          <h2 class="flex items-center h-8 font-semibold text-sm text-slate-700">{{ t('pane.raw') }}</h2>
+        </div>
+        <div class="ml-auto flex items-center gap-2 h-8 shrink-0">
           <button id="btnClearTranscript" type="button"
                   class="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600">
             {{ t('pane.clear') }}
@@ -505,15 +529,27 @@
     <!-- PANNEAU : note structurée -->
     <section id="paneNote" data-pane="note"
              class="max-lg:hidden flex-1 min-h-0 bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
-      <div class="flex items-center gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-200 shrink-0 flex-wrap">
-        <h2 class="font-semibold text-sm text-slate-700 hidden lg:block">{{ t('pane.note') }}</h2>
-        <span id="saveStatus" class="text-[11px] text-slate-400"></span>
-        <!-- Moteurs qui ont réellement produit CE document, et non la
-             configuration du moment : c'est ce qu'on veut savoir en rouvrant
-             un brouillon d'il y a deux semaines. -->
-        <span id="noteEngines" class="hidden text-[11px] text-slate-400 truncate max-w-[16rem]"></span>
+      <!-- Pas de flex-wrap : « Chargé — … » et « note gemini-3.6-flash »
+           n'apparaissent qu'un brouillon ouvert, et leur largeur renvoyait
+           tout le bloc de boutons à la ligne. Ils se compriment maintenant
+           (min-w-0 + truncate, texte complet en infobulle) au lieu de pousser
+           les boutons hors de la rangée. -->
+      <div class="flex items-end gap-2 px-3 sm:px-4 py-2.5 border-b border-slate-200 shrink-0">
+        <!-- Même coiffe que le panneau voisin, ici bien réelle au-dessus du
+             groupe « Copier » : titre et libellés d'état descendent d'autant,
+             et les deux rangées de boutons restent sur la même ligne. -->
+        <div class="flex flex-col min-w-0">
+          <span aria-hidden="true" class="invisible text-[10px] leading-none mb-0.5">{{ t('note.copy') }}</span>
+          <span aria-hidden="true" class="invisible h-1"></span>
+          <!-- Titre masqué en deçà de xl : à 1024 px un panneau ne fait que
+               ~494 px et la seule rangée de boutons en réclame l'essentiel.
+               Plutôt qu'un titre tronqué en « Note struc… », on le retire tant
+               que la place manque — le panneau reste identifiable par ses
+               onglets Aperçu/Éditer. -->
+          <h2 class="hidden xl:flex items-center h-8 font-semibold text-sm text-slate-700">{{ t('pane.note') }}</h2>
+        </div>
 
-        <div class="ml-auto flex items-end gap-1.5">
+        <div class="ml-auto flex items-end gap-1.5 shrink-0">
           <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs">
             <button id="tabPreview" type="button" class="px-3 py-2 bg-teal-700 text-white font-medium">{{ t('note.preview') }}</button>
             <button id="tabEdit" type="button" class="px-3 py-2 hover:bg-slate-50 text-slate-600">{{ t('note.edit') }}</button>
@@ -547,12 +583,18 @@
             <button id="btnCopyRich" type="button"
                     title="{{ t('copy.rich_title') }}"
                     class="px-2.5 py-2 hover:bg-slate-50 text-slate-600">
-              <span class="sm:hidden">{{ t('copy.rich_short') }}</span><span class="hidden sm:inline">{{ t('copy.rich') }}</span>
+              <!-- Libellés courts sur mobile ET dès que les deux panneaux se
+                   partagent l'écran (lg) : « Mise en forme / Texte simple »
+                   faisait alors sortir PDF du panneau. Ils ne reviennent qu'à
+                   2xl — à xl le titre reparaît et ne leur laissait que 4 px de
+                   marge, une police un peu plus large et ça débordait à
+                   nouveau. -->
+              <span class="sm:hidden lg:inline 2xl:hidden">{{ t('copy.rich_short') }}</span><span class="hidden sm:inline lg:hidden 2xl:inline">{{ t('copy.rich') }}</span>
             </button>
             <button id="btnCopyPlain" type="button"
                     title="{{ t('copy.plain_title') }}"
                     class="px-2.5 py-2 border-l border-slate-200 hover:bg-slate-50 text-slate-600">
-              <span class="sm:hidden">{{ t('copy.plain_short') }}</span><span class="hidden sm:inline">{{ t('copy.plain') }}</span>
+              <span class="sm:hidden lg:inline 2xl:hidden">{{ t('copy.plain_short') }}</span><span class="hidden sm:inline lg:hidden 2xl:inline">{{ t('copy.plain') }}</span>
             </button>
             <button id="btnCopyMd" type="button" title="{{ t('copy.markdown_title') }}"
                     class="hidden sm:block px-2.5 py-2 border-l border-slate-200 hover:bg-slate-50 text-slate-600">
@@ -568,17 +610,42 @@
         </div>
       </div>
 
-      <div id="previewPane"
-           class="flex-1 min-h-0 overflow-auto p-4 sm:p-6 thin-scroll prose prose-slate prose-sm max-w-none
-                  prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h2:uppercase
-                  prose-h2:tracking-wide prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-1
-                  prose-h3:text-sm prose-h3:italic prose-table:text-xs">
-        <p class="text-slate-400 italic">{{ t('note.empty') }}</p>
-      </div>
+      <!-- Aperçu, éditeur et pied de page réunis dans UN seul enfant. Le
+           sous-quadrillage plus haut ne donne que deux rangées à ce panneau
+           (en-tête, contenu) : un quatrième enfant s'en irait dans une rangée
+           implicite et ruinerait l'alignement avec le panneau voisin. -->
+      <div class="flex-1 min-h-0 flex flex-col">
+        <div id="previewPane"
+             class="flex-1 min-h-0 overflow-auto p-4 sm:p-6 thin-scroll prose prose-slate prose-sm max-w-none
+                    prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h2:uppercase
+                    prose-h2:tracking-wide prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-1
+                    prose-h3:text-sm prose-h3:italic prose-table:text-xs">
+          <p class="text-slate-400 italic">{{ t('note.empty') }}</p>
+        </div>
 
-      <textarea id="markdownEditor" spellcheck="true"
-                class="hidden flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 font-mono
-                       text-[13px] leading-relaxed text-slate-700 thin-scroll"></textarea>
+        <textarea id="markdownEditor" spellcheck="true"
+                  class="hidden flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 font-mono
+                         text-[13px] leading-relaxed text-slate-700 thin-scroll"></textarea>
+
+        <!-- PIED DE LA NOTE — ce qui DÉCRIT le document, par opposition à
+             l'en-tête qui AGIT sur lui. Ces libellés changent au fil de la
+             frappe et de la génération ; dans l'en-tête, chacun de leurs
+             changements déplaçait les boutons.
+             Masqué par défaut : refreshNoteFooter() ne l'ouvre que s'il a
+             quelque chose à dire, sans quoi son filet supérieur laisserait une
+             bande vide sous le texte. -->
+        <footer id="noteFooter"
+                class="hidden shrink-0 items-center gap-3 border-t border-slate-200
+                       px-4 sm:px-6 py-1.5 text-[11px] text-slate-400">
+          <!-- Moteurs qui ont réellement produit CE document, et non la
+               configuration du moment : c'est ce qu'on veut savoir en rouvrant
+               un brouillon d'il y a deux semaines. Texte complet en infobulle. -->
+          <span id="noteEngines" class="hidden truncate"></span>
+          <!-- Poussé à droite, et jamais tronqué : c'est le plus court des deux
+               et le seul qui bouge en direct pendant la frappe. -->
+          <span id="saveStatus" class="ml-auto shrink-0"></span>
+        </footer>
+      </div>
     </section>
   </main>
 

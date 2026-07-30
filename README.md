@@ -477,7 +477,7 @@ Incluez `/volume1/docker/ConsultAI/data` dans Hyper Backup.
 | L'enregistrement s'arrête écran éteint | Verrou d'écran non supporté. Gardez l'application au premier plan. |
 | Erreur 413 sur un long enregistrement | Augmentez la taille de corps autorisée au proxy. |
 | « Enregistrement trop long pour un envoi direct » | Au-delà de ~55 min. Configurez `STT_GCS_BUCKET` ou dictez en plusieurs parties. |
-| La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS` ; l'interface le signale. |
+| La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS` ; l'interface le signale. Malgré son nom, ce plafond vaut pour les quatre fournisseurs, et chacun a sa propre limite — l'application ramène la valeur sous celle du fournisseur retenu. |
 | Acronymes mal transcrits | Ajoutez-les au **Vocabulaire additionnel** du gabarit. |
 | Tranches retardées avec Cohere | Limite de 5 req/min atteinte. Changez de service (§ 7.2). |
 

@@ -508,6 +508,79 @@ def list_available_models(provider: Optional[str] = None) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
+# Plafond de jetons de sortie
+# ---------------------------------------------------------------------------
+# GEMINI_MAX_OUTPUT_TOKENS gouverne les quatre fournisseurs malgré son nom, et
+# chacun a son propre plafond. Une valeur convenant à Gemini fait refuser la
+# requête ailleurs :
+#
+#   Cohere (400) : max tokens must be less than or equal to 8192 — received 16384
+#
+# Deux protections. Un plafond CONNU, appliqué avant l'envoi, qui évite l'aller-
+# retour perdu dans le cas courant ; et un plafond APPRIS du message d'erreur,
+# pour les modèles dont on ignore la limite et pour le jour où elle change.
+# ---------------------------------------------------------------------------
+#: Plafonds connus, par fournisseur. Absent = aucune limite connue, on envoie la
+#: valeur demandée telle quelle.
+_MAX_OUTPUT_TOKENS = {
+    # Famille « command-a » : 8192 jetons de sortie.
+    "cohere": 8192,
+}
+
+#: Plafonds découverts à l'exécution, par (fournisseur, modèle). Complété quand
+#: un fournisseur nous corrige, pour ne pas répéter la requête refusée.
+_learned_max_output: Dict[tuple, int] = {}
+
+#: Ne journaliser qu'une fois par couple, sinon chaque dictée répète la ligne.
+_clamped_seen: set = set()
+
+
+def _clamp_max_tokens(provider: str, model: str, requested: int) -> int:
+    """Ramène le plafond demandé sous celui du fournisseur, s'il est connu."""
+    limite = _learned_max_output.get((provider, model)) or _MAX_OUTPUT_TOKENS.get(provider)
+    if not limite or requested <= limite:
+        return requested
+
+    vu = (provider, model, limite)
+    if vu not in _clamped_seen:
+        _clamped_seen.add(vu)
+        logger.info(
+            "%s (%s) plafonne la sortie à %d jetons : la valeur demandée (%d) "
+            "est ramenée à cette limite. La note pourrait être tronquée — "
+            "l'interface le signale le cas échéant.",
+            provider, model, limite, requested,
+        )
+    return limite
+
+
+_LIMITE_DANS_ERREUR = re.compile(
+    r"less than or equal to\s+(\d+)", re.IGNORECASE
+)
+
+
+def _learn_max_tokens(provider: str, model: str, message: str) -> Optional[int]:
+    """
+    Retient la limite que le fournisseur annonce dans son refus.
+
+    Le message porte le nombre exact — autant s'en servir plutôt que de coder en
+    dur une valeur qui vieillira.
+    """
+    trouve = _LIMITE_DANS_ERREUR.search(message or "")
+    if not trouve:
+        return None
+    try:
+        limite = int(trouve.group(1))
+    except ValueError:
+        return None
+    _learned_max_output[(provider, model)] = limite
+    logger.info(
+        "%s (%s) annonce un plafond de %d jetons de sortie : retenu pour les "
+        "appels suivants.", provider, model, limite,
+    )
+    return limite
+
+
+# ---------------------------------------------------------------------------
 # Appel unifié
 # ---------------------------------------------------------------------------
 def complete(
@@ -528,6 +601,7 @@ def complete(
     prompt et la réponse passe de toute façon par ``_strip_code_fence``.
     """
     provider = provider or active_provider()
+    max_tokens = _clamp_max_tokens(provider, model, max_tokens)
     if provider == "gemini":
         return _complete_gemini(system, user, model, temperature, max_tokens, json_mode)
     if provider == "anthropic":
@@ -1081,7 +1155,16 @@ def _complete_cohere(
         # Employé par la relecture des métadonnées, qui attend un objet JSON.
         corps["response_format"] = {"type": "json_object"}
 
-    data = _cohere_request("POST", "/v2/chat", corps)
+    try:
+        data = _cohere_request("POST", "/v2/chat", corps)
+    except GenerationError as exc:
+        # Le refus porte la limite exacte : on la retient et on réessaie, plutôt
+        # que de renvoyer au médecin une erreur qu'il ne peut pas corriger.
+        limite = _learn_max_tokens("cohere", model, str(exc))
+        if limite is None or limite >= max_tokens:
+            raise
+        corps["max_tokens"] = limite
+        data = _cohere_request("POST", "/v2/chat", corps)
 
     # Le texte arrive en blocs typés : on ne concatène que les blocs « text ».
     # Un bloc d'un autre type — appel d'outil, citation — n'a rien à faire dans

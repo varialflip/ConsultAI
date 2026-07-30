@@ -1795,6 +1795,7 @@ async def retranscribe_consultation(
     morceaux: List[str] = []
     secondes = 0.0
     moteur = ("", "")
+    dernier_refus = ""
     for piste in pistes:
         chemin = recordings.absolute_path(piste)
         if not os.path.exists(chemin):
@@ -1808,8 +1809,17 @@ async def retranscribe_consultation(
         try:
             resultat = await run_in_threadpool(transcribe, brut, piste.mime_type, hints)
         except TranscriptionError as exc:
-            logger.warning("Retranscription %s refusée : %s", consultation_id, exc)
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            # Un enregistrement muet ne doit pas emporter les autres. Une
+            # consultation en compte souvent plusieurs, dont un faux départ de
+            # quelques secondes : le refuser en bloc ferait perdre les minutes
+            # utiles qui suivent. On note, on passe au suivant, et l'absence
+            # totale de résultat est traitée après la boucle.
+            dernier_refus = str(exc)
+            logger.warning(
+                "Retranscription %s : enregistrement %s écarté — %s",
+                consultation_id, piste.id, exc,
+            )
+            continue
         except Exception as exc:  # pragma: no cover
             logger.exception("Erreur inattendue pendant la retranscription %s", consultation_id)
             raise HTTPException(
@@ -1825,8 +1835,12 @@ async def retranscribe_consultation(
 
     if not morceaux:
         # Aucun fichier lisible, ou du silence partout : mieux vaut refuser que
-        # remplacer une transcription existante par du vide.
-        raise HTTPException(status_code=422, detail=_t("err.retranscribe_empty"))
+        # remplacer une transcription existante par du vide. On remonte le
+        # dernier refus du service plutôt qu'un message générique — « aucune
+        # parole détectée » et « clé refusée » n'appellent pas la même suite.
+        raise HTTPException(
+            status_code=422, detail=dernier_refus or _t("err.retranscribe_empty")
+        )
 
     consultation.raw_transcript = "\n\n".join(morceaux)
     consultation.audio_seconds = int(round(secondes))
@@ -1849,6 +1863,7 @@ async def retranscribe_consultation(
         "stt_used": " / ".join(p for p in moteur if p),
         "duration_seconds": consultation.audio_seconds,
         "recordings": len(morceaux),
+        "recordings_total": len(pistes),
     }
 
 

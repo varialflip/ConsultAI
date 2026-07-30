@@ -383,9 +383,18 @@
       // écrase une éventuelle sauvegarde différée partie avec l'ancien texte.
       state.lastSavedSnapshot = '';
       scheduleSave();
-      toast(T('retranscribe.done', {
-        langue, count: (data.transcript || '').length,
-      }), 'success');
+      const total = data.recordings_total || 0;
+      const utilises = data.recordings || 0;
+      const partiel = total > utilises;
+      toast(
+        partiel
+          ? T('retranscribe.done_partial', {
+              langue, count: (data.transcript || '').length, used: utilises, total,
+            })
+          : T('retranscribe.done', { langue, count: (data.transcript || '').length }),
+        partiel ? 'warning' : 'success',
+        partiel ? 10000 : undefined,
+      );
     } catch (err) {
       toast(T('retranscribe.failed', { error: err.message || err }), 'error', 8000);
     } finally {

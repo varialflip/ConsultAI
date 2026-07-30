@@ -392,6 +392,16 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Retranscrit en {langue} — {count} caractères.",
         "Re-transcribed in {langue} — {count} characters.",
     ),
+    # Certains enregistrements n'ont rien donné — un faux départ muet, par
+    # exemple. Le texte est donc incomplet, et le taire serait pire que tout.
+    "retranscribe.done_partial": (
+        "Retranscrit en {langue} — {count} caractères. "
+        "{used} enregistrement(s) sur {total} ont donné du texte ; "
+        "les autres étaient muets ou illisibles.",
+        "Re-transcribed in {langue} — {count} characters. "
+        "{used} of {total} recordings produced text; "
+        "the others were silent or unreadable.",
+    ),
     "retranscribe.failed": (
         "Retranscription impossible : {error}",
         "Re-transcription failed: {error}",

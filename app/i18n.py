@@ -654,24 +654,47 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     # --- Panneau d'administration : chrome ---------------------------------
     "admin.title": ("Réglages", "Settings"),
     "admin.badge": ("Administrateur", "Administrator"),
-    "admin.intro": (
-        "Ces réglages sont enregistrés en base et <strong>surchargent le "
-        "fichier <code>.env</code></strong> : ils prennent effet "
-        "immédiatement, sans reconstruire l'image. Vider un champ le remet à "
-        "la valeur du <code>.env</code>.",
-        "These settings are stored in the database and <strong>override the "
-        "<code>.env</code> file</strong>: they take effect immediately, with "
-        "no image rebuild. Clearing a field resets it to the "
-        "<code>.env</code> value.",
-    ),
-    "admin.intro_access": (
-        "Ce qui gouverne l'accès — usagers autorisés, plages de proxy de "
-        "confiance — reste dans le <code>.env</code>, hors d'atteinte du "
-        "navigateur.",
-        "What governs access — authorized users, trusted proxy ranges — stays "
-        "in <code>.env</code>, out of reach of the browser.",
-    ),
     "admin.loading": ("Chargement…", "Loading…"),
+
+    # --- Une phrase par onglet, affichée au-dessus de son contenu ------------
+    # L'ancien bandeau expliquait la surcharge du .env en haut de TOUS les
+    # onglets, y compris ceux où elle ne s'applique pas. Chaque onglet dit
+    # maintenant ce qu'il fait, et seuls ceux qui portent des réglages
+    # mentionnent le .env.
+    "admin.intro.group.system": (
+        "Comportement général de l'installation.",
+        "General behaviour of this installation.",
+    ),
+    "admin.intro.group.stt": (
+        "Service qui transcrit la dictée. Le découpage en tranches est commun à "
+        "tous : seul l'envoi final change.",
+        "The service that transcribes dictation. Segmentation is common to all "
+        "of them: only the final upload differs.",
+    ),
+    "admin.intro.group.llm": (
+        "Modèle qui met la transcription en forme selon le gabarit.",
+        "The model that formats the transcript according to the template.",
+    ),
+    "admin.intro.group.prompts": (
+        "Consignes ajoutées à celles de TOUS les gabarits. Celle qui s'applique "
+        "dépend de la langue du gabarit employé.",
+        "Instructions added to those of EVERY template. Which one applies "
+        "depends on the language of the template in use.",
+    ),
+    "admin.intro.group.users": (
+        "Qui peut entrer, avec quels droits, et quelles propriétés du "
+        "fournisseur d'identité sont lues.",
+        "Who may sign in, with which rights, and which identity-provider "
+        "properties are read.",
+    ),
+    "admin.env_note": (
+        "Ces réglages sont enregistrés en base et surchargent le fichier "
+        "<code>.env</code> : effet immédiat, sans reconstruction. Vider un champ "
+        "le remet à la valeur du <code>.env</code>.",
+        "These settings are stored in the database and override the "
+        "<code>.env</code> file: effective immediately, with no rebuild. "
+        "Clearing a field resets it to the <code>.env</code> value.",
+    ),
 
     # --- Panneau : comptes et groupes ---------------------------------------
     "people.users_title": ("Comptes", "Accounts"),

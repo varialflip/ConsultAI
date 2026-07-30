@@ -132,12 +132,6 @@ services:
       COHERE_API_KEY: "${COHERE_API_KEY:-}"
       COHERE_MODEL: "${COHERE_MODEL:-cohere-transcribe-03-2026}"
 
-      # ---- Déconnexion (Pangolin + fournisseur OIDC) ----
-      LOGOUT_PANGOLIN_UI_URL: "${LOGOUT_PANGOLIN_UI_URL:-}"
-      LOGOUT_OIDC_URL: "${LOGOUT_OIDC_URL:-}"
-      LOGOUT_REDIRECT_URL: "${LOGOUT_REDIRECT_URL:-}"
-      LOGOUT_OIDC_REDIRECT_PARAM: "${LOGOUT_OIDC_REDIRECT_PARAM:-r}"
-
       # ---- Enregistrements conservés avec les brouillons ----
       AUDIO_DIR: "${AUDIO_DIR:-/data/audio}"
 

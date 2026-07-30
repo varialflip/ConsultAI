@@ -2705,18 +2705,6 @@
         .filter((field) => field.group === group.key)
         .filter(isFieldRelevant);
       if (!fields.length) return '';
-      // La bascule n'apparaît que dans les groupes où quelque chose est
-      // effectivement masqué : ailleurs, elle n'aurait aucun effet visible.
-      const masques = adminState.fields.filter(
-        (f) => f.group === group.key && PROVIDER_ONLY[f.key] && !isFieldRelevant(f),
-      ).length;
-      const bascule = (masques || adminState.showAllProviders)
-        ? `<label class="flex items-center gap-2 text-[11px] text-slate-500">
-             <input type="checkbox" id="admShowAll" ${adminState.showAllProviders ? 'checked' : ''}
-                    class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
-             ${esc(T('admin.show_all_providers'))}</label>`
-        : '';
-
       const avertissements = PROVIDER_WARNINGS
         .filter((a) => a.group === group.key && adminValueOf(a.key) === a.value)
         .flatMap((a) => a.messages)
@@ -2728,7 +2716,6 @@
       return `<section data-group-index="${index}" class="space-y-3">
         <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
           ${esc(group.label)}</h3>
-        ${bascule}
         ${avertissements}
         ${fields.map(adminFieldMarkup).join('')}
       </section>`;
@@ -2760,17 +2747,6 @@
         $('adminStatus').textContent = T('admin.unsaved');
       });
     });
-
-    // La bascule reconstruit la liste sans rien enregistrer : elle ne change
-    // que ce qui est à l'écran.
-    const toutAfficher = container.querySelector('#admShowAll');
-    if (toutAfficher) {
-      toutAfficher.addEventListener('change', () => {
-        adminState.showAllProviders = toutAfficher.checked;
-        renderAdminFields(adminState.groups);
-        showAdminTab(adminState.tab);
-      });
-    }
 
     renderAdminTabs();
     showAdminTab(adminState.tab);
@@ -2826,6 +2802,49 @@
     });
   }
 
+  /**
+   * Bandeau d'explication de l'onglet courant, et bascule d'affichage.
+   *
+   * Rendu ICI et non dans chaque section : la bascule pilote un état global, et
+   * en afficher une par groupe donnait deux cases à cocher pour un seul
+   * réglage. Le rappel sur la surcharge du .env n'apparaît que sur les onglets
+   * qui portent effectivement des réglages.
+   */
+  function renderAdminIntro(tab) {
+    const boite = $('adminIntro');
+    if (!boite) return;
+
+    const phrase = T(`admin.intro.${tab}`);
+    const reglages = adminState.fields.some((f) => f.group === tab);
+
+    // Y a-t-il des champs masqués faute du bon fournisseur, dans CET onglet ?
+    const masques = adminState.fields.some(
+      (f) => f.group === tab && PROVIDER_ONLY[f.key] && !isFieldRelevant(f),
+    );
+    const bascule = (masques || adminState.showAllProviders)
+      ? `<label class="mt-2 flex items-center gap-2 text-[11px] text-slate-600">
+           <input type="checkbox" id="admShowAll" ${adminState.showAllProviders ? 'checked' : ''}
+                  class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
+           ${esc(T('admin.show_all_providers'))}</label>`
+      : '';
+
+    boite.innerHTML = `
+      <div class="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+        <p class="text-xs text-slate-600 leading-relaxed">${esc(phrase)}</p>
+        ${reglages ? `<p class="text-[11px] text-slate-500 mt-1 leading-relaxed">${T('admin.env_note')}</p>` : ''}
+        ${bascule}
+      </div>`;
+
+    const toutAfficher = $('admShowAll');
+    if (toutAfficher) {
+      toutAfficher.addEventListener('change', () => {
+        adminState.showAllProviders = toutAfficher.checked;
+        renderAdminFields(adminState.groups);
+        showAdminTab(adminState.tab);
+      });
+    }
+  }
+
   function showAdminTab(tab) {
     const comptes = tab === PEOPLE_GROUP;
 
@@ -2834,7 +2853,14 @@
     // dévoilée. « Modèles disponibles » n'a en revanche rien à y faire.
     $('adminFields').classList.remove('hidden');
     $('adminPeople').classList.toggle('hidden', !comptes);
-    $('btnListModels').classList.toggle('hidden', comptes);
+
+    renderAdminIntro(tab);
+
+    // « Modèles disponibles » n'a de sens que sur l'onglet du modèle de langage ;
+    // « Enregistrer » que sur un onglet portant des réglages.
+    $('btnListModels').classList.toggle('hidden', tab !== 'group.llm');
+    const aDesReglages = adminState.fields.some((f) => f.group === tab);
+    $('btnSaveAdmin').classList.toggle('hidden', !aDesReglages);
 
     // Comparaison par index, pour la même raison que les onglets : les
     // libellés sont traduits, les clés ne le sont pas.
@@ -2899,14 +2925,19 @@
 
     const lignesUsagers = (data.users || []).map((user) => {
       const moi = user.id === data.current_user_id;
+      // L'appartenance en pastilles a bascule plutot qu'en mur de cases a
+      // cocher : avec plusieurs groupes, la rangee de cases devenait illisible
+      // et ne montrait pas d'un coup d'oeil a quoi l'usager appartient.
       const cases = (data.groups || []).map((groupe) => {
         const coche = (user.groups || []).some((g) => g.id === groupe.id);
-        return `<label class="inline-flex items-center gap-1 mr-3 text-xs">
-          <input type="checkbox" data-user="${user.id}" data-group="${groupe.id}"
-                 ${coche ? 'checked' : ''}
-                 class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
-          ${esc(groupe.name)}</label>`;
-      }).join('');
+        return `<button type="button" data-user="${user.id}" data-group="${groupe.id}"
+                  aria-pressed="${coche}"
+                  class="px-2 py-0.5 rounded-full text-[11px] border transition ${
+                    coche
+                      ? 'bg-teal-700 text-white border-teal-700'
+                      : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'}">
+                  ${esc(groupe.name)}</button>`;
+      }).join(' ');
 
       const etat = user.is_active
         ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700">${
@@ -2958,32 +2989,37 @@
       </li>`;
     }).join('');
 
+    // Deux niveaux au lieu d'un seul : identite en haut, permissions et actions
+    // en bas. En flex-wrap sur une ligne, le nom, les pastilles, le compte de
+    // membres, la description et deux cases a cocher se replisaient dans un
+    // ordre imprevisible des que la fenetre rétrécissait.
     const lignesGroupes = (data.groups || []).map((groupe) => `
-      <li class="rounded-lg border border-slate-200 p-3 flex items-center gap-2 flex-wrap">
-        <span class="font-medium text-sm text-slate-800">${esc(groupe.name)}</span>
-        ${permissionBadges(groupe)}
-        <!-- Pas d'étiquette pour les groupes livrés : ce qu'elle apprenait —
-             « non supprimable » — se voit déjà à l'absence du bouton Supprimer
-             sur la ligne. Une pastille de plus n'informait de rien et
-             encombrait une ligne déjà chargée. -->
-        <span class="text-[11px] text-slate-500">${esc(T('people.members', { count: groupe.member_count }))}</span>
-        <span class="text-[11px] text-slate-400 truncate max-w-full">${esc(groupe.description || '')}</span>
-        <span class="ml-auto flex items-center gap-3">
-          <label class="inline-flex items-center gap-1 text-xs">
+      <li class="rounded-lg border border-slate-200 p-3 space-y-2">
+        <div class="flex items-baseline gap-2 flex-wrap">
+          <span class="font-medium text-sm text-slate-800">${esc(groupe.name)}</span>
+          ${permissionBadges(groupe)}
+          <span class="text-[11px] text-slate-500 ml-auto shrink-0">${
+            esc(T('people.members', { count: groupe.member_count }))}</span>
+        </div>
+        ${groupe.description
+          ? `<p class="text-[11px] text-slate-500 leading-relaxed">${esc(groupe.description)}</p>`
+          : ''}
+        <div class="flex items-center gap-4 flex-wrap pt-1 border-t border-slate-100">
+          <label class="inline-flex items-center gap-1.5 text-xs text-slate-600">
             <input type="checkbox" data-perm-group="${groupe.id}" data-perm="is_admin"
                    ${groupe.is_admin ? 'checked' : ''}
                    class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
             ${esc(T('people.perm_admin'))}</label>
-          <label class="inline-flex items-center gap-1 text-xs">
+          <label class="inline-flex items-center gap-1.5 text-xs text-slate-600">
             <input type="checkbox" data-perm-group="${groupe.id}" data-perm="can_manage_templates"
                    ${groupe.can_manage_templates ? 'checked' : ''}
                    class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
             ${esc(T('people.perm_templates'))}</label>
           ${groupe.is_system ? '' : `<button type="button" data-delete-group="${groupe.id}"
                    data-name="${esc(groupe.name)}"
-                   class="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">
-            ${esc(T('people.delete_group'))}</button>`}
-        </span>
+                   class="ml-auto text-xs px-2 py-1 rounded border border-red-200 text-red-600
+                          hover:bg-red-50">${esc(T('people.delete_group'))}</button>`}
+        </div>
       </li>`).join('');
 
     boite.innerHTML = `
@@ -3023,13 +3059,20 @@
 
     // Appartenance : on envoie la liste complète des groupes cochés, le serveur
     // remplace. Envoyer un delta obligerait à tenir un état partagé.
-    boite.querySelectorAll('input[data-user][data-group]').forEach((caseACocher) => {
-      caseACocher.addEventListener('change', async () => {
-        const userId = Number(caseACocher.dataset.user);
-        const coches = Array.from(
-          boite.querySelectorAll(`input[data-user="${userId}"]:checked`),
-        ).map((c) => Number(c.dataset.group));
-        await savePerson(userId, { group_ids: coches });
+    boite.querySelectorAll('button[data-user][data-group]').forEach((pastille) => {
+      pastille.addEventListener('click', async () => {
+        const userId = Number(pastille.dataset.user);
+        const groupId = Number(pastille.dataset.group);
+        const actifs = new Set(
+          Array.from(boite.querySelectorAll(`button[data-user="${userId}"]`))
+            .filter((b) => b.getAttribute('aria-pressed') === 'true')
+            .map((b) => Number(b.dataset.group)),
+        );
+        // Bascule locale, puis on envoie la liste complète : le serveur
+        // remplace l'appartenance, il n'applique pas de delta.
+        if (actifs.has(groupId)) actifs.delete(groupId);
+        else actifs.add(groupId);
+        await savePerson(userId, { group_ids: Array.from(actifs) });
       });
     });
 

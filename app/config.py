@@ -211,20 +211,6 @@ class Settings:
     # --- Enregistrements conservés avec les brouillons ---
     audio_dir: str = "/data/audio"
 
-    # --- Déconnexion ---
-    # Deux sessions à clore, et Pangolin ne propage pas la déconnexion OIDC
-    # quand il ferme la sienne. Il faut donc s'adresser aux deux.
-    # Interface de Pangolin, et non son API : sa déconnexion exige un jeton
-    # CSRF qu'aucune autre origine ne peut obtenir (vérifié : 403 « CSRF token
-    # missing or invalid »). Elle ne peut donc se faire que depuis chez lui.
-    logout_pangolin_ui_url: str = ""
-    logout_oidc_url: str = ""
-    # Où revenir après la déconnexion. Le nom du paramètre varie d'un
-    # fournisseur à l'autre : Pocket ID emploie « r », la spécification OIDC
-    # « post_logout_redirect_uri ».
-    logout_redirect_url: str = ""
-    logout_oidc_redirect_param: str = "r"
-
     # -- Propriétés dérivées -------------------------------------------------
     @property
     def allow_all_users(self) -> bool:
@@ -373,10 +359,6 @@ class Settings:
             cohere_model=_env("COHERE_MODEL", "cohere-transcribe-03-2026"),
 
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
-            logout_pangolin_ui_url=_env("LOGOUT_PANGOLIN_UI_URL"),
-            logout_oidc_url=_env("LOGOUT_OIDC_URL"),
-            logout_redirect_url=_env("LOGOUT_REDIRECT_URL"),
-            logout_oidc_redirect_param=_env("LOGOUT_OIDC_REDIRECT_PARAM", "r"),
             dictation_dir=_env("DICTATION_DIR", "/data/dictations"),
             dictation_chunk_seconds=_env_int("DICTATION_CHUNK_SECONDS", 5),
             dictation_segment_seconds=_env_int("DICTATION_SEGMENT_SECONDS", 30),

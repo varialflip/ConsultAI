@@ -1,863 +1,522 @@
-# ConsultAI — Dictée de consultations cliniques (français / anglais)
+# ConsultAI — Guide de déploiement
 
-Application web auto-hébergée permettant à un médecin de **dicter** une
-consultation, de la faire **transcrire** (Google Speech-to-Text, Deepgram,
-AssemblyAI — ce dernier avec un module de terminologie médicale francophone —
-ou Soniox) puis **structurer** par un modèle de langage (Gemini, Claude
-ou OpenAI) selon un **gabarit personnalisable**, avec relecture, correction,
-copie et export PDF. L'audio reste attaché au brouillon pour lever un doute, et
-s'efface avec lui.
+Application web auto-hébergée de **dictée de consultations cliniques**. Le
+médecin dicte, l'application transcrit, un modèle de langage met en forme selon
+un gabarit, le médecin relit et exporte.
 
-L'application n'est propre à **aucune spécialité** : ce qui l'est vit dans les
-gabarits et dans la consigne générale, que le médecin écrit et modifie
-lui-même. L'interface existe en **français et en anglais**, et la langue
-choisie traverse toute la chaîne — voir § 5 quater.
+* Interface **française ou anglaise**, au choix de chaque usager.
+* **Cinq** services de reconnaissance vocale et **trois** fournisseurs de modèle
+  de langage, commutables depuis le panneau d'administration sans reconstruire
+  l'image.
+* Authentification **OpenID Connect**, assurée par l'application elle-même.
+* Aucune spécialité imposée : ce qui est propre à une pratique vit dans les
+  gabarits et dans la consigne générale.
 
-Conçue pour tourner sur un NAS Synology. Elle **authentifie elle-même**, par
-OpenID Connect (§ 4) : le reverse proxy n'est qu'un relais.
+Conçue pour un NAS Synology, mais rien n'y est spécifique hormis deux points
+signalés comme tels.
 
 ---
 
-## 1. Architecture
+## Sommaire
 
-```
-Navigateur (iPad, portable)
-   │  HTTPS
-   ▼
-Reverse proxy ── RELAIS SEULEMENT (son authentification est désactivée)
-   │  HTTP interne
-   ▼
-Conteneur ConsultAI (FastAPI + uvicorn)
-   ├── app/oidc.py           flux OpenID Connect (state, nonce, PKCE)
-   ├── app/auth.py           session signée → compte → groupes → permissions
-   ├── app/users.py          comptes, groupes, règles d'entrée
-   ├── app/runtime_config.py réglages du panneau d'administration (base)
-   ├── app/dictation.py      réception de la dictée au fil de l'eau, découpage
-   ├── app/stt.py            ffmpeg → OGG/Opus → Google / Deepgram / AssemblyAI
-   ├── app/llm.py            gabarit + transcription → Gemini/Claude/OpenAI
-   ├── app/recordings.py     audio conservé avec le brouillon
-   └── app/database.py       SQLite (/data/consultai.db)
-```
+1. [Prérequis](#1-prérequis) · 2. [Installation](#2-installation) ·
+3. [Configuration](#3-configuration) · 4. [Le proxy inverse](#4-le-proxy-inverse) ·
+5. [Premier démarrage](#5-premier-démarrage) ·
+6. [Vérification](#6-vérification-du-déploiement) · 7. [Exploitation](#7-exploitation) ·
+8. [Mise à jour](#8-mise-à-jour) · 9. [Sauvegarde](#9-sauvegarde) ·
+10. [Dépannage](#10-dépannage) · 11. [Confidentialité](#11-confidentialité) ·
+12. [Redéployer ailleurs](#12-redéployer-ailleurs)
 
-| Fichier | Rôle |
+---
+
+## 1. Prérequis
+
+| Élément | Détail |
 |---|---|
-| `docker-compose.yml` | Service, volumes, variables d'environnement |
-| `Dockerfile` | Image multi-étages (amd64 + arm64), ffmpeg inclus |
-| `app/config.py` | Lecture et validation de la configuration |
-| `app/database.py` | Schéma SQLite et gabarits par défaut |
-| `app/auth.py` | Session, identité et permissions |
-| `app/oidc.py` | Flux OpenID Connect et lecture des revendications |
-| `app/users.py` | Comptes, groupes et règles d'entrée |
-| `app/i18n.py` | Textes de l'interface (français / anglais) |
-| `app/preferences.py` | Préférences par usager (langue) |
-| `app/runtime_config.py` | Réglages modifiables depuis le panneau d'administration |
-| `app/dictation.py` | Sessions de dictée : fragments reçus, tranches transcrites |
-| `app/recordings.py` | Enregistrements audio attachés aux brouillons |
-| `app/stt.py` | Transcodage, découpage, Google / Deepgram / AssemblyAI |
-| `app/llm.py` | Prompts et appel du modèle (Gemini, Claude, OpenAI) |
-| `app/main.py` | API FastAPI |
-| `app/templates/index.html` | Interface (Tailwind) et feuille de style d'impression |
-| `app/static/app.js` | Enregistrement, rendu Markdown, sauvegarde auto, export |
+| Docker + Compose v2 | Fournis par DSM sur Synology |
+| Un fournisseur OIDC | Pocket ID, Authentik, Keycloak, Entra ID… |
+| Un proxy inverse en HTTPS | Obligatoire : le micro et l'installation PWA l'exigent |
+| Une clé de modèle de langage | Gemini, Anthropic ou OpenAI — au moins une |
+| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox ou Cohere — au moins une |
+| ~1 Go de RAM | Limite fixée dans `docker-compose.yml` |
+
+L'image contient `ffmpeg` : rien à installer sur l'hôte.
 
 ---
 
-## 2. Prérequis Google Cloud
-
-> Les services utilisés — reconnaissance vocale et modèle de langage — se
-> choisissent ensuite dans le **panneau d'administration** (§ 5 bis). Cette
-> section décrit la configuration Google, qui est celle livrée par défaut.
-
-1. Créer un projet Google Cloud et **activer deux API** :
-   - `speech.googleapis.com` (Cloud Speech-to-Text)
-   - `aiplatform.googleapis.com` (si vous utilisez Vertex AI pour Gemini)
-
-2. Créer un **compte de service** avec les rôles :
-   - `Cloud Speech Client` — obligatoire
-   - `Vertex AI User` — seulement en mode Vertex AI
-   - `Storage Object Admin` — seulement si vous configurez `STT_GCS_BUCKET`
-
-3. Télécharger la clé JSON et la déposer dans `./secrets/gcp-sa.json`.
-
-### Choix du mode Gemini
-
-| Mode | Configuration | Remarque |
-|---|---|---|
-| Clé API (AI Studio) | `GEMINI_API_KEY=…` | Le plus simple ; traitement hors du Canada |
-| **Vertex AI** | `GEMINI_API_KEY` vide + `GOOGLE_CLOUD_PROJECT=…` | **Recommandé** : `GOOGLE_CLOUD_LOCATION=northamerica-northeast1` garde le traitement à Montréal, ce qui simplifie la conformité pour des renseignements de santé québécois |
-
-> **Nom du modèle.** Le cahier des charges mentionnait `gemini-3.5-flash`, qui
-> n'existe pas au catalogue Google. La valeur livrée est `gemini-2.5-flash`.
-> Pour connaître les modèles réellement accessibles à votre compte, ouvrez
-> `https://votre-domaine/api/models` une fois l'application démarrée, puis
-> ajustez `GEMINI_MODEL` dans `.env`.
-
----
-
-## 3. Installation sur le NAS
+## 2. Installation
 
 ```bash
 cd /volume1/docker/ConsultAI
-
-# 1. Configuration
 cp .env.example .env
+```
 
-# 2. ⚠️ ÉTAPE CRITIQUE : votre UID/GID
-id votre_utilisateur      # ex. uid=1026(fred) gid=100(users)
-# Reportez ces valeurs dans .env : APP_UID=1026 et APP_GID=100
+### 2.1 ⚠️ Synology — l'UID du processus
 
-# 3. Renseignez au minimum la section OIDC (§ 4), SESSION_SECRET
-#    et la configuration Gemini
+**À régler avant tout démarrage.** Les dossiers partagés Synology portent des
+ACL qui refusent l'écriture aux UID inconnus **même quand les permissions
+affichent 777**. Avec une mauvaise valeur, l'application s'arrête au démarrage
+sur `sqlite3.OperationalError: unable to open database file`.
 
-# 4. Clé Google
+```bash
+id votre_utilisateur        # ex. uid=1026(fred) gid=100(users)
+```
+
+```ini
+APP_UID=1026
+APP_GID=100
+```
+
+### 2.2 Clé Google — seulement si vous utilisez Google
+
+Nécessaire pour Google Speech-to-Text et pour Gemini en mode Vertex AI. Rôles du
+compte de service : `Cloud Speech Client`, plus `Vertex AI User` en mode Vertex,
+plus `Storage Object Admin` si vous configurez `STT_GCS_BUCKET`.
+
+```bash
 mkdir -p secrets data
-cp /chemin/vers/votre-cle.json secrets/gcp-sa.json
+cp /chemin/vers/cle.json secrets/gcp-sa.json
 chmod 600 secrets/gcp-sa.json
+```
 
-# 5. Démarrage
+Les autres fournisseurs n'utilisent qu'une clé d'API, saisie dans le panneau
+d'administration ou dans `.env`.
+
+### 2.3 Démarrage
+
+```bash
 docker compose up -d --build
 docker compose logs -f consultai
 ```
 
-Au démarrage, les journaux affichent en clair chaque problème de
-configuration détecté (`CONFIGURATION : …`). L'état est aussi visible sur
-`/healthz`.
-
-L'application écoute sur `127.0.0.1:8787` — **volontairement inaccessible
-depuis l'extérieur du NAS**. Seul le reverse proxy doit l'atteindre.
+Le conteneur écoute sur `BIND_ADDRESS:BIND_PORT` (défaut `127.0.0.1:8787`).
 
 ---
 
-## 4. Authentification (OpenID Connect)
+## 3. Configuration
 
-L'application **authentifie elle-même**, par OpenID Connect. Le reverse proxy
-n'est plus qu'un relais.
+Tout passe par `.env`, documenté variable par variable dans `.env.example`.
+Cette section ne retient que ce qui bloque un déploiement.
 
-```
-navigateur ──► /auth/login ──► fournisseur ──► /auth/callback ──► témoin signé
-                                                     │
-                                              compte en base
-```
+### 3.1 Réseau
 
-### 4.1 Créer le client chez le fournisseur
-
-Chez votre fournisseur (Pocket ID, Authentik, Keycloak…), créez un client OIDC
-**confidentiel** et déclarez comme adresse de retour, à l'identique :
-
-```
-https://consultai.exemple.com/auth/callback
+```ini
+BIND_ADDRESS=192.168.20.50     # une adresse joignable par le proxy
+BIND_PORT=8787
+BASE_URL=https://consultai.exemple.com
 ```
 
-Puis dans `.env` :
+`127.0.0.1` ne convient que si le proxy tourne sur le même hôte ; sinon il
+renvoie « Bad Gateway ».
+
+### 3.2 Authentification
 
 ```ini
 OIDC_PROVIDER_URL=https://login.exemple.com
 OIDC_CLIENT_ID=…
 OIDC_CLIENT_SECRET=…
 OIDC_REDIRECT_URI=https://consultai.exemple.com/auth/callback
-BASE_URL=https://consultai.exemple.com
 OIDC_SCOPES=openid,profile,email,groups
-SESSION_SECRET=$(openssl rand -base64 48)
+SESSION_SECRET=…               # openssl rand -base64 48
+SSO_DISPLAY_NAME=Mon SSO       # nom affiché sur les pages d'erreur
+ALLOW_SIGNUP=false
 ```
 
-`SESSION_SECRET` n'est pas optionnelle en pratique : sans elle, une clé
-aléatoire est tirée à chaque démarrage et **tout le monde est déconnecté** à
-chaque `docker compose up`.
+Chez votre fournisseur, créez un client **confidentiel** et déclarez l'adresse
+de retour à l'identique.
 
-### 4.2 ⚠️ Le proxy doit RELAYER, pas authentifier
+> **`SESSION_SECRET` n'est pas optionnelle.** Sans elle, une clé aléatoire est
+> tirée à chaque démarrage : tout le monde est déconnecté à chaque
+> `docker compose up`. L'application le signale au démarrage.
 
-**Désactivez l'authentification de Pangolin sur cette ressource.** Ce n'est pas
-une préférence : quand Pangolin authentifie, il **retire l'en-tête `Cookie`**
-des requêtes qu'il relaie au conteneur. L'application ne verrait jamais revenir
-son propre témoin de session, et la connexion bouclerait indéfiniment — le flux
-aboutit chez le fournisseur, puis retombe sur une session vide.
+### 3.3 Langue
 
-Le symptôme est reconnaissable : la page de connexion réapparaît sans message,
-ou `/auth/callback` affiche « Connexion expirée ou témoin de session absent ».
+```ini
+APP_LANGUAGE=fr                # défaut de l'installation
+STT_LANGUAGE_CODE=             # LAISSER VIDE
+```
 
-Conséquence de ce changement : `SSO_HEADER_KEY` et `TRUSTED_PROXIES` **ne sont
-plus des contrôles de sécurité** et peuvent être retirées du `.env`.
-L'application le signale au démarrage si elles y sont encore. Gardez néanmoins
-le port du conteneur non exposé et la règle de pare-feu du § 4.4 : un appelant
-direct ne peut plus rien forger, mais il n'a aucune raison d'y accéder.
+`APP_LANGUAGE` ne sert qu'aux usagers qui n'ont pas encore choisi : chacun règle
+sa langue depuis le menu de la pastille d'identité.
 
-### 4.3 Qui a le droit d'entrer
+> **Laissez `STT_LANGUAGE_CODE` vide.** Une valeur y **force** la langue du
+> service vocal et survit au changement de langue — souhaitable seulement pour
+> épingler un dialecte précis.
+
+### 3.4 Services
+
+Renseignez au moins une clé de chaque famille. Le choix du service se fait
+ensuite dans le panneau, sans redémarrage.
+
+```ini
+# Vocal — au moins un
+GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json
+DEEPGRAM_API_KEY=
+ASSEMBLYAI_API_KEY=
+SONIOX_API_KEY=
+COHERE_API_KEY=
+
+# Modèle de langage — au moins un
+GEMINI_API_KEY=                # ou GOOGLE_CLOUD_PROJECT pour Vertex AI
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+```
+
+---
+
+## 4. Le proxy inverse
+
+Créez une ressource vers `http://<hôte>:8787`, en HTTPS côté public.
+
+### ⚠️ Le proxy doit RELAYER, sans authentifier
+
+**Désactivez toute authentification du proxy sur cette ressource.**
+
+Ce n'est pas une préférence. Un proxy qui authentifie lui-même retire souvent
+l'en-tête `Cookie` des requêtes qu'il relaie — Pangolin le fait. L'application
+ne verrait jamais revenir son propre témoin de session, et la connexion
+bouclerait indéfiniment : le flux aboutit chez le fournisseur, puis retombe sur
+une session vide.
+
+Symptôme : la page de connexion réapparaît sans message, ou `/auth/callback`
+affiche « Connexion expirée ou témoin de session absent ».
+
+### Ce que le proxy doit laisser passer
+
+| Chemin | Raison |
+|---|---|
+| `/auth/login`, `/auth/callback`, `/auth/logout` | Le flux de connexion |
+| `/static/manifest.webmanifest`, `/sw.js`, `/static/icons/` | Installation PWA : le navigateur les demande **sans** témoin |
+| Corps de requête ≥ 200 Mo | Une dictée longue dépasse les limites par défaut |
+
+### Pare-feu
+
+Le port du conteneur n'a aucune raison d'être joignable au-delà du proxy :
+
+> *DSM → Panneau de configuration → Sécurité → Pare-feu* → **Autoriser**
+> TCP 8787 depuis l'IP du proxy, puis **Refuser** TCP 8787 depuis « Toutes »,
+> règle placée **après**.
+
+---
+
+## 5. Premier démarrage
+
+### Le premier usager devient administrateur
+
+À la première connexion sur une installation vide, le compte est créé et reçoit
+l'administration. C'est l'amorçage : sans cette exception, personne ne pourrait
+ouvrir le panneau.
+
+> Cela suppose que **l'inscription soit fermée chez votre fournisseur**.
+> Ouverte, le premier venu prendrait l'installation.
+
+Ensuite, `ALLOW_SIGNUP` décide :
 
 | Situation | Résultat |
 |---|---|
-| Compte déjà connu, actif | entre |
-| Compte déjà connu, désactivé | refusé |
-| **Aucun compte n'existe encore** | entre et **devient administrateur** |
+| Compte connu, actif | entre |
+| Compte connu, désactivé | refusé |
 | Inconnu, `ALLOW_SIGNUP=true` | créé dans `users` |
 | Inconnu, `ALLOW_SIGNUP=false` | refusé |
 
-> **Le premier usager qui se connecte devient administrateur**, quel que soit
-> `ALLOW_SIGNUP`. C'est l'amorçage : sans cette exception, une installation
-> neuve n'aurait personne pour ouvrir le panneau. Cela suppose que
-> l'inscription soit **fermée** chez votre fournisseur — ouverte, le premier
-> venu prendrait l'installation.
+### Groupes
 
-Deux groupes sont livrés :
-
-| Groupe | Panneau d'administration | Gabarits | Ses consultations |
+| Groupe | Panneau | Gabarits | Ses consultations |
 |---|---|---|---|
 | `admins` | oui | oui | oui |
 | `users` | non | non | oui |
 
-Les groupes annoncés par le fournisseur (portée `groups`) sont reportés **par
-nom** sur ceux de l'application, et seulement de façon **additive** : un groupe
-absent de la réponse du fournisseur n'est jamais retiré. Beaucoup de
+Les groupes annoncés par le fournisseur sont rapprochés **par nom** et seulement
+**en ajout** : un groupe absent de la réponse n'est jamais retiré. Beaucoup de
 fournisseurs n'envoient la revendication que sous conditions, et la traiter
-comme la vérité complète ferait perdre ses droits au dernier administrateur le
-jour où elle manque. Le retrait d'un droit se fait explicitement, depuis la
-gestion des comptes.
+comme la vérité complète retirerait ses droits au dernier administrateur le jour
+où elle manque. Les retraits se font depuis **Réglages → Comptes et groupes**.
 
-### 4.4 Migration depuis l'authentification par en-têtes
+### Porte de secours
 
-Au premier démarrage, l'application crée un compte pour **chaque propriétaire
-de consultation existant** (la valeur que portait `Remote-User`), et le premier
-entre dans `admins`. Vos brouillons restent donc les vôtres.
-
-À la première connexion, l'identité du fournisseur est rattachée à ce compte en
-cascade : `sub`, puis nom d'usager, puis courriel. Le journal l'indique :
-
-```
-Compte « fred » créé à partir des consultations existantes. Il conserve ses 8 brouillon(s).
-Compte « fred » rattaché à l'identité du fournisseur
-```
-
-> **Si vos brouillons n'apparaissent pas après la première connexion**, c'est
-> que le nom d'usager retenu diffère de l'ancien propriétaire. Le compte visible
-> dans **Réglages → Comptes** affiche le nombre de consultations qu'il porte :
-> comparez-le. La colonne `owner` de la table `consultations` est la clé de
-> propriété.
-
-### 4.5 Porte de secours
-
-Si plus personne ne peut entrer (client OIDC supprimé, fournisseur
-injoignable, dernier compte désactivé à la main dans la base) :
+Si plus personne ne peut entrer — client OIDC supprimé, fournisseur
+injoignable, dernier compte désactivé :
 
 ```ini
 AUTH_DISABLED=true
 ```
 
-puis `docker compose up -d`. L'application s'ouvre alors sans authentification,
-sous l'identité `DEV_USER`, avec les droits d'administrateur — le temps de
-réparer les comptes. **Remettez-la à `false` immédiatement après**, et ne
-l'utilisez jamais sur une installation joignable depuis l'extérieur.
-
-### 4.6 Règle de pare-feu Synology
-
-Le NAS publie le port via le proxy userland de Docker (`docker-proxy`), qui
-réécrit l'IP source. Cela n'a plus d'incidence sur l'authentification, mais le
-port n'a aucune raison d'être joignable au-delà du proxy :
-
-> *DSM → Panneau de configuration → Sécurité → Pare-feu → Modifier les règles*
-> → **Créer** : Ports = **TCP 8787**, IP source = celle du proxy,
-> Action = **Autoriser**. Puis une règle **Refuser** pour TCP 8787 depuis
-> « Toutes », placée **après**.
+puis `docker compose up -d`. L'application s'ouvre sans authentification sous
+`DEV_USER`, avec les droits d'administrateur, le temps de réparer.
+**Remettez `false` immédiatement après.**
 
 ---
 
-## 5. Utilisation
+## 6. Vérification du déploiement
 
-1. Choisir un **gabarit** dans le menu déroulant.
-2. **Enregistrer** la dictée, ou **Importer** un fichier audio existant. Le
-   texte apparaît au fur et à mesure, par tranches d'environ trente secondes
-   (voir « La dictée » ci-dessous), et s'ajoute à la suite du texte déjà
-   présent — on peut donc dicter en plusieurs fois.
-3. Corriger la transcription brute si nécessaire, puis **Mettre en forme**.
-4. Relire la note dans le panneau droit ; l'onglet **Éditer** donne accès au
-   Markdown source.
-5. **Copier** (avec mise en forme, pour Word ou le DME), **Markdown** (texte
-   brut) ou **PDF** (impression du navigateur).
+```bash
+# 1. Le conteneur répond et signale ses défauts de configuration
+curl -s http://127.0.0.1:8787/healthz | python3 -m json.tool
 
-Tout est sauvegardé automatiquement dans SQLite ; « Mes brouillons » permet de
-reprendre un document.
+# 2. Aucun avertissement bloquant
+docker compose logs consultai | grep CONFIGURATION
 
-**Raccourcis :** `Ctrl/⌘ + Entrée` met en forme · `Ctrl/⌘ + S` sauvegarde ·
-`Échap` ferme les fenêtres.
+# 3. Une navigation non authentifiée redirige vers la connexion
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8787/ \
+     -H 'Accept: text/html'                    # attendu : 302
 
-### La dictée
+# 4. Un appel d'API non authentifié renvoie du JSON, pas une redirection
+curl -s http://127.0.0.1:8787/api/config       # attendu : 401 {"detail":…}
+```
 
-Quatre boutons, dans cet ordre :
+Puis, dans un navigateur, ouvrez `BASE_URL` : vous devez arriver chez votre
+fournisseur, revenir connecté, et voir votre nom dans la pastille en haut à
+droite.
 
-| Bouton | Effet |
+Le journal de démarrage résume l'état effectif :
+
+```
+Authentification : OIDC chez https://… | retour https://…/auth/callback
+                 | 1 compte(s) connu(s) | inscription automatique : non
+Modèle : gemini / gemini-2.5-flash | Reconnaissance vocale : soniox (fr-CA) | Langue : fr
+```
+
+---
+
+## 7. Exploitation
+
+### 7.1 Panneau d'administration
+
+**Réglages**, visible des seuls administrateurs. Cinq onglets :
+
+| Onglet | Contenu |
 |---|---|
-| **Enregistrer** | Ouvre le micro et la session de dictée |
-| **Pause** ⏸ | Suspend et reprend, sans rien envoyer ni perdre |
-| **Terminer** ⏹ | Transcrit le reliquat et conclut la dictée |
-| **Arrêter** ✕ | Abandonne : l'enregistrement est **supprimé**, sans transcription |
+| Système | Inscription automatique |
+| Reconnaissance vocale | Service, clés, modèles, retrait des longues pauses |
+| Modèle de langage | Fournisseur, modèle, modèle rapide, température, clés |
+| Consignes | Consigne générale, en français et en anglais |
+| Comptes et groupes | Revendications d'identité, comptes, groupes, permissions |
 
-« Arrêter » ne défait pas ce qui a déjà été transcrit — ce texte est dans la
-transcription, à vider à la main si on n'en veut pas. Le bouton n'apparaît que
-pendant l'enregistrement, où il prend la place de celui d'import.
+Ces valeurs sont stockées en base et **surchargent le `.env`** : effet immédiat,
+sans reconstruction. Vider un champ le remet à la valeur du `.env`. Chaque champ
+indique sa provenance (`panneau` ou `.env`).
 
-#### Ce qui se passe pendant que vous parlez
+Les champs d'un fournisseur non sélectionné sont masqués. Pour **saisir** une clé
+avant de basculer, cochez *Afficher les champs des fournisseurs non
+sélectionnés*.
 
-```
-micro ──▶ fragment de 5 s ──▶ copie locale (IndexedDB)
-                            └▶ serveur : fichier audio de la session
-                                            │
-                                            ├─▶ tranche de ~30 s (ffmpeg)
-                                            └─▶ Google STT ─▶ brouillon
-```
+Dans l'onglet Comptes, l'appartenance se règle en cliquant les pastilles de
+groupe, et chaque changement s'applique immédiatement — il n'y a rien à
+enregistrer.
 
-La dictée n'attend plus « Terminer » pour quitter le navigateur : elle part
-par fragments de cinq secondes, et le serveur la transcrit par tranches d'une
-trentaine de secondes qui s'affichent au fil de l'eau. Trois conséquences :
+> Ce qui gouverne l'accès reste hors d'atteinte du navigateur : `OIDC_*`,
+> `SESSION_SECRET` et `AUTH_DISABLED` ne sont que dans le `.env`.
 
-- **une coupure ne coûte plus la consultation.** Le serveur détient l'audio à
-  quelques secondes près, et le brouillon reçoit chaque tranche de texte dès
-  qu'elle est prête ;
-- **un envoi raté se rejoue.** Tant que la dictée n'est pas conclue, le
-  navigateur garde sa propre copie de l'audio. Une ligne sous les boutons
-  indique combien de fragments attendent, et la file se vide seule au retour
-  du réseau ;
-- **le texte n'arrive plus d'un bloc à la fin**, ce qui permet de vérifier
-  que le micro capte réellement la bonne chose.
+### 7.2 Choisir un service vocal
 
-Si le serveur est injoignable au moment d'appuyer sur « Enregistrer », la
-dictée se fait quand même : tout est conservé dans le navigateur et envoyé à
-« Terminer ».
-
-Les tranches ne sont **pas coupées à la seconde fixe** : ffmpeg cherche un
-silence autour de la trentième seconde (`silencedetect`) et coupe là. Couper au
-milieu d'un mot le rendrait inintelligible des deux côtés de la frontière, ce
-qu'une note médicale ne peut pas se permettre. Le curseur n'avance que de la
-durée réellement mesurée sur la tranche produite : aucune dérive ne peut faire
-sauter un passage.
-
-#### Dictée interrompue
-
-Un onglet fermé en pleine consultation — ou une application iOS tuée en
-arrière-plan — laisse la dictée en plan. Au chargement suivant, une bannière
-ambre la propose :
-
-- **Reprendre et transcrire** : complète le serveur avec les fragments qui lui
-  manquent, conclut la dictée et ouvre la consultation d'origine. Le texte
-  déjà transcrit n'est pas redemandé ;
-- **Télécharger l'audio** : récupère l'enregistrement complet en fichier, pour
-  le garder ou l'importer ailleurs ;
-- **Supprimer**.
-
-Le serveur conserve une dictée inachevée pendant `DICTATION_RETENTION_HOURS`
-(72 h par défaut), puis la purge au démarrage suivant. Une dictée conclue est
-effacée immédiatement : le brouillon porte désormais le texte, garder l'audio
-d'une consultation ne ferait qu'ajouter un risque.
-
-### Métadonnées de la consultation
-
-Le repli **Métadonnées de la consultation** contient le nom du patient, son
-numéro de dossier, la date, la raison de consultation, le demandeur et
-l'accompagnateur. **Ces champs n'ont pas à être saisis :** ils sont relus dans
-la dictée par Gemini juste après la mise en forme (`app/llm.py →
-extract_metadata`, un appel distinct de celui qui produit la note), puis
-affichés pour vérification.
-
-Ils remplissent deux rôles :
-
-- ils alimentent les `{{PLACEHOLDERS}}` de l'en-tête du document ;
-- ils identifient la consultation dans **Mes brouillons** — c'est le seul
-  moyen d'y reconnaître un document, la liste n'affichant aucun extrait du
-  contenu clinique.
-
-> Une valeur saisie à la main fait toujours autorité : l'extraction ne
-> complète que les champs restés vides, y compris après une régénération. Un
-> numéro de dossier vérifié à l'écran ne sera jamais remplacé par ce que le
-> moteur de reconnaissance vocale a cru entendre.
-
-La **scolarité** ne figure pas ici : ce n'est pas un élément d'identification
-mais une donnée clinique, qui appartient à l'histoire sociale de la note (et
-qui conditionne l'interprétation du MoCA).
-
-### Mes brouillons
-
-La liste est **groupée par jour de dictée**, du plus récent au plus ancien, et
-chaque groupe est trié de l'heure la plus récente à la plus ancienne. Une
-ligne porte l'heure, le nom, le numéro de dossier, la raison de consultation,
-le gabarit et l'état.
-
-Le tri repose sur la date de **création** et non de dernière modification :
-rouvrir un vieux dossier pour y corriger une virgule ne doit pas le faire
-remonter au-dessus de la consultation du matin même.
-
-### Enregistrements conservés
-
-L'audio d'une consultation **reste attaché à son brouillon**, réécoutable dans
-le repli « Enregistrements » sous les boutons de dictée. La reconnaissance
-vocale se trompe, et généralement sur ce qui compte — une posologie, un score,
-un nom de molécule. Réécouter le passage est le seul moyen de trancher sans
-refaire l'entrevue.
-
-Les fichiers importés y figurent au même titre que les dictées. Chacun peut
-être écouté, téléchargé ou supprimé individuellement.
-
-> **Supprimer le brouillon efface tout** : la transcription, la note **et**
-> les enregistrements audio, fichiers compris. C'est la contrepartie de leur
-> conservation — un seul geste doit suffire à ne rien laisser derrière.
-
----
-
-## 5 bis. Panneau d'administration (« Réglages »)
-
-Bouton **Réglages** dans l'en-tête, visible pour les comptes listés dans
-`TEMPLATE_ADMINS` (par défaut : tous les usagers autorisés).
-
-Ces réglages sont enregistrés en base et **surchargent le fichier `.env`** :
-ils prennent effet immédiatement, sans `docker compose up --build`. Vider un
-champ supprime la surcharge et le réglage revient à ce que dit le `.env` —
-c'est la façon la plus simple de revenir en arrière. Chaque champ indique sa
-provenance : `panneau` ou `.env`.
-
-> **Ce qui n'y est pas :** rien de ce qui gouverne l'accès. `AUTHORIZED_USERS`,
-> `TRUSTED_PROXIES` et `TEMPLATE_ADMINS` restent dans le `.env`, hors d'atteinte
-> du navigateur. Un panneau accessible en ligne ne doit pas pouvoir élargir la
-> liste des personnes autorisées à lire les consultations.
-
-> **La langue n'est pas ici.** C'est une préférence personnelle, choisie dans
-> le menu de la pastille d'identité — voir § 5 quater.
-
-### Reconnaissance vocale
-
-Quatre services au choix. Le changement ne touche que la dernière étape : le
-transcodage en OGG/Opus, le découpage en tranches de trente secondes et le
-lexique d'adaptation leur sont communs. Basculer en cours d'usage est sans
-effet sur les dictées déjà transcrites.
-
-| Service | Adaptation au vocabulaire | Terminologie clinique |
+| Service | Adaptation au vocabulaire | À savoir |
 |---|---|---|
-| **Google Speech-to-Text** | `speech_contexts`, ~300 expressions | aucun modèle médical francophone (`medical_dictation` est anglophone) |
-| **Deepgram** | `keywords`, **nova-2 seulement** | aucun |
-| **AssemblyAI** | `keyterms_prompt`, 1000 termes | **module « medical-v1 », français pris en charge** |
-| **Soniox** | `context.terms`, 60 termes | aucun, mais multilingue par conception |
+| **Soniox** | 60 termes de contexte | Le moins cher (~0,10 $US/h), multilingue |
+| **AssemblyAI** | 1000 termes | Module médical `medical-v1`, facturé en supplément |
+| **Google** | ~300 expressions | Aucun modèle médical francophone |
+| **Deepgram** | mots-clés, **nova-2 seulement** | `nova-3` ignore les mots-clés hors anglais |
+| **Cohere** | **aucune** | ⚠️ voir ci-dessous |
 
-> Le lexique d'adaptation livré avec l'application est **francophone** : il n'est
-> pas envoyé en mode anglais. Voir § 5 quater.
+> ⚠️ **Cohere est déconseillé pour la dictée clinique.** Plafonné à 5
+> requêtes/minute sur une clé d'essai — la dictée envoie une tranche toutes les
+> 30 s **et par usager**, donc une dictée passe, deux passent à peine, trois
+> dépassent. Il n'offre aucune adaptation au vocabulaire et s'est montré
+> nettement moins fiable sur les noms de médicaments à l'essai, jusqu'à en
+> inventer. L'application étale les envois et réessaie sur 429, mais une tranche
+> peut être retardée.
 
-#### AssemblyAI et son module médical
+Le lexique clinique livré (~320 expressions : acronymes du réseau québécois,
+échelles, molécules) est **francophone**. Il n'est pas envoyé pour un gabarit
+anglais, où le champ **Vocabulaire additionnel** du gabarit devient la seule
+source transmise au moteur.
 
-C'est le seul des trois à proposer un modèle spécialisé en terminologie
-clinique qui **couvre le français**. Le module `medical-v1` (« Medical Mode »)
-vise précisément ce que les deux autres ratent le plus ici : noms de
-médicaments, procédures, diagnostics et posologies. Il est activé par défaut
-dans le panneau et fonctionne en pré-enregistré, donc avec le découpage en
-tranches de ConsultAI.
+### 7.3 Retrait des longues pauses
 
-| Réglage | Remarque |
-|---|---|
-| Clé API | `assemblyai.com` → Dashboard → API Keys |
-| Modèle | `universal-3-5-pro` (défaut) ou `universal-2`. Le premier reconnaît explicitement le **français québécois** et accepte 1000 termes d'adaptation, contre 200 pour le second |
-| Langue | `fr` — AssemblyAI ne demande pas de code de dialecte, `fr` couvre le québécois. Vide = détection automatique |
-| Mode médical | `medical-v1`, activé par défaut |
+Les services facturent à la durée d'audio. Seule la **copie envoyée** est
+raccourcie ; l'enregistrement conservé reste intact et la durée affichée reste
+celle de la dictée réelle. Gain constaté : 30 à 40 %.
 
-À savoir :
+Ne descendez pas `STT_SILENCE_KEEP_SECONDS` à 0 : les moteurs se servent des
+pauses pour placer la ponctuation.
 
-- **Facturation supplémentaire.** Le module est un supplément (~0,15 $US/h
-  au tarif public, au-dessus du prix du modèle). Sur une langue non prise en
-  charge, AssemblyAI l'ignore et le signale — les journaux du conteneur
-  reprennent l'avertissement — sans le facturer.
-- **Trois allers-retours au lieu d'un.** L'API n'est pas synchrone :
-  téléversement, création de la tâche, puis interrogation jusqu'à la fin.
-  Quelques secondes de plus par tranche, invisibles en pratique puisque le
-  découpage tourne en tâche de fond pendant que le médecin continue de parler.
-- Les expressions du lexique de plus de six mots sont écartées : l'API les
-  refuse. Ce sont des phrases entières, que l'adaptation n'aide pas.
+### 7.4 Gabarits
 
-#### Retrait des longues pauses
+Quatre sont livrés :
 
-Les trois services facturent **à la durée d'audio** : les pauses d'une
-consultation — le médecin examine le patient, le patient cherche ses mots —
-sont payées plein tarif pour rien. ConsultAI les plafonne avant l'envoi.
+| Gabarit | Langue | |
+|---|---|---|
+| Consultation Médicale Générale | fr | 🔒 protégé |
+| General Medical Consultation | en | 🔒 protégé |
+| Consultation - Gériatrie | fr | modifiable |
+| Suivi | fr | modifiable |
 
-| Réglage (panneau) | Défaut |
-|---|---|
-| Retirer les longues pauses | **Activé** |
-| Pause conservée | 0,5 s |
+Les deux **protégés** ne sont ni modifiables ni supprimables — le refus est
+appliqué côté serveur. **Dupliquez-les** pour obtenir une copie indépendante et
+entièrement modifiable ; c'est le chemin prévu, et un bouton du formulaire le
+propose.
 
-Ce n'est **pas** une suppression du silence, c'est un plafonnement. Toute pause
-plus courte que le réglage est conservée telle quelle ; les plus longues sont
-ramenées à cette durée. La raison est clinique : les moteurs se servent des
-pauses pour placer la ponctuation et séparer les phrases. Tout supprimer
-transformerait « *arrêter le lisinopril. Débuter l'amlodipine* » en une seule
-phrase — sur une liste de médicaments, ce n'est pas un détail de mise en forme.
-**Ne mettez pas 0.**
+Les deux autres sont amorcés une seule fois et se comportent comme vos propres
+gabarits : modifiables, supprimables, jamais recréés.
 
-Une tranche où personne n'a parlé est réduite à rien : l'appel au service n'est
-alors pas émis du tout.
+Chaque gabarit comporte : **Instructions cliniques** (ce sur quoi le modèle se
+concentre), **Mise en page** (le squelette Markdown, qui fixe la structure
+exacte), **Vocabulaire additionnel** et **Langue**.
 
-> **Seule la copie envoyée est raccourcie.** L'enregistrement conservé avec le
-> brouillon garde sa chronologie intacte — il sert à réécouter un passage dont
-> on doute, une bande trafiquée le rendrait inutilisable. Et la durée affichée
-> reste celle de la dictée réelle.
+Champs de substitution disponibles dans la mise en page : `{{PATIENT}}`,
+`{{DOSSIER}}`, `{{DATE}}`, `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. Une ligne dont
+le champ reste inconnu est retirée du document.
 
-Sur un fichier de test contenant 40 s de parole et 60 s de silence, l'audio
-facturé passe de 100 s à 46 s. Le gain réel dépend entièrement de la proportion
-de silence de vos dictées — les journaux du conteneur l'indiquent tranche par
-tranche :
+### 7.5 La langue du gabarit pilote la chaîne
 
-```
-Silences retirés : 34.5 s → 18.1 s envoyées (48 % de moins)
-```
+Le champ **Langue** d'un gabarit n'est pas une étiquette : il décide des
+consignes envoyées au modèle, de la consigne générale employée, du code de
+langue transmis au service vocal, de l'envoi ou non du lexique francophone, et
+de la langue de rédaction de la note.
 
-Le seuil de détection (`STT_SILENCE_THRESHOLD_DB`, −40 dB) reste dans le
-`.env` : remontez-le vers −32 si le local est bruyant, descendez-le pour être
-plus prudent.
+Il n'y a **aucune détection automatique** depuis l'audio ou le texte : elle se
+tromperait sur une consultation bilingue.
 
-#### Deepgram
+La langue d'**interface** est distincte et propre à chaque usager : on peut lire
+l'écran en français et produire une note anglaise.
 
-| Réglage | Remarque |
-|---|---|
-| Clé API | `console.deepgram.com` → API Keys |
-| Modèle | `nova-2` recommandé en français canadien |
-| Langue | **laisser vide** : suit la langue de l'application (§ 5 quater) |
+> Un gabarit n'est jamais traduit. Un gabarit français avec l'interface en
+> anglais produit une note aux **titres de rubriques français** et au corps
+> anglais : les consignes exigent de reproduire exactement la structure fournie,
+> et cette exigence l'emporte sur la langue de rédaction. Pour une note
+> entièrement anglaise, dupliquez le gabarit et traduisez ses titres.
 
-> **Modèle Deepgram :** l'adaptation par mots-clés (le lexique du réseau de la
-> santé québécois — CHSLD, CIUSSS, les échelles cliniques, les molécules)
-> passe par le paramètre `keywords`, qui n'existe plus sur nova-3. Ce dernier
-> lui substitue `keyterm`, réservé à l'anglais. En français, l'adaptation n'est
-> donc réellement disponible que sur **nova-2**, d'où la recommandation.
+### 7.6 Installation sur mobile (PWA)
 
-### Modèle de langage
+Ouvrez `BASE_URL` puis **Partager → Sur l'écran d'accueil** (iOS, Safari
+exclusivement) ou **Installer** (Android/Chrome). Exige HTTPS.
 
-| Réglage | Remarque |
-|---|---|
-| Fournisseur | **Google Gemini**, **Anthropic Claude** ou **OpenAI** |
-| Modèle | Nom exact. Le bouton **Modèles disponibles** interroge le fournisseur avec la clé configurée et remplit la liste de suggestions du champ |
-| Modèle rapide | Sert uniquement à la relecture des métadonnées (voir § Métadonnées). Tâche triviale payée au jeton : inutile d'y mettre un modèle « pro ». Vide = même modèle que ci-dessus |
-| Température | 0 = déterministe. Au-delà de 0,4 le modèle brode, ce qui n'a pas sa place dans une note clinique |
-| Clés API | Une par fournisseur. Seul celui qui est sélectionné a besoin de la sienne |
+Après toute modification d'un fichier de `app/static/`, **incrémentez `VERSION`
+dans `app/static/sw.js`** : sans cela, les appareils ayant installé
+l'application continuent de servir l'ancienne version depuis leur cache.
 
-Les clés **ne ressortent jamais du serveur** : le panneau n'en affiche que les
-quatre derniers caractères, assez pour vérifier qu'on a collé la bonne, inutile
-pour s'en servir. Laisser le champ vide conserve la clé en place ; le bouton
-**Effacer** la supprime.
-
-Le mode **Vertex AI** de Gemini (traitement en région de Montréal) reste piloté
-par le `.env` : il s'active dès qu'aucune clé Gemini n'est configurée et que
-`GOOGLE_CLOUD_PROJECT` est renseigné.
-
-### Consigne générale
-
-Un texte libre ajouté aux consignes de **tous** les gabarits, appliqué quel que
-soit le modèle choisi. Il sert aux préférences durables du médecin :
-
-```
-Toujours employer le vouvoiement.
-Ne jamais abréger les noms de molécules.
-Exprimer toutes les doses en milligrammes.
-```
-
-L'ordre des consignes est : garde-fous de l'application (non modifiables) →
-consignes du gabarit → consigne générale. **Elle passe en dernier, donc elle
-l'emporte** en cas de contradiction avec un gabarit qu'on n'a pas pensé à
-mettre à jour.
+Le service worker ne met en cache que des ressources statiques et anonymes. Ni la
+page `/`, ni les appels `/api/` — ils contiennent des renseignements de santé.
 
 ---
 
-## 5 ter. Utilisation sur mobile et installation (PWA)
+## 8. Mise à jour
 
-L'application est une **PWA** : elle s'installe sur l'écran d'accueil et
-s'ouvre en plein écran, sans barre d'adresse.
-
-| Appareil | Installation |
-|---|---|
-| **iPhone / iPad** | Ouvrir l'adresse dans **Safari** (Chrome iOS ne sait pas installer), bouton *Partager* → **Sur l'écran d'accueil** |
-| **Android** | Chrome → menu ⋮ → **Installer l'application** (ou la bannière proposée automatiquement) |
-| **Bureau** | Chrome/Edge → icône d'installation dans la barre d'adresse |
-
-Adaptations spécifiques au mobile :
-
-- **Un panneau à la fois**, avec un sélecteur *Dictée / Note structurée* :
-  les deux colonnes du bureau ne sont lisibles que sur grand écran. Après la
-  mise en forme, l'application bascule automatiquement sur la note.
-- **Barre d'action basse** avec « Mettre en forme » toujours accessible, même
-  depuis l'onglet Note, et respectant la barre d'accueil de l'iPhone.
-- **Bouton d'enregistrement large**, commandes Pause / Terminer / Importer en
-  cibles tactiles de 44 px minimum.
-- **Verrou d'écran** (*Wake Lock*) actif pendant la dictée : sans lui, la mise
-  en veille du téléphone suspend l'onglet et interrompt l'enregistrement. Le
-  verrou est repris automatiquement au retour dans l'application.
-- **Champs à 16 px** sur mobile : en dessous, Safari iOS zoome
-  automatiquement à chaque focus et décale la mise en page.
-- **Marges de sécurité** (encoche, barre d'accueil) prises en compte.
-
-### Ce que le service worker met — et ne met pas — en cache
-
-Il ne met en cache **que** `/static/*`, les icônes et les bibliothèques CDN.
-Il ne touche **jamais** à la page `/` ni aux appels `/api/*` : ces réponses
-contiennent des renseignements de santé et resteraient lisibles sur l'appareil
-après la déconnexion, en plus de court-circuiter la vérification
-d'autorisation faite à chaque requête. **Ne modifiez pas cette règle** — elle
-est commentée en tête de `app/static/sw.js`.
-
-Conséquence assumée : l'application **ne fonctionne pas hors ligne**. C'est
-sans incidence pratique, la transcription et la mise en forme nécessitant de
-toute façon les API Google.
-
-Le manifeste, les icônes et `/sw.js` sont volontairement **publics** (voir
-`app/main.py`) : le navigateur les récupère sans cookies, et les protéger
-ferait échouer l'installation sans message d'erreur. Ils ne contiennent que le
-nom de l'application, ses couleurs et du code de mise en cache.
-
-### Icônes
-
-Le motif retenu est une **page repliée portant une onde vocale** : il dit à la
-fois la dictée et le document clinique, là où une onde seule évoquerait une
-application de musique et un micro seul un simple dictaphone.
+Le code est **inclus dans l'image**. Seuls `./data` et `./secrets` sont des
+volumes.
 
 ```bash
-python3 tools/make_icons.py             # jeu complet (design par défaut)
-python3 tools/make_icons.py --preview   # une vignette par design, dans tools/previews/
-python3 tools/make_icons.py --design onde   # bascule sur un autre motif
+git pull
+
+# Modification de code, de gabarit livré ou de dépendance :
+docker compose up -d --build
+
+# Modification du seul .env :
+docker compose up -d
 ```
 
-Motifs disponibles : `note-pli` (retenu), `note`, `dictee`, `onde`, `micro`,
-`pouls`. Changez `DEFAULT_DESIGN` en tête du script pour figer un autre choix.
-
-Le script n'a **aucune dépendance** : les PNG sont encodés via `zlib` et le
-dessin repose sur des champs de distance signés. Ni Pillow ni ImageMagick, dont
-le décodeur SVG est désactivé par la politique de sécurité de DSM.
-
-Deux points de conception :
-
-- Le **favicon 32 px** utilise volontairement le motif `onde`, plus gras : à
-  cette taille, les barres de l'onde dans la page ne feraient qu'un pixel de
-  large et le dessin virerait à la tache blanche.
-- Le **logo de l'en-tête** (`index.html`) reprend la même onde en SVG inline,
-  pour la même raison de lisibilité à 20 px.
-
-> Après toute modification des icônes, incrémentez `VERSION` dans
-> `app/static/sw.js` : sinon les appareils ayant déjà installé l'application
-> continueront d'afficher les anciennes depuis leur cache.
-
-> **Mise à jour de l'interface :** après avoir modifié `app.js` ou le HTML,
-> incrémentez `VERSION` dans `app/static/sw.js`. Sans cela, les appareils
-> ayant déjà installé l'application continueront de servir l'ancien
-> JavaScript depuis leur cache.
+Le schéma de la base est migré automatiquement au démarrage : colonnes ajoutées,
+gabarits protégés rafraîchis, gabarits livrés obsolètes retirés. Les journaux
+l'indiquent ligne par ligne.
 
 ---
 
-## 5 quater. Langue : français ou anglais
+## 9. Sauvegarde
 
-**Menu de la pastille d'identité, en haut à droite → Langue.** Chacun choisit la
-sienne ; le choix est enregistré sous son identité et ne touche personne
-d'autre. `APP_LANGUAGE` dans le `.env` (`fr` par défaut) ne sert qu'aux usagers
-qui n'ont jamais choisi.
-
-> **Pourquoi pas dans le panneau d'administration ?** Parce que ce panneau est
-> réservé aux administrateurs. La langue, elle, regarde la personne qui lit
-> l'écran : un usager ordinaire doit pouvoir changer la sienne, et ne doit pas
-> pouvoir changer celle des autres. Deux médecins partageant l'installation
-> travaillent donc l'un en français, l'autre en anglais.
-
-> **Pourquoi en base et non dans un témoin de session ?** Parce que Pangolin
-> retire l'en-tête `Cookie` des requêtes qu'il relaie au conteneur : le serveur
-> ne verrait jamais la préférence. Elle est donc rangée dans la table
-> `user_preferences`, sous l'identité que Pangolin transmet, elle.
-
-Ce n'est pas qu'un habillage : la langue traverse toute la chaîne :
-
-| Ce qui suit la langue | Détail |
-|---|---|
-| L'interface | Boutons, menus, messages d'erreur, panneau d'administration, page de refus d'accès, manifeste de l'application installée |
-| Le service vocal | `fr` → `fr-CA` (Google, Deepgram) et `fr` (AssemblyAI, Soniox) ; `en` → `en-CA` / `en` |
-| Le lexique d'adaptation intégré | Il est **francophone** : en mode anglais il n'est **pas** envoyé au moteur (voir ci-dessous) |
-| La note produite | Les consignes de base existent en deux versions ; le modèle rédige en français québécois ou en anglais canadien |
-| L'extraction des métadonnées | Même invite, dans la langue courante |
-
-Le changement prend effet **immédiatement**, sans reconstruction de l'image. La
-page se recharge d'elle-même, l'interface étant rendue par le serveur. Une
-dictée déjà lancée conserve la langue dans laquelle elle a commencé, jusqu'à sa
-transcription : le changement en cours de dictée est refusé plutôt que de
-produire une transcription à cheval sur deux langues.
-
-### Ce que la langue ne change pas : vos gabarits
-
-Un gabarit appartient au médecin qui l'a écrit et **n'est jamais réécrit ni
-traduit**. Conséquence à connaître : passer l'interface en anglais avec des
-gabarits rédigés en français donne une note dont **les titres de rubriques
-restent français** et le corps devient anglais. Ce n'est pas un défaut — les
-consignes de base exigent de reproduire *exactement* la structure fournie, et
-cette exigence l'emporte volontairement sur la langue de rédaction : un titre
-de rubrique inventé serait bien plus gênant qu'un titre dans l'autre langue.
-
-Pour une note entièrement anglaise, dupliquez le gabarit et traduisez-en les
-titres (**Gérer les gabarits → Dupliquer**). Idem pour la consigne générale du
-panneau d'administration, qui est également recopiée telle quelle.
-
-### Le lexique intégré est francophone
-
-Les ~320 expressions d'adaptation livrées avec l'application (acronymes du
-réseau de la santé québécois, échelles cliniques, molécules souvent mal
-entendues) sont des termes **français**. En mode anglais, les envoyer ne pourrait
-rien améliorer et pousserait le moteur vers des mots qui ne seront pas
-prononcés : ils sont donc **omis**.
-
-Le champ **Vocabulaire additionnel** d'un gabarit, lui, est toujours transmis —
-c'est vous qui l'écrivez, vous savez dans quelle langue vous dictez. En mode
-anglais, il devient donc la seule source de vocabulaire du moteur, et le texte
-d'aide sous le champ le rappelle.
-
-### Forcer un code de langue
-
-Les trois champs **Langue …** du panneau (Deepgram, AssemblyAI, Soniox) et la
-variable `STT_LANGUAGE_CODE` du `.env` acceptent trois états :
-
-| Valeur | Effet |
-|---|---|
-| **vide** (recommandé) | Suit la langue de l'application |
-| `auto` | Détection automatique par le service. Utile pour une consultation qui alterne deux langues — Soniox est multilingue par conception |
-| `fr-CA`, `en-GB`, … | Forçage explicite. **Survit au changement de langue** de l'application : à réserver à l'épinglage d'un dialecte précis |
-
-> Un `STT_LANGUAGE_CODE=fr-CA` laissé dans le `.env` d'une installation
-> antérieure figerait le français même après un passage de l'interface à
-> l'anglais. Videz-le.
-
----
-
-## 6. Gabarits
-
-C'est **ici, et nulle part ailleurs**, que vit ce qui est propre à une pratique.
-L'application ne connaît aucune spécialité : elle sait dicter, transcrire et
-mettre en forme. Les gabarits fournis ci-dessous sont donc des **exemples**,
-rédigés pour une pratique gériatrique québécoise — renommez-les, réécrivez-les
-ou supprimez-les selon la vôtre.
-
-> Un gabarit préchargé que vous n'avez jamais enregistré depuis l'éditeur peut
-> être mis à jour par une future version de l'application. Dès que vous le
-> modifiez une fois, il vous appartient et n'est plus jamais écrasé.
-
-Trois gabarits sont préchargés au premier démarrage :
-
-1. **Évaluation gériatrique standard** — HMA, antécédents, syndromes
-   gériatriques (chutes, AVQ/AVD, cognition, humeur, nutrition, continence),
-   examen physique, impression, plan, niveau de soins.
-2. **Bilan cognitif / Clinique de mémoire** — histoire cognitive et
-   hétéro-anamnèse distinguées, impact fonctionnel, SCPD, orientation
-   étiologique, tests objectifs (MoCA/MMSE), aptitude, SAAQ, hébergement.
-3. **Révision de la pharmacothérapie** — bilan comparatif, critères de
-   Beers/STOPP-START, charge anticholinergique, cascades médicamenteuses,
-   plan de déprescription.
-
-Chaque gabarit comporte quatre parties, modifiables via **Gérer les gabarits** :
-
-| Champ | Rôle |
-|---|---|
-| **Instructions cliniques** | Ce sur quoi Gemini doit se concentrer : éléments à chercher dans la dictée, distinctions à faire, pièges à éviter |
-| **Mise en page** | Le squelette Markdown : titres exacts, ordre, tableaux. Accepte `{{PATIENT}}`, `{{DOSSIER}}`, `{{DATE}}`, `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}` ; une ligne dont le champ reste inconnu est retirée du document |
-| **Vocabulaire** | Termes ajoutés au lexique de reconnaissance vocale pour ce type de consultation |
-| **Ordre** | Position dans le menu déroulant |
-
-Le bouton **Dupliquer** crée une copie modifiable du gabarit ouvert (`Nom
-(copie)`, suffixe incrémenté si besoin). C'est la façon normale d'en créer un :
-partir d'un gabarit éprouvé et en ajuster une rubrique, plutôt que de réécrire
-depuis zéro plusieurs dizaines de lignes d'instructions cliniques. Une copie
-n'est jamais marquée « préchargé » et n'est donc jamais réécrite au démarrage.
-
-Les instructions anti-hallucination communes (interdiction d'inventer une
-dose, un score ou un antécédent ; `« Non abordé lors de la dictée. »` pour une
-rubrique vide ; `[à vérifier]` en cas de doute) sont dans
-`app/llm.py → BASE_SYSTEM_PROMPT` et s'appliquent à **tous** les gabarits.
-Modifiez-les là si nécessaire, pas dans chaque gabarit.
-
-> Un gabarit préchargé supprimé est recréé au redémarrage du conteneur.
-> Renommez-le ou modifiez-le plutôt que de le supprimer.
-
-> Tant qu'un gabarit préchargé n'a **jamais** été enregistré depuis l'éditeur,
-> il est remis à jour au démarrage si la version livrée avec l'application a
-> changé (`database.refresh_default_templates`). Dès la première modification,
-> il vous appartient et n'est plus jamais touché. Pour figer un gabarit livré
-> tel quel, dupliquez-le ou enregistrez-le une fois sans rien changer.
-
----
-
-## 7. Dépannage
-
-| Symptôme | Cause et correctif |
-|---|---|
-| **Bad Gateway** dans Pangolin | Pangolin n'atteint pas le conteneur. Vérifiez que `BIND_ADDRESS` est une adresse du NAS joignable depuis Pangolin : avec `127.0.0.1`, seul le NAS lui-même peut se connecter, jamais un proxy distant. Test : depuis la machine Pangolin, `curl -m5 http://192.168.20.50:8787/healthz` doit renvoyer du JSON. |
-| **403 sur toutes les requêtes** après avoir mis l'IP de Pangolin dans `TRUSTED_PROXIES` | Le proxy userland Synology masque l'IP source. Mettez la passerelle Docker (`172.27.0.1/32`). L'IP réellement vue est journalisée : `docker compose logs consultai \| grep "IP paire"`. |
-| `sqlite3.OperationalError: unable to open database file` | `APP_UID`/`APP_GID` ne correspondent pas au propriétaire de `./data`. Les ACL Synology refusent l'écriture aux UID inconnus **même avec des permissions 777**. Faites `id votre_utilisateur`, corrigez `.env`, puis `docker compose up -d --build`. |
-| `403 — Accès refusé : requête reçue en dehors du proxy de confiance` | L'IP du pair n'est pas dans `TRUSTED_PROXIES`. L'IP réelle est indiquée dans les journaux : `docker compose logs consultai \| grep "IP paire"`. |
-| `403 — aucune identité transmise par le SSO` | Pangolin n'envoie pas l'en-tête attendu. Vérifiez `SSO_HEADER_KEY` ou ajoutez le bon nom à `SSO_HEADER_FALLBACKS`. |
-| Le bouton micro ne fait rien | `getUserMedia` exige HTTPS. Passez par Pangolin (l'accès direct en `http://ip:8787` est bloqué par le navigateur). |
-| Micro refusé dans l'app installée sur iPhone | Bogue connu de certaines versions d'iOS en mode « écran d'accueil ». L'application le détecte et le signale : dictez depuis Safari, le reste fonctionne normalement dans l'app installée. |
-| L'option « Installer / Sur l'écran d'accueil » n'apparaît pas | Exige HTTPS (donc Pangolin) et, sur iOS, **Safari** exclusivement. Vérifiez que `/static/manifest.webmanifest` et `/sw.js` répondent 200 **sans** en-tête d'authentification. |
-| Modification de l'interface non visible sur mobile | Le service worker sert l'ancienne version. Incrémentez `VERSION` dans `app/static/sw.js` et reconstruisez l'image. |
-| L'enregistrement s'arrête quand l'écran s'éteint | Le verrou d'écran n'est pas supporté par ce navigateur. Gardez l'application au premier plan pendant la dictée. |
-| `Le modèle « … » est introuvable pour ce compte` | Ouvrez `/api/models`, choisissez un identifiant de la liste, reportez-le dans `GEMINI_MODEL`. |
-| `Enregistrement trop long pour un envoi direct` | Au-delà d'environ 55 minutes de dictée. Configurez `STT_GCS_BUCKET`, ou dictez en plusieurs parties (les transcriptions se concatènent). |
-| Erreur 413 côté proxy sur un long enregistrement | Augmentez la taille de corps autorisée dans Pangolin/Traefik (l'équivalent de `client_max_body_size 200M`). |
-| La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS`. L'interface affiche un avertissement dans ce cas. |
-| Acronymes mal transcrits | Ajoutez-les au champ **Vocabulaire** du gabarit, ou au lexique global dans `app/stt.py`. |
-
-Diagnostic rapide :
+Tout tient dans `./data` : base SQLite, audio conservé, dictées en cours.
 
 ```bash
-docker compose logs -f consultai          # journaux applicatifs
-curl -s http://127.0.0.1:8787/healthz     # état + avertissements de configuration
-```
-
----
-
-## 8. Sauvegarde
-
-Toutes les données tiennent dans `./data/consultai.db` (gabarits + brouillons).
-
-```bash
-# Sauvegarde à chaud, sûre même pendant l'utilisation (mode WAL)
+# Sauvegarde à chaud, sûre pendant l'utilisation (mode WAL)
 docker compose exec consultai python -c \
   "import sqlite3; s=sqlite3.connect('/data/consultai.db'); \
    d=sqlite3.connect('/data/sauvegarde.db'); s.backup(d); d.close(); s.close()"
 ```
 
-Incluez `/volume1/docker/ConsultAI/data` dans Hyper Backup. **N'incluez jamais
-`./secrets` ni `.env` dans une sauvegarde non chiffrée.**
+Incluez `/volume1/docker/ConsultAI/data` dans Hyper Backup.
+
+> **N'incluez jamais `./secrets` ni `.env` dans une sauvegarde non chiffrée** :
+> ils contiennent les clés d'API et `SESSION_SECRET`.
 
 ---
 
-## 9. Confidentialité
+## 10. Dépannage
 
-- ⚠️ **Les enregistrements audio sont conservés** avec leur brouillon, sous
-  `AUDIO_DIR` (`./data/audio`). C'est la donnée la plus sensible que produise
-  l'application : la voix du patient, non anonymisable. Elle disparaît quand
-  on supprime le brouillon — fichier compris — et de nulle autre façon.
-  Purgez les brouillons que vous n'avez plus à conserver.
-- Pendant la dictée, deux copies temporaires existent en plus, toutes deux
-  effacées à la conclusion :
-  - sur le NAS, sous `DICTATION_DIR` (`./data/dictations`) — c'est ce qui
-    permet de survivre à une coupure. Une dictée jamais conclue y reste
-    `DICTATION_RETENTION_HOURS` puis est purgée ;
-  - dans le navigateur (IndexedDB), pour pouvoir rejouer un envoi raté.
-    « Terminer » avec succès, « Arrêter » et « Supprimer » l'effacent.
-- Tout cela vit sous `./data`, au même titre que la base : **c'est ce dossier
-  qu'il faut placer sur un partage chiffré** si votre analyse de risque
-  l'exige, et c'est lui qu'il faut sauvegarder — et protéger.
-- Les fichiers intermédiaires (transcodage, découpage des tranches) sont
-  écrits dans un dossier temporaire immédiatement supprimé. Si
-  `STT_GCS_BUCKET` est utilisé, l'objet est supprimé dès la fin de la
-  transcription.
-- La transcription et la note sont stockées **en clair** dans SQLite. Placez
-  `./data` sur un dossier partagé chiffré du NAS si votre analyse de risque
-  l'exige.
-- Le service de reconnaissance vocale **et** le fournisseur de modèle traitent
-  des renseignements de santé. Le panneau d'administration permet de changer
-  l'un et l'autre en deux clics : **chaque changement est une décision de
-  conformité**, pas un simple réglage. Validez chaque fournisseur auprès de
-  votre responsable de la protection des renseignements personnels, signez les
-  ententes appropriées, et privilégiez le mode Vertex AI en région
-  `northamerica-northeast1` — le seul de la liste qui garde le traitement au
-  Québec.
-- Préférez une identification indirecte du patient (initiales, numéro de
-  dossier) plutôt qu'un nom complet dans le champ prévu.
-- Le contenu généré doit **toujours** être relu par le clinicien avant d'être
-  versé au dossier médical.
+### Connexion
 
-### Fonctionnement hors ligne (facultatif)
+| Symptôme | Cause et correctif |
+|---|---|
+| La page de connexion revient en boucle, ou « témoin de session absent » | Le proxy retire l'en-tête `Cookie`. **Désactivez son authentification** sur cette ressource (§ 4). |
+| Tout le monde est déconnecté à chaque redémarrage | `SESSION_SECRET` est vide. Fixez-la. |
+| « Adresse de retour refusée par le fournisseur » | `OIDC_REDIRECT_URI` ne correspond pas, au caractère près, à ce qui est déclaré chez le fournisseur. |
+| « Le compte … n'est pas autorisé » | `ALLOW_SIGNUP=false` et le compte n'existe pas. Créez-le ou activez l'inscription. |
+| La déconnexion ne revient pas à l'application | Le fournisseur exige `id_token_hint`, capté à la connexion. Reconnectez-vous une fois après une mise à jour. Certains fournisseurs demandent aussi que `BASE_URL` soit déclarée comme adresse de retour de déconnexion. |
+| Après migration, les brouillons ont disparu | Le nom d'usager retenu diffère de l'ancien propriétaire. **Réglages → Comptes** affiche le nombre de consultations par compte ; la colonne `owner` de `consultations` est la clé. |
+| Plus aucun administrateur | `AUTH_DISABLED=true`, réparer, remettre à `false` (§ 5). |
 
-L'interface charge Tailwind, `marked` et `DOMPurify` depuis un CDN public
-(aucune donnée clinique n'y transite). Pour un fonctionnement totalement
-autonome :
+### Démarrage
+
+| Symptôme | Cause et correctif |
+|---|---|
+| `unable to open database file` | `APP_UID`/`APP_GID` ne correspondent pas au propriétaire de `./data` (§ 2.1). |
+| **Bad Gateway** au proxy | `BIND_ADDRESS` n'est pas joignable depuis le proxy. Testez `curl -m5 http://<hôte>:8787/healthz` depuis la machine du proxy. |
+| `Le modèle « … » est introuvable` | Panneau → **Modèles disponibles**, puis reportez un identifiant de la liste. |
+
+### Dictée
+
+| Symptôme | Cause et correctif |
+|---|---|
+| Le bouton micro ne fait rien | `getUserMedia` exige HTTPS. Passez par l'adresse publique. |
+| Micro refusé dans l'app installée sur iPhone | Bogue de certaines versions d'iOS en mode écran d'accueil. Dictez depuis Safari. |
+| « Installer » n'apparaît pas | Exige HTTPS et, sur iOS, Safari. Vérifiez que `/static/manifest.webmanifest` et `/sw.js` répondent 200 sans authentification. |
+| L'interface ne se met pas à jour sur mobile | Service worker en cache : incrémentez `VERSION` dans `app/static/sw.js`. |
+| L'enregistrement s'arrête écran éteint | Verrou d'écran non supporté. Gardez l'application au premier plan. |
+| Erreur 413 sur un long enregistrement | Augmentez la taille de corps autorisée au proxy. |
+| « Enregistrement trop long pour un envoi direct » | Au-delà de ~55 min. Configurez `STT_GCS_BUCKET` ou dictez en plusieurs parties. |
+| La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS` ; l'interface le signale. |
+| Acronymes mal transcrits | Ajoutez-les au **Vocabulaire additionnel** du gabarit. |
+| Tranches retardées avec Cohere | Limite de 5 req/min atteinte. Changez de service (§ 7.2). |
+
+### Diagnostic
+
+```bash
+docker compose logs -f consultai
+curl -s http://127.0.0.1:8787/healthz
+```
+
+Dans la console du navigateur, `consultaiDiag()` explique pourquoi l'installation
+PWA échoue.
+
+---
+
+## 11. Confidentialité
+
+Cette application manipule des renseignements de santé. Les points suivants ne
+sont pas des recommandations de style.
+
+* ⚠️ **Les enregistrements audio sont conservés** avec leur brouillon, sous
+  `AUDIO_DIR`. C'est la donnée la plus sensible produite : la voix du patient,
+  non anonymisable. Elle disparaît quand le brouillon est supprimé — fichier
+  compris — et de nulle autre façon. Purgez ce que vous n'avez plus à garder.
+* Pendant la dictée, deux copies temporaires existent, effacées à la conclusion :
+  sur le serveur sous `DICTATION_DIR` (purgée après
+  `DICTATION_RETENTION_HOURS` si la dictée n'est jamais conclue), et dans le
+  navigateur (IndexedDB) pour rejouer un envoi raté.
+* Transcriptions et notes sont stockées **en clair** dans SQLite. Placez `./data`
+  sur un partage chiffré si votre analyse de risque l'exige.
+* Le service vocal **et** le fournisseur de modèle traitent des renseignements de
+  santé. Le panneau permet de changer l'un ou l'autre en deux clics : **chaque
+  changement est une décision de conformité**, pas un réglage. Faites valider les
+  fournisseurs, signez les ententes, et privilégiez Vertex AI en région
+  `northamerica-northeast1` — le seul choix de la liste qui garde le traitement
+  au Québec.
+* Préférez une identification indirecte du patient (initiales, numéro de dossier)
+  plutôt qu'un nom complet.
+* La note générée doit **toujours** être relue par le clinicien avant d'être
+  versée au dossier.
+
+### Fonctionnement sans CDN (facultatif)
+
+L'interface charge Tailwind, `marked` et `DOMPurify` depuis un CDN public — aucune
+donnée clinique n'y transite. Pour une autonomie complète :
 
 ```bash
 mkdir -p app/static/vendor && cd app/static/vendor
@@ -866,5 +525,48 @@ curl -LO https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js
 curl -Lo tailwind.js "https://cdn.tailwindcss.com?plugins=forms,typography"
 ```
 
-Puis remplacez les trois `<script src="https://…">` d'`app/templates/index.html`
-par `/static/vendor/…` et reconstruisez l'image.
+Remplacez les trois `<script src="https://…">` d'`app/templates/index.html` par
+`/static/vendor/…`, incrémentez `VERSION` dans `sw.js`, reconstruisez.
+
+---
+
+## 12. Redéployer ailleurs
+
+`git clone` ne suffit pas à démarrer : trois éléments vivent hors du dépôt, à
+dessein.
+
+| Élément | À reconstituer |
+|---|---|
+| `.env` | Depuis `.env.example`. Toutes les clés y sont vides. |
+| `secrets/gcp-sa.json` | Seulement si vous utilisez Google. |
+| `./data` | Créé vide au premier démarrage ; le schéma se migre seul. |
+
+Conservez `.env` et la clé de service dans un gestionnaire de mots de passe : le
+dépôt ne peut pas les reconstituer.
+
+Sur un hôte non Synology, trois réglages méritent un second regard :
+`APP_UID`/`APP_GID` (le contournement d'ACL n'a plus d'objet), `BIND_ADDRESS`, et
+la règle de pare-feu du § 4.
+
+### Structure du dépôt
+
+```
+app/
+├── main.py               API FastAPI et routes
+├── auth.py               session, identité, permissions
+├── oidc.py               flux OpenID Connect
+├── users.py              comptes, groupes, règles d'entrée
+├── preferences.py        préférences par usager (langue)
+├── config.py             lecture et validation du .env
+├── runtime_config.py     réglages du panneau (base de données)
+├── database.py           schéma SQLite et migrations
+├── default_templates.py  les quatre gabarits livrés
+├── default_prompts.py    consignes générales fr / en
+├── dictation.py          dictée par tranches
+├── stt.py                transcodage, découpage, cinq services vocaux
+├── llm.py                consignes et appel du modèle
+├── recordings.py         audio attaché aux brouillons
+├── i18n.py               textes de l'interface (fr / en)
+├── templates/index.html  interface et feuille de style d'impression
+└── static/app.js         logique du navigateur
+```

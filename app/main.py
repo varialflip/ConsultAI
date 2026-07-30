@@ -771,10 +771,16 @@ async def api_models(request: Request, provider: Optional[str] = None):
     except GenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     configured = llm.active_model()
+    # Le modèle rapide est renvoyé lui aussi : c'en est un second, réglable
+    # séparément, et « Modèles disponibles » ne renseignait que le principal —
+    # on ne pouvait donc pas vérifier qu'il existait sans lancer une génération.
+    rapide = runtime_config.value("llm_model_fast")
     return {
         "provider": target,
         "configured": configured,
         "configured_available": configured in models,
+        "fast_model": rapide,
+        "fast_model_available": (not rapide) or rapide in models,
         "models": models,
     }
 

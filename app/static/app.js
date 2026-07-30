@@ -2498,7 +2498,16 @@
    * on n'y touche pas, il n'est pas renvoyé, la clé reste en place.
    * ====================================================================== */
 
-  const adminState = { fields: [], dirty: new Set() };
+  const adminState = {
+    fields: [],
+    dirty: new Set(),
+    groups: [],
+    tab: null,          // onglet visible ; null = le premier
+    people: null,       // réponse de /api/admin/users, chargée à la demande
+  };
+
+  /** Onglet artificiel : il ne vient pas du schéma des réglages. */
+  const PEOPLE_TAB = '\u0000people';
 
   function adminFieldMarkup(field) {
     const id = `adm_${field.key}`;
@@ -2550,16 +2559,63 @@
     </div>`;
   }
 
+  /* -------------------------------------------------------------------------
+   * Champs sans objet selon le fournisseur choisi
+   * ----------------------------------------------------------------------
+   * Une clé Anthropic n'a rien à faire à l'écran quand OpenAI est sélectionné :
+   * elle n'est pas seulement inutile, elle laisse croire qu'il faut la
+   * renseigner. On masque donc ce qui ne sert pas au fournisseur courant.
+   *
+   * MASQUER N'EST PAS EFFACER : la valeur reste en base et reparaît au retour
+   * du fournisseur. Le champ masqué n'est simplement pas rendu, donc jamais
+   * marqué modifié, donc jamais renvoyé.
+   * ---------------------------------------------------------------------- */
+  const PROVIDER_ONLY = {
+    // Clés de modèle de langage
+    gemini_api_key: { key: 'llm_provider', value: 'gemini' },
+    anthropic_api_key: { key: 'llm_provider', value: 'anthropic' },
+    openai_api_key: { key: 'llm_provider', value: 'openai' },
+    // Réglages propres à chaque service vocal
+    deepgram_api_key: { key: 'stt_provider', value: 'deepgram' },
+    deepgram_model: { key: 'stt_provider', value: 'deepgram' },
+    deepgram_language: { key: 'stt_provider', value: 'deepgram' },
+    assemblyai_api_key: { key: 'stt_provider', value: 'assemblyai' },
+    assemblyai_model: { key: 'stt_provider', value: 'assemblyai' },
+    assemblyai_language: { key: 'stt_provider', value: 'assemblyai' },
+    assemblyai_medical: { key: 'stt_provider', value: 'assemblyai' },
+    soniox_api_key: { key: 'stt_provider', value: 'soniox' },
+    soniox_model: { key: 'stt_provider', value: 'soniox' },
+    soniox_language: { key: 'stt_provider', value: 'soniox' },
+  };
+
+  /** Valeur courante d'un réglage : celle à l'écran si le champ est rendu. */
+  function adminValueOf(key) {
+    const element = $('adminFields').querySelector(`[data-key="${key}"]`);
+    if (element) return element.value;
+    const field = adminState.fields.find((f) => f.key === key);
+    return field ? (field.value || '') : '';
+  }
+
+  function isFieldRelevant(field) {
+    const regle = PROVIDER_ONLY[field.key];
+    if (!regle) return true;
+    return adminValueOf(regle.key) === regle.value;
+  }
+
   function renderAdminFields(groups) {
     const container = $('adminFields');
     const order = groups && groups.length
       ? groups
       : Array.from(new Set(adminState.fields.map((f) => f.group)));
 
+    adminState.groups = order.slice();
+
     container.innerHTML = '<datalist id="modelOptions"></datalist>' + order.map((group) => {
-      const fields = adminState.fields.filter((field) => field.group === group);
+      const fields = adminState.fields
+        .filter((field) => field.group === group)
+        .filter(isFieldRelevant);
       if (!fields.length) return '';
-      return `<section class="space-y-3">
+      return `<section data-group="${esc(group)}" class="space-y-3">
         <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
           ${esc(group)}</h3>
         ${fields.map(adminFieldMarkup).join('')}
@@ -2578,6 +2634,24 @@
       element.addEventListener('change', mark);
     });
 
+    // Changer de fournisseur change ce qui a un sens à l'écran : on reconstruit
+    // en conservant les modifications en attente, que renderAdminFields relit
+    // depuis les champs encore présents.
+    ['llm_provider', 'stt_provider'].forEach((cle) => {
+      const select = container.querySelector(`[data-key="${cle}"]`);
+      if (!select) return;
+      select.addEventListener('change', () => {
+        const field = adminState.fields.find((f) => f.key === cle);
+        if (field) field.value = select.value;
+        renderAdminFields(adminState.groups);
+        showAdminTab(adminState.tab);
+        $('adminStatus').textContent = T('admin.unsaved');
+      });
+    });
+
+    renderAdminTabs();
+    showAdminTab(adminState.tab);
+
     // « Effacer » vide le champ ET le marque modifié : à l'enregistrement, une
     // valeur vide supprime la surcharge, et le réglage revient au .env.
     container.querySelectorAll('button[data-clear]').forEach((button) => {
@@ -2591,9 +2665,285 @@
     });
   }
 
+  /* -------------------------------------------------------------------------
+   * Onglets du panneau
+   * ---------------------------------------------------------------------- */
+  function renderAdminTabs() {
+    const barre = $('adminTabs');
+    if (!barre) return;
+
+    const onglets = adminState.groups.map((g) => ({ id: g, label: g }));
+    if (state.isAdmin) {
+      onglets.push({ id: PEOPLE_TAB, label: T('group.users') });
+    }
+    if (!adminState.tab || !onglets.some((o) => o.id === adminState.tab)) {
+      adminState.tab = onglets.length ? onglets[0].id : null;
+    }
+
+    barre.innerHTML = onglets.map((onglet) => {
+      const actif = onglet.id === adminState.tab;
+      return `<button type="button" data-tab="${esc(onglet.id)}"
+                class="shrink-0 px-3 py-2 text-xs font-medium border-b-2 transition ${
+                  actif
+                    ? 'border-teal-600 text-teal-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'}">
+                ${esc(onglet.label)}</button>`;
+    }).join('');
+
+    barre.querySelectorAll('button[data-tab]').forEach((bouton) => {
+      bouton.addEventListener('click', () => {
+        adminState.tab = bouton.dataset.tab;
+        renderAdminTabs();
+        showAdminTab(adminState.tab);
+      });
+    });
+  }
+
+  function showAdminTab(tab) {
+    const comptes = tab === PEOPLE_TAB;
+    $('adminFields').classList.toggle('hidden', comptes);
+    $('adminPeople').classList.toggle('hidden', !comptes);
+    // « Enregistrer » ne concerne que les réglages : les comptes et les groupes
+    // s'appliquent au clic, chaque ligne étant indépendante.
+    $('btnSaveAdmin').classList.toggle('hidden', comptes);
+    $('btnListModels').classList.toggle('hidden', comptes);
+
+    $('adminFields').querySelectorAll('section[data-group]').forEach((section) => {
+      section.classList.toggle('hidden', comptes || section.dataset.group !== tab);
+    });
+
+    if (comptes && !adminState.people) loadPeople();
+  }
+
+  /* -------------------------------------------------------------------------
+   * Comptes et groupes
+   * ----------------------------------------------------------------------
+   * Chaque ligne s'applique immédiatement, sans bouton « Enregistrer » global :
+   * retirer un droit à quelqu'un ne doit pas pouvoir rester en attente dans un
+   * formulaire qu'on oublie de valider.
+   * ---------------------------------------------------------------------- */
+  async function loadPeople() {
+    const boite = $('adminPeople');
+    boite.innerHTML = `<p class="text-sm text-slate-500">${esc(T('admin.loading'))}</p>`;
+    try {
+      adminState.people = await api('/api/admin/users');
+      renderPeople();
+    } catch (err) {
+      boite.innerHTML = `<p class="text-sm text-red-600">${esc(err.message)}</p>`;
+    }
+  }
+
+  function permissionBadges(groupe) {
+    const puces = [];
+    if (groupe.is_admin) {
+      puces.push(`<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">${
+        esc(T('people.perm_admin'))}</span>`);
+    }
+    if (groupe.can_manage_templates && !groupe.is_admin) {
+      puces.push(`<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">${
+        esc(T('people.perm_templates'))}</span>`);
+    }
+    return puces.join(' ');
+  }
+
+  function renderPeople() {
+    const data = adminState.people || { users: [], groups: [] };
+    const boite = $('adminPeople');
+
+    const lignesUsagers = (data.users || []).map((user) => {
+      const moi = user.id === data.current_user_id;
+      const cases = (data.groups || []).map((groupe) => {
+        const coche = (user.groups || []).some((g) => g.id === groupe.id);
+        return `<label class="inline-flex items-center gap-1 mr-3 text-xs">
+          <input type="checkbox" data-user="${user.id}" data-group="${groupe.id}"
+                 ${coche ? 'checked' : ''}
+                 class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
+          ${esc(groupe.name)}</label>`;
+      }).join('');
+
+      const etat = user.is_active
+        ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700">${
+            esc(T('people.active'))}</span>`
+        : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">${
+            esc(T('people.disabled'))}</span>`;
+
+      const details = [
+        user.email && user.email !== user.username ? esc(user.email) : '',
+        T('people.consultations', { count: user.consultation_count }),
+        user.has_signed_in
+          ? (user.last_login_at
+              ? T('people.last_login', { date: formatDateTime(user.last_login_at) })
+              : '')
+          : T('people.never_signed_in'),
+      ].filter(Boolean).join(' · ');
+
+      return `<li class="rounded-lg border border-slate-200 p-3 space-y-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-medium text-sm text-slate-800">${esc(user.display_name || user.username)}</span>
+          <span class="text-xs text-slate-500">${esc(user.username)}</span>
+          ${moi ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">${
+            esc(T('people.you'))}</span>` : ''}
+          ${etat}
+          <button type="button" data-toggle-active="${user.id}"
+                  class="ml-auto text-xs px-2 py-1 rounded border transition ${
+                    user.is_active
+                      ? 'border-red-200 text-red-600 hover:bg-red-50'
+                      : 'border-teal-300 text-teal-700 hover:bg-teal-50'}">
+            ${esc(user.is_active ? T('people.deactivate') : T('people.reactivate'))}</button>
+        </div>
+        <p class="text-[11px] text-slate-500">${esc(details)}</p>
+        <div>${cases}</div>
+      </li>`;
+    }).join('');
+
+    const lignesGroupes = (data.groups || []).map((groupe) => `
+      <li class="rounded-lg border border-slate-200 p-3 flex items-center gap-2 flex-wrap">
+        <span class="font-medium text-sm text-slate-800">${esc(groupe.name)}</span>
+        ${permissionBadges(groupe)}
+        ${groupe.is_system ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${
+          esc(T('people.system_group'))}</span>` : ''}
+        <span class="text-[11px] text-slate-500">${esc(T('people.members', { count: groupe.member_count }))}</span>
+        <span class="text-[11px] text-slate-400 truncate max-w-full">${esc(groupe.description || '')}</span>
+        <span class="ml-auto flex items-center gap-3">
+          <label class="inline-flex items-center gap-1 text-xs">
+            <input type="checkbox" data-perm-group="${groupe.id}" data-perm="is_admin"
+                   ${groupe.is_admin ? 'checked' : ''}
+                   class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
+            ${esc(T('people.perm_admin'))}</label>
+          <label class="inline-flex items-center gap-1 text-xs">
+            <input type="checkbox" data-perm-group="${groupe.id}" data-perm="can_manage_templates"
+                   ${groupe.can_manage_templates ? 'checked' : ''}
+                   class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
+            ${esc(T('people.perm_templates'))}</label>
+          ${groupe.is_system ? '' : `<button type="button" data-delete-group="${groupe.id}"
+                   data-name="${esc(groupe.name)}"
+                   class="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">
+            ${esc(T('people.delete_group'))}</button>`}
+        </span>
+      </li>`).join('');
+
+    boite.innerHTML = `
+      <section class="space-y-3">
+        <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
+          ${esc(T('people.users_title'))}</h3>
+        <p class="text-[11px] text-slate-500">${esc(T('people.disabled_warning'))}</p>
+        <ul class="space-y-2">${lignesUsagers
+          || `<li class="text-sm text-slate-500">${esc(T('people.no_users'))}</li>`}</ul>
+      </section>
+      <section class="space-y-3">
+        <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
+          ${esc(T('people.groups_title'))}</h3>
+        <p class="text-[11px] text-slate-500">${esc(T('people.provider_groups_note'))}</p>
+        <ul class="space-y-2">${lignesGroupes}</ul>
+        <div class="rounded-lg border border-dashed border-slate-300 p-3 space-y-2">
+          <p class="text-xs font-medium text-slate-600">${esc(T('people.new_group'))}</p>
+          <div class="flex flex-wrap gap-2">
+            <input id="newGroupName" type="text" maxlength="80"
+                   placeholder="${esc(T('people.group_name_ph'))}"
+                   class="flex-1 min-w-[8rem] rounded-lg border-slate-300 text-sm">
+            <input id="newGroupDesc" type="text" maxlength="300"
+                   placeholder="${esc(T('people.group_desc_ph'))}"
+                   class="flex-[2] min-w-[10rem] rounded-lg border-slate-300 text-sm">
+            <button type="button" id="btnCreateGroup"
+                    class="px-3 py-2 rounded-lg bg-teal-700 text-white text-sm hover:bg-teal-800">
+              ${esc(T('people.create'))}</button>
+          </div>
+        </div>
+      </section>`;
+
+    bindPeopleActions();
+  }
+
+  function bindPeopleActions() {
+    const boite = $('adminPeople');
+
+    // Appartenance : on envoie la liste complète des groupes cochés, le serveur
+    // remplace. Envoyer un delta obligerait à tenir un état partagé.
+    boite.querySelectorAll('input[data-user][data-group]').forEach((caseACocher) => {
+      caseACocher.addEventListener('change', async () => {
+        const userId = Number(caseACocher.dataset.user);
+        const coches = Array.from(
+          boite.querySelectorAll(`input[data-user="${userId}"]:checked`),
+        ).map((c) => Number(c.dataset.group));
+        await savePerson(userId, { group_ids: coches });
+      });
+    });
+
+    boite.querySelectorAll('button[data-toggle-active]').forEach((bouton) => {
+      bouton.addEventListener('click', async () => {
+        const userId = Number(bouton.dataset.toggleActive);
+        const user = (adminState.people.users || []).find((u) => u.id === userId);
+        await savePerson(userId, { is_active: !(user && user.is_active) });
+      });
+    });
+
+    boite.querySelectorAll('input[data-perm-group]').forEach((caseACocher) => {
+      caseACocher.addEventListener('change', async () => {
+        const corps = {};
+        corps[caseACocher.dataset.perm] = caseACocher.checked;
+        try {
+          await api(`/api/admin/groups/${caseACocher.dataset.permGroup}`, {
+            method: 'PATCH', body: corps,
+          });
+          toast(T('people.group_saved'), 'success');
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+        }
+        await loadPeople();
+      });
+    });
+
+    boite.querySelectorAll('button[data-delete-group]').forEach((bouton) => {
+      bouton.addEventListener('click', async () => {
+        const nom = bouton.dataset.name;
+        if (!window.confirm(T('people.confirm_delete_group', { name: nom }))) return;
+        try {
+          await api(`/api/admin/groups/${bouton.dataset.deleteGroup}`, { method: 'DELETE' });
+          toast(T('people.group_deleted'), 'success');
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+        }
+        await loadPeople();
+      });
+    });
+
+    const creer = $('btnCreateGroup');
+    if (creer) {
+      creer.addEventListener('click', async () => {
+        const nom = $('newGroupName').value.trim();
+        if (!nom) return;
+        try {
+          await api('/api/admin/groups', {
+            method: 'POST',
+            body: { name: nom, description: $('newGroupDesc').value.trim() },
+          });
+          toast(T('people.group_created'), 'success');
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+        }
+        await loadPeople();
+      });
+    }
+  }
+
+  async function savePerson(userId, corps) {
+    try {
+      await api(`/api/admin/users/${userId}`, { method: 'PATCH', body: corps });
+      toast(T('people.saved'), 'success');
+    } catch (err) {
+      toast(err.message, 'error', 9000);
+    }
+    // Rechargement systématique, y compris après un échec : le serveur peut
+    // avoir refusé (dernier administrateur), et l'écran doit alors revenir à
+    // l'état réel plutôt que garder une case cochée à tort.
+    await loadPeople();
+  }
+
   async function openAdminModal() {
     $('adminModal').classList.remove('hidden');
     $('adminStatus').textContent = '';
+    // Rechargé à chaque ouverture : les comptes peuvent avoir changé ailleurs.
+    adminState.people = null;
     $('adminFields').innerHTML = `<p class="text-sm text-slate-500">${esc(T('admin.loading'))}</p>`;
     try {
       const data = await api('/api/admin/settings');
@@ -2641,12 +2991,22 @@
     $('adminStatus').textContent = T('admin.querying');
     try {
       const data = await api(`/api/models?provider=${encodeURIComponent(provider)}`);
+      // Une seule liste, mais rattachée aux DEUX champs de modèle : le
+      // principal et le rapide. Le second n'était pas alimenté, on ne pouvait
+      // donc pas vérifier son nom sans lancer une génération pour le voir
+      // échouer.
       const datalist = $('modelOptions');
       datalist.innerHTML = (data.models || [])
         .map((name) => `<option value="${esc(name)}"></option>`).join('');
+      const rapide = $('adminFields').querySelector('[data-key="llm_model_fast"]');
+      if (rapide) rapide.setAttribute('list', 'modelOptions');
+
       $('adminStatus').textContent = T('admin.models_listed', { count: data.models.length });
       if (!data.configured_available) {
         toast(T('admin.model_missing', { model: data.configured }), 'warning', 10000);
+      }
+      if (data.fast_model && !data.fast_model_available) {
+        toast(T('admin.fast_model_missing', { model: data.fast_model }), 'warning', 10000);
       }
     } catch (err) {
       $('adminStatus').textContent = '';

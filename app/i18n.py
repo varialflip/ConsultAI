@@ -652,6 +652,59 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "in <code>.env</code>, out of reach of the browser.",
     ),
     "admin.loading": ("Chargement…", "Loading…"),
+
+    # --- Panneau : comptes et groupes ---------------------------------------
+    "people.users_title": ("Comptes", "Accounts"),
+    "people.groups_title": ("Groupes", "Groups"),
+    "people.you": ("vous", "you"),
+    "people.never_signed_in": ("jamais connecté", "never signed in"),
+    "people.last_login": ("dernière connexion {date}", "last sign-in {date}"),
+    "people.consultations": (
+        "{count} consultation(s)", "{count} consultation(s)",
+    ),
+    "people.active": ("Actif", "Active"),
+    "people.disabled": ("Désactivé", "Disabled"),
+    "people.deactivate": ("Désactiver", "Deactivate"),
+    "people.reactivate": ("Réactiver", "Reactivate"),
+    "people.groups_of": ("Groupes", "Groups"),
+    "people.saved": ("Compte mis à jour.", "Account updated."),
+    "people.no_users": (
+        "Aucun compte. Le premier usager qui se connectera deviendra "
+        "administrateur.",
+        "No accounts yet. The first user to sign in will become an "
+        "administrator.",
+    ),
+    "people.disabled_warning": (
+        "Un compte désactivé conserve ses consultations mais ne peut plus se "
+        "connecter.",
+        "A disabled account keeps its consultations but can no longer sign in.",
+    ),
+    "people.perm_admin": ("Administration", "Administration"),
+    "people.perm_templates": ("Gabarits", "Templates"),
+    "people.system_group": ("livré", "built-in"),
+    "people.members": ("{count} membre(s)", "{count} member(s)"),
+    "people.new_group": ("Nouveau groupe", "New group"),
+    "people.group_name_ph": ("nom-du-groupe", "group-name"),
+    "people.group_desc_ph": ("À quoi sert ce groupe", "What this group is for"),
+    "people.create": ("Créer", "Create"),
+    "people.delete_group": ("Supprimer", "Delete"),
+    "people.group_created": ("Groupe créé.", "Group created."),
+    "people.group_saved": ("Groupe mis à jour.", "Group updated."),
+    "people.group_deleted": ("Groupe supprimé.", "Group deleted."),
+    "people.confirm_delete_group": (
+        "Supprimer le groupe « {name} » ? Ses membres le perdent, leurs "
+        "consultations ne sont pas touchées.",
+        "Delete the group “{name}”? Its members lose it; their consultations "
+        "are untouched.",
+    ),
+    "people.provider_groups_note": (
+        "Les groupes annoncés par le fournisseur d'identité sont ajoutés "
+        "automatiquement s'ils portent le même nom. Ils ne sont jamais retirés "
+        "automatiquement : le retrait se fait ici.",
+        "Groups announced by the identity provider are added automatically "
+        "when the names match. They are never removed automatically: removal "
+        "is done here.",
+    ),
     "admin.save": ("Enregistrer", "Save"),
     "admin.list_models": ("Modèles disponibles", "Available models"),
     "admin.from_panel": ("panneau", "panel"),
@@ -682,6 +735,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "admin.models_listed": (
         "{count} modèle(s) — proposés dans le champ « Modèle ».",
         "{count} model(s) — offered in the “Model” field.",
+    ),
+    "admin.fast_model_missing": (
+        "Le modèle rapide « {model} » ne figure pas dans les modèles "
+        "accessibles à cette clé. La relecture des métadonnées échouera.",
+        "The fast model “{model}” is not among the models available to this "
+        "key. Metadata extraction will fail.",
     ),
     "admin.model_missing": (
         "Attention : « {model} » ne figure pas dans les modèles accessibles à "

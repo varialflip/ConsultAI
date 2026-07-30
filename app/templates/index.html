@@ -205,6 +205,23 @@
           <div class="px-3 py-2 border-b border-slate-100">
             <p class="font-medium text-slate-800 truncate">{{ user.display_name or user.label }}</p>
             <p class="text-[11px] text-slate-500 truncate">{{ user.email or user.username }}</p>
+            <!-- Rôle et groupes : on doit pouvoir vérifier d'un coup d'œil sous
+                 quels droits on travaille, notamment pour comprendre pourquoi
+                 « Réglages » n'apparaît pas. -->
+            <p class="mt-1 flex flex-wrap items-center gap-1">
+              {% if user.is_admin %}
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                {{ t('people.perm_admin') }}</span>
+              {% endif %}
+              {% for groupe in user.groups %}
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                {{ groupe }}</span>
+              {% endfor %}
+              {% if user.is_dev %}
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                AUTH_DISABLED</span>
+              {% endif %}
+            </p>
           </div>
 
           <!-- Langue : préférence PERSONNELLE, et donc ici plutôt que dans le
@@ -704,6 +721,13 @@
       </button>
     </div>
 
+    <!-- Onglets. Le panneau était une seule colonne de vingt champs : on
+         cherchait un réglage en défilant. Les groupes renvoyés par l'API
+         deviennent des onglets, et la gestion des comptes en est un de plus. -->
+    <div class="shrink-0 border-b border-slate-200 bg-white px-2 sm:px-4">
+      <div id="adminTabs" class="flex gap-1 overflow-x-auto thin-scroll -mb-px"></div>
+    </div>
+
     <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
       <p class="text-xs text-slate-600 leading-relaxed">
         {{ t('admin.intro') | safe }}
@@ -717,6 +741,8 @@
       <div id="adminFields" class="space-y-6">
         <p class="text-sm text-slate-500">{{ t('admin.loading') }}</p>
       </div>
+      <!-- Comptes et groupes : construit par app.js depuis /api/admin/users. -->
+      <div id="adminPeople" class="hidden space-y-6"></div>
     </form>
 
     <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-slate-200 shrink-0">

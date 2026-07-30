@@ -2502,12 +2502,23 @@
     fields: [],
     dirty: new Set(),
     groups: [],
+    tabs: [],
     tab: null,          // onglet visible ; null = le premier
     people: null,       // réponse de /api/admin/users, chargée à la demande
   };
 
-  /** Onglet artificiel : il ne vient pas du schéma des réglages. */
-  const PEOPLE_TAB = '\u0000people';
+  /**
+    * Onglet artificiel : il ne vient pas du schéma des réglages.
+    *
+    * Chaîne ordinaire, et surtout PAS de caractère de contrôle : un U+0000
+    * placé dans une valeur d'attribut est remplacé par U+FFFD par l'analyseur
+    * HTML, si bien que la valeur relue ne correspondait plus jamais et que le
+    * clic retombait sur le premier onglet.
+    *
+    * Aucune collision possible avec un groupe de réglages : ceux-ci portent des
+    * libellés traduits (« Système », « Speech recognition »…).
+    */
+  const PEOPLE_TAB = '__people__';
 
   function adminFieldMarkup(field) {
     const id = `adm_${field.key}`;
@@ -2615,7 +2626,7 @@
         .filter((field) => field.group === group)
         .filter(isFieldRelevant);
       if (!fields.length) return '';
-      return `<section data-group="${esc(group)}" class="space-y-3">
+      return `<section data-group-index="${order.indexOf(group)}" class="space-y-3">
         <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
           ${esc(group)}</h3>
         ${fields.map(adminFieldMarkup).join('')}
@@ -2679,10 +2690,15 @@
     if (!adminState.tab || !onglets.some((o) => o.id === adminState.tab)) {
       adminState.tab = onglets.length ? onglets[0].id : null;
     }
+    adminState.tabs = onglets;
 
-    barre.innerHTML = onglets.map((onglet) => {
+    // L'identifiant ne traverse PAS le HTML : on ne met qu'un index dans
+    // l'attribut et la correspondance se fait en JavaScript. Les libellés de
+    // groupe sont des chaînes traduites, et esc() n'échappe pas les guillemets :
+    // faire voyager la valeur dans un attribut, c'est en dépendre.
+    barre.innerHTML = onglets.map((onglet, index) => {
       const actif = onglet.id === adminState.tab;
-      return `<button type="button" data-tab="${esc(onglet.id)}"
+      return `<button type="button" data-tab-index="${index}"
                 class="shrink-0 px-3 py-2 text-xs font-medium border-b-2 transition ${
                   actif
                     ? 'border-teal-600 text-teal-700'
@@ -2690,9 +2706,11 @@
                 ${esc(onglet.label)}</button>`;
     }).join('');
 
-    barre.querySelectorAll('button[data-tab]').forEach((bouton) => {
+    barre.querySelectorAll('button[data-tab-index]').forEach((bouton) => {
       bouton.addEventListener('click', () => {
-        adminState.tab = bouton.dataset.tab;
+        const onglet = adminState.tabs[Number(bouton.dataset.tabIndex)];
+        if (!onglet) return;
+        adminState.tab = onglet.id;
         renderAdminTabs();
         showAdminTab(adminState.tab);
       });
@@ -2708,8 +2726,12 @@
     $('btnSaveAdmin').classList.toggle('hidden', comptes);
     $('btnListModels').classList.toggle('hidden', comptes);
 
-    $('adminFields').querySelectorAll('section[data-group]').forEach((section) => {
-      section.classList.toggle('hidden', comptes || section.dataset.group !== tab);
+    // Comparaison par index, pour la même raison que les onglets.
+    const indexActif = adminState.groups.indexOf(tab);
+    $('adminFields').querySelectorAll('section[data-group-index]').forEach((section) => {
+      section.classList.toggle(
+        'hidden', comptes || Number(section.dataset.groupIndex) !== indexActif,
+      );
     });
 
     if (comptes && !adminState.people) loadPeople();

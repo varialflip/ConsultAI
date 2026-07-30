@@ -185,6 +185,13 @@ class Settings:
     cohere_api_key: str = ""
     cohere_model: str = "cohere-transcribe-03-2026"
 
+    # --- Mistral Voxtral (sixième service de reconnaissance vocale) ---
+    # Une seule clé pour les deux usages : comme Cohere, Mistral facture la
+    # transcription (Voxtral) et le modèle de langage via le même compte. Voir
+    # llm.LLM_PROVIDERS / runtime_config.SETTINGS pour le réglage partagé.
+    mistral_api_key: str = ""
+    mistral_model: str = "voxtral-mini-latest"
+
     # --- Dictée par segments ---
     # La dictée n'est plus envoyée en un seul bloc à la fin : le navigateur
     # téléverse l'audio au fil de l'eau et le serveur le transcrit par
@@ -357,6 +364,8 @@ class Settings:
             soniox_model=_env("SONIOX_MODEL", "stt-async-v5"),
             cohere_api_key=_env("COHERE_API_KEY"),
             cohere_model=_env("COHERE_MODEL", "cohere-transcribe-03-2026"),
+            mistral_api_key=_env("MISTRAL_API_KEY"),
+            mistral_model=_env("MISTRAL_MODEL", "voxtral-mini-latest"),
 
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
             dictation_dir=_env("DICTATION_DIR", "/data/dictations"),
@@ -452,12 +461,14 @@ class Settings:
             )
 
         if not (self.gemini_api_key or self.google_cloud_project
-                or self.anthropic_api_key or self.openai_api_key):
+                or self.anthropic_api_key or self.openai_api_key
+                or self.mistral_api_key):
             problems.append(
                 "Aucune clé de modèle de langage dans l'environnement "
                 "(GEMINI_API_KEY, GOOGLE_CLOUD_PROJECT, ANTHROPIC_API_KEY, "
-                "OPENAI_API_KEY) — renseignez-en une ici ou dans le panneau "
-                "d'administration, sinon la mise en forme échouera."
+                "OPENAI_API_KEY, MISTRAL_API_KEY) — renseignez-en une ici ou "
+                "dans le panneau d'administration, sinon la mise en forme "
+                "échouera."
             )
 
         return problems

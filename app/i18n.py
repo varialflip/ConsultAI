@@ -83,8 +83,10 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         "deepgram": "fr-CA",
         "assemblyai": "fr",
         "soniox": "fr",
-        # Cohere attend de l'ISO-639-1 strict : « fr-CA » serait refusé.
+        # Cohere et Mistral attendent de l'ISO-639-1 strict : « fr-CA » serait
+        # refusé.
         "cohere": "fr",
+        "mistral": "fr",
     },
     "en": {
         "google": "en-CA",
@@ -92,6 +94,7 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         "assemblyai": "en",
         "soniox": "en",
         "cohere": "en",
+        "mistral": "en",
     },
 }
 
@@ -831,6 +834,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "speech recognition: set it once, under the Speech recognition tab → "
         "Cohere.",
     ),
+    "admin.mistral_shared_key": (
+        "Mistral emploie <strong>la même clé</strong> pour le modèle de langage et "
+        "pour la reconnaissance vocale (Voxtral) : elle se règle une seule fois, "
+        "sous l'onglet Reconnaissance vocale → Mistral Voxtral.",
+        "Mistral uses <strong>the same key</strong> for the language model and for "
+        "speech recognition (Voxtral): set it once, under the Speech recognition "
+        "tab → Mistral Voxtral.",
+    ),
     "admin.provider_env_only": (
         "Ce service n'a aucun réglage dans ce panneau : il se configure dans le "
         "fichier <code>.env</code> et, pour Google, par le compte de service "
@@ -1082,6 +1093,28 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Laisser vide pour suivre la langue du gabarit. Cohere n'accepte que "
         "de l'ISO-639-1 : « fr », « en » — jamais « fr-CA ».",
         "Leave empty to follow the template language. Cohere only accepts "
+        "ISO-639-1: “fr”, “en” — never “fr-CA”.",
+    ),
+
+    "set.mistral_api_key.label": ("Clé API Mistral", "Mistral API key"),
+    "set.mistral_api_key.help": (
+        "console.mistral.ai → API Keys. Cette même clé sert au modèle de "
+        "langage, sous l'onglet Modèle de langage → Mistral AI.",
+        "console.mistral.ai → API Keys. This same key is used by the language "
+        "model, under the Language model tab → Mistral AI.",
+    ),
+    "set.mistral_model.label": ("Modèle Voxtral", "Voxtral model"),
+    "set.mistral_model.help": (
+        "voxtral-mini-latest au moment de l'intégration ; voxtral-small-latest "
+        "est plus précis mais plus coûteux.",
+        "voxtral-mini-latest at the time of integration; voxtral-small-latest "
+        "is more accurate but more expensive.",
+    ),
+    "set.mistral_language.label": ("Langue Mistral", "Mistral language"),
+    "set.mistral_language.help": (
+        "Laisser vide pour suivre la langue du gabarit. Mistral n'accepte que "
+        "de l'ISO-639-1 : « fr », « en » — jamais « fr-CA ».",
+        "Leave empty to follow the template language. Mistral only accepts "
         "ISO-639-1: “fr”, “en” — never “fr-CA”.",
     ),
 

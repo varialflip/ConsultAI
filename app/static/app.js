@@ -2794,6 +2794,9 @@
     cohere_api_key: { key: 'stt_provider', value: 'cohere' },
     cohere_model: { key: 'stt_provider', value: 'cohere' },
     cohere_language: { key: 'stt_provider', value: 'cohere' },
+    mistral_api_key: { key: 'stt_provider', value: 'mistral' },
+    mistral_model: { key: 'stt_provider', value: 'mistral' },
+    mistral_language: { key: 'stt_provider', value: 'mistral' },
   };
 
   /**
@@ -2824,15 +2827,18 @@
     'group.stt|assemblyai': 'assemblyai_api_key',
     'group.stt|soniox': 'soniox_api_key',
     'group.stt|cohere': 'cohere_api_key',
+    'group.stt|mistral': 'mistral_api_key',
     'group.llm|gemini': 'gemini_api_key',
     'group.llm|anthropic': 'anthropic_api_key',
     'group.llm|openai': 'openai_api_key',
     'group.llm|cohere': 'cohere_api_key',
+    'group.llm|mistral': 'mistral_api_key',
   };
 
   /** Services dont la clé se règle ailleurs : on l'indique au lieu de la répéter. */
   const PROVIDER_SHARED_KEY = {
     'group.llm|cohere': 'admin.cohere_shared_key',
+    'group.llm|mistral': 'admin.mistral_shared_key',
   };
 
   /**

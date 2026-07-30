@@ -14,15 +14,16 @@ Pourquoi transcoder systématiquement ?
   * Opus à 24 kb/s divise la taille par 5 à 10, ce qui permet de rester sous
     la limite de 10 Mo des requêtes « inline » pour ~50 minutes de dictée.
 
-QUATRE FOURNISSEURS
--------------------
-Google Speech-to-Text, Deepgram, AssemblyAI ou Soniox, au choix depuis le panneau
-d'administration. Tout ce qui précède l'envoi — transcodage, découpage en
-tranches, lexique d'adaptation — leur est commun ; seule la dernière étape
-change. Voir ``transcribe_payload``.
+SIX FOURNISSEURS
+----------------
+Google Speech-to-Text, Deepgram, AssemblyAI, Soniox, Cohere Transcribe ou
+Mistral Voxtral, au choix depuis le panneau d'administration. Tout ce qui
+précède l'envoi — transcodage, découpage en tranches, lexique d'adaptation —
+leur est commun ; seule la dernière étape change. Voir ``transcribe_payload``.
 
-AssemblyAI est le seul des trois à proposer un modèle spécialisé en
-terminologie clinique qui couvre le français (« medical-v1 »).
+AssemblyAI est le seul des six à proposer un modèle spécialisé en
+terminologie clinique qui couvre le français (« medical-v1 »). Cohere et
+Mistral n'offrent aucune adaptation au vocabulaire connue à ce jour.
 
 CHOIX DU MODÈLE (Google)
 ------------------------
@@ -495,6 +496,8 @@ def transcribe_payload(
         return _transcribe_soniox(payload, extra_phrase_hints)
     if provider == "cohere":
         return _transcribe_cohere(payload, extra_phrase_hints)
+    if provider == "mistral":
+        return _transcribe_mistral(payload, extra_phrase_hints)
     return _transcribe_google(payload, extra_phrase_hints, boost)
 
 
@@ -1576,5 +1579,93 @@ def _transcribe_cohere(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         "duration_seconds": int(round(payload.duration_seconds)),
         "segments": 1 if texte else 0,
         "provider": "cohere",
+        "model": model,
+    }
+
+
+# ===========================================================================
+# Mistral Voxtral (transcription audio)
+# ===========================================================================
+# Contrat documenté sur docs.mistral.ai :
+#   POST https://api.mistral.ai/v1/audio/transcriptions
+#   Authorization: Bearer <clé>
+#   multipart/form-data : file, model, language (ISO-639-1, optionnel)
+#   réponse : {"text": "...", ...}
+#
+# Comme Cohere, aucune adaptation au vocabulaire n'est documentée pour ce
+# service : ``extra_phrase_hints`` n'est donc pas transmis.
+# ===========================================================================
+_MISTRAL_URL = "https://api.mistral.ai/v1/audio/transcriptions"
+_MISTRAL_MODEL_DEFAUT = "voxtral-mini-latest"
+
+
+def _transcribe_mistral(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
+    """
+    Transcription par Mistral Voxtral.
+
+    ``extra_phrase_hints`` est ignoré : aucune adaptation au vocabulaire n'est
+    documentée pour ce service, contrairement à Google ou Deepgram.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    api_key = runtime_config.value("mistral_api_key")
+    if not api_key:
+        raise TranscriptionError(
+            "Mistral est sélectionné mais aucune clé API n'est renseignée. "
+            "Panneau d'administration → Reconnaissance vocale."
+        )
+
+    model = runtime_config.value("mistral_model") or _MISTRAL_MODEL_DEFAUT
+    langue = runtime_config.stt_language("mistral")
+
+    logger.info(
+        "Envoi à Mistral Voxtral : %.2f Mo, %s s facturées, modèle %s, langue %s",
+        len(payload.content) / 1048576,
+        round(payload.effective_seconds, 1) or "?", model, langue or "auto",
+    )
+
+    champs = {"model": model}
+    if langue:
+        champs["language"] = langue
+    corps, ctype = _multipart_body_fields(champs, "file", "dictee.ogg", payload.content)
+
+    requete = urllib.request.Request(
+        _MISTRAL_URL,
+        data=corps,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": ctype},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(requete, timeout=240) as reponse:
+            data = _json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:400]
+        logger.error("Mistral a refusé la requête (%s) : %s", exc.code, detail)
+        if exc.code in (401, 403):
+            raise TranscriptionError(
+                "Mistral refuse la clé API. Vérifiez-la dans le panneau "
+                "d'administration."
+            ) from exc
+        raise TranscriptionError(f"Erreur Mistral ({exc.code}) : {detail}") from exc
+    except Exception as exc:
+        logger.exception("Échec de l'appel Mistral")
+        raise TranscriptionError(f"Erreur Mistral : {exc}") from exc
+
+    transcript = str(data.get("text") or "").strip()
+    if not transcript and not payload.allow_silence:
+        raise TranscriptionError(
+            "Aucune parole n'a été détectée. Vérifiez le micro et le volume "
+            "de l'enregistrement, puis réessayez."
+        )
+
+    return {
+        "transcript": transcript,
+        # L'API ne renvoie aucun indice de confiance : on n'en invente pas.
+        "confidence": 0.0,
+        "duration_seconds": int(round(payload.duration_seconds)),
+        "segments": 1 if transcript else 0,
+        "provider": "mistral",
         "model": model,
     }

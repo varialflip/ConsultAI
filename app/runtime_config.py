@@ -81,6 +81,7 @@ STT_PROVIDERS = (
     ("assemblyai", "AssemblyAI"),
     ("soniox", "Soniox"),
     ("cohere", "Cohere Transcribe"),
+    ("mistral", "Mistral Voxtral"),
 )
 
 #: Un booléen présenté comme un choix : le panneau sait déjà afficher un
@@ -91,10 +92,12 @@ LLM_PROVIDERS = (
     ("gemini", "Google Gemini"),
     ("anthropic", "Anthropic Claude"),
     ("openai", "OpenAI"),
-    # Cohere ne reçoit PAS de réglage de clé propre : ``llm._api_key("cohere")``
-    # lit « cohere_api_key », celui du service vocal. Une seule clé pour les deux
-    # usages, comme chez Cohere, et un seul champ à remplir dans le panneau.
+    # Cohere et Mistral ne reçoivent PAS de réglage de clé propre :
+    # ``llm._api_key(...)`` lit « cohere_api_key » / « mistral_api_key », ceux
+    # du service vocal. Une seule clé pour les deux usages chez chacun, et un
+    # seul champ à remplir dans le panneau.
     ("cohere", "Cohere"),
+    ("mistral", "Mistral AI"),
 )
 
 
@@ -185,6 +188,20 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     Setting(
         "cohere_language", "text", "group.stt",
+        default=lambda: "", placeholder="fr / en",
+    ),
+
+    Setting(
+        "mistral_api_key", "secret", "group.stt",
+        default=lambda: settings.mistral_api_key,
+    ),
+    Setting(
+        "mistral_model", "text", "group.stt",
+        default=lambda: settings.mistral_model,
+        placeholder="voxtral-mini-latest",
+    ),
+    Setting(
+        "mistral_language", "text", "group.stt",
         default=lambda: "", placeholder="fr / en",
     ),
 
@@ -370,6 +387,7 @@ def stt_language(provider: str) -> str:
         "assemblyai": "assemblyai_language",
         "soniox": "soniox_language",
         "cohere": "cohere_language",
+        "mistral": "mistral_language",
     }.get(provider)
 
     if cle is not None:

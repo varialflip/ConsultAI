@@ -51,8 +51,8 @@ un point signalé comme tel.
 | Docker + Compose v2 | Fournis par DSM sur Synology ; sinon [docs.docker.com](https://docs.docker.com/engine/install/) |
 | Un fournisseur OIDC | Pocket ID, Authentik, Keycloak, Entra ID… |
 | Un proxy inverse en HTTPS | Obligatoire : le micro et l'installation PWA l'exigent |
-| Une clé de modèle de langage | Gemini, Anthropic, OpenAI ou Cohere — au moins une (peut attendre le premier démarrage, voir §2) |
-| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox ou Cohere — au moins une (idem) |
+| Une clé de modèle de langage | Gemini, Anthropic, OpenAI, Cohere ou Mistral — au moins une (peut attendre le premier démarrage, voir §2) |
+| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox, Cohere ou Mistral — au moins une (idem) |
 | ~1 Go de RAM | Limite fixée dans `docker-compose.yml` |
 
 L'image contient `ffmpeg` : rien à installer sur l'hôte.
@@ -191,18 +191,20 @@ DEEPGRAM_API_KEY=
 ASSEMBLYAI_API_KEY=
 SONIOX_API_KEY=
 COHERE_API_KEY=
+MISTRAL_API_KEY=
 
 # Modèle de langage — au moins un
 GEMINI_API_KEY=                # ou GOOGLE_CLOUD_PROJECT pour Vertex AI
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
-# Cohere : pas de variable propre, COHERE_API_KEY ci-dessus sert aux deux usages
+# Cohere et Mistral : pas de variable propre, COHERE_API_KEY / MISTRAL_API_KEY
+# ci-dessus servent aux deux usages
 ```
 
-> **Cohere n'a qu'une clé pour deux usages** : `COHERE_API_KEY` alimente le
-> service vocal *et* le modèle de langage. Le champ n'apparaît donc qu'une fois
-> dans le panneau, sous Reconnaissance vocale, et le panneau du modèle y
-> renvoie.
+> **Cohere et Mistral n'ont qu'une clé pour deux usages chacun** :
+> `COHERE_API_KEY` / `MISTRAL_API_KEY` alimentent le service vocal *et* le
+> modèle de langage. Le champ n'apparaît donc qu'une fois dans le panneau,
+> sous Reconnaissance vocale, et le panneau du modèle y renvoie.
 
 ---
 
@@ -358,6 +360,7 @@ enregistrer.
 | **Google** | ~300 expressions | Aucun modèle médical francophone |
 | **Deepgram** | mots-clés, **nova-2 seulement** | `nova-3` ignore les mots-clés hors anglais |
 | **Cohere** | **aucune** | ⚠️ voir ci-dessous |
+| **Mistral Voxtral** | **aucune connue** | Clé partagée avec le modèle de langage Mistral |
 
 > ⚠️ **Cohere est déconseillé pour la dictée clinique.** Plafonné à 5
 > requêtes/minute sur une clé d'essai — la dictée envoie une tranche toutes les
@@ -535,7 +538,7 @@ Incluez `/volume1/docker/ConsultAI/data` dans Hyper Backup.
 | L'enregistrement s'arrête écran éteint | Verrou d'écran non supporté. Gardez l'application au premier plan. |
 | Erreur 413 sur un long enregistrement | Augmentez la taille de corps autorisée au proxy. |
 | « Enregistrement trop long pour un envoi direct » | Au-delà de ~55 min. Configurez `STT_GCS_BUCKET` ou dictez en plusieurs parties. |
-| La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS` ; l'interface le signale. Malgré son nom, ce plafond vaut pour les quatre fournisseurs, et chacun a sa propre limite — l'application ramène la valeur sous celle du fournisseur retenu. |
+| La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS` ; l'interface le signale. Malgré son nom, ce plafond vaut pour les cinq fournisseurs, et chacun a sa propre limite — l'application ramène la valeur sous celle du fournisseur retenu. |
 | Acronymes mal transcrits | Ajoutez-les au **Vocabulaire additionnel** du gabarit. |
 | Dictée transcrite dans la mauvaise langue | Choisissez le gabarit de la bonne langue : l'application propose de retranscrire l'enregistrement (§ 7.5). Sans enregistrement conservé, elle refuse — il n'y a plus de source. |
 | Tranches retardées avec Cohere | Limite de 5 req/min atteinte. Changez de service (§ 7.2). |

@@ -8,11 +8,11 @@ n'ajoute jamais de contenu clinique. Toutes les consignes anti-hallucination
 sont regroupées dans ``BASE_SYSTEM_PROMPT`` ci-dessous — c'est le garde-fou
 le plus important de l'application, et il s'applique quel que soit le modèle.
 
-TROIS FOURNISSEURS
-------------------
-Gemini, Anthropic Claude ou OpenAI, au choix depuis le panneau
-d'administration. Ils sont réunis derrière ``complete()`` : le reste du
-fichier ignore lequel est en service. Gemini garde en plus le mode Vertex AI
+CINQ FOURNISSEURS
+-----------------
+Gemini, Anthropic Claude, OpenAI, Cohere ou Mistral AI, au choix depuis le
+panneau d'administration. Ils sont réunis derrière ``complete()`` : le reste
+du fichier ignore lequel est en service. Gemini garde en plus le mode Vertex AI
 (``GOOGLE_CLOUD_PROJECT``), recommandé pour des données de santé québécoises
 puisqu'il permet de rester en région de Montréal.
 
@@ -395,7 +395,7 @@ def _api_key(provider: str) -> str:
 def _missing_key(provider: str) -> GenerationError:
     labels = {
         "gemini": "Google Gemini", "anthropic": "Anthropic",
-        "openai": "OpenAI", "cohere": "Cohere",
+        "openai": "OpenAI", "cohere": "Cohere", "mistral": "Mistral AI",
     }
     return GenerationError(
         f"Aucune clé API {labels.get(provider, provider)} n'est configurée. "
@@ -483,6 +483,12 @@ def list_available_models(provider: Optional[str] = None) -> List[str]:
             for m in (data.get("models") or [])
             if m.get("name")
         ]
+        return sorted(set(noms))
+
+    if provider == "mistral":
+        # Pas de SDK Mistral dans l'image, même choix que pour Cohere.
+        data = _mistral_request("GET", "/v1/models")
+        noms = [str(m.get("id") or "") for m in (data.get("data") or []) if m.get("id")]
         return sorted(set(noms))
 
     client = get_client(provider)
@@ -610,6 +616,8 @@ def complete(
         return _complete_openai(system, user, model, temperature, max_tokens, json_mode)
     if provider == "cohere":
         return _complete_cohere(system, user, model, temperature, max_tokens, json_mode)
+    if provider == "mistral":
+        return _complete_mistral(system, user, model, temperature, max_tokens, json_mode)
     raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
 
 
@@ -1183,5 +1191,121 @@ def _complete_cohere(
         usage={
             "input_tokens": jetons.get("input_tokens"),
             "output_tokens": jetons.get("output_tokens"),
+        },
+    )
+
+
+# ===========================================================================
+# Mistral AI
+# ===========================================================================
+# Contrat OpenAI-compatible, documenté sur docs.mistral.ai :
+#   POST https://api.mistral.ai/v1/chat/completions
+#   Authorization: Bearer <clé>
+#   {model, messages: [{role, content}], temperature, max_tokens,
+#    response_format: {"type": "json_object"}}
+#   réponse : choices[0].message.content, choices[0].finish_reason,
+#             usage.{prompt_tokens, completion_tokens, total_tokens}
+#
+# LA CLÉ EST CELLE DU SERVICE VOCAL
+# ---------------------------------
+# ``_api_key("mistral")`` lit ``mistral_api_key``, le réglage déjà employé par
+# la transcription Voxtral (voir stt._transcribe_mistral) : une seule clé pour
+# les deux usages, comme pour Cohere. Le réglage n'apparaît donc qu'une fois
+# dans le panneau, sous Reconnaissance vocale.
+#
+# Pas de SDK : une requête HTTP suffit, et l'image ne grossit pas.
+# ===========================================================================
+_MISTRAL_API = "https://api.mistral.ai"
+#: Modèle par défaut proposé dans le panneau. Le bouton « Modèles disponibles »
+#: montre ce à quoi la clé donne réellement droit.
+MISTRAL_DEFAULT_MODEL = "mistral-large-latest"
+
+
+def _mistral_request(method: str, path: str, payload: Optional[dict] = None) -> dict:
+    """Requête JSON authentifiée vers l'API Mistral."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    key = _api_key("mistral")
+    if not key:
+        raise _missing_key("mistral")
+
+    data = _json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(
+        f"{_MISTRAL_API}{path}",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as reponse:
+            return _json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:300]
+        if exc.code in (401, 403):
+            raise GenerationError(
+                "Mistral refuse la clé API. Vérifiez-la dans le panneau "
+                "d'administration."
+            ) from exc
+        if exc.code == 429:
+            raise GenerationError(
+                "Mistral a refusé la requête : limite de débit atteinte. "
+                "Patientez quelques instants puis réessayez."
+            ) from exc
+        raise GenerationError(f"Erreur Mistral ({exc.code}) : {detail}") from exc
+    except Exception as exc:
+        raise GenerationError(f"Erreur Mistral : {exc}") from exc
+
+
+def _complete_mistral(
+    system: str,
+    user: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    json_mode: bool,
+) -> Completion:
+    corps = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if json_mode:
+        corps["response_format"] = {"type": "json_object"}
+
+    try:
+        data = _mistral_request("POST", "/v1/chat/completions", corps)
+    except GenerationError as exc:
+        # Le refus porte parfois la limite exacte : on la retient et on
+        # réessaie, plutôt que de renvoyer au médecin une erreur qu'il ne peut
+        # pas corriger.
+        limite = _learn_max_tokens("mistral", model, str(exc))
+        if limite is None or limite >= max_tokens:
+            raise
+        corps["max_tokens"] = limite
+        data = _mistral_request("POST", "/v1/chat/completions", corps)
+
+    choix = (data.get("choices") or [None])[0] or {}
+    texte = str((choix.get("message") or {}).get("content") or "")
+    jetons = data.get("usage") or {}
+
+    return Completion(
+        text=texte,
+        model=model,
+        provider="mistral",
+        finish_reason=str(choix.get("finish_reason") or ""),
+        usage={
+            "prompt_tokens": jetons.get("prompt_tokens"),
+            "output_tokens": jetons.get("completion_tokens"),
+            "total_tokens": jetons.get("total_tokens"),
         },
     )

@@ -746,6 +746,7 @@ def generate_note(
     context_lines: Optional[List[str]] = None,
     extra_instructions: str = "",
     model: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> dict:
     """
     Met la transcription en forme et retourne
@@ -759,13 +760,22 @@ def generate_note(
     provider = active_provider()
     model_name = model or active_model()
 
+    # LA LANGUE DU GABARIT PILOTE TOUT : consignes de base, consigne générale
+    # employée, et langue de rédaction. Pas de repli sur la préférence
+    # d'interface — celle-ci concerne l'écran, pas le document.
+    langue = i18n.normalize(language or runtime_config.language())
+
     logger.info(
-        "Mise en forme via %s (%s) — %d caractères de transcription",
-        provider, model_name, len(transcript),
+        "Mise en forme via %s (%s) — %d caractères de transcription, langue %s",
+        provider, model_name, len(transcript), langue,
     )
     result = complete(
-        build_system_prompt(system_instructions, runtime_config.value("general_prompt")),
-        build_user_prompt(transcript, layout_format, context_lines, extra_instructions),
+        build_system_prompt(
+            system_instructions, runtime_config.general_prompt(langue), langue
+        ),
+        build_user_prompt(
+            transcript, layout_format, context_lines, extra_instructions, langue
+        ),
         model=model_name,
         temperature=runtime_config.value_float("llm_temperature", settings.gemini_temperature),
         max_tokens=settings.gemini_max_output_tokens,

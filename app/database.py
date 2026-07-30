@@ -32,6 +32,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from app.config import settings
+from app.default_templates import (
+    EDITABLE_TEMPLATES,
+    KEEP_NAMES,
+    LOCKED_TEMPLATES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +135,20 @@ class Template(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
 
+    #: LANGUE DE TOUTE LA CHAÎNE pour ce gabarit — « fr » ou « en ».
+    #:
+    #: Ce n'est pas une étiquette d'affichage. Elle décide de la langue des
+    #: consignes de base, de la consigne générale employée, du code envoyé au
+    #: service de reconnaissance vocale et de la langue de rédaction de la note.
+    #: C'est la SEULE source : aucune détection automatique depuis l'audio ni
+    #: depuis le texte, qui se tromperait sur une consultation bilingue et
+    #: rendrait le résultat imprévisible.
+    language: Mapped[str] = mapped_column(String(8), default="fr", nullable=False)
+
+    #: Gabarit protégé : ni modifiable ni supprimable, à dupliquer pour l'adapter.
+    #: Le refus est appliqué côté serveur, pas seulement masqué dans l'écran.
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -141,6 +160,8 @@ class Template(Base):
             "name": self.name,
             "description": self.description,
             "is_default": self.is_default,
+            "is_locked": self.is_locked,
+            "language": self.language or "fr",
             "sort_order": self.sort_order,
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
@@ -780,173 +801,153 @@ médicamenteuses, interactions, doublons, ajustements rénaux.
 ## SUIVI ET SURVEILLANCE
 """
 
-_DEFAULT_TEMPLATES = [
-    {
-        "name": "Évaluation gériatrique standard",
-        "description": "Évaluation multisystémique complète : HMA, antécédents, syndromes gériatriques, examen physique, impression et plan.",
-        "system_instructions": _STANDARD_INSTRUCTIONS,
-        "layout_format": _STANDARD_LAYOUT,
-        "phrase_hints": (
-            "évaluation gériatrique globale, syndrome gériatrique, fragilité, sarcopénie, "
-            "TUG, test de Tinetti, vitesse de marche, marchette, quadriporteur, déambulateur, "
-            "hypotension orthostatique, dénutrition, plaie de pression, iatrogénie, "
-            "niveau de soins, directives médicales anticipées, proche aidant"
-        ),
-        "is_default": True,
-        "sort_order": 10,
-    },
-    {
-        "name": "Bilan cognitif / Clinique de mémoire",
-        "description": "Évaluation cognitive : histoire et hétéro-anamnèse, impact fonctionnel, SCPD, tests objectifs (MoCA/MMSE), sécurité et hébergement.",
-        "system_instructions": _COGNITIF_INSTRUCTIONS,
-        "layout_format": _COGNITIF_LAYOUT,
-        "phrase_hints": (
-            "trouble neurocognitif majeur, trouble neurocognitif léger, maladie d'Alzheimer, "
-            "démence vasculaire, démence à corps de Lewy, dégénérescence frontotemporale, "
-            "hydrocéphalie à pression normale, anosognosie, hétéro-anamnèse, "
-            "MoCA, MMSE, test de l'horloge, rappel des cinq mots, fluence verbale, "
-            "SCPD, apathie, désinhibition, errance, idées délirantes, hallucinations visuelles, "
-            "donépézil, rivastigmine, galantamine, mémantine, "
-            "inhibiteur de la cholinestérase, mandat de protection, aptitude, SAAQ"
-        ),
-        "is_default": True,
-        "sort_order": 20,
-    },
-    {
-        "name": "Révision de la pharmacothérapie",
-        "description": "Bilan comparatif et déprescription : médicaments potentiellement inappropriés, cascades médicamenteuses, plan de sevrage.",
-        "system_instructions": _POLYPHARMACIE_INSTRUCTIONS,
-        "layout_format": _POLYPHARMACIE_LAYOUT,
-        "phrase_hints": (
-            "polypharmacie, déprescription, critères de Beers, STOPP START, "
-            "charge anticholinergique, cascade médicamenteuse, bilan comparatif des médicaments, "
-            "benzodiazépine, lorazépam, oxazépam, quétiapine, rispéridone, "
-            "inhibiteur de la pompe à protons, anticoagulant, clairance de la créatinine, "
-            "pilulier, dosette, PRN, sevrage progressif"
-        ),
-        "is_default": True,
-        "sort_order": 30,
-    },
-]
+#: Marqueur d'amorçage des gabarits modifiables, rangé dans ``app_settings``.
+#:
+#: Ils ne doivent être créés QU'UNE FOIS. Sans ce marqueur, le mécanisme
+#: d'amorçage — qui reconnaît un gabarit à son nom — recréerait « Suivi » au
+#: prochain démarrage après que le médecin l'a supprimé, ce qui est exactement
+#: ce qu'un gabarit « comme les autres » ne doit pas faire.
+_EDITABLE_SEEDED_KEY = "editable_defaults_seeded"
 
 
-def seed_default_templates(db: Session) -> int:
+def seed_locked_templates(db: Session) -> int:
     """
-    Insère les gabarits par défaut manquants.
+    Crée ou met à jour les gabarits verrouillés.
 
-    Idempotent : on se base sur le NOM du gabarit. Un gabarit par défaut
-    supprimé volontairement par l'utilisateur sera donc recréé au prochain
-    démarrage — renommez-le plutôt que de le supprimer si ce n'est pas
-    souhaité, ou modifiez-le simplement sur place.
+    Rafraîchis à chaque démarrage, sans précaution particulière : personne ne
+    peut les avoir modifiés — c'est le sens du verrou. Une amélioration apportée
+    au module profite donc immédiatement aux installations existantes.
     """
-    existing = set(db.scalars(select(Template.name)).all())
-    created = 0
-    for payload in _DEFAULT_TEMPLATES:
-        if payload["name"] in existing:
+    touches = 0
+    for payload in LOCKED_TEMPLATES:
+        row = db.scalar(select(Template).where(Template.name == payload["name"]))
+        if row is None:
+            db.add(Template(**payload))
+            touches += 1
+            logger.info("Gabarit verrouillé « %s » créé", payload["name"])
+            continue
+        change = False
+        for champ, valeur in payload.items():
+            if getattr(row, champ) != valeur:
+                setattr(row, champ, valeur)
+                change = True
+        if change:
+            touches += 1
+            logger.info("Gabarit verrouillé « %s » mis à jour", payload["name"])
+    if touches:
+        db.commit()
+    return touches
+
+
+def seed_editable_templates(db: Session) -> int:
+    """
+    Crée les gabarits modifiables, une seule fois dans la vie de l'installation.
+
+    Le marqueur est posé même si rien n'est créé : sur une installation
+    existante, ces gabarits sont déjà là sous leur nom, et il ne faut pas
+    réessayer à chaque démarrage.
+    """
+    marqueur = db.get(AppSetting, _EDITABLE_SEEDED_KEY)
+    if marqueur is not None:
+        return 0
+
+    existants = {name for name in db.scalars(select(Template.name))}
+    crees = 0
+    for payload in EDITABLE_TEMPLATES:
+        if payload["name"] in existants:
             continue
         db.add(Template(**payload))
-        created += 1
-    if created:
-        db.commit()
-        logger.info("Amorçage : %d gabarit(s) par défaut créé(s)", created)
-    return created
+        crees += 1
+        logger.info("Gabarit modifiable « %s » amorcé", payload["name"])
+
+    db.add(AppSetting(key=_EDITABLE_SEEDED_KEY, value="1", updated_by="amorçage"))
+    db.commit()
+    return crees
 
 
-def refresh_default_templates(db: Session) -> int:
+def purge_legacy_templates(db: Session) -> int:
     """
-    Remet à jour les gabarits préchargés que l'utilisateur n'a jamais modifiés.
+    Supprime les gabarits livrés par une version antérieure.
 
-    ``create_all`` ne touche pas aux lignes existantes : sans cela, une
-    amélioration apportée aux gabarits livrés (nouvelle rubrique, champ retiré)
-    ne profiterait qu'aux installations neuves. On ne réécrit donc QUE les
-    gabarits ``is_default`` dont ``updated_at`` colle encore à ``created_at``,
-    signe qu'ils n'ont jamais été enregistrés depuis l'éditeur. Dès que le
-    médecin en modifie un, il lui appartient et n'est plus jamais écrasé.
+    MIGRATION DESTRUCTIVE, appliquée aussi aux installations en service. Sont
+    supprimés les gabarits marqués ``is_default`` dont le nom ne figure pas
+    parmi les quatre retenus — c'est-à-dire « Évaluation gériatrique standard »,
+    « Bilan cognitif / Clinique de mémoire », « Révision de la
+    pharmacothérapie », et tout autre défaut d'une version encore plus ancienne.
+
+    CE QUI N'EST PAS SUPPRIMÉ, ET POURQUOI
+    --------------------------------------
+    Un gabarit créé par le médecin (``is_default`` faux) n'est jamais touché,
+    même si son nom est inconnu d'ici : ce sont ses gabarits, pas les nôtres.
+
+    LES CONSULTATIONS PASSÉES SONT PRÉSERVÉES
+    -----------------------------------------
+    ``Consultation.template_name`` est un instantané pris au moment de la
+    génération : le libellé du gabarit survit à sa suppression, et l'historique
+    reste lisible. Aucune clé étrangère ne relie les deux tables, donc aucune
+    suppression en cascade n'est possible.
+
+    Il reste ``template_id``, qui pointerait dans le vide. On le met à NULL —
+    l'identifiant d'une ligne disparue n'a aucun sens, et le nom conservé suffit
+    à l'affichage.
     """
-    by_name = {payload["name"]: payload for payload in _DEFAULT_TEMPLATES}
-    refreshed = 0
-
-    for row in db.scalars(select(Template).where(Template.is_default.is_(True))).all():
-        payload = by_name.get(row.name)
-        if payload is None:
-            continue
-
-        # Tolérance : les deux horodatages sont produits par deux appels
-        # distincts à utcnow() lors de l'insertion, à quelques µs d'écart.
-        if row.updated_at and row.created_at:
-            if (row.updated_at - row.created_at).total_seconds() > 2:
-                continue  # gabarit personnalisé : on n'y touche pas
-
-        unchanged = (
-            row.description == payload["description"]
-            and row.system_instructions == payload["system_instructions"]
-            and row.layout_format == payload["layout_format"]
-            and row.phrase_hints == payload["phrase_hints"]
+    condamnes = list(
+        db.scalars(
+            select(Template).where(
+                Template.is_default.is_(True),
+                Template.name.notin_(KEEP_NAMES),
+            )
         )
-        if unchanged:
-            continue
+    )
+    if not condamnes:
+        return 0
 
-        row.description = payload["description"]
-        row.system_instructions = payload["system_instructions"]
-        row.layout_format = payload["layout_format"]
-        row.phrase_hints = payload["phrase_hints"]
-        # created_at est réaligné pour que le gabarit reste « non modifié » aux
-        # yeux du prochain démarrage, malgré le onupdate sur updated_at.
-        row.created_at = utcnow()
-        refreshed += 1
+    for gabarit in condamnes:
+        # Les consultations qui le référencent gardent leur nom instantané ; on
+        # ne coupe que le lien devenu creux.
+        orphelines = (
+            db.query(Consultation)
+            .filter(Consultation.template_id == gabarit.id)
+            .update({"template_id": None}, synchronize_session=False)
+        )
+        logger.warning(
+            "Gabarit livré « %s » supprimé (migration). %d consultation(s) "
+            "conservent leur nom de gabarit et perdent seulement le lien.",
+            gabarit.name, orphelines,
+        )
+        db.delete(gabarit)
 
-    if refreshed:
-        db.commit()
-        logger.info("Amorçage : %d gabarit(s) par défaut mis à jour", refreshed)
-    return refreshed
-
-
-# ---------------------------------------------------------------------------
-# Migration légère du schéma
-# ---------------------------------------------------------------------------
-# ``Base.metadata.create_all`` crée les tables manquantes mais n'ajoute jamais
-# une colonne à une table déjà existante. Comme la base vit dans un volume
-# Docker qu'on ne veut évidemment pas réinitialiser, les colonnes ajoutées
-# après coup sont créées ici à la main. SQLite accepte
-# ``ALTER TABLE … ADD COLUMN`` avec une valeur par défaut constante, ce qui
-# suffit largement pour des colonnes texte.
-# ---------------------------------------------------------------------------
-_ADDED_COLUMNS = {
-    "users": [
-        ("avatar_url", "VARCHAR(1000) NOT NULL DEFAULT ''"),
-    ],
-    "consultations": [
-        ("patient_name", "VARCHAR(200) NOT NULL DEFAULT ''"),
-        ("reason", "VARCHAR(300) NOT NULL DEFAULT ''"),
-        ("requester", "VARCHAR(200) NOT NULL DEFAULT ''"),
-        ("accompanied_by", "VARCHAR(200) NOT NULL DEFAULT ''"),
-        ("consultation_date", "VARCHAR(40) NOT NULL DEFAULT ''"),
-        ("llm_provider", "VARCHAR(40) NOT NULL DEFAULT ''"),
-        ("stt_provider", "VARCHAR(40) NOT NULL DEFAULT ''"),
-        ("stt_model", "VARCHAR(80) NOT NULL DEFAULT ''"),
-    ],
-}
+    db.commit()
+    return len(condamnes)
 
 
-def _add_missing_columns() -> None:
-    if not settings.database_url.startswith("sqlite"):
-        return
+def migrate_general_prompt(db: Session) -> bool:
+    """
+    Reporte l'ancienne consigne générale unique vers sa version française.
 
-    with engine.begin() as connection:
-        for table, columns in _ADDED_COLUMNS.items():
-            existing = {
-                row[1]
-                for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")
-            }
-            if not existing:
-                continue  # table pas encore créée : create_all s'en chargera
-            for name, definition in columns:
-                if name in existing:
-                    continue
-                connection.exec_driver_sql(
-                    f"ALTER TABLE {table} ADD COLUMN {name} {definition}"
-                )
-                logger.info("Migration : colonne %s.%s ajoutée", table, name)
+    Il n'y avait qu'une consigne, rédigée en français. Elle devient
+    ``general_prompt_fr`` ; la version anglaise part du module livré. L'ancienne
+    clé est retirée pour qu'il n'en reste pas deux sources.
+    """
+    ancienne = db.get(AppSetting, "general_prompt")
+    if ancienne is None:
+        return False
+
+    if db.get(AppSetting, "general_prompt_fr") is None and ancienne.value.strip():
+        db.add(
+            AppSetting(
+                key="general_prompt_fr",
+                value=ancienne.value,
+                updated_by=ancienne.updated_by or "migration",
+            )
+        )
+        logger.info(
+            "Consigne générale reportée vers « general_prompt_fr » (%d caractères).",
+            len(ancienne.value),
+        )
+    db.delete(ancienne)
+    db.commit()
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1097,13 +1098,67 @@ def _adopt_authorized_users(db: Session) -> int:
     return crees
 
 
+# ---------------------------------------------------------------------------
+# Migration légère du schéma
+# ---------------------------------------------------------------------------
+# ``Base.metadata.create_all`` crée les tables manquantes mais n'ajoute jamais
+# une colonne à une table déjà existante. Comme la base vit dans un volume
+# Docker qu'on ne veut évidemment pas réinitialiser, les colonnes ajoutées
+# après coup sont créées ici à la main. SQLite accepte ALTER TABLE ADD COLUMN,
+# ce qui suffit à ce cas : on n'a jamais eu à changer ni à retirer une colonne.
+# ---------------------------------------------------------------------------
+_ADDED_COLUMNS = {
+    "users": [
+        ("avatar_url", "VARCHAR(1000) NOT NULL DEFAULT ''"),
+    ],
+    "templates": [
+        ("language", "VARCHAR(8) NOT NULL DEFAULT 'fr'"),
+        ("is_locked", "BOOLEAN NOT NULL DEFAULT 0"),
+    ],
+    "consultations": [
+        ("patient_name", "VARCHAR(200) NOT NULL DEFAULT ''"),
+        ("reason", "VARCHAR(300) NOT NULL DEFAULT ''"),
+        ("requester", "VARCHAR(200) NOT NULL DEFAULT ''"),
+        ("accompanied_by", "VARCHAR(200) NOT NULL DEFAULT ''"),
+        ("consultation_date", "VARCHAR(40) NOT NULL DEFAULT ''"),
+        ("llm_provider", "VARCHAR(40) NOT NULL DEFAULT ''"),
+        ("stt_provider", "VARCHAR(40) NOT NULL DEFAULT ''"),
+        ("stt_model", "VARCHAR(80) NOT NULL DEFAULT ''"),
+    ],
+}
+
+
+def _add_missing_columns() -> None:
+    """Ajoute les colonnes apparues après la création initiale de la base."""
+    with engine.begin() as connection:
+        for table, columns in _ADDED_COLUMNS.items():
+            existing = {
+                row[1]
+                for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")
+            }
+            if not existing:
+                # Table absente : create_all vient de la créer complète.
+                continue
+            for name, ddl in columns:
+                if name in existing:
+                    continue
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"
+                )
+                logger.info("Migration : colonne %s.%s ajoutée", table, name)
+
+
 def init_db() -> None:
     """Crée les tables si nécessaire puis amorce les gabarits. Appelé au démarrage."""
     Base.metadata.create_all(bind=engine)
     _add_missing_columns()
     with SessionLocal() as db:
-        seed_default_templates(db)
-        refresh_default_templates(db)
+        # L'ordre compte : on purge les anciens défauts AVANT d'amorcer, pour
+        # qu'un nom réutilisé ne fasse pas échouer la contrainte d'unicité.
+        purge_legacy_templates(db)
+        seed_locked_templates(db)
+        seed_editable_templates(db)
+        migrate_general_prompt(db)
         seed_groups(db)
         # L'ordre compte : les propriétaires existants d'abord, pour que le
         # compte porteur des données soit celui qui devient administrateur.

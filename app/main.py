@@ -326,6 +326,21 @@ class TemplateIn(BaseModel):
     layout_format: str = Field(..., min_length=1)
     phrase_hints: str = Field("", max_length=20000)
     sort_order: int = Field(100, ge=0, le=9999)
+    #: « fr » ou « en ». Décide de TOUTE la chaîne pour ce gabarit : consignes,
+    #: consigne générale employée, code de langue du service vocal, langue de
+    #: rédaction. Voir database.Template.language.
+    language: str = Field("fr", max_length=8)
+
+    @field_validator("language")
+    @classmethod
+    def _langue(cls, value: str) -> str:
+        # Une langue inconnue est refusée plutôt que ramenée au français : elle
+        # ne peut venir que d'un appel fabriqué, et la corriger en silence
+        # produirait une note dans une langue que personne n'a demandée.
+        code = (value or "fr").strip().lower()
+        if code not in dict(i18n.LANGUAGES):
+            raise ValueError(f"Langue inconnue : {value}")
+        return code
 
     @field_validator("name", "description", "system_instructions", "layout_format", "phrase_hints")
     @classmethod
@@ -713,6 +728,8 @@ async def index(request: Request):
             # avant le premier affichage, et un aller-retour de plus ferait
             # apparaître l'interface en clés brutes le temps du chargement.
             "i18n_catalog": i18n.catalog(langue),
+            # Pour le sélecteur de langue du formulaire de gabarit.
+            "languages": i18n.LANGUAGES,
         },
     )
 
@@ -1060,6 +1077,7 @@ def create_template(
         layout_format=payload.layout_format,
         phrase_hints=payload.phrase_hints,
         sort_order=payload.sort_order,
+        language=payload.language,
         is_default=False,
     )
     db.add(row)
@@ -1085,6 +1103,11 @@ def update_template(
     row = db.get(TemplateModel, template_id)
     if row is None:
         raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
+    # Le refus est ICI et pas seulement dans l'écran : masquer un bouton n'est
+    # pas un contrôle, et ces deux gabarits sont les points de départ garantis
+    # de l'installation.
+    if row.is_locked:
+        raise HTTPException(status_code=403, detail=_t("err.template_locked"))
 
     row.name = payload.name
     row.description = payload.description
@@ -1092,6 +1115,7 @@ def update_template(
     row.layout_format = payload.layout_format
     row.phrase_hints = payload.phrase_hints
     row.sort_order = payload.sort_order
+    row.language = payload.language
     row.updated_at = utcnow()
 
     try:
@@ -1119,8 +1143,12 @@ def duplicate_template(
     ajuster une rubrique, plutôt que de réécrire depuis la page blanche des
     instructions cliniques longues de plusieurs dizaines de lignes.
 
-    La copie n'est jamais marquée ``is_default`` : sinon l'amorçage la
-    considérerait comme un gabarit livré et pourrait la réécrire.
+    La copie n'est jamais marquée ``is_default`` ni ``is_locked`` : sinon
+    l'amorçage la considérerait comme un gabarit livré et pourrait la réécrire,
+    et elle hériterait du verrou qu'on cherche précisément à quitter.
+
+    C'est le SEUL chemin pour adapter un gabarit verrouillé, et il fonctionne
+    sur lui : la copie est une ligne neuve et indépendante, pas une référence.
     """
     source = db.get(TemplateModel, template_id)
     if source is None:
@@ -1146,7 +1174,11 @@ def duplicate_template(
         phrase_hints=source.phrase_hints,
         # Juste après l'original dans le menu déroulant.
         sort_order=min(source.sort_order + 1, 9999),
+        # La copie d'un gabarit verrouillé est modifiable : c'est tout l'objet
+        # de l'opération.
         is_default=False,
+        is_locked=False,
+        language=source.language or "fr",
     )
     db.add(copy)
     db.commit()
@@ -1164,13 +1196,19 @@ def delete_template(
     """
     Supprime un gabarit.
 
-    Note : les gabarits marqués ``is_default`` seront recréés au prochain
-    redémarrage du conteneur (voir database.seed_default_templates).
-    Renommez-les ou modifiez-les plutôt que de les supprimer.
+    Les gabarits VERROUILLÉS sont refusés : ce sont les points de départ
+    garantis de l'installation, et on les duplique pour les adapter.
+
+    Les deux gabarits modifiables livrés (« Consultation - Gériatrie »,
+    « Suivi ») se suppriment normalement et ne reviennent PAS : ils ne sont
+    amorcés qu'une fois, voir database.seed_editable_templates.
     """
     row = db.get(TemplateModel, template_id)
     if row is None:
         raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
+    # Contrôlé ICI et pas seulement masqué dans l'écran.
+    if row.is_locked:
+        raise HTTPException(status_code=403, detail=_t("err.template_locked"))
 
     remaining = db.scalar(select(TemplateModel.id).where(TemplateModel.id != template_id))
     if remaining is None:
@@ -1469,6 +1507,7 @@ async def api_generate(
             _build_context_lines(payload),
             payload.extra_instructions,
             model_name,
+            template_row.language,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)

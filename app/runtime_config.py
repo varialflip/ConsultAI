@@ -35,7 +35,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 
-from app import i18n, preferences
+from app import default_prompts, i18n, preferences
 from app.config import settings
 from app.database import AppSetting, SessionLocal
 
@@ -230,9 +230,17 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
 
     # --- Consignes ----------------------------------------------------------
+    # Une consigne par langue. C'est la LANGUE DU GABARIT qui décide laquelle
+    # est employée — voir llm.build_system_prompt. Les valeurs livrées viennent
+    # de app/default_prompts.py, sous contrôle de version.
     Setting(
-        "general_prompt", "textarea", "group.prompts",
-        default=lambda: "",
+        "general_prompt_fr", "textarea", "group.prompts",
+        default=lambda: default_prompts.GENERAL_PROMPT_FR,
+        placeholder="set.general_prompt.placeholder",
+    ),
+    Setting(
+        "general_prompt_en", "textarea", "group.prompts",
+        default=lambda: default_prompts.GENERAL_PROMPT_EN,
         placeholder="set.general_prompt.placeholder",
     ),
 )
@@ -324,6 +332,17 @@ def language() -> str:
     return preferences.current_language()
 
 
+def general_prompt(language: str) -> str:
+    """
+    Consigne générale pour la langue demandée.
+
+    La langue vient du GABARIT et de nulle part ailleurs : c'est la seule source
+    prévue, sans détection automatique depuis l'audio ni depuis le texte.
+    """
+    cle = "general_prompt_en" if i18n.normalize(language) == "en" else "general_prompt_fr"
+    return value(cle)
+
+
 def stt_language(provider: str) -> str:
     """
     Code de langue à envoyer à ``provider``.
@@ -360,7 +379,9 @@ def stt_language(provider: str) -> str:
     if forcage:
         return forcage
 
-    return i18n.stt_language_code(language(), provider)
+    # La langue du DOCUMENT — donc celle du gabarit — et non celle de l'écran :
+    # c'est la dictée qu'on transcrit, pas l'interface qu'on lit.
+    return i18n.stt_language_code(preferences.document_language(), provider)
 
 
 # ---------------------------------------------------------------------------

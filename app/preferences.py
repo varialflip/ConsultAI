@@ -67,6 +67,36 @@ def bind_language(language: Optional[str]) -> None:
     _request_language.set(i18n.normalize(language) if language else None)
 
 
+#: Langue du DOCUMENT en cours de production, distincte de celle de l'écran.
+#:
+#: Elle vient du gabarit et de nulle part ailleurs. La séparer de la langue
+#: d'interface est nécessaire : un médecin peut lire l'écran en français et
+#: produire une note anglaise à partir d'un gabarit anglais. Confondre les deux
+#: ferait dépendre le contenu du document d'une préférence d'affichage.
+_document_language: ContextVar[Optional[str]] = ContextVar(
+    "consultai_document_language", default=None
+)
+
+
+def bind_document_language(language: Optional[str]) -> None:
+    """Fixe la langue du document pour la suite du traitement."""
+    _document_language.set(i18n.normalize(language) if language else None)
+
+
+def document_language() -> str:
+    """
+    Langue du document : celle du gabarit si elle est fixée, sinon celle de
+    l'usager.
+
+    Le repli sur la langue de l'usager sert les cas où aucun gabarit n'est en
+    jeu — un fichier audio importé sans gabarit, par exemple.
+    """
+    portee = _document_language.get()
+    if portee:
+        return portee
+    return current_language()
+
+
 def current_language() -> str:
     """
     Langue effective : celle de l'usager de la requête, sinon celle du ``.env``.

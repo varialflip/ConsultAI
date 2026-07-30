@@ -47,7 +47,7 @@ import uuid
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
-from app import i18n, runtime_config
+from app import i18n, preferences, runtime_config
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -211,7 +211,7 @@ def build_phrase_hints(extra: Optional[str] = None) -> List[str]:
     """
     phrases = (
         list(DEFAULT_PHRASE_HINTS)
-        if i18n.uses_french_lexicon(runtime_config.language())
+        if i18n.uses_french_lexicon(preferences.document_language())
         else []
     )
     if extra:
@@ -836,7 +836,7 @@ def _termes_prioritaires(extra_phrase_hints: Optional[str], limite: int) -> List
     # il dicte.
     noyau = (
         list(LEXIQUE_PRIORITAIRE)
-        if i18n.uses_french_lexicon(runtime_config.language())
+        if i18n.uses_french_lexicon(preferences.document_language())
         else []
     )
 
@@ -1115,7 +1115,7 @@ def _transcribe_soniox(payload: AudioPayload, extra_phrase_hints: Optional[str] 
             "model": model,
             "file_id": file_id,
             "context": {
-                "text": _SONIOX_CONTEXTES[i18n.normalize(runtime_config.language())],
+                "text": _SONIOX_CONTEXTES[i18n.normalize(preferences.document_language())],
                 "terms": termes,
             },
         }

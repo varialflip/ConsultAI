@@ -518,6 +518,28 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "tpl.name": ("Nom du gabarit", "Template name"),
     "tpl.name_ph": ("Ex. Consultation externe", "e.g. Outpatient consultation"),
     "tpl.order": ("Ordre", "Order"),
+    "tpl.language": ("Langue", "Language"),
+    "tpl.language_help": (
+        "Décide de toute la chaîne : consignes, service vocal, langue de la note.",
+        "Drives the whole chain: instructions, speech service, note language.",
+    ),
+    "tpl.locked_title": (
+        "Ce gabarit est protégé.",
+        "This template is protected.",
+    ),
+    "tpl.locked_help": (
+        "Il ne peut être ni modifié ni supprimé : c'est un point de départ "
+        "garanti de l'installation. Dupliquez-le pour en obtenir une copie "
+        "entièrement modifiable, indépendante de l'original.",
+        "It cannot be edited or deleted: it is a guaranteed starting point for "
+        "this installation. Duplicate it to obtain a fully editable copy, "
+        "independent of the original.",
+    ),
+    "tpl.duplicate_to_edit": (
+        "Dupliquer pour personnaliser",
+        "Duplicate to customize",
+    ),
+    "tpl.locked_badge": ("protégé", "protected"),
     "tpl.description": ("Description", "Description"),
     "tpl.description_ph": (
         "Affichée sous le menu de sélection",
@@ -1068,6 +1090,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "err.template_exists": (
         "Un gabarit nommé « {name} » existe déjà.",
         "A template named “{name}” already exists.",
+    ),
+    "err.template_locked": (
+        "Ce gabarit est protégé : il ne peut être ni modifié ni supprimé. "
+        "Dupliquez-le pour en obtenir une copie modifiable.",
+        "This template is protected: it cannot be edited or deleted. Duplicate "
+        "it to obtain an editable copy.",
     ),
     "err.template_last": (
         "Impossible de supprimer le dernier gabarit : l'application en exige "

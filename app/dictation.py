@@ -400,6 +400,26 @@ def _phrase_hints(template_id: Optional[int]) -> str:
         return (row.phrase_hints or "") if row else ""
 
 
+def _bind_template_language(template_id: Optional[int]) -> None:
+    """
+    Fixe la langue du document d'après le gabarit de la dictée.
+
+    Appelé avant chaque transcription : c'est la langue du gabarit qui décide du
+    code envoyé au service vocal et de l'envoi ou non du lexique francophone.
+    Sans cet appel, une dictée anglaise partirait avec le code de langue de
+    l'interface — et le lexique français par-dessus.
+    """
+    from app import preferences
+    from app.database import Template as TemplateModel
+
+    if not template_id:
+        preferences.bind_document_language(None)
+        return
+    with SessionLocal() as db:
+        row = db.get(TemplateModel, template_id)
+        preferences.bind_document_language(row.language if row else None)
+
+
 def _store_part(session: DictationSession, text: str, moteur: tuple = ("", "")) -> None:
     """
     Reporte la tranche dans le brouillon — c'est lui, la copie durable. Le
@@ -484,6 +504,7 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
     """
     with _lock_for(session_id):
         session = load_session(session_id, username)
+        _bind_template_language(session.template_id)
         hints = _phrase_hints(session.template_id)
         _, _, high = _window()
 
@@ -528,6 +549,7 @@ def _finalise(session: DictationSession) -> None:
     )
     with open(session.audio_path, "rb") as handle:
         raw = handle.read()
+    _bind_template_language(session.template_id)
     result = transcribe(raw, session.mime_type, _phrase_hints(session.template_id))
     session.offset_seconds = float(result.get("duration_seconds") or 0)
     text = (result.get("transcript") or "").strip()

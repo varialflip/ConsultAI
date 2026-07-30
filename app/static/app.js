@@ -1984,10 +1984,24 @@
       const item = document.createElement('li');
       const active = String(tpl.id) === $('tplId').value;
       item.className = `px-4 py-3 cursor-pointer hover:bg-white transition ${active ? 'bg-white border-l-4 border-teal-600' : ''}`;
+      // La langue est affichée pour CHAQUE gabarit : c'est elle qui décide de
+      // la langue de la note produite, et s'en apercevoir après coup coûte une
+      // régénération.
+      const langue = (tpl.language || 'fr').toUpperCase();
       item.innerHTML = `
-        <div class="font-medium text-sm text-slate-800">${esc(tpl.name)}</div>
+        <div class="font-medium text-sm text-slate-800 flex items-center gap-1.5">
+          ${tpl.is_locked ? `<svg class="w-3 h-3 text-amber-600 shrink-0" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+               <rect x="4" y="11" width="16" height="10" rx="2"/>
+               <path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>` : ''}
+          <span class="truncate">${esc(tpl.name)}</span>
+        </div>
         <div class="text-xs text-slate-500 mt-0.5 line-clamp-2">${esc(tpl.description || T('tpl.no_description'))}</div>
-        ${tpl.is_default ? `<span class="inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">${esc(T('tpl.preloaded'))}</span>` : ''}
+        <div class="mt-1.5 flex items-center gap-1 flex-wrap">
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 font-medium">${esc(langue)}</span>
+          ${tpl.is_locked ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">${esc(T('tpl.locked_badge'))}</span>` : ''}
+          ${tpl.is_default && !tpl.is_locked ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">${esc(T('tpl.preloaded'))}</span>` : ''}
+        </div>
       `;
       item.addEventListener('click', () => {
         fillTemplateForm(tpl);
@@ -2002,6 +2016,28 @@
     }
   }
 
+  /**
+   * Rend le formulaire inerte pour un gabarit protégé.
+   *
+   * Les champs restent LISIBLES — on veut pouvoir consulter le gabarit avant de
+   * décider de le dupliquer — mais ne s'enregistrent pas. Le serveur refuse de
+   * toute façon : ceci n'est que la politesse qui évite de saisir pour rien.
+   */
+  function applyTemplateLock(locked) {
+    const champs = ['tplName', 'tplDescription', 'tplInstructions', 'tplLayout',
+                    'tplHints', 'tplOrder', 'tplLanguage'];
+    champs.forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = Boolean(locked);
+    });
+    $('tplLockedBanner').classList.toggle('hidden', !locked);
+    // « Enregistrer » et « Supprimer » n'ont pas de sens ici ; « Dupliquer »
+    // est au contraire l'action à mettre en avant.
+    const submit = $('templateForm').querySelector('button[type="submit"]');
+    if (submit) submit.classList.toggle('hidden', Boolean(locked));
+    $('btnDeleteTemplate').classList.toggle('hidden', Boolean(locked));
+  }
+
   function fillTemplateForm(tpl) {
     $('tplId').value = tpl.id;
     $('tplName').value = tpl.name;
@@ -2011,9 +2047,11 @@
     $('tplLayout').value = tpl.layout_format || '';
     $('tplHints').value = tpl.phrase_hints || '';
     $('tplOrder').value = tpl.sort_order != null ? tpl.sort_order : 100;
+    $('tplLanguage').value = tpl.language || 'fr';
     // Supprimer et dupliquer n'ont de sens que sur un gabarit déjà en base.
     $('btnDeleteTemplate').classList.remove('hidden');
     $('btnDuplicateTemplate').classList.toggle('hidden', !state.isTemplateAdmin);
+    applyTemplateLock(tpl.is_locked);
     $('templateFormStatus').textContent = '';
   }
 
@@ -2026,6 +2064,10 @@
     $('tplLayout').value = T('tpl.default_layout');
     $('tplHints').value = '';
     $('tplOrder').value = '100';
+    // Nouveau gabarit : la langue de l'interface est le point de départ le plus
+    // probable, sans être imposée.
+    $('tplLanguage').value = LANG;
+    applyTemplateLock(false);
     $('btnDeleteTemplate').classList.add('hidden');
     $('btnDuplicateTemplate').classList.add('hidden');
     $('templateFormStatus').textContent = '';
@@ -2043,6 +2085,7 @@
       layout_format: $('tplLayout').value.trim(),
       phrase_hints: $('tplHints').value.trim(),
       sort_order: parseInt($('tplOrder').value, 10) || 100,
+      language: $('tplLanguage').value || 'fr',
     };
 
     if (!body.name || !body.system_instructions || !body.layout_format) {
@@ -3278,6 +3321,8 @@
 
     $('templateForm').addEventListener('submit', submitTemplateForm);
     $('btnDuplicateTemplate').addEventListener('click', duplicateTemplate);
+    // Le bandeau des gabarits protégés propose la même action, mise en avant.
+    $('btnDuplicateLocked').addEventListener('click', duplicateTemplate);
     $('btnDeleteTemplate').addEventListener('click', deleteTemplate);
 
     // --- Brouillons ---

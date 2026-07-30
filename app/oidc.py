@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 from urllib.parse import urlencode, urlparse
 
 from app.config import settings
@@ -119,7 +119,22 @@ async def authorization_redirect(request):
     return await client.authorize_redirect(request, redirect_uri)
 
 
-async def fetch_identity(request) -> Dict[str, Any]:
+class Identity(NamedTuple):
+    """
+    Résultat d'une connexion réussie.
+
+    Le jeton d'identité **brut** accompagne les revendications décodées, et ce
+    n'est pas une commodité : il est exigé comme ``id_token_hint`` à la
+    déconnexion. Sans lui, le fournisseur ignore ``post_logout_redirect_uri`` et
+    l'usager reste sur la page de déconnexion du fournisseur au lieu de revenir
+    à l'application.
+    """
+
+    claims: Dict[str, Any]
+    id_token: str
+
+
+async def fetch_identity(request) -> Identity:
     """
     Termine le flux et retourne les revendications validées.
 
@@ -154,7 +169,17 @@ async def fetch_identity(request) -> Dict[str, Any]:
             "Le fournisseur n'a renvoyé aucun identifiant « sub » : impossible "
             "de reconnaître le compte."
         )
-    return claims
+
+    # Le jeton d'identité BRUT, tel que reçu. Il servira de « id_token_hint » à
+    # la déconnexion — c'est la seule pièce qui permette au fournisseur
+    # d'accepter notre adresse de retour.
+    id_token = str(token.get("id_token") or "")
+    if not id_token:
+        logger.warning(
+            "Le fournisseur n'a pas renvoyé de jeton d'identité : la "
+            "déconnexion ne pourra pas revenir à l'application."
+        )
+    return Identity(claims, id_token)
 
 
 def _diagnose(exc: Exception) -> str:
@@ -258,10 +283,19 @@ async def end_session_url(id_token: str = "") -> str:
     params = {}
     if id_token:
         params["id_token_hint"] = id_token
+    elif retour:
+        # Sans « id_token_hint », la plupart des fournisseurs — Pocket ID
+        # compris — IGNORENT « post_logout_redirect_uri » : l'usager reste sur
+        # leur page de déconnexion. On le dit dans le journal plutôt que de
+        # laisser chercher.
+        logger.warning(
+            "Déconnexion sans jeton d'identité : le fournisseur ignorera "
+            "probablement le retour vers %s.", retour,
+        )
     if retour:
         params["post_logout_redirect_uri"] = retour
-        # Exigé par la spécification lorsque id_token_hint est absent, et
-        # inoffensif sinon.
+        # Alternative à id_token_hint prévue par la spécification, et
+        # inoffensive lorsque les deux sont présents.
         params["client_id"] = settings.oidc_client_id
 
     if not params:

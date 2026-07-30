@@ -100,6 +100,12 @@ logger = logging.getLogger("consultai")
 
 BASE_DIR = Path(__file__).resolve().parent
 
+#: Longueur maximale du jeton d'identité conservé en session. La session est un
+#: témoin signé, et un témoin dépassant ~4 ko est écarté sans un mot par le
+#: navigateur : on garde de la marge pour le reste de son contenu et pour la
+#: signature.
+_MAX_SESSION_ID_TOKEN = 2800
+
 
 # ---------------------------------------------------------------------------
 # Cycle de vie de l'application
@@ -545,9 +551,11 @@ async def auth_callback(request: Request):
         return _auth_error_page(_t("auth.provider_refused", detail=detail))
 
     try:
-        claims = await oidc.fetch_identity(request)
+        identite = await oidc.fetch_identity(request)
     except oidc.OidcError as exc:
         return _auth_error_page(str(exc))
+
+    claims = identite.claims
 
     username = oidc.username_from(claims)
     groupes_fournisseur = oidc.groups_from(claims)
@@ -571,9 +579,23 @@ async def auth_callback(request: Request):
     # La session ne porte que l'identité. Les droits sont relus en base à chaque
     # requête — voir auth._principal_from_db.
     store_identity(request, {"sub": user.subject, "username": user.username})
-    # Conservé pour « id_token_hint » : sans lui, certains fournisseurs
-    # demandent une confirmation avant de fermer la session.
-    request.session["consultai_id_token"] = claims.get("__id_token", "")
+    # Conservé pour « id_token_hint » à la déconnexion. Sans lui, le
+    # fournisseur ignore notre adresse de retour et l'usager reste sur sa page.
+    #
+    # BORNE DE TAILLE : la session vit dans un témoin, et un navigateur écarte
+    # SILENCIEUSEMENT un témoin trop gros (~4 ko). Un jeton exceptionnellement
+    # long — beaucoup de groupes, revendications volumineuses — coûterait alors
+    # la session entière, donc la connexion. Perdre la redirection de
+    # déconnexion est un moindre mal : on renonce au jeton plutôt qu'à la
+    # session.
+    if len(identite.id_token) <= _MAX_SESSION_ID_TOKEN:
+        request.session["consultai_id_token"] = identite.id_token
+    else:
+        logger.warning(
+            "Jeton d'identité trop long pour la session (%d octets) : il n'est "
+            "pas conservé. La déconnexion ne reviendra pas à l'application.",
+            len(identite.id_token),
+        )
 
     logger.info(
         "Connexion de « %s » (groupes : %s)",

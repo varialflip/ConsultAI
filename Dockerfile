@@ -36,7 +36,7 @@ FROM python:3.12-slim AS runtime
 
 LABEL org.opencontainers.image.title="ConsultAI" \
       org.opencontainers.image.description="Dictée de consultations cliniques (fr / en) — STT + LLM au choix" \
-      org.opencontainers.image.source="https://github.com/local/consultai"
+      org.opencontainers.image.source="https://github.com/varialflip/ConsultAI"
 
 # ffmpeg : indispensable pour normaliser l'audio du navigateur.
 #   - Chrome/Android produit du audio/webm;codecs=opus
@@ -48,27 +48,37 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Utilisateur non-root. UID/GID 1000 correspond au premier utilisateur créé
-# sur un NAS Synology ; ajustez avec --build-arg si vos dossiers partagés
-# appartiennent à un autre UID (voir `id votre_user` en SSH sur le NAS).
-ARG APP_UID=1000
-ARG APP_GID=1000
-RUN groupadd -g "${APP_GID}" appuser 2>/dev/null || true \
-    && useradd -m -u "${APP_UID}" -g "${APP_GID}" -s /usr/sbin/nologin appuser 2>/dev/null || true
+# Utilisateur non-root, UID/GID fixes (1000:1000) — c'est une image publiée
+# une fois et réutilisée partout, donc plus question de la reconstruire avec
+# un UID sur mesure. Un déploiement qui a besoin d'un UID différent (ACL
+# Synology, par ex. — voir docker-compose.yml : "user:") le fait au lancement
+# du conteneur, pas à sa construction : Docker autorise n'importe quel UID à
+# l'exécution, même absent de /etc/passwd.
+RUN groupadd -g 1000 appuser \
+    && useradd -m -u 1000 -g 1000 -s /usr/sbin/nologin appuser
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    # HOME=/tmp (monde-inscriptible) plutôt que /home/appuser : un conteneur
+    # lancé avec un UID différent de 1000 (voir "user:" dans
+    # docker-compose.yml) n'a pas accès à /home/appuser, propriété du build.
+    # Rien dans l'application n'écrit sous HOME, mais une bibliothèque tierce
+    # pourrait vouloir y déposer un cache — /tmp le lui permet sans exiger un
+    # UID précis.
+    HOME=/tmp
 
 COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 COPY app/ /app/app/
 
-# /data = volume persistant (base SQLite). Créé et possédé par appuser pour
-# que SQLite puisse y écrire son fichier -wal/-shm.
-RUN mkdir -p /data && chown -R "${APP_UID}:${APP_GID}" /data /app
+# /data = volume persistant (base SQLite), monté par-dessus au lancement : ce
+# chown ne sert qu'en dehors de tout montage (ex. test de l'image seule).
+# L'écriture réelle dépend de la propriété du dossier hôte ./data — voir
+# APP_UID/APP_GID dans .env.example.
+RUN mkdir -p /data && chown -R appuser:appuser /data /app
 
 USER appuser
 
@@ -81,8 +91,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # Un seul worker : SQLite + état applicatif simple. Pour plus de charge,
 # augmentez --workers ET passez la base sur PostgreSQL.
 #
-# --no-proxy-headers est VOLONTAIRE ET IMPORTANT : sans cela, uvicorn remplace
-# request.client.host par la valeur de X-Forwarded-For, qui est falsifiable.
-# La vérification TRUSTED_PROXIES (app/auth.py) doit voir l'IP réelle du pair
-# TCP, sinon elle ne protège plus rien.
+# --no-proxy-headers est VOLONTAIRE : sans cela, uvicorn remplacerait
+# request.client.host par la valeur d'X-Forwarded-For, falsifiable par
+# n'importe quel appelant. Ce n'est plus un contrôle de sécurité (l'app
+# authentifie par OIDC, pas par IP source — voir app/auth.py) mais l'IP
+# journalisée doit rester celle du pair TCP réel, pas une valeur que
+# l'appelant peut choisir.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-proxy-headers"]

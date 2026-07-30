@@ -12,8 +12,8 @@
  *
  * Deux raisons : (1) ces données resteraient lisibles sur le disque de
  * l'appareil après la déconnexion ; (2) une réponse mise en cache court-
- * circuiterait la vérification d'autorisation faite par Pangolin et par
- * app/auth.py à chaque requête.
+ * circuiterait la vérification d'autorisation faite par app/auth.py à
+ * chaque requête.
  *
  * Tout ce qui n'est pas explicitement listé ci-dessous part directement sur le
  * réseau, sans interception.

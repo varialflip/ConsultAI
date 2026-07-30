@@ -12,8 +12,12 @@ un gabarit, le médecin relit et exporte.
 * Aucune spécialité imposée : ce qui est propre à une pratique vit dans les
   gabarits et dans la consigne générale.
 
-Conçue pour un NAS Synology, mais rien n'y est spécifique hormis deux points
-signalés comme tels.
+L'image est publiée sur GitHub Container Registry : **deux fichiers suffisent
+pour déployer**, `docker-compose.yml` et `.env` — pas besoin de cloner le
+dépôt ni de construire quoi que ce soit soi-même.
+
+Conçue à l'origine pour un NAS Synology, mais rien n'y est spécifique hormis
+un point signalé comme tel.
 
 ---
 
@@ -33,11 +37,11 @@ signalés comme tels.
 
 | Élément | Détail |
 |---|---|
-| Docker + Compose v2 | Fournis par DSM sur Synology |
+| Docker + Compose v2 | Fournis par DSM sur Synology ; sinon [docs.docker.com](https://docs.docker.com/engine/install/) |
 | Un fournisseur OIDC | Pocket ID, Authentik, Keycloak, Entra ID… |
 | Un proxy inverse en HTTPS | Obligatoire : le micro et l'installation PWA l'exigent |
-| Une clé de modèle de langage | Gemini, Anthropic, OpenAI ou Cohere — au moins une |
-| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox ou Cohere — au moins une |
+| Une clé de modèle de langage | Gemini, Anthropic, OpenAI ou Cohere — au moins une (peut attendre le premier démarrage, voir §2) |
+| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox ou Cohere — au moins une (idem) |
 | ~1 Go de RAM | Limite fixée dans `docker-compose.yml` |
 
 L'image contient `ffmpeg` : rien à installer sur l'hôte.
@@ -46,17 +50,31 @@ L'image contient `ffmpeg` : rien à installer sur l'hôte.
 
 ## 2. Installation
 
+Aucun `git clone` n'est nécessaire : téléchargez seulement ces deux fichiers
+dans un dossier (ex. `consultai/`) et travaillez depuis là :
+
+* [`docker-compose.yml`](docker-compose.yml)
+* [`.env.example`](.env.example)
+
 ```bash
-cd /volume1/docker/ConsultAI
+mkdir consultai && cd consultai
+curl -LO https://raw.githubusercontent.com/varialflip/ConsultAI/main/docker-compose.yml
+curl -LO https://raw.githubusercontent.com/varialflip/ConsultAI/main/.env.example
 cp .env.example .env
 ```
 
+Puis ouvrez `.env` dans un éditeur : il est rangé en 6 parties numérotées, la
+première (« OBLIGATOIRE ») est la seule à remplir avant de démarrer. Chaque
+variable y est commentée — pas besoin de revenir ici pour la plupart des
+réglages.
+
 ### 2.1 ⚠️ Synology — l'UID du processus
 
-**À régler avant tout démarrage.** Les dossiers partagés Synology portent des
-ACL qui refusent l'écriture aux UID inconnus **même quand les permissions
-affichent 777**. Avec une mauvaise valeur, l'application s'arrête au démarrage
-sur `sqlite3.OperationalError: unable to open database file`.
+**À régler avant tout démarrage, sur Synology seulement.** Les dossiers
+partagés Synology portent des ACL qui refusent l'écriture aux UID inconnus
+**même quand les permissions affichent 777**. Avec une mauvaise valeur,
+l'application s'arrête au démarrage sur
+`sqlite3.OperationalError: unable to open database file`.
 
 ```bash
 id votre_utilisateur        # ex. uid=1026(fred) gid=100(users)
@@ -66,6 +84,8 @@ id votre_utilisateur        # ex. uid=1026(fred) gid=100(users)
 APP_UID=1026
 APP_GID=100
 ```
+
+Sur un hôte Docker générique, ignorez cette étape : les défauts conviennent.
 
 ### 2.2 Clé Google — seulement si vous utilisez Google
 
@@ -80,16 +100,21 @@ chmod 600 secrets/gcp-sa.json
 ```
 
 Les autres fournisseurs n'utilisent qu'une clé d'API, saisie dans le panneau
-d'administration ou dans `.env`.
+d'administration ou dans `.env` — voir la note « FLEXIBILITÉ SUR LES CLÉS
+D'API » en tête de la partie 1 de `.env.example`. Aucune clé n'est obligatoire
+pour démarrer : sans elles, l'application démarre quand même et vous les
+ajoutez plus tard depuis le panneau, une fois connecté.
 
 ### 2.3 Démarrage
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 docker compose logs -f consultai
 ```
 
-Le conteneur écoute sur `BIND_ADDRESS:BIND_PORT` (défaut `127.0.0.1:8787`).
+`docker compose` télécharge l'image publiée (`ghcr.io/varialflip/consultai`),
+il n'y a rien à construire. Le conteneur écoute sur `BIND_ADDRESS:BIND_PORT`
+(défaut `127.0.0.1:8787`).
 
 ---
 
@@ -407,16 +432,14 @@ page `/`, ni les appels `/api/` — ils contiennent des renseignements de santé
 
 ## 8. Mise à jour
 
-Le code est **inclus dans l'image**. Seuls `./data` et `./secrets` sont des
-volumes.
+Le code est **inclus dans l'image**, republiée à chaque changement. Seuls
+`./data` et `./secrets` sont des volumes.
 
 ```bash
-git pull
+docker compose pull
+docker compose up -d
 
-# Modification de code, de gabarit livré ou de dépendance :
-docker compose up -d --build
-
-# Modification du seul .env :
+# Modification du seul .env, sans nouvelle image :
 docker compose up -d
 ```
 
@@ -538,8 +561,8 @@ Remplacez les trois `<script src="https://…">` d'`app/templates/index.html` pa
 
 ## 12. Redéployer ailleurs
 
-`git clone` ne suffit pas à démarrer : trois éléments vivent hors du dépôt, à
-dessein.
+Aucun clonage nécessaire (§2) : redéployer, c'est reconstituer trois éléments
+qui vivent délibérément hors de l'image, à côté de `docker-compose.yml`.
 
 | Élément | À reconstituer |
 |---|---|
@@ -547,12 +570,17 @@ dessein.
 | `secrets/gcp-sa.json` | Seulement si vous utilisez Google. |
 | `./data` | Créé vide au premier démarrage ; le schéma se migre seul. |
 
-Conservez `.env` et la clé de service dans un gestionnaire de mots de passe : le
-dépôt ne peut pas les reconstituer.
+Conservez `.env` et la clé de service dans un gestionnaire de mots de passe :
+rien dans l'image ne peut les reconstituer.
 
-Sur un hôte non Synology, trois réglages méritent un second regard :
-`APP_UID`/`APP_GID` (le contournement d'ACL n'a plus d'objet), `BIND_ADDRESS`, et
-la règle de pare-feu du § 4.
+Sur un hôte non Synology, deux réglages méritent un second regard :
+`APP_UID`/`APP_GID` (le contournement d'ACL Synology n'a plus d'objet — les
+défauts de l'image, 1000:1000, conviennent) et `BIND_ADDRESS` + la règle de
+pare-feu du § 4.
+
+Le code source complet (pour l'audit, la contribution, ou reconstruire
+soi-même l'image) est sur
+[github.com/varialflip/ConsultAI](https://github.com/varialflip/ConsultAI).
 
 ### Structure du dépôt
 

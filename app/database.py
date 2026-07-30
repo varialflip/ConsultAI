@@ -462,10 +462,11 @@ class UserPreference(Base):
 
     POURQUOI PAS UN TÉMOIN DE SESSION
     ---------------------------------
-    Ce serait la solution habituelle, et elle est ici impossible : Pangolin
-    retire l'en-tête ``Cookie`` des requêtes qu'il relaie au conteneur. Le
-    serveur ne verrait jamais la préférence. Elle est donc rangée en base, sous
-    la clé d'identité que Pangolin transmet, elle.
+    Un témoin de session existe (voir ``main.py``, ``SessionMiddleware``),
+    mais il expire (``SESSION_MAX_AGE_SECONDS``, 12 h par défaut) et est
+    propre à un appareil. La langue, elle, doit survivre à une reconnexion et
+    suivre l'usager d'un appareil à l'autre : elle est donc rangée en base,
+    sous la clé d'identité de l'usager, indépendamment de tout témoin.
 
     La clé est l'identifiant normalisé en minuscules (voir
     ``Principal.owner_key``) : le fournisseur d'identité peut renvoyer une casse

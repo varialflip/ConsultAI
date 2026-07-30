@@ -2389,7 +2389,9 @@
       if (!response.ok) {
         report.manifeste = `HTTP ${response.status}`;
       } else if (type.includes('html')) {
-        // Cas typique : Pangolin renvoie sa page de connexion.
+        // Cas typique : le proxy authentifie encore cette ressource (sa
+        // propre authentification devrait être désactivée ici — README §4)
+        // et renvoie sa page de connexion au lieu du manifeste.
         report.manifeste = T('pwa.state_sso');
       } else {
         await response.clone().json();
@@ -3396,9 +3398,10 @@
   /* =========================================================================
    * 8 quater. IDENTITÉ ET DÉCONNEXION
    * ======================================================================
-   * Deux sessions à clore : Pangolin et le fournisseur OIDC. Pangolin ne
-   * propage pas la déconnexion OIDC quand il ferme la sienne, il faut donc
-   * s'adresser aux deux — et dans cet ordre, la seconde étape quittant la page.
+   * Une seule route serveur, /auth/logout (main.auth_logout) : elle ferme la
+   * session locale PUIS redirige vers le point de déconnexion OIDC du
+   * fournisseur (RP-initiated logout). Le client n'a rien d'autre à faire
+   * qu'y naviguer.
    * ====================================================================== */
 
   function toggleIdentityMenu(force) {
@@ -3419,15 +3422,9 @@
   /**
    * Déconnexion.
    *
-   * Deux sessions, et une seule que l'application puisse clore.
-   *
-   * Pangolin refuse tout POST dépourvu de jeton CSRF — vérifié : 403 « CSRF
-   * token missing or invalid », y compris sur une route inexistante, donc le
-   * contrôle précède le routage. Ce jeton n'existe que dans les pages servies
-   * par Pangolin lui-même : aucune requête venue de ConsultAI ne peut
-   * l'obtenir, et c'est exactement ce que cette protection est faite
-   * d'empêcher. On n'essaie donc pas de la contourner — on renvoie l'usager
-   * chez Pangolin, par un lien qu'il voit.
+   * Une navigation de premier niveau (pas un fetch) : /auth/logout se termine
+   * par une redirection 302 vers le fournisseur OIDC, que seule une vraie
+   * navigation du navigateur peut suivre jusqu'au bout.
    */
   async function logout() {
     if (state.recording) {
@@ -3445,9 +3442,9 @@
    * Choix de la langue
    * ----------------------------------------------------------------------
    * Préférence personnelle, enregistrée côté serveur sous l'identité
-   * authentifiée. Elle ne peut pas passer par un témoin de session : Pangolin
-   * retire l'en-tête « Cookie » des requêtes qu'il relaie, le serveur ne le
-   * verrait jamais.
+   * authentifiée plutôt que dans le témoin de session : elle doit survivre à
+   * l'expiration du témoin et suivre l'usager d'un appareil à l'autre (voir
+   * database.UserPreference).
    *
    * Le rechargement est nécessaire et non un raccourci : toute l'interface est
    * rendue par le serveur avec le catalogue de la langue courante, et les
@@ -3588,8 +3585,6 @@
       toggleIdentityMenu();
     });
     $('btnLogout').addEventListener('click', logout);
-    // Le lien Pangolin s'ouvre dans un onglet distinct : la session de
-    // ConsultAI reste utilisable pendant qu'on ferme celle du proxy.
     // Un clic ailleurs referme le menu ; le clic sur le menu lui-même ne doit
     // pas remonter jusque-là, sinon toute interaction le fermerait.
     $('identityMenu').addEventListener('click', (event) => event.stopPropagation());

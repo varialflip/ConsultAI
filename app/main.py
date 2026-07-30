@@ -7,7 +7,7 @@ Routes
   Public (non authentifié) :
     GET    /healthz                      sonde de santé Docker
 
-  Protégé par Pangolin SSO :
+  Protégé (authentification OIDC, voir app/auth.py) :
     GET    /                             interface web
     GET    /api/me                       identité de l'utilisateur courant
     PUT    /api/me/language              langue de l'utilisateur courant
@@ -262,8 +262,8 @@ def _template_translator(language: str):
 # ---------------------------------------------------------------------------
 # Déclaré AVANT le montage de /static : Starlette parcourt les routes dans
 # l'ordre d'enregistrement, et le montage attraperait sinon cette adresse. Le
-# chemin ne change pas, ce qui évite de retoucher la liste des ressources
-# publiques de Pangolin.
+# chemin ne change pas, ce qui évite de retoucher la liste des chemins publics
+# d'AuthMiddleware (public_paths, plus haut).
 @app.get("/static/manifest.webmanifest", include_in_schema=False)
 async def web_manifest() -> JSONResponse:
     langue = runtime_config.language()

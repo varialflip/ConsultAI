@@ -1172,22 +1172,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "The audio file for this recording is no longer on disk.",
     ),
 
-    # --- Refus d'accès ------------------------------------------------------
-    # Ces messages nomment des réglages du .env (AUTHORIZED_USERS) : les noms de
-    # variables ne se traduisent pas, c'est ce qu'il faut aller chercher dans le
-    # fichier.
-    "denied.no_identity": (
-        "Accès refusé : aucune identité transmise par le SSO. En-têtes "
-        "attendus : {headers}.",
-        "Access denied: no identity passed by the SSO. Expected headers: "
-        "{headers}.",
-    ),
-    "denied.not_authorized": (
-        "Accès refusé : le compte « {username} » ne figure pas dans "
-        "AUTHORIZED_USERS. Contactez l'administrateur.",
-        "Access denied: the account “{username}” is not listed in "
-        "AUTHORIZED_USERS. Contact your administrator.",
-    ),
     "err.group_system": (
         "Ce groupe est livré avec l'application et ne peut pas être supprimé.",
         "This group ships with the application and cannot be deleted.",

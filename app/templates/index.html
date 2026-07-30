@@ -9,13 +9,16 @@
   <title>{{ app_title }}</title>
 
   <!-- ================== Application web progressive (PWA) ================== -->
-  <!-- crossorigin="use-credentials" est INDISPENSABLE derrière un SSO.
+  <!-- crossorigin="use-credentials" est un filet de sécurité si le proxy
+       placé devant l'application authentifie encore cette ressource (ce
+       qu'il ne devrait pas faire — voir README §4 : sa propre
+       authentification doit être désactivée ici, /static/manifest.webmanifest
+       est déjà public côté application, voir AuthMiddleware.public_paths).
        Sans cet attribut, le navigateur récupère le manifeste en omettant les
-       cookies : Pangolin ne voit pas de session, répond par une redirection
-       vers sa page de connexion, et le navigateur conclut qu'il n'y a pas de
-       manifeste — l'option « Installer » n'apparaît jamais, sans message
-       d'erreur. Rendre la ressource publique côté application ne suffit pas,
-       puisque la requête est interceptée avant d'y parvenir. -->
+       cookies : un proxy qui authentifie ne voit pas de session, répond par
+       une redirection vers sa page de connexion, et le navigateur conclut
+       qu'il n'y a pas de manifeste — l'option « Installer » n'apparaît
+       jamais, sans message d'erreur. -->
   <link rel="manifest" href="/static/manifest.webmanifest" crossorigin="use-credentials">
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="{{ t('app.description') }}">
@@ -231,10 +234,9 @@
       </button>
 
       <!-- Identité et déconnexion.
-           Deux sessions à clore : celle de Pangolin et celle du fournisseur
-           OIDC, Pangolin ne propageant pas la seconde quand il ferme la
-           première. La partie Pangolin passe par le serveur — voir
-           main.api_logout pour la raison. -->
+           Une seule route serveur, /auth/logout (voir main.auth_logout) :
+           elle ferme la session locale puis redirige vers le point de
+           déconnexion OIDC du fournisseur. -->
       <div class="relative shrink-0 ml-0.5">
         <button id="btnIdentity" type="button" title="{{ user.label }}"
                 aria-haspopup="true" aria-expanded="false"

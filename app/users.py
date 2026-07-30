@@ -214,16 +214,29 @@ def link_or_create(
             logger.info(
                 "Compte « %s » rattaché à l'identité du fournisseur", user.username
             )
-        # On complète ce qui manque, sans écraser ce que l'administrateur a
-        # éventuellement corrigé à la main.
         if email and not user.email:
             user.email = email
-        if display_name and not user.display_name:
+
+        # NOM AFFICHÉ ET AVATAR : LE FOURNISSEUR FAIT FOI.
+        #
+        # Ils sont écrasés à chaque connexion dès que le fournisseur envoie une
+        # valeur. C'était l'inverse au départ — « ne remplir que si vide » — pour
+        # préserver une correction manuelle, et c'était un défaut : un compte
+        # amorcé depuis les anciennes consultations reçoit son nom d'usager comme
+        # nom affiché, ce qui n'est pas une correction manuelle mais un
+        # bouche-trou. Le vrai nom envoyé par le fournisseur était donc jeté
+        # indéfiniment.
+        #
+        # Quand le fournisseur n'envoie RIEN, la valeur en place est conservée :
+        # une saisie faite depuis la gestion des comptes survit donc pour un
+        # compte dépourvu de la revendication.
+        if display_name and user.display_name != display_name:
+            logger.info(
+                "Nom affiché de %s : %r -> %r (source : fournisseur)",
+                user.username, user.display_name, display_name,
+            )
             user.display_name = display_name
-        # L'avatar, lui, est RAFRAÎCHI à chaque connexion : il n'est pas modifiable
-        # dans l'application, et une photo changée chez le fournisseur doit
-        # suivre. Le retrait de la revendication vide donc le champ.
-        if user.avatar_url != avatar_url:
+        if avatar_url != user.avatar_url:
             user.avatar_url = avatar_url
         # Un compte amorcé sans groupe entrerait sans aucun droit.
         if not groups_of(db, user.id):

@@ -1037,7 +1037,11 @@ def _adopt_legacy_owners(db: Session) -> int:
         # Le courriel deviné ne l'est que s'il diffère du nom d'usager : si les
         # deux sont identiques, il n'y a rien à deviner.
         courriel = courriel_unique if courriel_unique and courriel_unique != nom else ""
-        user = User(username=nom, email=courriel, display_name=nom)
+        # display_name volontairement VIDE : le recopier depuis le nom d'usager
+        # en ferait un bouche-trou que la première connexion prendrait pour une
+        # valeur voulue. L'affichage retombe de lui-même sur le nom d'usager
+        # tant que le fournisseur n'a rien envoyé.
+        user = User(username=nom, email=courriel, display_name="")
         db.add(user)
         db.flush()
         if admin is not None and premier_compte and index == 0:

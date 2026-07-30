@@ -607,6 +607,16 @@ async def auth_callback(request: Request):
         "Connexion de « %s » (groupes : %s)",
         user.username, ", ".join(g.name for g in groupes) or "aucun",
     )
+    # Quelles revendications le fournisseur a réellement envoyées. Les NOMS
+    # seulement, pas les valeurs : c'est ce qu'il faut pour régler les deux
+    # réglages de revendication, et cela évite de recopier des données
+    # personnelles dans les journaux du conteneur.
+    logger.info(
+        "Revendications reçues : %s | nom retenu : %s | avatar : %s",
+        ", ".join(sorted(claims)) or "aucune",
+        "oui" if nom_affiche else "non",
+        "oui" if avatar else "non",
+    )
 
     suite = oidc.safe_next_path(request.session.pop("consultai_next", "/"))
     return RedirectResponse(suite, status_code=302)

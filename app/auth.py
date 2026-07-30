@@ -37,7 +37,6 @@ d'effet qu'à l'expiration de son témoin, soit jusqu'à douze heures plus tard.
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import re
 from dataclasses import dataclass
@@ -172,38 +171,6 @@ class Principal:
 # ---------------------------------------------------------------------------
 # Vérifications
 # ---------------------------------------------------------------------------
-def get_peer_ip(request: Request) -> Optional[str]:
-    """IP réellement connectée au socket (et non une valeur d'en-tête)."""
-    if request.client is None:
-        return None
-    return request.client.host
-
-
-def is_trusted_peer(ip: Optional[str], networks: Optional[Sequence] = None) -> bool:
-    """L'IP appartient-elle à l'une des plages de confiance ?"""
-    if ip is None:
-        return False
-    nets = settings.trusted_proxies if networks is None else networks
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
-        logger.warning("Adresse IP paire illisible : %r", ip)
-        return False
-
-    for net in nets:
-        # Une IPv4 ne peut pas être comparée à un réseau IPv6. Docker présente
-        # parfois les adresses sous forme mappée (::ffff:172.18.0.5) : on les
-        # ramène alors à leur équivalent IPv4 avant comparaison.
-        if addr.version != net.version:
-            if addr.version == 6 and getattr(addr, "ipv4_mapped", None) is not None:
-                if addr.ipv4_mapped in net:
-                    return True
-            continue
-        if addr in net:
-            return True
-    return False
-
-
 def _header(request: Request, name: str) -> str:
     if not name:
         return ""
@@ -457,7 +424,7 @@ class AuthMiddleware:
                     lang=langue,
                     title=i18n.t("denied.title", langue),
                     heading=i18n.t("denied.heading", langue),
-                    footer=i18n.t("denied.footer", langue),
+                    footer=i18n.t("denied.footer", langue, sso=settings.sso_label),
                     detail=exc.detail,
                 ),
                 status_code=exc.status_code,

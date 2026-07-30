@@ -691,7 +691,7 @@ def _auth_error_page(message: str, status_code: int = 400) -> HTMLResponse:
             lang=langue,
             title=i18n.t("auth.error_title", langue),
             heading=i18n.t("auth.error_title", langue),
-            footer=i18n.t("denied.footer", langue),
+            footer=i18n.t("denied.footer", langue, sso=settings.sso_label),
             detail=corps,
         ),
         status_code=status_code,

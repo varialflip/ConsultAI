@@ -378,12 +378,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 
     # --- Dictée : micro et erreurs matérielles -----------------------------
     "mic.insecure": (
-        "Le micro n'est pas accessible. L'application doit être servie en "
-        "HTTPS (c'est le cas via Pangolin) pour que le navigateur autorise "
-        "l'enregistrement.",
-        "The microphone is not available. The application must be served over "
-        "HTTPS (which it is through Pangolin) for the browser to allow "
-        "recording.",
+        "Le micro n'est pas accessible. Le navigateur ne l'autorise que sur une "
+        "page servie en HTTPS : ouvrez l'application par son adresse publique, "
+        "et non par l'adresse locale du serveur.",
+        "The microphone is not available. Browsers only allow it on a page "
+        "served over HTTPS: open the application through its public address, "
+        "not the server's local address.",
     ),
     "mic.denied": (
         "Accès au micro refusé. Autorisez le microphone dans les réglages du "
@@ -1055,9 +1055,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "pwa.insecure": (
         "L'installation est impossible en {protocol} : une PWA exige HTTPS. "
-        "Passez par l'adresse Pangolin plutôt que par l'IP du NAS.",
+        "Passez par l'adresse publique de l'application plutôt que par l'IP du "
+        "serveur.",
         "Installation is not possible over {protocol}: a PWA requires HTTPS. "
-        "Use the Pangolin address rather than the NAS IP.",
+        "Use the application's public address rather than the server's IP.",
     ),
     # États du diagnostic d'installation. Le rapport complet est un outil de
     # développeur (console), mais cet état-ci ressort dans une notification
@@ -1069,12 +1070,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "pwa.state_unreadable": ("illisible ({error})", "unreadable ({error})"),
     "pwa.manifest_blocked": (
-        "Manifeste inaccessible ({state}). Autorisez "
-        "/static/manifest.webmanifest, /sw.js et /static/icons/ sans "
-        "authentification dans Pangolin.",
-        "Manifest unreachable ({state}). Allow "
-        "/static/manifest.webmanifest, /sw.js and /static/icons/ without "
-        "authentication in Pangolin.",
+        "Manifeste inaccessible ({state}). Ces ressources sont pourtant "
+        "publiques dans l'application : c'est donc le reverse proxy qui les "
+        "intercepte. Il doit laisser passer /static/manifest.webmanifest, "
+        "/sw.js et /static/icons/ sans authentifier.",
+        "Manifest unreachable ({state}). These resources are public within the "
+        "application, so the reverse proxy is intercepting them. It must let "
+        "/static/manifest.webmanifest, /sw.js and /static/icons/ through "
+        "without authenticating.",
     ),
 
     # --- Messages du serveur ------------------------------------------------
@@ -1115,15 +1118,9 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
 
     # --- Refus d'accès ------------------------------------------------------
-    # Ces messages nomment des réglages du .env (TRUSTED_PROXIES,
-    # AUTHORIZED_USERS) : les noms de variables ne se traduisent pas, c'est ce
-    # qu'il faut aller chercher dans le fichier.
-    "denied.proxy": (
-        "Accès refusé : requête reçue en dehors du proxy de confiance. "
-        "Passez par Pangolin ou ajustez TRUSTED_PROXIES.",
-        "Access denied: request received outside the trusted proxy. Go through "
-        "Pangolin or adjust TRUSTED_PROXIES.",
-    ),
+    # Ces messages nomment des réglages du .env (AUTHORIZED_USERS) : les noms de
+    # variables ne se traduisent pas, c'est ce qu'il faut aller chercher dans le
+    # fichier.
     "denied.no_identity": (
         "Accès refusé : aucune identité transmise par le SSO. En-têtes "
         "attendus : {headers}.",
@@ -1198,8 +1195,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "denied.title": ("Accès refusé", "Access denied"),
     "denied.heading": ("403 — Accès refusé", "403 — Access denied"),
     "denied.footer": (
-        "ConsultAI — accès contrôlé par Pangolin SSO.",
-        "ConsultAI — access controlled by Pangolin SSO.",
+        "ConsultAI — accès contrôlé par {sso}.",
+        "ConsultAI — access controlled by {sso}.",
     ),
 }
 

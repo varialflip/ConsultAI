@@ -111,6 +111,12 @@ class Settings:
     oidc_name_claim: str = "name"
     oidc_picture_claim: str = "picture"
 
+    #: Nom du fournisseur d'identité tel qu'il apparaît à l'écran (pages
+    #: d'erreur). Configurable plutôt que codé en dur : l'application doit
+    #: pouvoir être redéployée derrière un autre fournisseur sans qu'un nom
+    #: propre traîne dans son catalogue de traductions.
+    sso_display_name: str = ""
+
     #: Clé de signature du témoin de session. **Doit être fixée** : sans elle,
     #: une clé aléatoire est tirée au démarrage et tout le monde est déconnecté
     #: à chaque redémarrage du conteneur.
@@ -239,6 +245,23 @@ class Settings:
         return {u.lower() for u in self.template_admins}
 
     @property
+    def sso_label(self) -> str:
+        """
+        Nom du fournisseur à afficher.
+
+        À défaut de ``SSO_DISPLAY_NAME``, on montre l'hôte du fournisseur OIDC :
+        moins élégant, mais toujours exact et jamais vide, alors qu'un libellé
+        générique n'aiderait personne à savoir où il vient de se faire refuser.
+        """
+        if self.sso_display_name:
+            return self.sso_display_name
+        if self.oidc_provider_url:
+            from urllib.parse import urlparse
+
+            return urlparse(self.oidc_provider_url).netloc or self.oidc_provider_url
+        return "OIDC"
+
+    @property
     def oidc_configured(self) -> bool:
         """Y a-t-il de quoi lancer un flux OIDC ?"""
         return bool(
@@ -310,6 +333,7 @@ class Settings:
             oidc_groups_claim=_env("OIDC_GROUPS_CLAIM", "groups"),
             oidc_name_claim=_env("OIDC_NAME_CLAIM", "name"),
             oidc_picture_claim=_env("OIDC_PICTURE_CLAIM", "picture"),
+            sso_display_name=_env("SSO_DISPLAY_NAME"),
 
             session_secret=_env("SESSION_SECRET"),
             session_max_age_seconds=_env_int("SESSION_MAX_AGE_SECONDS", 60 * 60 * 12),

@@ -76,6 +76,7 @@ services:
       BASE_URL: "${BASE_URL:-}"
       OIDC_SCOPES: "${OIDC_SCOPES:-openid,profile,email,groups}"
       OIDC_GROUPS_CLAIM: "${OIDC_GROUPS_CLAIM:-groups}"
+      SSO_DISPLAY_NAME: "${SSO_DISPLAY_NAME:-}"
       SESSION_SECRET: "${SESSION_SECRET:-}"
       SESSION_MAX_AGE_SECONDS: "${SESSION_MAX_AGE_SECONDS:-43200}"
       SESSION_HTTPS_ONLY: "${SESSION_HTTPS_ONLY:-true}"

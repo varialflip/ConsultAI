@@ -725,6 +725,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "admin.save": ("Enregistrer", "Save"),
     "admin.list_models": ("Modèles disponibles", "Available models"),
+    "admin.show_all_providers": (
+        "Afficher les champs des fournisseurs non sélectionnés",
+        "Show fields for providers that are not selected",
+    ),
     "admin.from_panel": ("panneau", "panel"),
     "admin.from_env": (".env", ".env"),
     "admin.secret_configured": (

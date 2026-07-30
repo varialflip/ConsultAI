@@ -2547,6 +2547,7 @@
     groups: [],
     tabs: [],
     tab: null,          // onglet visible ; null = le premier
+    showAllProviders: false,   // dévoile les champs des fournisseurs non retenus
     people: null,       // réponse de /api/admin/users, chargée à la demande
   };
 
@@ -2671,7 +2672,18 @@
   function isFieldRelevant(field) {
     const regle = PROVIDER_ONLY[field.key];
     if (!regle) return true;
-    return adminValueOf(regle.key) === regle.value;
+    // Le fournisseur retenu, toujours.
+    if (adminValueOf(regle.key) === regle.value) return true;
+    // La bascule « tout afficher » : indispensable pour SAISIR une clé.
+    //
+    // Sans elle, le masquage créait un cercle : le champ d'une clé n'était à
+    // l'écran que si le fournisseur était déjà sélectionné, mais on ne pouvait
+    // pas le sélectionner utilement sans clé. Il fallait donc basculer la
+    // dictée réelle vers un service dépourvu de clé pour pouvoir en saisir une.
+    if (adminState.showAllProviders) return true;
+    // Une clé déjà enregistrée reste visible : on doit pouvoir la remplacer ou
+    // l'effacer sans changer de fournisseur pour autant.
+    return Boolean(field.configured);
   }
 
   function renderAdminFields(groups) {
@@ -2693,6 +2705,18 @@
         .filter((field) => field.group === group.key)
         .filter(isFieldRelevant);
       if (!fields.length) return '';
+      // La bascule n'apparaît que dans les groupes où quelque chose est
+      // effectivement masqué : ailleurs, elle n'aurait aucun effet visible.
+      const masques = adminState.fields.filter(
+        (f) => f.group === group.key && PROVIDER_ONLY[f.key] && !isFieldRelevant(f),
+      ).length;
+      const bascule = (masques || adminState.showAllProviders)
+        ? `<label class="flex items-center gap-2 text-[11px] text-slate-500">
+             <input type="checkbox" id="admShowAll" ${adminState.showAllProviders ? 'checked' : ''}
+                    class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
+             ${esc(T('admin.show_all_providers'))}</label>`
+        : '';
+
       const avertissements = PROVIDER_WARNINGS
         .filter((a) => a.group === group.key && adminValueOf(a.key) === a.value)
         .flatMap((a) => a.messages)
@@ -2704,6 +2728,7 @@
       return `<section data-group-index="${index}" class="space-y-3">
         <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
           ${esc(group.label)}</h3>
+        ${bascule}
         ${avertissements}
         ${fields.map(adminFieldMarkup).join('')}
       </section>`;
@@ -2735,6 +2760,17 @@
         $('adminStatus').textContent = T('admin.unsaved');
       });
     });
+
+    // La bascule reconstruit la liste sans rien enregistrer : elle ne change
+    // que ce qui est à l'écran.
+    const toutAfficher = container.querySelector('#admShowAll');
+    if (toutAfficher) {
+      toutAfficher.addEventListener('change', () => {
+        adminState.showAllProviders = toutAfficher.checked;
+        renderAdminFields(adminState.groups);
+        showAdminTab(adminState.tab);
+      });
+    }
 
     renderAdminTabs();
     showAdminTab(adminState.tab);

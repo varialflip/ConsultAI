@@ -2926,8 +2926,10 @@
       <li class="rounded-lg border border-slate-200 p-3 flex items-center gap-2 flex-wrap">
         <span class="font-medium text-sm text-slate-800">${esc(groupe.name)}</span>
         ${permissionBadges(groupe)}
-        ${groupe.is_system ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${
-          esc(T('people.system_group'))}</span>` : ''}
+        <!-- Pas d'étiquette pour les groupes livrés : ce qu'elle apprenait —
+             « non supprimable » — se voit déjà à l'absence du bouton Supprimer
+             sur la ligne. Une pastille de plus n'informait de rien et
+             encombrait une ligne déjà chargée. -->
         <span class="text-[11px] text-slate-500">${esc(T('people.members', { count: groupe.member_count }))}</span>
         <span class="text-[11px] text-slate-400 truncate max-w-full">${esc(groupe.description || '')}</span>
         <span class="ml-auto flex items-center gap-3">

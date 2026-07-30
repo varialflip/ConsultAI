@@ -176,14 +176,9 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Could not change the language: {error}",
     ),
     "identity.logout": ("Se déconnecter", "Sign out"),
-    "identity.pangolin_logout": ("Fermer la session Pangolin", "Close the Pangolin session"),
     "identity.logout_busy": (
         "Terminez ou arrêtez la dictée en cours avant de vous déconnecter.",
         "Finish or stop the current dictation before signing out.",
-    ),
-    "identity.logout_unconfigured": (
-        "LOGOUT_OIDC_URL n'est pas configurée : aucune déconnexion possible.",
-        "LOGOUT_OIDC_URL is not configured: signing out is not possible.",
     ),
     "identity.logout_progress": (
         "Déconnexion du fournisseur d'identité…",
@@ -691,7 +686,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "people.disabled": ("Désactivé", "Disabled"),
     "people.deactivate": ("Désactiver", "Deactivate"),
     "people.reactivate": ("Réactiver", "Reactivate"),
-    "people.groups_of": ("Groupes", "Groups"),
     "people.saved": ("Compte mis à jour.", "Account updated."),
     "people.no_users": (
         "Aucun compte. Le premier usager qui se connectera deviendra "
@@ -706,7 +700,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "people.perm_admin": ("Administration", "Administration"),
     "people.perm_templates": ("Gabarits", "Templates"),
-    "people.system_group": ("livré", "built-in"),
     "people.members": ("{count} membre(s)", "{count} member(s)"),
     "people.new_group": ("Nouveau groupe", "New group"),
     "people.group_name_ph": ("nom-du-groupe", "group-name"),

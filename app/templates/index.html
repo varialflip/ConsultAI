@@ -505,7 +505,7 @@
 
     <!-- PANNEAU : transcription brute -->
     <section id="paneDictee" data-pane="dictee"
-             class="flex-1 min-h-0 bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
+             class="flex-1 min-h-0 bg-white lg:rounded-xl lg:overflow-hidden lg:border border-slate-200 lg:shadow-sm flex flex-col">
       <!-- items-end, et non items-center : les deux en-têtes partagent la même
            rangée (subgrid plus haut), et l'œil compare les DEUX rangées de
            boutons. C'est donc leur ligne du bas qui doit concorder, pas le
@@ -542,7 +542,7 @@
 
     <!-- PANNEAU : note structurée -->
     <section id="paneNote" data-pane="note"
-             class="max-lg:hidden flex-1 min-h-0 bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
+             class="max-lg:hidden flex-1 min-h-0 bg-white lg:rounded-xl lg:overflow-hidden lg:border border-slate-200 lg:shadow-sm flex flex-col">
       <!-- Pas de flex-wrap : « Chargé — … » et « note gemini-3.6-flash »
            n'apparaissent qu'un brouillon ouvert, et leur largeur renvoyait
            tout le bloc de boutons à la ligne. Ils se compriment maintenant

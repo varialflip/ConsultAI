@@ -2547,7 +2547,15 @@
     groups: [],
     tabs: [],
     tab: null,          // onglet visible ; null = le premier
-    showAllProviders: false,   // dévoile les champs des fournisseurs non retenus
+    //: Valeurs saisies mais pas encore enregistrées, par clé de réglage.
+    //
+    // INDISPENSABLE depuis l'arrivée des sous-menus : naviguer d'un service à
+    // l'autre reconstruit les champs, donc retire du DOM ceux qu'on vient de
+    // remplir. Lire les valeurs dans le DOM au moment d'enregistrer, comme
+    // avant, perdait silencieusement une clé saisie sous un autre sous-onglet.
+    values: {},
+    //: Sous-onglet visible, par groupe : { 'group.stt': 'soniox', … }
+    subTab: {},
     people: null,       // réponse de /api/admin/users, chargée à la demande
   };
 
@@ -2646,6 +2654,20 @@
   };
 
   /**
+   * Groupes présentés par SERVICE, avec un sous-menu.
+   *
+   * Le sous-menu remplace la liste déroulante de sélection : on choisit un
+   * service en cliquant son onglet, et l'on voit sous celui-ci tout ce qui le
+   * concerne. Les réglages qui s'appliquent à TOUS les services — le retrait
+   * des pauses, le modèle, la température — sont répétés sous chaque service :
+   * c'est délibéré, on règle un service d'un seul endroit.
+   */
+  const PROVIDER_GROUPS = {
+    'group.stt': 'stt_provider',
+    'group.llm': 'llm_provider',
+  };
+
+  /**
    * Avertissements affichés en tête d'un groupe, selon la valeur d'un réglage.
    *
    * Cohere plafonne à 5 requêtes/minute : c'est une contrainte qui décide de
@@ -2661,35 +2683,123 @@
     },
   ];
 
-  /** Valeur courante d'un réglage : celle à l'écran si le champ est rendu. */
+  /**
+   * Valeur courante d'un réglage.
+   *
+   * Ordre : ce qui a été saisi (même sous un autre sous-onglet), puis ce qui est
+   * à l'écran, puis ce que le serveur a renvoyé.
+   */
   function adminValueOf(key) {
+    if (Object.prototype.hasOwnProperty.call(adminState.values, key)) {
+      return adminState.values[key];
+    }
     const element = $('adminFields').querySelector(`[data-key="${key}"]`);
     if (element) return element.value;
     const field = adminState.fields.find((f) => f.key === key);
     return field ? (field.value || '') : '';
   }
 
-  function isFieldRelevant(field) {
-    const regle = PROVIDER_ONLY[field.key];
-    if (!regle) return true;
-    // Le fournisseur retenu, toujours.
-    if (adminValueOf(regle.key) === regle.value) return true;
-    // La bascule « tout afficher » : indispensable pour SAISIR une clé.
-    //
-    // Sans elle, le masquage créait un cercle : le champ d'une clé n'était à
-    // l'écran que si le fournisseur était déjà sélectionné, mais on ne pouvait
-    // pas le sélectionner utilement sans clé. Il fallait donc basculer la
-    // dictée réelle vers un service dépourvu de clé pour pouvoir en saisir une.
-    if (adminState.showAllProviders) return true;
-    // Une clé déjà enregistrée reste visible : on doit pouvoir la remplacer ou
-    // l'effacer sans changer de fournisseur pour autant.
-    return Boolean(field.configured);
+
+  /** Le service affiché pour ce groupe : celui qu'on visite, sinon l'actif. */
+  function currentProvider(groupKey) {
+    const cle = PROVIDER_GROUPS[groupKey];
+    return adminState.subTab[groupKey] || adminValueOf(cle);
+  }
+
+  /** Les services offerts, tels que le serveur les déclare. */
+  function providerChoices(groupKey) {
+    const champ = adminState.fields.find((f) => f.key === PROVIDER_GROUPS[groupKey]);
+    return (champ && champ.choices) || [];
+  }
+
+  /**
+   * Répartit les champs d'un groupe : propres au service affiché, puis communs.
+   *
+   * La répartition est DÉDUITE de PROVIDER_ONLY, déjà nécessaire par ailleurs :
+   * un champ sans règle s'applique à tous les services, un champ avec règle
+   * n'appartient qu'au sien. Le sélecteur de service lui-même n'est pas rendu —
+   * le sous-menu le remplace.
+   */
+  function partitionFields(groupKey, provider) {
+    const selecteur = PROVIDER_GROUPS[groupKey];
+    const propres = [];
+    const communs = [];
+    adminState.fields.forEach((field) => {
+      if (field.group !== groupKey || field.key === selecteur) return;
+      const regle = PROVIDER_ONLY[field.key];
+      if (!regle) communs.push(field);
+      else if (regle.key === selecteur && regle.value === provider) propres.push(field);
+    });
+    return { propres, communs };
+  }
+
+  function providerSubMenu(groupKey) {
+    const actif = adminValueOf(PROVIDER_GROUPS[groupKey]);
+    const enregistre = (adminState.fields.find(
+      (f) => f.key === PROVIDER_GROUPS[groupKey],
+    ) || {}).value;
+    const vu = currentProvider(groupKey);
+
+    const boutons = providerChoices(groupKey).map((choix, index) => {
+      const estVu = choix.value === vu;
+      return `<button type="button" data-subtab="${index}"
+                class="shrink-0 px-3 py-1.5 rounded-lg text-xs border transition ${
+                  estVu
+                    ? 'bg-white border-slate-300 text-slate-800 font-medium shadow-sm'
+                    : 'bg-transparent border-transparent text-slate-500 hover:text-slate-700'}">
+                ${esc(choix.label)}${choix.value === enregistre
+                  ? '<span class="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-teal-600"'
+                    + ` title="${esc(T('admin.provider_active'))}"></span>`
+                  : ''}</button>`;
+    }).join('');
+
+    return `<div class="flex gap-1 overflow-x-auto thin-scroll rounded-lg bg-slate-100 p-1">
+              ${boutons}</div>`;
+  }
+
+  /** Bandeau d'état du service affiché : actif, en attente, ou à activer. */
+  function providerStatus(groupKey) {
+    const cle = PROVIDER_GROUPS[groupKey];
+    const vu = currentProvider(groupKey);
+    const enregistre = (adminState.fields.find((f) => f.key === cle) || {}).value;
+    const stage = adminValueOf(cle);
+    const libelle = (providerChoices(groupKey).find((c) => c.value === vu) || {}).label || vu;
+
+    // Une clé absente est la première cause de « ça ne marche pas » après un
+    // changement de service : on le dit ici plutôt que de laisser découvrir
+    // l'échec à la première dictée.
+    const champClef = adminState.fields.find(
+      (f) => f.kind === 'secret' && (PROVIDER_ONLY[f.key] || {}).value === vu,
+    );
+    const sansClef = champClef && !champClef.configured
+      && !adminState.values[champClef.key]
+      ? `<p class="text-[11px] text-amber-800 mt-1">${esc(T('admin.provider_no_key'))}</p>`
+      : '';
+
+    if (vu === enregistre && vu === stage) {
+      return `<div class="flex items-center gap-2 text-xs text-teal-800">
+          <span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+          <span class="font-medium">${esc(libelle)}</span>
+          <span class="text-slate-500">— ${esc(T('admin.provider_active'))}</span>
+        </div>${sansClef}`;
+    }
+    if (vu === stage) {
+      return `<div class="flex items-center gap-2 text-xs text-amber-800">
+          <span class="font-medium">${esc(libelle)}</span>
+          <span>— ${esc(T('admin.provider_staged'))}</span>
+        </div>${sansClef}`;
+    }
+    return `<div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs font-medium text-slate-700">${esc(libelle)}</span>
+        <button type="button" data-activate="${esc(vu)}" data-provider-key="${esc(cle)}"
+                class="px-2.5 py-1 rounded-lg bg-teal-700 text-white text-xs font-medium
+                       hover:bg-teal-800 transition">
+          ${esc(T('admin.provider_use'))}</button>
+      </div>${sansClef}`;
   }
 
   function renderAdminFields(groups) {
     const container = $('adminFields');
-    // Le serveur envoie [{key, label}]. Repli : on reconstruit depuis les
-    // champs, qui portent les deux.
     const order = (groups && groups.length)
       ? groups.slice()
       : Array.from(new Set(adminState.fields.map((f) => f.group)))
@@ -2701,23 +2811,46 @@
     adminState.groups = order;
 
     container.innerHTML = '<datalist id="modelOptions"></datalist>' + order.map((group, index) => {
-      const fields = adminState.fields
-        .filter((field) => field.group === group.key)
-        .filter(isFieldRelevant);
-      if (!fields.length) return '';
-      const avertissements = PROVIDER_WARNINGS
-        .filter((a) => a.group === group.key && adminValueOf(a.key) === a.value)
-        .flatMap((a) => a.messages)
-        .map((cle) => `<p class="rounded-lg border border-amber-300 bg-amber-50 p-2.5
-                                 text-[11px] leading-relaxed text-amber-900">
-                         ${esc(T(cle))}</p>`)
-        .join('');
+      const parService = PROVIDER_GROUPS[group.key];
+      let corps;
+
+      if (parService) {
+        const vu = currentProvider(group.key);
+        const { propres, communs } = partitionFields(group.key, vu);
+        // Les avertissements suivent le service CONSULTÉ et non le service
+        // actif : on veut lire les réserves sur Cohere avant de l'activer.
+        const alertes = PROVIDER_WARNINGS
+          .filter((a) => a.group === group.key && a.value === vu)
+          .flatMap((a) => a.messages)
+          .map((c) => `<p class="rounded-lg border border-amber-300 bg-amber-50 p-2.5
+                                 text-[11px] leading-relaxed text-amber-900">${esc(T(c))}</p>`)
+          .join('');
+
+        corps = `
+          ${providerSubMenu(group.key)}
+          <div class="rounded-lg border border-slate-200 p-3 space-y-3">
+            ${providerStatus(group.key)}
+            ${alertes}
+            ${propres.length
+              ? propres.map(adminFieldMarkup).join('')
+              : `<p class="text-[11px] text-slate-500 leading-relaxed">${
+                  T('admin.provider_env_only')}</p>`}
+          </div>
+          ${communs.length ? `<div class="pt-1 space-y-3">
+            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
+              ${esc(T('admin.provider_shared'))}</p>
+            ${communs.map(adminFieldMarkup).join('')}
+          </div>` : ''}`;
+      } else {
+        const fields = adminState.fields.filter((f) => f.group === group.key);
+        if (!fields.length) return '';
+        corps = fields.map(adminFieldMarkup).join('');
+      }
 
       return `<section data-group-index="${index}" class="space-y-3">
         <h3 class="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-1">
           ${esc(group.label)}</h3>
-        ${avertissements}
-        ${fields.map(adminFieldMarkup).join('')}
+        ${corps}
       </section>`;
     }).join('');
 
@@ -2727,29 +2860,40 @@
     container.querySelectorAll('[data-key]').forEach((element) => {
       const mark = () => {
         adminState.dirty.add(element.dataset.key);
+        // Mémorisé dans l'état : la valeur doit survivre à un changement de
+        // sous-onglet, qui reconstruit le DOM.
+        adminState.values[element.dataset.key] = element.value;
         $('adminStatus').textContent = T('admin.unsaved');
       };
       element.addEventListener('input', mark);
       element.addEventListener('change', mark);
     });
 
-    // Changer de fournisseur change ce qui a un sens à l'écran : on reconstruit
-    // en conservant les modifications en attente, que renderAdminFields relit
-    // depuis les champs encore présents.
-    ['llm_provider', 'stt_provider'].forEach((cle) => {
-      const select = container.querySelector(`[data-key="${cle}"]`);
-      if (!select) return;
-      select.addEventListener('change', () => {
-        const field = adminState.fields.find((f) => f.key === cle);
-        if (field) field.value = select.value;
+    // Navigation entre services : aucune écriture, on change ce qu'on regarde.
+    container.querySelectorAll('button[data-subtab]').forEach((bouton) => {
+      const section = bouton.closest('section[data-group-index]');
+      const groupKey = order[Number(section.dataset.groupIndex)].key;
+      bouton.addEventListener('click', () => {
+        const choix = providerChoices(groupKey)[Number(bouton.dataset.subtab)];
+        if (!choix) return;
+        adminState.subTab[groupKey] = choix.value;
         renderAdminFields(adminState.groups);
         showAdminTab(adminState.tab);
-        $('adminStatus').textContent = T('admin.unsaved');
       });
     });
 
-    renderAdminTabs();
-    showAdminTab(adminState.tab);
+    // Activation : c'est un acte EXPLICITE, distinct de la navigation. Sans
+    // cela, simplement consulter un service pour y coller une clé l'aurait mis
+    // en service — le piège exact qu'on cherche à éviter.
+    container.querySelectorAll('button[data-activate]').forEach((bouton) => {
+      bouton.addEventListener('click', () => {
+        adminState.values[bouton.dataset.providerKey] = bouton.dataset.activate;
+        adminState.dirty.add(bouton.dataset.providerKey);
+        $('adminStatus').textContent = T('admin.unsaved');
+        renderAdminFields(adminState.groups);
+        showAdminTab(adminState.tab);
+      });
+    });
 
     // « Effacer » vide le champ ET le marque modifié : à l'enregistrement, une
     // valeur vide supprime la surcharge, et le réglage revient au .env.
@@ -2759,9 +2903,13 @@
         input.value = '';
         input.placeholder = T('admin.secret_will_clear');
         adminState.dirty.add(button.dataset.clear);
+        adminState.values[button.dataset.clear] = '';
         $('adminStatus').textContent = T('admin.unsaved');
       });
     });
+
+    renderAdminTabs();
+    showAdminTab(adminState.tab);
   }
 
   /* -------------------------------------------------------------------------
@@ -2817,32 +2965,15 @@
     const phrase = T(`admin.intro.${tab}`);
     const reglages = adminState.fields.some((f) => f.group === tab);
 
-    // Y a-t-il des champs masqués faute du bon fournisseur, dans CET onglet ?
-    const masques = adminState.fields.some(
-      (f) => f.group === tab && PROVIDER_ONLY[f.key] && !isFieldRelevant(f),
-    );
-    const bascule = (masques || adminState.showAllProviders)
-      ? `<label class="mt-2 flex items-center gap-2 text-[11px] text-slate-600">
-           <input type="checkbox" id="admShowAll" ${adminState.showAllProviders ? 'checked' : ''}
-                  class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
-           ${esc(T('admin.show_all_providers'))}</label>`
-      : '';
-
+    // La bascule « afficher tous les fournisseurs » a disparu : le sous-menu
+    // donne accès aux réglages de CHAQUE service, actif ou non. On peut donc y
+    // coller une clé sans mettre le service en production, ce qui était le
+    // problème que la bascule rustinait.
     boite.innerHTML = `
       <div class="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
         <p class="text-xs text-slate-600 leading-relaxed">${esc(phrase)}</p>
         ${reglages ? `<p class="text-[11px] text-slate-500 mt-1 leading-relaxed">${T('admin.env_note')}</p>` : ''}
-        ${bascule}
       </div>`;
-
-    const toutAfficher = $('admShowAll');
-    if (toutAfficher) {
-      toutAfficher.addEventListener('change', () => {
-        adminState.showAllProviders = toutAfficher.checked;
-        renderAdminFields(adminState.groups);
-        showAdminTab(adminState.tab);
-      });
-    }
   }
 
   function showAdminTab(tab) {
@@ -3151,6 +3282,9 @@
     $('adminStatus').textContent = '';
     // Rechargé à chaque ouverture : les comptes peuvent avoir changé ailleurs.
     adminState.people = null;
+    adminState.dirty = new Set();
+    adminState.values = {};
+    adminState.subTab = {};
     $('adminFields').innerHTML = `<p class="text-sm text-slate-500">${esc(T('admin.loading'))}</p>`;
     try {
       const data = await api('/api/admin/settings');
@@ -3168,8 +3302,14 @@
       $('adminStatus').textContent = T('admin.nothing_to_save');
       return;
     }
+    // Depuis l'état et non depuis le DOM : un champ rempli sous un autre
+    // sous-onglet n'est plus à l'écran, et sa valeur serait perdue.
     const values = {};
     adminState.dirty.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(adminState.values, key)) {
+        values[key] = adminState.values[key];
+        return;
+      }
       const element = $('adminFields').querySelector(`[data-key="${key}"]`);
       if (element) values[key] = element.value;
     });
@@ -3180,6 +3320,7 @@
 
       adminState.fields = result.settings || [];
       adminState.dirty = new Set();
+      adminState.values = {};
       renderAdminFields(result.groups || null);
       $('adminStatus').textContent = T('admin.saved_count', { count: result.changed.length });
       toast(T('admin.applied'), 'success');

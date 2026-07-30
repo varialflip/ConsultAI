@@ -748,9 +748,29 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "admin.save": ("Enregistrer", "Save"),
     "admin.list_models": ("Modèles disponibles", "Available models"),
-    "admin.show_all_providers": (
-        "Afficher les champs des fournisseurs non sélectionnés",
-        "Show fields for providers that are not selected",
+    "admin.provider_active": ("service actif", "active service"),
+    "admin.provider_use": ("Utiliser ce service", "Use this service"),
+    "admin.provider_staged": (
+        "Sera activé à l'enregistrement.",
+        "Will be activated on save.",
+    ),
+    "admin.provider_env_only": (
+        "Ce service n'a aucun réglage dans ce panneau : il se configure dans le "
+        "fichier <code>.env</code> et, pour Google, par le compte de service "
+        "monté dans le conteneur.",
+        "This service has no setting in this panel: it is configured in the "
+        "<code>.env</code> file and, for Google, through the service account "
+        "mounted in the container.",
+    ),
+    "admin.provider_shared": (
+        "Réglages communs à tous les services",
+        "Settings shared by all services",
+    ),
+    "admin.provider_no_key": (
+        "Aucune clé enregistrée pour ce service : il refusera les requêtes tant "
+        "qu'elle n'est pas renseignée.",
+        "No key stored for this service: it will refuse requests until one is "
+        "provided.",
     ),
     "admin.from_panel": ("panneau", "panel"),
     "admin.from_env": (".env", ".env"),

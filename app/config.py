@@ -91,16 +91,47 @@ class Settings:
     log_level: str = "INFO"
     database_url: str = "sqlite:////data/consultai.db"
 
-    # --- Authentification / SSO ---
-    sso_header_key: str = "Remote-User"
-    sso_header_fallbacks: List[str] = field(default_factory=list)
-    sso_email_header: str = "Remote-Email"
-    sso_name_header: str = "Remote-Name"
+    # --- Authentification OIDC ---
+    # L'application authentifie elle-même, par OpenID Connect. Le reverse proxy
+    # n'est plus qu'un relais : il ne décide plus qui entre.
+    oidc_provider_url: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_redirect_uri: str = ""
+    base_url: str = ""
+    oidc_scopes: List[str] = field(default_factory=list)
+    #: Nom de la revendication portant les groupes. Aucune norme ne l'impose :
+    #: Pocket ID et Authentik disent « groups », Keycloak « roles » selon la
+    #: configuration du client.
+    oidc_groups_claim: str = "groups"
+
+    #: Clé de signature du témoin de session. **Doit être fixée** : sans elle,
+    #: une clé aléatoire est tirée au démarrage et tout le monde est déconnecté
+    #: à chaque redémarrage du conteneur.
+    session_secret: str = ""
+    session_max_age_seconds: int = 60 * 60 * 12
+    #: Le témoin n'est émis qu'en HTTPS. À ne passer à false que pour un essai
+    #: local en http://localhost, jamais en production.
+    session_https_only: bool = True
+
+    #: Tout usager authentifié par le fournisseur est-il accepté ?
+    #: Surchargeable depuis le panneau d'administration.
+    allow_signup: bool = False
+
+    #: Reste utilisé au tout premier démarrage : ces comptes sont créés en base
+    #: pour que l'installation ne se retrouve pas sans personne pouvant entrer.
     authorized_users: List[str] = field(default_factory=list)
     template_admins: List[str] = field(default_factory=list)
-    trusted_proxies: List[ipaddress._BaseNetwork] = field(default_factory=list)
+
     auth_disabled: bool = False
     dev_user: str = "dev@local"
+
+    # --- Anciens en-têtes de proxy (obsolètes) ---
+    # Conservés pour la seule journalisation d'un avertissement au démarrage :
+    # une installation qui les a encore renseignés croit être protégée par son
+    # proxy alors que ce n'est plus l'application qui s'y fie.
+    sso_header_key: str = ""
+    trusted_proxies: List[ipaddress._BaseNetwork] = field(default_factory=list)
 
     # --- Speech-to-Text ---
     google_credentials: str = ""
@@ -197,16 +228,41 @@ class Settings:
         return {u.lower() for u in self.template_admins}
 
     @property
-    def sso_headers_in_order(self) -> List[str]:
-        """En-tête principal suivi des replis, sans doublon."""
-        ordered = [self.sso_header_key, *self.sso_header_fallbacks]
-        seen, result = set(), []
-        for header in ordered:
-            key = header.lower()
-            if header and key not in seen:
-                seen.add(key)
-                result.append(header)
-        return result
+    def oidc_configured(self) -> bool:
+        """Y a-t-il de quoi lancer un flux OIDC ?"""
+        return bool(
+            self.oidc_provider_url and self.oidc_client_id and self.oidc_client_secret
+        )
+
+    @property
+    def oidc_scopes_effective(self) -> List[str]:
+        """
+        Portées demandées, « openid » garantie présente.
+
+        « openid » n'est pas une portée comme les autres : sans elle le
+        fournisseur exécute un flux OAuth2 ordinaire et ne renvoie aucun
+        jeton d'identité. L'oublier dans OIDC_SCOPES donnerait une erreur
+        obscure côté fournisseur ; on la remet donc en tête.
+        """
+        portees = [p for p in self.oidc_scopes if p]
+        if "openid" not in portees:
+            portees.insert(0, "openid")
+        return portees
+
+    @property
+    def effective_redirect_uri(self) -> str:
+        """
+        Adresse de retour du fournisseur.
+
+        Déduite de BASE_URL si OIDC_REDIRECT_URI n'est pas renseignée : les deux
+        doivent concorder, et les laisser saisir séparément est la première
+        source d'erreur « redirect_uri_mismatch ».
+        """
+        if self.oidc_redirect_uri:
+            return self.oidc_redirect_uri
+        if self.base_url:
+            return f"{self.base_url.rstrip('/')}/auth/callback"
+        return ""
 
     @property
     def gemini_use_vertex(self) -> bool:
@@ -234,23 +290,29 @@ class Settings:
             log_level=_env("LOG_LEVEL", "INFO").upper(),
             database_url=_env("DATABASE_URL", "sqlite:////data/consultai.db"),
 
-            sso_header_key=_env("SSO_HEADER_KEY", "Remote-User"),
-            sso_header_fallbacks=_env_list(
-                "SSO_HEADER_FALLBACKS",
-                "X-Forwarded-User,X-Remote-User,X-Authentik-Username",
-            ),
-            sso_email_header=_env("SSO_EMAIL_HEADER", "Remote-Email"),
-            sso_name_header=_env("SSO_NAME_HEADER", "Remote-Name"),
+            oidc_provider_url=_env("OIDC_PROVIDER_URL").rstrip("/"),
+            oidc_client_id=_env("OIDC_CLIENT_ID"),
+            oidc_client_secret=_env("OIDC_CLIENT_SECRET"),
+            oidc_redirect_uri=_env("OIDC_REDIRECT_URI"),
+            base_url=_env("BASE_URL").rstrip("/"),
+            oidc_scopes=_env_list("OIDC_SCOPES", "openid,profile,email,groups"),
+            oidc_groups_claim=_env("OIDC_GROUPS_CLAIM", "groups"),
+
+            session_secret=_env("SESSION_SECRET"),
+            session_max_age_seconds=_env_int("SESSION_MAX_AGE_SECONDS", 60 * 60 * 12),
+            session_https_only=_env_bool("SESSION_HTTPS_ONLY", True),
+
+            allow_signup=_env_bool("ALLOW_SIGNUP", False),
             authorized_users=_env_list("AUTHORIZED_USERS"),
             template_admins=_env_list("TEMPLATE_ADMINS", "*"),
-            trusted_proxies=_parse_networks(
-                _env_list(
-                    "TRUSTED_PROXIES",
-                    "127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",
-                )
-            ),
+
             auth_disabled=_env_bool("AUTH_DISABLED", False),
             dev_user=_env("DEV_USER", "dev@local"),
+
+            # Obsolètes : lues uniquement pour pouvoir avertir qu'elles ne
+            # servent plus (voir warnings()).
+            sso_header_key=_env("SSO_HEADER_KEY"),
+            trusted_proxies=_parse_networks(_env_list("TRUSTED_PROXIES")),
 
             google_credentials=_env("GOOGLE_APPLICATION_CREDENTIALS"),
             # Pas de défaut : vide signifie « suis la langue de l'application ».
@@ -306,19 +368,60 @@ class Settings:
                 "AUTH_DISABLED=true — l'authentification est DÉSACTIVÉE. "
                 "À n'utiliser qu'en développement local."
             )
-        elif not self.authorized_users:
-            problems.append(
-                "AUTHORIZED_USERS est vide — personne ne pourra accéder à l'application."
-            )
-        elif self.allow_all_users:
-            problems.append(
-                "AUTHORIZED_USERS contient « * » — tout utilisateur authentifié "
-                "par Pangolin aura accès aux consultations."
-            )
+        else:
+            if not self.oidc_provider_url:
+                problems.append(
+                    "OIDC_PROVIDER_URL est vide — aucune connexion n'est possible."
+                )
+            if not self.oidc_client_id or not self.oidc_client_secret:
+                problems.append(
+                    "OIDC_CLIENT_ID ou OIDC_CLIENT_SECRET est vide — la connexion "
+                    "échouera à l'échange du code."
+                )
+            if not self.effective_redirect_uri:
+                problems.append(
+                    "Ni OIDC_REDIRECT_URI ni BASE_URL n'est renseignée — impossible "
+                    "de construire l'adresse de retour du fournisseur."
+                )
+            elif not self.effective_redirect_uri.startswith("https://") \
+                    and "localhost" not in self.effective_redirect_uri \
+                    and "127.0.0.1" not in self.effective_redirect_uri:
+                problems.append(
+                    "L'adresse de retour OIDC n'est pas en HTTPS "
+                    f"({self.effective_redirect_uri}) — le fournisseur la refusera "
+                    "et le témoin de session ne serait pas protégé."
+                )
+            if not self.session_secret:
+                problems.append(
+                    "SESSION_SECRET est vide — une clé aléatoire est tirée au "
+                    "démarrage, donc TOUT LE MONDE EST DÉCONNECTÉ à chaque "
+                    "redémarrage du conteneur. Fixez-la."
+                )
+            elif len(self.session_secret) < 32:
+                problems.append(
+                    "SESSION_SECRET fait moins de 32 caractères — trop court pour "
+                    "signer un témoin de session."
+                )
+            if not self.session_https_only:
+                problems.append(
+                    "SESSION_HTTPS_ONLY=false — le témoin de session circulerait "
+                    "en clair. À ne faire qu'en essai local."
+                )
+            if self.allow_signup:
+                problems.append(
+                    "ALLOW_SIGNUP=true — tout compte du fournisseur d'identité est "
+                    "créé et autorisé automatiquement. À ne laisser ainsi que si "
+                    "l'inscription chez le fournisseur est fermée."
+                )
 
-        if not self.trusted_proxies and not self.auth_disabled:
+        # L'application n'authentifie plus par en-têtes : le dire, sinon une
+        # installation migrée croit encore être protégée par son proxy.
+        if self.sso_header_key or self.trusted_proxies:
             problems.append(
-                "TRUSTED_PROXIES est vide — toutes les requêtes seront refusées."
+                "SSO_HEADER_KEY / TRUSTED_PROXIES sont encore renseignées mais ne "
+                "servent plus : l'authentification se fait par OIDC. Le proxy doit "
+                "désormais RELAYER sans authentifier, et ces variables peuvent être "
+                "retirées du .env."
             )
 
         if self.google_credentials and not os.path.exists(self.google_credentials):

@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Iterator
+from typing import Iterator, List, Optional
 
 from sqlalchemy import (
     Boolean,
     DateTime,
+    ForeignKey,
     Integer,
     String,
     Text,
@@ -310,6 +311,115 @@ class AppSetting(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
     updated_by: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+
+
+class Group(Base):
+    """
+    Groupe d'usagers, porteur de permissions.
+
+    Deux groupes sont livrés et ne peuvent être supprimés (``is_system``) :
+
+    * ``admins`` — accès au panneau d'administration et aux gabarits ;
+    * ``users``  — dicter, relire, exporter ses propres consultations.
+
+    Les permissions sont volontairement peu nombreuses. Un modèle de droits fin
+    se paie en écrans de configuration que personne ne relit, et le vrai
+    cloisonnement de cette application est ailleurs : une consultation
+    n'appartient qu'à son auteur, quel que soit son groupe.
+    """
+
+    __tablename__ = "groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    #: Identifiant technique, en minuscules. Sert aussi à la correspondance avec
+    #: les groupes annoncés par le fournisseur d'identité.
+    name: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    description: Mapped[str] = mapped_column(String(300), default="", nullable=False)
+
+    #: Accès au panneau d'administration, aux réglages et à la gestion des
+    #: usagers. C'est « le rôle admin » du cahier des charges.
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    #: Droit de créer / modifier / supprimer les gabarits, qui sont partagés.
+    can_manage_templates: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    #: Groupe livré avec l'application : renommable, mais pas supprimable.
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "is_admin": self.is_admin,
+            "can_manage_templates": self.can_manage_templates,
+            "is_system": self.is_system,
+        }
+
+
+class UserGroup(Base):
+    """Appartenance d'un usager à un groupe."""
+
+    __tablename__ = "user_groups"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class User(Base):
+    """
+    Compte connu de l'application.
+
+    IDENTITÉ : ``subject`` FAIT FOI
+    ------------------------------
+    Le ``sub`` du fournisseur OIDC est le seul identifiant stable : une adresse
+    de courriel change, un nom d'usager peut être réattribué. C'est donc lui qui
+    lie un compte à une personne, et il est rempli à la première connexion.
+
+    ``username`` reste néanmoins la clé de propriété des consultations (colonne
+    ``Consultation.owner``), pour une raison d'histoire : les consultations
+    existaient avant cette table. Le rattachement d'une identité OIDC à un
+    compte déjà porteur de données passe donc par ``subject``, puis ``username``,
+    puis ``email`` — voir ``users.link_or_create``. Sans cette cascade, une
+    installation migrée verrait ses brouillons devenir invisibles du jour où
+    l'authentification change de source.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    #: « sub » OIDC. Vide pour un compte amorcé qui ne s'est jamais connecté.
+    subject: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
+    #: Identité normalisée en minuscules. Clé de propriété des consultations.
+    username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(255), default="", nullable=False, index=True)
+    display_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    #: Un compte désactivé conserve ses consultations mais ne peut plus entrer.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def to_dict(self, groups: Optional[List["Group"]] = None) -> dict:
+        payload = {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "display_name": self.display_name,
+            "is_active": self.is_active,
+            "has_signed_in": bool(self.subject),
+            "created_at": _iso(self.created_at),
+            "last_login_at": _iso(self.last_login_at),
+        }
+        if groups is not None:
+            payload["groups"] = [g.to_dict() for g in groups]
+        return payload
 
 
 class UserPreference(Base):
@@ -832,6 +942,150 @@ def _add_missing_columns() -> None:
                 logger.info("Migration : colonne %s.%s ajoutée", table, name)
 
 
+# ---------------------------------------------------------------------------
+# Groupes et comptes : amorçage
+# ---------------------------------------------------------------------------
+#: Groupes livrés. « admins » ouvre le panneau d'administration, « users » ne
+#: donne accès qu'à ses propres consultations.
+_SYSTEM_GROUPS = (
+    {
+        "name": "admins",
+        "description": "Accès complet : réglages, gabarits, comptes et groupes.",
+        "is_admin": True,
+        "can_manage_templates": True,
+    },
+    {
+        "name": "users",
+        "description": "Dicter, relire et exporter ses propres consultations.",
+        "is_admin": False,
+        "can_manage_templates": False,
+    },
+)
+
+ADMIN_GROUP = "admins"
+DEFAULT_GROUP = "users"
+
+
+def seed_groups(db: Session) -> None:
+    """Crée les groupes livrés s'ils manquent. Ne touche pas à leurs permissions."""
+    existants = {name for name in db.scalars(select(Group.name))}
+    for payload in _SYSTEM_GROUPS:
+        if payload["name"] in existants:
+            continue
+        db.add(Group(is_system=True, **payload))
+    db.commit()
+
+
+def _adopt_legacy_owners(db: Session) -> int:
+    """
+    Crée un compte pour chaque propriétaire de consultation antérieur.
+
+    POURQUOI C'EST NÉCESSAIRE
+    -------------------------
+    Avant l'authentification OIDC, une consultation appartenait à la valeur d'un
+    en-tête HTTP (``Remote-User``), qui n'était pas forcément une adresse de
+    courriel. Ces chaînes sont toujours dans ``Consultation.owner`` : sans compte
+    correspondant, les brouillons existants n'auraient plus de propriétaire
+    identifiable et disparaîtraient de l'écran.
+
+    Le premier compte adopté entre dans ``admins`` : une installation migrée doit
+    garder quelqu'un capable d'ouvrir le panneau.
+
+    L'adresse de courriel n'est devinée que dans le cas non ambigu — un seul
+    propriétaire existant et une seule entrée dans ``AUTHORIZED_USERS``. C'est la
+    situation d'une installation à un seul médecin, et elle permet au
+    rattachement par courriel de fonctionner à la première connexion. Au-delà,
+    on ne devine pas : associer deux personnes par erreur donnerait à l'une les
+    consultations de l'autre.
+    """
+    # Le compte ET le nombre de consultations : ce dernier est journalisé, et
+    # compter sur une liste dédoublonnée aurait toujours donné 1.
+    from sqlalchemy import func
+
+    par_proprietaire = {
+        (owner or "").strip().lower(): total
+        for owner, total in db.execute(
+            select(Consultation.owner, func.count()).group_by(Consultation.owner)
+        )
+        if (owner or "").strip()
+    }
+    proprietaires = sorted(par_proprietaire)
+    if not proprietaires:
+        return 0
+
+    connus = {u for u in db.scalars(select(User.username))}
+    a_creer = [o for o in proprietaires if o not in connus]
+    if not a_creer:
+        return 0
+
+    courriels = [a.strip().lower() for a in settings.authorized_users if a.strip() != "*"]
+    courriel_unique = (
+        courriels[0] if len(a_creer) == 1 and len(courriels) == 1 else ""
+    )
+
+    admin = db.scalar(select(Group).where(Group.name == ADMIN_GROUP))
+    premier_compte = not connus
+
+    for index, nom in enumerate(a_creer):
+        # Le courriel deviné ne l'est que s'il diffère du nom d'usager : si les
+        # deux sont identiques, il n'y a rien à deviner.
+        courriel = courriel_unique if courriel_unique and courriel_unique != nom else ""
+        user = User(username=nom, email=courriel, display_name=nom)
+        db.add(user)
+        db.flush()
+        if admin is not None and premier_compte and index == 0:
+            db.add(UserGroup(user_id=user.id, group_id=admin.id))
+        logger.warning(
+            "Compte « %s » créé à partir des consultations existantes%s. "
+            "Il conserve ses %d brouillon(s).",
+            nom,
+            f" (courriel deviné : {courriel})" if courriel else "",
+            par_proprietaire.get(nom, 0),
+        )
+
+    db.commit()
+    return len(a_creer)
+
+
+def _adopt_authorized_users(db: Session) -> int:
+    """
+    Crée un compte pour chaque entrée d'``AUTHORIZED_USERS`` encore inconnue.
+
+    Filet de démarrage : sans lui, une installation neuve n'aurait aucun compte,
+    et avec ``ALLOW_SIGNUP=false`` personne ne pourrait jamais entrer. Le premier
+    compte créé entre dans ``admins``.
+    """
+    entrees = [a.strip().lower() for a in settings.authorized_users if a.strip() and a.strip() != "*"]
+    if not entrees:
+        return 0
+
+    connus = {u for u in db.scalars(select(User.username))}
+    courriels_connus = {e for e in db.scalars(select(User.email)) if e}
+    admin = db.scalar(select(Group).where(Group.name == ADMIN_GROUP))
+    defaut = db.scalar(select(Group).where(Group.name == DEFAULT_GROUP))
+    premier = not connus
+    crees = 0
+
+    for entree in entrees:
+        # Déjà rattaché à un compte adopté plus haut : ne pas dédoubler.
+        if entree in connus or entree in courriels_connus:
+            continue
+        user = User(username=entree, email=entree if "@" in entree else "", display_name=entree)
+        db.add(user)
+        db.flush()
+        groupe = admin if (premier and crees == 0) else defaut
+        if groupe is not None:
+            db.add(UserGroup(user_id=user.id, group_id=groupe.id))
+        logger.info(
+            "Compte « %s » amorcé depuis AUTHORIZED_USERS (%s).",
+            entree, "admins" if groupe is admin else "users",
+        )
+        crees += 1
+
+    db.commit()
+    return crees
+
+
 def init_db() -> None:
     """Crée les tables si nécessaire puis amorce les gabarits. Appelé au démarrage."""
     Base.metadata.create_all(bind=engine)
@@ -839,3 +1093,8 @@ def init_db() -> None:
     with SessionLocal() as db:
         seed_default_templates(db)
         refresh_default_templates(db)
+        seed_groups(db)
+        # L'ordre compte : les propriétaires existants d'abord, pour que le
+        # compte porteur des données soit celui qui devient administrateur.
+        _adopt_legacy_owners(db)
+        _adopt_authorized_users(db)

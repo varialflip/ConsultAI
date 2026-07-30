@@ -25,3 +25,12 @@ google-genai>=1.0,<2.0              # SDK unifié Gemini (API Studio + Vertex AI
 # Deepgram, lui, n'a pas de SDK ici — une seule requête HTTP suffit.
 anthropic>=0.40,<1.0
 openai>=1.60,<3.0
+
+# --- Authentification OpenID Connect ---
+# authlib : découverte du fournisseur, flux « authorization code » + PKCE, et
+# surtout VALIDATION DU JETON D'IDENTITÉ (signature, algorithme, iss, aud,
+# nonce). Vérifier une signature JWT à la main est du code de sécurité qu'on
+# n'improvise pas — c'est la raison d'être de cette dépendance.
+authlib>=1.3,<2.0
+# itsdangerous : signature du témoin de session, requis par SessionMiddleware.
+itsdangerous>=2.2,<3.0

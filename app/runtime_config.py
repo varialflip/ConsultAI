@@ -103,6 +103,12 @@ LLM_PROVIDERS = (
 #
 # Le défaut de l'installation reste ``APP_LANGUAGE`` dans le ``.env``.
 SETTINGS: Tuple[Setting, ...] = (
+    # --- Système -------------------------------------------------------------
+    Setting(
+        "allow_signup", "choice", "group.system",
+        default=lambda: "true" if settings.allow_signup else "false", choices=ON_OFF,
+    ),
+
     # --- Reconnaissance vocale ---------------------------------------------
     Setting(
         "stt_provider", "choice", "group.stt",
@@ -203,7 +209,7 @@ SETTINGS: Tuple[Setting, ...] = (
 )
 
 #: Ordre d'affichage des groupes dans le panneau.
-GROUPS: Tuple[str, ...] = ("group.stt", "group.llm", "group.prompts")
+GROUPS: Tuple[str, ...] = ("group.system", "group.stt", "group.llm", "group.prompts")
 
 BY_KEY: Dict[str, Setting] = {item.key: item for item in SETTINGS}
 

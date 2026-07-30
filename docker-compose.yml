@@ -66,7 +66,22 @@ services:
       DATABASE_URL: "${DATABASE_URL:-sqlite:////data/consultai.db}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
 
-      # ---- Authentification / Pangolin SSO ----
+      # ---- Authentification OpenID Connect ----
+      # L'application authentifie elle-même : le proxy ne fait que relayer, et
+      # sa propre authentification doit être désactivée pour cette ressource.
+      OIDC_PROVIDER_URL: "${OIDC_PROVIDER_URL:-}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-}"
+      OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-}"
+      BASE_URL: "${BASE_URL:-}"
+      OIDC_SCOPES: "${OIDC_SCOPES:-openid,profile,email,groups}"
+      OIDC_GROUPS_CLAIM: "${OIDC_GROUPS_CLAIM:-groups}"
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      SESSION_MAX_AGE_SECONDS: "${SESSION_MAX_AGE_SECONDS:-43200}"
+      SESSION_HTTPS_ONLY: "${SESSION_HTTPS_ONLY:-true}"
+      ALLOW_SIGNUP: "${ALLOW_SIGNUP:-false}"
+
+      # ---- Amorçage des comptes (premier démarrage seulement) ----
       SSO_HEADER_KEY: "${SSO_HEADER_KEY:-Remote-User}"
       SSO_HEADER_FALLBACKS: "${SSO_HEADER_FALLBACKS:-X-Forwarded-User,X-Remote-User,X-Authentik-Username}"
       SSO_EMAIL_HEADER: "${SSO_EMAIL_HEADER:-Remote-Email}"

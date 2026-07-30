@@ -2695,14 +2695,11 @@
       showLogoutHint(T('identity.logout_busy'), 'error');
       return;
     }
-    const cible = state.logoutOidcUrl;
-    if (!cible) {
-      showLogoutHint(T('identity.logout_unconfigured'), 'error');
-      return;
-    }
     showLogoutHint(T('identity.logout_progress'));
-    // Navigation de premier niveau : la seule qui emporte à coup sûr le témoin.
-    window.location.href = cible;
+    // Navigation de premier niveau vers notre propre route : elle ferme la
+    // session locale PUIS renvoie au fournisseur. L'ordre compte — voir
+    // main.auth_logout.
+    window.location.href = state.logoutUrl || '/auth/logout';
   }
 
   /* -------------------------------------------------------------------------
@@ -2781,17 +2778,14 @@
 
     $('templateAdminBadge').classList.toggle('hidden', state.isTemplateAdmin);
     $('btnNewTemplate').classList.toggle('hidden', !state.isTemplateAdmin);
-    state.logoutOidcUrl = config.logout_oidc_url || '';
+    state.logoutUrl = config.logout_url || '/auth/logout';
+    state.isAdmin = Boolean(config.is_admin);
     renderLanguageChoices(config.languages, config.language || LANG);
-    const lien = $('lnkPangolinLogout');
-    if (config.logout_pangolin_ui_url) {
-      lien.href = config.logout_pangolin_ui_url;
-      lien.classList.remove('hidden');
-      lien.classList.add('flex');
-    }
 
-    $('btnAdmin').classList.toggle('hidden', !state.isTemplateAdmin);
-    $('btnAdmin').classList.toggle('flex', state.isTemplateAdmin);
+    // Le panneau est réservé aux administrateurs, pas à quiconque peut écrire
+    // un gabarit : ce sont deux droits distincts depuis l'arrivée des groupes.
+    $('btnAdmin').classList.toggle('hidden', !state.isAdmin);
+    $('btnAdmin').classList.toggle('flex', state.isAdmin);
 
     // Quel moteur travaille réellement : la question se pose dès qu'une note
     // sort différente de d'habitude, et la réponse n'était nulle part.
@@ -2855,7 +2849,6 @@
     $('btnLogout').addEventListener('click', logout);
     // Le lien Pangolin s'ouvre dans un onglet distinct : la session de
     // ConsultAI reste utilisable pendant qu'on ferme celle du proxy.
-    $('lnkPangolinLogout').addEventListener('click', () => toggleIdentityMenu(false));
     // Un clic ailleurs referme le menu ; le clic sur le menu lui-même ne doit
     // pas remonter jusque-là, sinon toute interaction le fermerait.
     $('identityMenu').addEventListener('click', (event) => event.stopPropagation());

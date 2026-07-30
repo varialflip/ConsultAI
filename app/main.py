@@ -64,15 +64,29 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import RedirectResponse
 
 from app import __version__
-from app import dictation, i18n, llm, preferences, recordings, runtime_config
-from app.auth import Principal, SSOAuthMiddleware, current_user, require_template_admin
+from app import dictation, i18n, llm, oidc, preferences, recordings, runtime_config
+from app import users as users_service
+from app.auth import (
+    AuthMiddleware,
+    Principal,
+    clear_identity,
+    current_user,
+    require_admin,
+    require_template_admin,
+    store_identity,
+)
 from app.config import configure_logging, settings
 from app.database import (
     Consultation,
+    Group,
+    SessionLocal,
     Recording,
     Template as TemplateModel,
+    User,
     get_db,
     init_db,
     utcnow,
@@ -101,14 +115,28 @@ async def lifespan(app: FastAPI):
     for warning in settings.warnings():
         logger.warning("CONFIGURATION : %s", warning)
 
-    logger.info(
-        "Authentification : en-tête « %s » (replis : %s) | %d utilisateur(s) autorisé(s) | "
-        "%d plage(s) de confiance",
-        settings.sso_header_key,
-        ", ".join(settings.sso_header_fallbacks) or "aucun",
-        len(settings.authorized_users),
-        len(settings.trusted_proxies),
-    )
+    if settings.auth_disabled:
+        logger.warning(
+            "Authentification DÉSACTIVÉE (AUTH_DISABLED) — usager « %s », "
+            "administrateur. À n'utiliser qu'en développement local.",
+            settings.dev_user,
+        )
+    else:
+        with SessionLocal() as _db:
+            _comptes = users_service.count_users(_db)
+        logger.info(
+            "Authentification : OIDC chez %s | retour %s | %d compte(s) connu(s) | "
+            "inscription automatique : %s",
+            settings.oidc_provider_url or "(non configuré)",
+            settings.effective_redirect_uri or "(non configurée)",
+            _comptes,
+            "oui" if users_service.allow_signup() else "non",
+        )
+        if _comptes == 0:
+            logger.warning(
+                "Aucun compte en base : le PREMIER usager qui se connectera "
+                "deviendra administrateur."
+            )
     # Les fournisseurs effectifs viennent du panneau d'administration, pas du
     # .env : c'est ce couple-là qu'il faut voir dans les journaux quand une
     # génération échoue.
@@ -149,9 +177,49 @@ app = FastAPI(
 # ce sont le nom de l'application, ses couleurs, ses icônes et du code de
 # mise en cache. Toutes les données restent derrière l'authentification.
 app.add_middleware(
-    SSOAuthMiddleware,
-    public_paths={"/healthz", "/sw.js", "/static/manifest.webmanifest"},
+    AuthMiddleware,
+    public_paths={
+        "/healthz",
+        "/sw.js",
+        "/static/manifest.webmanifest",
+        # Le flux de connexion doit rester atteignable sans être connecté :
+        # sans cela, la redirection vers la page de connexion boucle sur
+        # elle-même.
+        "/auth/login",
+        "/auth/callback",
+        "/auth/logout",
+    },
     public_prefixes=("/static/icons/",),
+)
+
+# ⚠️ ORDRE DES MIDDLEWARES
+#
+# Starlette exécute les middlewares dans l'ordre INVERSE de leur ajout : celui
+# déclaré en dernier s'exécute en premier. La session doit donc être ajoutée
+# APRÈS l'authentification pour être disponible AVANT elle — sans quoi
+# `request.session` lèverait au moment où le middleware d'authentification
+# cherche à la lire.
+#
+# La clé de signature : si SESSION_SECRET est absente, on en tire une au hasard
+# pour que l'application démarre quand même. Conséquence assumée et signalée au
+# démarrage : tout le monde est déconnecté à chaque redémarrage.
+_session_secret = settings.session_secret or oidc.new_secret()
+if not settings.session_secret:
+    logger.warning(
+        "SESSION_SECRET absente : clé de session aléatoire. Les sessions ne "
+        "survivront pas à un redémarrage du conteneur."
+    )
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_session_secret,
+    session_cookie="consultai_session",
+    max_age=settings.session_max_age_seconds,
+    # « lax » et non « strict » : le fournisseur d'identité nous renvoie par une
+    # navigation venue d'un autre site, et « strict » ferait perdre le témoin
+    # portant l'état du flux — la connexion échouerait systématiquement.
+    same_site="lax",
+    https_only=settings.session_https_only,
 )
 
 
@@ -429,6 +497,162 @@ async def service_worker() -> FileResponse:
 
 
 # ===========================================================================
+# Connexion (OpenID Connect)
+# ===========================================================================
+# Ces trois routes sont publiques : elles constituent le mécanisme de défi.
+# Voir app/oidc.py pour ce que la bibliothèque prend en charge (state, nonce,
+# PKCE, validation de signature) et ce qui reste à notre charge.
+# ===========================================================================
+@app.get("/auth/login", include_in_schema=False)
+async def auth_login(request: Request):
+    """Amorce le flux, ou renvoie à l'accueil si la session est déjà ouverte."""
+    from app.auth import session_identity
+
+    suite = oidc.safe_next_path(request.query_params.get("next", "/"))
+
+    if session_identity(request):
+        return RedirectResponse(suite, status_code=302)
+
+    if not settings.oidc_configured:
+        return _auth_error_page(
+            _t("auth.not_configured"),
+            status_code=503,
+        )
+
+    # Mémorisé côté session plutôt que passé au fournisseur : ce dernier ne
+    # renvoie que « state » et « code », et un paramètre supplémentaire dans
+    # l'adresse de retour serait refusé pour non-concordance.
+    request.session["consultai_next"] = suite
+    try:
+        return await oidc.authorization_redirect(request)
+    except oidc.OidcError as exc:
+        return _auth_error_page(str(exc), status_code=503)
+
+
+@app.get("/auth/callback", include_in_schema=False)
+async def auth_callback(request: Request):
+    """
+    Retour du fournisseur : valide, rattache le compte, ouvre la session.
+
+    Toute erreur est rendue en page lisible plutôt que propagée : l'usager
+    arrive ici par une navigation, une trace d'exception ne lui apprendrait
+    rien.
+    """
+    # Le fournisseur signale un refus par des paramètres, pas par un code HTTP.
+    if request.query_params.get("error"):
+        detail = request.query_params.get("error_description") or request.query_params["error"]
+        logger.warning("Connexion refusée par le fournisseur : %s", detail)
+        return _auth_error_page(_t("auth.provider_refused", detail=detail))
+
+    try:
+        claims = await oidc.fetch_identity(request)
+    except oidc.OidcError as exc:
+        return _auth_error_page(str(exc))
+
+    username = oidc.username_from(claims)
+    groupes_fournisseur = oidc.groups_from(claims)
+
+    try:
+        user, groupes = await run_in_threadpool(
+            _link_account,
+            str(claims.get("sub") or ""),
+            username,
+            str(claims.get("email") or ""),
+            str(claims.get("name") or claims.get("preferred_username") or ""),
+            groupes_fournisseur,
+        )
+    except users_service.SignupRefused as exc:
+        logger.warning("Inscription refusée : %s", exc)
+        return _auth_error_page(_t("denied.signup_closed", username=str(exc)), status_code=403)
+    except users_service.AccountDisabled as exc:
+        logger.warning("Compte désactivé : %s", exc)
+        return _auth_error_page(_t("denied.account_disabled"), status_code=403)
+
+    # La session ne porte que l'identité. Les droits sont relus en base à chaque
+    # requête — voir auth._principal_from_db.
+    store_identity(request, {"sub": user.subject, "username": user.username})
+    # Conservé pour « id_token_hint » : sans lui, certains fournisseurs
+    # demandent une confirmation avant de fermer la session.
+    request.session["consultai_id_token"] = claims.get("__id_token", "")
+
+    logger.info(
+        "Connexion de « %s » (groupes : %s)",
+        user.username, ", ".join(g.name for g in groupes) or "aucun",
+    )
+
+    suite = oidc.safe_next_path(request.session.pop("consultai_next", "/"))
+    return RedirectResponse(suite, status_code=302)
+
+
+def _link_account(subject, username, email, display_name, provider_groups):
+    """Partie synchrone du rattachement, exécutée hors de la boucle asyncio."""
+    with SessionLocal() as db:
+        return users_service.link_or_create(
+            db, subject, username, email, display_name, provider_groups
+        )
+
+
+@app.get("/auth/logout", include_in_schema=False)
+async def auth_logout(request: Request):
+    """
+    Ferme la session locale, puis celle du fournisseur.
+
+    Dans cet ordre, et sans dépendre de la seconde : si le fournisseur n'annonce
+    pas de point de déconnexion, la session locale doit tout de même être close.
+    L'inverse — rediriger d'abord — laisserait un témoin valide derrière si
+    l'usager n'allait pas au bout.
+    """
+    id_token = request.session.get("consultai_id_token", "")
+    clear_identity(request)
+    request.session.clear()
+
+    cible = ""
+    if settings.oidc_configured:
+        try:
+            cible = await oidc.end_session_url(id_token)
+        except Exception as exc:  # la déconnexion locale a déjà eu lieu
+            logger.info("Déconnexion du fournisseur impossible : %s", exc)
+
+    return RedirectResponse(cible or (settings.base_url or "/"), status_code=302)
+
+
+def _auth_error_page(message: str, status_code: int = 400) -> HTMLResponse:
+    """
+    Page d'erreur du flux de connexion.
+
+    Reprend la mise en forme de la page de refus du middleware plutôt que
+    d'introduire un troisième gabarit, et propose toujours de réessayer : la
+    cause la plus fréquente est un témoin d'état expiré, que recommencer suffit
+    à corriger.
+    """
+    from app.auth import _ERROR_PAGE
+
+    langue = i18n.normalize(settings.app_language)
+    corps = (
+        f"{esc_html(message)}</p>"
+        f"<p><a style=\"color:#5eead4\" href=\"/auth/login\">"
+        f"{esc_html(i18n.t('auth.retry', langue))}</a>"
+    )
+    return HTMLResponse(
+        _ERROR_PAGE.format(
+            lang=langue,
+            title=i18n.t("auth.error_title", langue),
+            heading=i18n.t("auth.error_title", langue),
+            footer=i18n.t("denied.footer", langue),
+            detail=corps,
+        ),
+        status_code=status_code,
+    )
+
+
+def esc_html(value: str) -> str:
+    """Échappement minimal : ce texte peut venir du fournisseur d'identité."""
+    import html
+
+    return html.escape(str(value or ""), quote=True)
+
+
+# ===========================================================================
 # Interface
 # ===========================================================================
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -517,35 +741,18 @@ async def api_config(request: Request):
         # règle sur MediaRecorder, mais le serveur qui en décide.
         "dictation_chunk_seconds": settings.dictation_chunk_seconds,
         "dictation_segment_seconds": settings.dictation_segment_seconds,
-        # Deux sessions, deux origines. Pangolin refusant tout POST sans jeton
-        # CSRF, sa déconnexion ne peut se faire que depuis son interface :
-        # l'application y renvoie au lieu de prétendre la faire elle-même.
-        "logout_oidc_url": _logout_oidc_url(),
-        "logout_pangolin_ui_url": settings.logout_pangolin_ui_url,
+        # Une seule session désormais : celle de l'application. La déconnexion
+        # ferme la session locale puis celle du fournisseur, dans cet ordre —
+        # voir la route /auth/logout.
+        "logout_url": "/auth/logout",
+        "auth_mode": "disabled" if settings.auth_disabled else "oidc",
+        "is_admin": user.is_admin,
         # Langues offertes, pour le menu d'identité. Le serveur en est la seule
         # source : ajouter une langue ne demande de toucher qu'à app/i18n.py.
         "languages": [
             {"value": code, "label": label} for code, label in i18n.LANGUAGES
         ],
     }
-
-
-def _logout_oidc_url() -> str:
-    """
-    Adresse de déconnexion du fournisseur d'identité, avec le retour demandé.
-
-    Le nom du paramètre de retour n'est pas normalisé en pratique : Pocket ID
-    emploie « r », la spécification OIDC « post_logout_redirect_uri ». Il est
-    donc configurable plutôt que deviné.
-    """
-    base = settings.logout_oidc_url
-    retour = settings.logout_redirect_url
-    if not base or not retour:
-        return base
-    from urllib.parse import quote
-
-    separateur = "&" if "?" in base else "?"
-    return f"{base}{separateur}{settings.logout_oidc_redirect_param}={quote(retour, safe='')}"
 
 
 @app.get("/api/models")
@@ -624,6 +831,149 @@ def put_admin_settings(
         "groups": [i18n.t(groupe, langue) for groupe in runtime_config.GROUPS],
         "language": langue,
     }
+
+
+# ===========================================================================
+# Comptes et groupes (administrateur)
+# ===========================================================================
+# Ces routes exigent ``require_admin`` et non ``require_template_admin`` :
+# écrire un gabarit et changer les droits d'autrui ne sont pas le même pouvoir.
+#
+# Le garde-fou qui compte est dans app/users.py : on refuse toute opération qui
+# laisserait l'installation sans administrateur actif. Sans lui, une mauvaise
+# manœuvre ne serait réparable qu'en éditant la base à la main sur le NAS.
+# ===========================================================================
+class UserPatchIn(BaseModel):
+    group_ids: Optional[List[int]] = None
+    is_active: Optional[bool] = None
+    display_name: Optional[str] = Field(None, max_length=255)
+
+
+class GroupIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    description: str = Field("", max_length=300)
+    is_admin: bool = False
+    can_manage_templates: bool = False
+
+
+class GroupPatchIn(BaseModel):
+    description: Optional[str] = Field(None, max_length=300)
+    is_admin: Optional[bool] = None
+    can_manage_templates: Optional[bool] = None
+
+
+@app.get("/api/admin/users")
+def api_list_users(
+    request: Request,
+    admin: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return {
+        "users": users_service.list_users(db),
+        "groups": users_service.list_groups(db),
+        # Pour que l'interface puisse signaler « c'est vous » et éviter qu'on se
+        # retire ses propres droits par distraction.
+        "current_user_id": admin.user_id,
+    }
+
+
+@app.patch("/api/admin/users/{user_id}")
+def api_update_user(
+    user_id: int,
+    payload: UserPatchIn,
+    request: Request,
+    admin: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return {
+            "user": users_service.update_user(
+                db, user_id,
+                group_ids=payload.group_ids,
+                is_active=payload.is_active,
+                display_name=payload.display_name,
+            )
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=_translate_user_error(exc)) from exc
+
+
+@app.get("/api/admin/groups")
+def api_list_groups(
+    request: Request,
+    admin: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return {"groups": users_service.list_groups(db)}
+
+
+@app.post("/api/admin/groups", status_code=201)
+def api_create_group(
+    payload: GroupIn,
+    request: Request,
+    admin: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return {"group": users_service.create_group(
+            db, payload.name, payload.description,
+            payload.is_admin, payload.can_manage_templates,
+        )}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=_translate_user_error(exc)) from exc
+
+
+@app.patch("/api/admin/groups/{group_id}")
+def api_update_group(
+    group_id: int,
+    payload: GroupPatchIn,
+    request: Request,
+    admin: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return {"group": users_service.update_group(
+            db, group_id,
+            description=payload.description,
+            is_admin=payload.is_admin,
+            can_manage_templates=payload.can_manage_templates,
+        )}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=_translate_user_error(exc)) from exc
+
+
+@app.delete("/api/admin/groups/{group_id}", status_code=204)
+def api_delete_group(
+    group_id: int,
+    request: Request,
+    admin: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        users_service.delete_group(db, group_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=_translate_user_error(exc)) from exc
+    return JSONResponse(status_code=204, content=None)
+
+
+def _translate_user_error(exc: ValueError) -> str:
+    """
+    Traduit les refus de app/users.py en message affichable.
+
+    Le service lève des motifs courts et stables plutôt que des phrases : il ne
+    connaît pas la langue de l'usager, et c'est ici qu'on la connaît.
+    """
+    motif = str(exc)
+    correspondances = {
+        "dernier administrateur": "denied.last_admin",
+        "groupe système": "err.group_system",
+        "nom déjà pris": "err.group_exists",
+        "nom vide": "err.group_name_required",
+        "groupe introuvable": "err.group_not_found",
+        "compte introuvable": "err.user_not_found",
+    }
+    cle = correspondances.get(motif)
+    return _t(cle) if cle else motif
 
 
 # ===========================================================================

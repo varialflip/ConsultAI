@@ -13,7 +13,8 @@ gabarits et dans la consigne générale, que le médecin écrit et modifie
 lui-même. L'interface existe en **français et en anglais**, et la langue
 choisie traverse toute la chaîne — voir § 5 quater.
 
-Conçue pour tourner sur un NAS Synology derrière **Pangolin SSO**.
+Conçue pour tourner sur un NAS Synology. Elle **authentifie elle-même**, par
+OpenID Connect (§ 4) : le reverse proxy n'est qu'un relais.
 
 ---
 
@@ -23,11 +24,13 @@ Conçue pour tourner sur un NAS Synology derrière **Pangolin SSO**.
 Navigateur (iPad, portable)
    │  HTTPS
    ▼
-Pangolin SSO  ── authentifie l'usager, injecte l'en-tête « Remote-User »
+Reverse proxy ── RELAIS SEULEMENT (son authentification est désactivée)
    │  HTTP interne
    ▼
 Conteneur ConsultAI (FastAPI + uvicorn)
-   ├── app/auth.py           IP du proxy PUIS liste blanche d'usagers
+   ├── app/oidc.py           flux OpenID Connect (state, nonce, PKCE)
+   ├── app/auth.py           session signée → compte → groupes → permissions
+   ├── app/users.py          comptes, groupes, règles d'entrée
    ├── app/runtime_config.py réglages du panneau d'administration (base)
    ├── app/dictation.py      réception de la dictée au fil de l'eau, découpage
    ├── app/stt.py            ffmpeg → OGG/Opus → Google / Deepgram / AssemblyAI
@@ -42,7 +45,11 @@ Conteneur ConsultAI (FastAPI + uvicorn)
 | `Dockerfile` | Image multi-étages (amd64 + arm64), ffmpeg inclus |
 | `app/config.py` | Lecture et validation de la configuration |
 | `app/database.py` | Schéma SQLite et gabarits par défaut |
-| `app/auth.py` | Intégration Pangolin SSO |
+| `app/auth.py` | Session, identité et permissions |
+| `app/oidc.py` | Flux OpenID Connect et lecture des revendications |
+| `app/users.py` | Comptes, groupes et règles d'entrée |
+| `app/i18n.py` | Textes de l'interface (français / anglais) |
+| `app/preferences.py` | Préférences par usager (langue) |
 | `app/runtime_config.py` | Réglages modifiables depuis le panneau d'administration |
 | `app/dictation.py` | Sessions de dictée : fragments reçus, tranches transcrites |
 | `app/recordings.py` | Enregistrements audio attachés aux brouillons |
@@ -98,7 +105,8 @@ cp .env.example .env
 id votre_utilisateur      # ex. uid=1026(fred) gid=100(users)
 # Reportez ces valeurs dans .env : APP_UID=1026 et APP_GID=100
 
-# 3. Renseignez au minimum AUTHORIZED_USERS et la configuration Gemini
+# 3. Renseignez au minimum la section OIDC (§ 4), SESSION_SECRET
+#    et la configuration Gemini
 
 # 4. Clé Google
 mkdir -p secrets data
@@ -119,89 +127,134 @@ depuis l'extérieur du NAS**. Seul le reverse proxy doit l'atteindre.
 
 ---
 
-## 4. Configuration de Pangolin
+## 4. Authentification (OpenID Connect)
 
-Créez une ressource pointant vers `http://<ip-du-nas>:8787` (ou vers le
-conteneur `consultai:8000` si Pangolin partage son réseau Docker), avec
-l'authentification activée.
+L'application **authentifie elle-même**, par OpenID Connect. Le reverse proxy
+n'est plus qu'un relais.
 
-Pangolin doit transmettre l'identité dans un en-tête. Par défaut
-l'application lit `Remote-User`, avec repli automatique sur
-`X-Forwarded-User`, `X-Remote-User` et `X-Authentik-Username`. En-têtes
-optionnels enrichissant l'affichage : `Remote-Email`, `Remote-Name`.
+```
+navigateur ──► /auth/login ──► fournisseur ──► /auth/callback ──► témoin signé
+                                                     │
+                                              compte en base
+```
 
-Puis, dans `.env` :
+### 4.1 Créer le client chez le fournisseur
+
+Chez votre fournisseur (Pocket ID, Authentik, Keycloak…), créez un client OIDC
+**confidentiel** et déclarez comme adresse de retour, à l'identique :
+
+```
+https://consultai.exemple.com/auth/callback
+```
+
+Puis dans `.env` :
 
 ```ini
-BIND_ADDRESS=192.168.20.50          # interface du NAS joignable par Pangolin
-AUTHORIZED_USERS=dr.tremblay@clinique.qc.ca,dr.gagnon@clinique.qc.ca
-TRUSTED_PROXIES=172.27.0.1/32       # passerelle Docker — lire l'encadré ci-dessous
+OIDC_PROVIDER_URL=https://login.exemple.com
+OIDC_CLIENT_ID=…
+OIDC_CLIENT_SECRET=…
+OIDC_REDIRECT_URI=https://consultai.exemple.com/auth/callback
+BASE_URL=https://consultai.exemple.com
+OIDC_SCOPES=openid,profile,email,groups
+SESSION_SECRET=$(openssl rand -base64 48)
 ```
 
-### ⚠️ Particularité Synology : l'IP source est réécrite
+`SESSION_SECRET` n'est pas optionnelle en pratique : sans elle, une clé
+aléatoire est tirée à chaque démarrage et **tout le monde est déconnecté** à
+chaque `docker compose up`.
 
-Le NAS publie les ports via le **proxy userland de Docker** (`docker-proxy`).
-Vérifiable ainsi :
+### 4.2 ⚠️ Le proxy doit RELAYER, pas authentifier
 
-```bash
-ps aux | grep '[d]ocker-proxy' | grep 8787
-# docker-proxy -proto tcp -host-ip 192.168.20.50 -host-port 8787 -container-ip 172.27.0.2 …
+**Désactivez l'authentification de Pangolin sur cette ressource.** Ce n'est pas
+une préférence : quand Pangolin authentifie, il **retire l'en-tête `Cookie`**
+des requêtes qu'il relaie au conteneur. L'application ne verrait jamais revenir
+son propre témoin de session, et la connexion bouclerait indéfiniment — le flux
+aboutit chez le fournisseur, puis retombe sur une session vide.
+
+Le symptôme est reconnaissable : la page de connexion réapparaît sans message,
+ou `/auth/callback` affiche « Connexion expirée ou témoin de session absent ».
+
+Conséquence de ce changement : `SSO_HEADER_KEY` et `TRUSTED_PROXIES` **ne sont
+plus des contrôles de sécurité** et peuvent être retirées du `.env`.
+L'application le signale au démarrage si elles y sont encore. Gardez néanmoins
+le port du conteneur non exposé et la règle de pare-feu du § 4.4 : un appelant
+direct ne peut plus rien forger, mais il n'a aucune raison d'y accéder.
+
+### 4.3 Qui a le droit d'entrer
+
+| Situation | Résultat |
+|---|---|
+| Compte déjà connu, actif | entre |
+| Compte déjà connu, désactivé | refusé |
+| **Aucun compte n'existe encore** | entre et **devient administrateur** |
+| Inconnu, `ALLOW_SIGNUP=true` | créé dans `users` |
+| Inconnu, `ALLOW_SIGNUP=false` | refusé |
+
+> **Le premier usager qui se connecte devient administrateur**, quel que soit
+> `ALLOW_SIGNUP`. C'est l'amorçage : sans cette exception, une installation
+> neuve n'aurait personne pour ouvrir le panneau. Cela suppose que
+> l'inscription soit **fermée** chez votre fournisseur — ouverte, le premier
+> venu prendrait l'installation.
+
+Deux groupes sont livrés :
+
+| Groupe | Panneau d'administration | Gabarits | Ses consultations |
+|---|---|---|---|
+| `admins` | oui | oui | oui |
+| `users` | non | non | oui |
+
+Les groupes annoncés par le fournisseur (portée `groups`) sont reportés **par
+nom** sur ceux de l'application, et seulement de façon **additive** : un groupe
+absent de la réponse du fournisseur n'est jamais retiré. Beaucoup de
+fournisseurs n'envoient la revendication que sous conditions, et la traiter
+comme la vérité complète ferait perdre ses droits au dernier administrateur le
+jour où elle manque. Le retrait d'un droit se fait explicitement, depuis la
+gestion des comptes.
+
+### 4.4 Migration depuis l'authentification par en-têtes
+
+Au premier démarrage, l'application crée un compte pour **chaque propriétaire
+de consultation existant** (la valeur que portait `Remote-User`), et le premier
+entre dans `admins`. Vos brouillons restent donc les vôtres.
+
+À la première connexion, l'identité du fournisseur est rattachée à ce compte en
+cascade : `sub`, puis nom d'usager, puis courriel. Le journal l'indique :
+
+```
+Compte « fred » créé à partir des consultations existantes. Il conserve ses 8 brouillon(s).
+Compte « fred » rattaché à l'identité du fournisseur
 ```
 
-Ce processus **termine la connexion entrante et en ouvre une nouvelle** vers le
-conteneur. L'application ne voit donc jamais l'IP réelle de Pangolin, mais
-toujours celle de la passerelle du pont (`172.27.0.1`). Deux conséquences :
+> **Si vos brouillons n'apparaissent pas après la première connexion**, c'est
+> que le nom d'usager retenu diffère de l'ancien propriétaire. Le compte visible
+> dans **Réglages → Comptes** affiche le nombre de consultations qu'il porte :
+> comparez-le. La colonne `owner` de la table `consultations` est la clé de
+> propriété.
 
-1. `TRUSTED_PROXIES` doit contenir **la passerelle**, pas l'IP de Pangolin.
-   Y mettre `192.168.20.55/32` produit un 403 sur *toutes* les requêtes.
-   Le sous-réseau est figé à `172.27.0.0/24` dans `docker-compose.yml` pour que
-   cette adresse ne change jamais après un `docker compose down`.
-2. **Le contrôle applicatif d'IP ne distingue plus Pangolin d'une autre machine
-   du LAN.** N'importe quel hôte pouvant atteindre `192.168.20.50:8787`
-   pourrait forger `Remote-User` et lire toutes les consultations.
+### 4.5 Porte de secours
 
-**Le pare-feu du NAS doit donc reprendre ce rôle** — étape obligatoire :
+Si plus personne ne peut entrer (client OIDC supprimé, fournisseur
+injoignable, dernier compte désactivé à la main dans la base) :
+
+```ini
+AUTH_DISABLED=true
+```
+
+puis `docker compose up -d`. L'application s'ouvre alors sans authentification,
+sous l'identité `DEV_USER`, avec les droits d'administrateur — le temps de
+réparer les comptes. **Remettez-la à `false` immédiatement après**, et ne
+l'utilisez jamais sur une installation joignable depuis l'extérieur.
+
+### 4.6 Règle de pare-feu Synology
+
+Le NAS publie le port via le proxy userland de Docker (`docker-proxy`), qui
+réécrit l'IP source. Cela n'a plus d'incidence sur l'authentification, mais le
+port n'a aucune raison d'être joignable au-delà du proxy :
 
 > *DSM → Panneau de configuration → Sécurité → Pare-feu → Modifier les règles*
-> → **Créer** : Ports = **TCP 8787**, IP source = **192.168.20.55** (Pangolin),
-> Action = **Autoriser**.
-> Ajoutez ensuite une règle **Refuser** pour TCP 8787 depuis « Toutes »,
-> placée **après** la précédente.
-
-Vérification :
-
-```bash
-# Depuis une machine du LAN autre que Pangolin — doit échouer (délai/refus) :
-curl -m 5 http://192.168.20.50:8787/healthz
-```
-
-*Alternative si vous préférez restaurer le contrôle applicatif :* ajoutez
-`{"userland-proxy": false}` à `/etc/docker/daemon.json` puis redémarrez le
-démon Docker — l'IP source réelle est alors préservée et `TRUSTED_PROXIES`
-peut valoir `192.168.20.55/32`. **Attention :** cela redémarre *tous* les
-conteneurs du NAS (il y en a une soixantaine ici), à ne faire qu'en fenêtre de
-maintenance.
-
-### Modèle de sécurité — à comprendre avant la mise en production
-
-Un en-tête HTTP se falsifie en une ligne de `curl`. La protection repose donc
-sur **deux** vérifications successives :
-
-1. L'**adresse IP du pair TCP** doit appartenir à `TRUSTED_PROXIES`.
-2. L'identité extraite de l'en-tête doit figurer dans `AUTHORIZED_USERS`.
-
-Deux conséquences pratiques :
-
-- **Ne publiez jamais le port du conteneur sur une interface publique.** Le
-  `docker-compose.yml` fourni le lie à `127.0.0.1` exprès.
-- Le conteneur démarre uvicorn avec `--no-proxy-headers`. Sans cela, uvicorn
-  remplacerait l'IP du pair par la valeur de `X-Forwarded-For`, elle-même
-  falsifiable, et la vérification n° 1 ne protégerait plus rien. **Ne retirez
-  pas cette option.**
-
-`TEMPLATE_ADMINS` restreint en plus la création/modification/suppression des
-gabarits à certains comptes (`*` par défaut = tous les usagers autorisés).
-Chaque médecin ne voit que ses propres brouillons.
+> → **Créer** : Ports = **TCP 8787**, IP source = celle du proxy,
+> Action = **Autoriser**. Puis une règle **Refuser** pour TCP 8787 depuis
+> « Toutes », placée **après**.
 
 ---
 

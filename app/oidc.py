@@ -1,0 +1,300 @@
+"""
+oidc.py — Connexion par OpenID Connect.
+===========================================================================
+
+CE QUE FAIT CE MODULE, ET CE QU'IL DÉLÈGUE
+------------------------------------------
+Il enveloppe ``authlib`` : découverte du fournisseur, flux « authorization
+code » avec PKCE, et validation du jeton d'identité.
+
+La validation cryptographique n'est **volontairement pas** écrite ici. Vérifier
+une signature JWT à la main — récupérer le JWKS, choisir la bonne clé, contrôler
+l'algorithme sans se laisser imposer ``none`` ou une confusion HS256/RS256 —
+c'est du code de sécurité qu'on n'improvise pas. ``authlib`` le fait, il est
+maintenu, et c'est la seule dépendance ajoutée pour cela.
+
+Ce qui reste à notre charge et qui compte tout autant :
+
+* ``state`` — lie le retour du fournisseur à la session qui a initié le flux.
+  Sans lui, un tiers peut faire aboutir *sa* connexion dans le navigateur de la
+  victime (« login CSRF »). Géré par authlib, qui le range dans la session.
+* ``nonce`` — lie le jeton d'identité à cette requête-ci, contre le rejeu.
+* ``PKCE`` — inutile en théorie pour un client confidentiel, mais gratuit et
+  il ferme l'interception du code d'autorisation.
+* la portée de retour : on ne redirige qu'à l'intérieur de l'application, jamais
+  vers une adresse arbitraire fournie par l'appelant (« open redirect »).
+
+POURQUOI LE PROXY NE DÉCIDE PLUS
+--------------------------------
+L'application authentifiait par en-tête HTTP, en se fiant à un reverse proxy.
+Elle authentifie maintenant elle-même : le proxy n'est plus qu'un relais. Deux
+conséquences à ne pas perdre de vue :
+
+* ``TRUSTED_PROXIES`` n'est plus un contrôle de sécurité ;
+* la session vit dans un témoin signé, et ce témoin doit atteindre le serveur.
+  Un proxy qui retire l'en-tête ``Cookie`` — Pangolin le fait quand il
+  authentifie lui-même — rend toute connexion impossible : le flux aboutit chez
+  le fournisseur puis retombe sur une session vide, en boucle.
+"""
+
+from __future__ import annotations
+
+import logging
+import secrets
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode, urlparse
+
+from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class OidcError(RuntimeError):
+    """Échec du flux, avec un message affichable."""
+
+
+# ---------------------------------------------------------------------------
+# Client
+# ---------------------------------------------------------------------------
+_oauth = None
+_registered = False
+
+
+def _client():
+    """
+    Client authlib, construit à la première utilisation.
+
+    Construit tardivement et non au chargement du module : l'import de ce
+    dernier ne doit pas échouer sur une installation qui n'a pas encore
+    renseigné sa configuration OIDC — sinon l'application ne démarre plus et
+    même ``/healthz``, qui sert à diagnostiquer cela, devient inatteignable.
+    """
+    global _oauth, _registered
+
+    if not settings.oidc_configured:
+        raise OidcError(
+            "La connexion n'est pas configurée : renseignez OIDC_PROVIDER_URL, "
+            "OIDC_CLIENT_ID et OIDC_CLIENT_SECRET."
+        )
+
+    if _registered:
+        return _oauth.consultai
+
+    from authlib.integrations.starlette_client import OAuth
+
+    _oauth = OAuth()
+    _oauth.register(
+        name="consultai",
+        server_metadata_url=f"{settings.oidc_provider_url}/.well-known/openid-configuration",
+        client_id=settings.oidc_client_id,
+        client_secret=settings.oidc_client_secret,
+        client_kwargs={
+            "scope": " ".join(settings.oidc_scopes_effective),
+            # PKCE : gratuit, et referme l'interception du code.
+            "code_challenge_method": "S256",
+        },
+    )
+    _registered = True
+    return _oauth.consultai
+
+
+def reset_client() -> None:
+    """Oublie le client mémorisé (après un changement de configuration)."""
+    global _oauth, _registered
+    _oauth, _registered = None, False
+
+
+# ---------------------------------------------------------------------------
+# Flux
+# ---------------------------------------------------------------------------
+async def authorization_redirect(request):
+    """Réponse de redirection vers la page de connexion du fournisseur."""
+    client = _client()
+    redirect_uri = settings.effective_redirect_uri
+    if not redirect_uri:
+        raise OidcError(
+            "Aucune adresse de retour : renseignez BASE_URL ou OIDC_REDIRECT_URI."
+        )
+    # authlib range state, nonce et le verifier PKCE dans la session.
+    return await client.authorize_redirect(request, redirect_uri)
+
+
+async def fetch_identity(request) -> Dict[str, Any]:
+    """
+    Termine le flux et retourne les revendications validées.
+
+    Lève ``OidcError`` avec un message affichable : cette fonction répond à un
+    retour de navigateur, l'usager doit lire quelque chose d'utile plutôt qu'une
+    trace d'exception.
+    """
+    client = _client()
+    try:
+        token = await client.authorize_access_token(request)
+    except Exception as exc:
+        # Cas courants : « state » absent (témoin perdu, donc session vide),
+        # code expiré, ou secret client erroné.
+        logger.warning("Échange du code OIDC refusé : %s", exc)
+        raise OidcError(_diagnose(exc)) from exc
+
+    claims: Dict[str, Any] = dict(token.get("userinfo") or {})
+
+    # Les groupes ne figurent pas toujours dans le jeton d'identité : certains
+    # fournisseurs ne les exposent qu'au point « userinfo ». On complète, sans
+    # jamais écraser ce que le jeton signé disait déjà.
+    if settings.oidc_groups_claim not in claims:
+        try:
+            info = await client.userinfo(token=token)
+            for cle, valeur in dict(info).items():
+                claims.setdefault(cle, valeur)
+        except Exception as exc:
+            logger.info("Point « userinfo » non exploitable : %s", exc)
+
+    if not claims.get("sub"):
+        raise OidcError(
+            "Le fournisseur n'a renvoyé aucun identifiant « sub » : impossible "
+            "de reconnaître le compte."
+        )
+    return claims
+
+
+def _diagnose(exc: Exception) -> str:
+    """Traduit les échecs les plus fréquents en indication actionnable."""
+    texte = str(exc).lower()
+    if "state" in texte:
+        return (
+            "Connexion expirée ou témoin de session absent. Si cela se répète, "
+            "le proxy retire l'en-tête « Cookie » : il doit relayer sans "
+            "authentifier."
+        )
+    if "redirect_uri" in texte or "redirect uri" in texte:
+        return (
+            "Adresse de retour refusée par le fournisseur. Elle doit être "
+            f"déclarée à l'identique chez lui : {settings.effective_redirect_uri}"
+        )
+    if "client" in texte and ("secret" in texte or "auth" in texte):
+        return "Identifiant ou secret client refusé par le fournisseur."
+    return f"Connexion refusée par le fournisseur : {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Lecture des revendications
+# ---------------------------------------------------------------------------
+def username_from(claims: Dict[str, Any]) -> str:
+    """
+    Nom d'usager retenu, en minuscules.
+
+    L'ordre a des conséquences : c'est cette valeur qui sert de clé de propriété
+    aux consultations. ``preferred_username`` d'abord, parce que c'est ce que
+    portait l'ancien en-tête du proxy et que les consultations déjà en base y
+    sont rattachées ; le courriel ensuite ; le ``sub`` en dernier recours, qui
+    est stable mais illisible.
+    """
+    for cle in ("preferred_username", "email", "sub"):
+        valeur = str(claims.get(cle) or "").strip().lower()
+        if valeur:
+            return valeur
+    return ""
+
+
+def groups_from(claims: Dict[str, Any]) -> List[str]:
+    """
+    Groupes annoncés par le fournisseur, normalisés en minuscules.
+
+    Tolérant sur la forme : selon les fournisseurs, la revendication est une
+    liste, une chaîne séparée par des espaces ou par des virgules. Une valeur
+    inattendue donne une liste vide plutôt qu'une erreur — les groupes sont un
+    complément, leur absence ne doit pas empêcher la connexion.
+    """
+    brut = claims.get(settings.oidc_groups_claim)
+    if brut is None:
+        return []
+    if isinstance(brut, str):
+        # Un nom distingué LDAP contient des virgules qui SÉPARENT SES PROPRES
+        # composants (« cn=admins,ou=groups,dc=x ») : le découper comme une
+        # liste produirait « ou=groups » et « dc=x » comme noms de groupes.
+        # On ne découpe donc que ce qui ne ressemble pas à un DN.
+        brut = [brut] if "=" in brut else [m for m in brut.replace(",", " ").split() if m]
+    if not isinstance(brut, (list, tuple, set)):
+        logger.info("Revendication de groupes ignorée (type %s)", type(brut).__name__)
+        return []
+
+    vus, sortie = set(), []
+    for item in brut:
+        nom = str(item or "").strip().lower()
+        # Certains fournisseurs renvoient des chemins (« /admins ») ou des
+        # noms distingués LDAP : on ne garde que le dernier segment.
+        if nom.startswith("cn="):
+            nom = nom.split(",", 1)[0][3:]
+        nom = nom.strip("/").split("/")[-1]
+        if nom and nom not in vus:
+            vus.add(nom)
+            sortie.append(nom)
+    return sortie
+
+
+# ---------------------------------------------------------------------------
+# Déconnexion
+# ---------------------------------------------------------------------------
+async def end_session_url(id_token: str = "") -> str:
+    """
+    Adresse de déconnexion du fournisseur (« RP-initiated logout »).
+
+    Retourne une chaîne vide si le fournisseur n'annonce pas de point de
+    terminaison : la session locale est alors la seule qu'on puisse clore, et
+    l'appelant se contente de rediriger vers l'accueil.
+    """
+    retour = settings.base_url or ""
+    try:
+        client = _client()
+        metadata = await client.load_server_metadata()
+    except Exception as exc:
+        logger.info("Métadonnées du fournisseur illisibles à la déconnexion : %s", exc)
+        return ""
+
+    point = metadata.get("end_session_endpoint")
+    if not point:
+        return ""
+
+    params = {}
+    if id_token:
+        params["id_token_hint"] = id_token
+    if retour:
+        params["post_logout_redirect_uri"] = retour
+        # Exigé par la spécification lorsque id_token_hint est absent, et
+        # inoffensif sinon.
+        params["client_id"] = settings.oidc_client_id
+
+    if not params:
+        return point
+    separateur = "&" if "?" in point else "?"
+    return f"{point}{separateur}{urlencode(params)}"
+
+
+# ---------------------------------------------------------------------------
+# Redirection interne
+# ---------------------------------------------------------------------------
+def safe_next_path(candidate: str) -> str:
+    """
+    Chemin de retour après connexion, ramené à l'intérieur de l'application.
+
+    Un « next » venu de l'extérieur ne doit jamais pouvoir emmener l'usager
+    ailleurs : une adresse absolue, un chemin protocole-relatif (« //ailleurs »)
+    ou un espace de noms inattendu retombent sur l'accueil. C'est la faille
+    d'« open redirect », dont l'usage classique est d'habiller une page de
+    phishing d'un domaine de confiance.
+    """
+    chemin = (candidate or "").strip()
+    if not chemin.startswith("/") or chemin.startswith("//"):
+        return "/"
+    # Un chemin ne doit pas contenir de schéma ni d'hôte.
+    analyse = urlparse(chemin)
+    if analyse.scheme or analyse.netloc:
+        return "/"
+    if chemin.startswith("/auth/"):
+        return "/"
+    return chemin
+
+
+def new_secret(length: int = 48) -> str:
+    """Clé de session utilisable, pour la documentation et le démarrage."""
+    return secrets.token_urlsafe(length)

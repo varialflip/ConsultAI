@@ -1,27 +1,38 @@
 """
-auth.py — Intégration Pangolin SSO (authentification par en-têtes HTTP).
+auth.py — Authentification par OpenID Connect.
 =========================================================================
 
 MODÈLE DE SÉCURITÉ
 ------------------
-L'application ne gère aucun mot de passe : Pangolin authentifie l'utilisateur
-puis réinjecte son identité dans un en-tête HTTP (``Remote-User`` par défaut).
+L'application authentifie **elle-même**, par OpenID Connect (voir ``oidc.py``).
+Elle ne gère aucun mot de passe : le fournisseur d'identité le fait, et
+l'application ne conserve de la session qu'un témoin signé.
 
-Un en-tête HTTP est trivial à falsifier. La sécurité repose donc sur DEUX
-vérifications successives :
+    navigateur ──► /auth/login ──► fournisseur ──► /auth/callback ──► témoin
+                                                        │
+                                                  compte en base
+                                                  (app/users.py)
 
-  1. L'ADRESSE IP PAIRE (le socket TCP réellement connecté) doit appartenir à
-     ``TRUSTED_PROXIES``. Seul Pangolin doit pouvoir joindre le conteneur.
-  2. L'identité extraite de l'en-tête doit figurer dans ``AUTHORIZED_USERS``.
+Le reverse proxy n'est plus qu'un relais. C'est un changement de nature par
+rapport à la version précédente, qui se fiait à un en-tête ``Remote-User``
+injecté par Pangolin :
 
-⚠️ IMPORTANT — le conteneur démarre volontairement uvicorn avec
-``--no-proxy-headers``. Sans cela, uvicorn remplacerait ``request.client.host``
-par la valeur de ``X-Forwarded-For``, elle-même falsifiable : la vérification
-n° 1 deviendrait inutile. On garde donc l'IP réelle du pair, et l'en-tête
-``X-Forwarded-For`` n'est utilisé QUE pour la journalisation.
+* ``TRUSTED_PROXIES`` n'est **plus un contrôle de sécurité**. Le port du
+  conteneur ne doit pas pour autant être exposé — un attaquant qui l'atteint ne
+  peut rien forger, mais il n'a aucune raison d'y accéder ;
+* le proxy doit **relayer sans authentifier**. Un proxy qui retire l'en-tête
+  ``Cookie`` — Pangolin le fait quand il authentifie lui-même — rend toute
+  connexion impossible : le flux aboutit chez le fournisseur puis retombe sur
+  une session vide, indéfiniment ;
+* l'en-tête ``X-Forwarded-For`` ne sert qu'à la journalisation, et uvicorn
+  démarre toujours avec ``--no-proxy-headers`` pour ne pas laisser un appelant
+  réécrire l'adresse qu'on journalise.
 
-Corollaire : ne publiez jamais le port du conteneur sur une interface publique.
-Le docker-compose fourni le lie à 127.0.0.1 pour cette raison.
+CE QUE LE TÉMOIN CONTIENT
+-------------------------
+L'identité, pas les droits. Les groupes et permissions sont relus en base à
+chaque requête : sans cela, retirer l'administration à quelqu'un n'aurait
+d'effet qu'à l'expiration de son témoin, soit jusqu'à douze heures plus tard.
 """
 
 from __future__ import annotations
@@ -30,10 +41,10 @@ import ipaddress
 import logging
 import re
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, Tuple
 
 from fastapi import HTTPException, Request, status
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import i18n, preferences
@@ -86,8 +97,15 @@ class Principal:
     username: str
     email: str = ""
     display_name: str = ""
-    source_header: str = ""
+    #: D'où vient l'identité. « oidc », ou « (AUTH_DISABLED) » en développement.
+    source_header: str = "oidc"
     is_dev: bool = False
+    user_id: Optional[int] = None
+    #: Noms des groupes, et permissions qui en découlent. Relus en base à chaque
+    #: requête : un droit retiré prend effet immédiatement.
+    groups: Tuple[str, ...] = ()
+    is_admin: bool = False
+    can_manage_templates: bool = False
 
     @property
     def label(self) -> str:
@@ -127,15 +145,11 @@ class Principal:
         """
         Droit de créer / modifier / supprimer des gabarits.
 
-        Par défaut (``TEMPLATE_ADMINS=*``) tout utilisateur autorisé est
-        administrateur des gabarits — un cabinet médical compte peu
-        d'utilisateurs et ils se font mutuellement confiance. Renseignez la
-        variable pour restreindre ce droit à quelques comptes.
+        Vient désormais des groupes et non plus de ``TEMPLATE_ADMINS`` : les
+        gabarits sont partagés, et le droit de les réécrire se donne compte par
+        compte depuis le panneau. Un administrateur l'a toujours.
         """
-        admins = settings.template_admins_normalized
-        if not admins or "*" in admins:
-            return True
-        return self.username.lower() in admins or (self.email or "").lower() in admins
+        return self.is_admin or self.can_manage_templates
 
     def to_dict(self) -> dict:
         return {
@@ -145,6 +159,8 @@ class Principal:
             "label": self.label,
             "initials": self.initials,
             "is_template_admin": self.is_template_admin,
+            "is_admin": self.is_admin,
+            "groups": list(self.groups),
             "is_dev": self.is_dev,
         }
 
@@ -190,50 +206,75 @@ def _header(request: Request, name: str) -> str:
     return (request.headers.get(name) or "").strip()
 
 
-def extract_identity(request: Request) -> tuple[str, str]:
-    """
-    Retourne (identifiant, nom de l'en-tête utilisé).
-
-    Les en-têtes sont testés dans l'ordre : SSO_HEADER_KEY puis les replis
-    déclarés dans SSO_HEADER_FALLBACKS. Cela évite d'avoir à reconfigurer
-    l'application si Pangolin change de convention.
-    """
-    for header_name in settings.sso_headers_in_order:
-        value = _header(request, header_name)
-        if value:
-            return value, header_name
-    return "", ""
+SESSION_KEY = "consultai_user"
 
 
-def is_authorized(username: str, email: str = "") -> bool:
-    """
-    L'utilisateur figure-t-il dans la liste blanche ?
+def session_identity(request: Request) -> dict:
+    """Contenu de la session, ou dictionnaire vide si aucune."""
+    try:
+        return dict(request.session.get(SESSION_KEY) or {})
+    except AssertionError:
+        # SessionMiddleware absent : ne devrait pas arriver, mais mieux vaut
+        # une absence d'identité qu'une exception au milieu du middleware.
+        logger.error("SessionMiddleware non installé : aucune session lisible")
+        return {}
 
-    La comparaison est insensible à la casse et accepte que la liste blanche
-    contienne soit l'identifiant, soit l'adresse courriel — Pangolin peut
-    fournir l'un ou l'autre selon le fournisseur d'identité configuré.
+
+def store_identity(request: Request, payload: dict) -> None:
+    request.session[SESSION_KEY] = payload
+
+
+def clear_identity(request: Request) -> None:
+    request.session.pop(SESSION_KEY, None)
+
+
+def _principal_from_db(identity: dict) -> Optional[Principal]:
     """
-    if settings.allow_all_users:
-        return True
-    allowed = settings.authorized_users_normalized
-    if not allowed:
-        return False
-    candidates = {username.lower()}
-    if email:
-        candidates.add(email.lower())
-    return bool(candidates & allowed)
+    Construit le Principal en relisant les droits en base.
+
+    Les groupes ne sont **pas** pris dans le témoin : ils y seraient figés
+    jusqu'à son expiration, et retirer l'administration à quelqu'un ne prendrait
+    effet que douze heures plus tard. Le témoin ne porte que l'identité.
+    """
+    from app.database import SessionLocal, User
+    from app import users as users_service
+
+    subject = str(identity.get("sub") or "")
+    username = str(identity.get("username") or "").lower()
+    if not (subject or username):
+        return None
+
+    with SessionLocal() as db:
+        user = None
+        if subject:
+            user = db.query(User).filter(User.subject == subject).one_or_none()
+        if user is None and username:
+            user = db.query(User).filter(User.username == username).one_or_none()
+        if user is None or not user.is_active:
+            return None
+
+        groupes = users_service.groups_of(db, user.id)
+        droits = users_service.permissions_of(groupes)
+        return Principal(
+            username=user.username,
+            email=user.email,
+            display_name=user.display_name,
+            user_id=user.id,
+            groups=tuple(g.name for g in groupes),
+            is_admin=droits["is_admin"],
+            can_manage_templates=droits["can_manage_templates"],
+        )
 
 
 def authenticate(request: Request) -> Principal:
     """
-    Authentifie la requête ou lève une ``HTTPException``.
+    Authentifie la requête depuis la session, ou lève une ``HTTPException``.
 
-    Codes retournés :
-      * 403 — pair non fiable, en-tête absent, ou utilisateur non autorisé.
-        On ne renvoie jamais 401 : il n'y a pas de mécanisme de défi côté
-        application, c'est Pangolin qui gère la connexion.
+    Renvoie **401** et non 403 : il existe désormais un mécanisme de défi côté
+    application — ``/auth/login``. Le middleware traduit ce 401 en redirection
+    pour une navigation, et le laisse tel quel pour un appel d'API, que le
+    navigateur ne doit pas suivre silencieusement.
     """
-    # -- Mode développement : contournement explicite --------------------
     if settings.auth_disabled:
         return Principal(
             username=settings.dev_user,
@@ -241,52 +282,32 @@ def authenticate(request: Request) -> Principal:
             display_name="Mode développement",
             source_header="(AUTH_DISABLED)",
             is_dev=True,
+            groups=("admins",),
+            is_admin=True,
+            can_manage_templates=True,
         )
 
-    peer_ip = get_peer_ip(request)
+    identity = session_identity(request)
+    if not identity:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_denied("denied.unauthenticated"),
+        )
 
-    # -- Vérification 1 : provenance réseau ------------------------------
-    if not is_trusted_peer(peer_ip):
+    principal = _principal_from_db(identity)
+    if principal is None:
+        # Compte supprimé ou désactivé depuis l'ouverture de la session : le
+        # témoin ne doit pas continuer à ouvrir la porte.
+        clear_identity(request)
         logger.warning(
-            "Requête refusée : IP paire %s hors de TRUSTED_PROXIES (%s %s)",
-            peer_ip, request.method, request.url.path,
+            "Session refusée : compte « %s » inconnu ou désactivé",
+            identity.get("username"),
         )
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_denied("denied.proxy"),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_denied("denied.account_disabled"),
         )
-
-    # -- Vérification 2 : identité ---------------------------------------
-    username, source_header = extract_identity(request)
-    if not username:
-        logger.warning(
-            "Requête refusée : aucun en-tête d'identité parmi %s (IP %s)",
-            settings.sso_headers_in_order, peer_ip,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_denied(
-                "denied.no_identity",
-                headers=", ".join(settings.sso_headers_in_order),
-            ),
-        )
-
-    email = _header(request, settings.sso_email_header)
-    display_name = _header(request, settings.sso_name_header)
-
-    if not is_authorized(username, email):
-        logger.warning("Requête refusée : utilisateur « %s » non autorisé", username)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_denied("denied.not_authorized", username=username),
-        )
-
-    return Principal(
-        username=username,
-        email=email,
-        display_name=display_name,
-        source_header=source_header,
-    )
+    return principal
 
 
 # ---------------------------------------------------------------------------
@@ -326,13 +347,14 @@ _ERROR_PAGE = """<!doctype html>
 </div></body></html>"""
 
 
-class SSOAuthMiddleware:
+class AuthMiddleware:
     """
     Protège l'ensemble de l'application, y compris les fichiers statiques.
 
-    ``public_paths`` liste les chemins accessibles sans authentification
-    (sonde de santé du conteneur uniquement — elle ne divulgue aucune donnée
-    clinique).
+    ``public_paths`` liste les chemins accessibles sans authentification : la
+    sonde de santé, les ressources d'installation de la PWA, et **les trois
+    routes du flux de connexion** — qui doivent évidemment rester atteignables
+    sans être déjà connecté.
     """
 
     def __init__(
@@ -386,9 +408,38 @@ class SSOAuthMiddleware:
     async def _deny(
         request: Request, exc: HTTPException, scope: Scope, receive: Receive, send: Send
     ) -> None:
-        """Réponse HTML pour une navigation, JSON pour un appel d'API."""
+        """
+        Réponse adaptée à la nature de l'appel.
+
+        Une **navigation** non authentifiée part vers la page de connexion : c'est
+        le comportement attendu d'une application qui authentifie elle-même, et
+        afficher un 403 obligerait l'usager à deviner qu'il doit visiter
+        ``/auth/login``.
+
+        Un **appel d'API** reçoit du JSON, jamais une redirection. Le client
+        suivrait la redirection en arrière-plan et recevrait du HTML là où il
+        attend du JSON, ce qui se manifesterait par une erreur d'analyse
+        incompréhensible plutôt que par « votre session a expiré ».
+        """
         accepts_html = "text/html" in (request.headers.get("accept") or "")
         wants_api = request.url.path.startswith("/api/")
+
+        if (
+            exc.status_code == status.HTTP_401_UNAUTHORIZED
+            and accepts_html
+            and not wants_api
+            and request.method == "GET"
+        ):
+            from urllib.parse import quote
+
+            cible = request.url.path
+            if request.url.query:
+                cible = f"{cible}?{request.url.query}"
+            response = RedirectResponse(
+                f"/auth/login?next={quote(cible, safe='')}", status_code=302
+            )
+            await response(scope, receive, send)
+            return
 
         if accepts_html and not wants_api:
             # Langue prise dans le .env et non dans la base : cette page est la
@@ -431,5 +482,22 @@ def require_template_admin(request: Request) -> Principal:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_denied("denied.not_admin"),
+        )
+    return principal
+
+
+def require_admin(request: Request) -> Principal:
+    """
+    Dépendance des routes d'administration : réglages, comptes, groupes.
+
+    Distincte de ``require_template_admin`` : écrire un gabarit et changer les
+    droits d'autrui ne sont pas le même pouvoir. Un groupe peut accorder le
+    premier sans le second.
+    """
+    principal = current_user(request)
+    if not principal.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_denied("denied.not_system_admin"),
         )
     return principal

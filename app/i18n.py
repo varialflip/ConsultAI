@@ -692,11 +692,29 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 
     # --- Panneau d'administration : groupes de réglages --------------------
     "group.interface": ("Interface", "Interface"),
+    "group.system": ("Système", "System"),
     "group.stt": ("Reconnaissance vocale", "Speech recognition"),
+    "group.users": ("Comptes et groupes", "Users and groups"),
     "group.llm": ("Modèle de langage", "Language model"),
     "group.prompts": ("Consignes", "Instructions"),
 
     # --- Panneau d'administration : réglages -------------------------------
+    "set.allow_signup.label": (
+        "Inscription automatique",
+        "Automatic sign-up",
+    ),
+    "set.allow_signup.help": (
+        "Activée : tout compte authentifié par le fournisseur d'identité est "
+        "créé et autorisé sans intervention. Désactivée : seuls les comptes "
+        "déjà présents peuvent entrer, les autres sont refusés. À ne laisser "
+        "activée que si l'inscription est fermée chez le fournisseur — sinon "
+        "quiconque peut s'y créer un compte entre ici.",
+        "Enabled: any account authenticated by the identity provider is created "
+        "and authorized with no intervention. Disabled: only existing accounts "
+        "may enter, others are refused. Leave this enabled only if sign-up is "
+        "closed at the provider — otherwise anyone who can register there gets "
+        "in here.",
+    ),
     "set.stt_provider.label": (
         "Service de reconnaissance vocale",
         "Speech recognition service",
@@ -958,14 +976,62 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Access denied: the account “{username}” is not listed in "
         "AUTHORIZED_USERS. Contact your administrator.",
     ),
+    "err.group_system": (
+        "Ce groupe est livré avec l'application et ne peut pas être supprimé.",
+        "This group ships with the application and cannot be deleted.",
+    ),
+    "err.group_exists": (
+        "Un groupe porte déjà ce nom.",
+        "A group with this name already exists.",
+    ),
+    "err.group_name_required": ("Le nom est obligatoire.", "The name is required."),
+    "err.group_not_found": ("Groupe introuvable.", "Group not found."),
+    "err.user_not_found": ("Compte introuvable.", "Account not found."),
     "err.unknown_language": (
         "Langue inconnue : {language}",
         "Unknown language: {language}",
     ),
     "denied.unauthenticated": ("Non authentifié.", "Not authenticated."),
+    "denied.account_disabled": (
+        "Votre compte a été désactivé. Contactez l'administrateur.",
+        "Your account has been disabled. Contact your administrator.",
+    ),
+    "denied.not_system_admin": (
+        "Réservé aux administrateurs.",
+        "Administrators only.",
+    ),
+    "denied.signup_closed": (
+        "Le compte « {username} » n'est pas autorisé sur cette installation. "
+        "L'inscription automatique est désactivée : un administrateur doit "
+        "créer le compte.",
+        "The account “{username}” is not authorized on this installation. "
+        "Automatic sign-up is disabled: an administrator must create the "
+        "account.",
+    ),
+    "denied.last_admin": (
+        "Impossible : ce serait le dernier administrateur actif. "
+        "Nommez-en un autre d'abord.",
+        "Not possible: this would remove the last active administrator. "
+        "Appoint another one first.",
+    ),
     "denied.not_admin": (
         "Seuls les administrateurs peuvent modifier les gabarits.",
         "Only administrators may modify templates.",
+    ),
+
+    # --- Flux de connexion ---------------------------------------------------
+    "auth.error_title": ("Connexion impossible", "Sign-in failed"),
+    "auth.retry": ("Réessayer la connexion", "Try signing in again"),
+    "auth.not_configured": (
+        "La connexion n'est pas configurée sur cette installation : "
+        "OIDC_PROVIDER_URL, OIDC_CLIENT_ID et OIDC_CLIENT_SECRET doivent être "
+        "renseignés dans le fichier .env.",
+        "Sign-in is not configured on this installation: OIDC_PROVIDER_URL, "
+        "OIDC_CLIENT_ID and OIDC_CLIENT_SECRET must be set in the .env file.",
+    ),
+    "auth.provider_refused": (
+        "Le fournisseur d'identité a refusé la connexion : {detail}",
+        "The identity provider refused the sign-in: {detail}",
     ),
 
     # --- Page 403 (rendue par le middleware) --------------------------------

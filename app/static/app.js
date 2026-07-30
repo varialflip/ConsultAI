@@ -2668,6 +2668,31 @@
   };
 
   /**
+   * Clé d'API dont dépend un service, par groupe et par service.
+   *
+   * Nécessaire parce que la correspondance n'est pas toujours « un service, un
+   * champ » : Cohere emploie LA MÊME clé pour la reconnaissance vocale et pour
+   * le modèle de langage. Le champ n'existe donc qu'une fois, sous
+   * Reconnaissance vocale, et le panneau du modèle s'y réfère au lieu d'en
+   * afficher un second qui écrirait dans le même réglage.
+   */
+  const PROVIDER_KEY_FIELD = {
+    'group.stt|deepgram': 'deepgram_api_key',
+    'group.stt|assemblyai': 'assemblyai_api_key',
+    'group.stt|soniox': 'soniox_api_key',
+    'group.stt|cohere': 'cohere_api_key',
+    'group.llm|gemini': 'gemini_api_key',
+    'group.llm|anthropic': 'anthropic_api_key',
+    'group.llm|openai': 'openai_api_key',
+    'group.llm|cohere': 'cohere_api_key',
+  };
+
+  /** Services dont la clé se règle ailleurs : on l'indique au lieu de la répéter. */
+  const PROVIDER_SHARED_KEY = {
+    'group.llm|cohere': 'admin.cohere_shared_key',
+  };
+
+  /**
    * Avertissements affichés en tête d'un groupe, selon la valeur d'un réglage.
    *
    * Cohere plafonne à 5 requêtes/minute : c'est une contrainte qui décide de
@@ -2768,12 +2793,18 @@
     // Une clé absente est la première cause de « ça ne marche pas » après un
     // changement de service : on le dit ici plutôt que de laisser découvrir
     // l'échec à la première dictée.
-    const champClef = adminState.fields.find(
-      (f) => f.kind === 'secret' && (PROVIDER_ONLY[f.key] || {}).value === vu,
-    );
+    const nomClef = PROVIDER_KEY_FIELD[`${groupKey}|${vu}`];
+    const champClef = nomClef && adminState.fields.find((f) => f.key === nomClef);
     const sansClef = champClef && !champClef.configured
-      && !adminState.values[champClef.key]
+      && !adminState.values[nomClef]
       ? `<p class="text-[11px] text-amber-800 mt-1">${esc(T('admin.provider_no_key'))}</p>`
+      : '';
+
+    // Clé partagée avec un autre service : on le dit, sinon le panneau paraît
+    // incomplet alors qu'il n'y a rien à y saisir.
+    const partage = PROVIDER_SHARED_KEY[`${groupKey}|${vu}`];
+    const notePartage = partage
+      ? `<p class="text-[11px] text-slate-500 mt-1 leading-relaxed">${T(partage)}</p>`
       : '';
 
     if (vu === enregistre && vu === stage) {
@@ -2781,13 +2812,13 @@
           <span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
           <span class="font-medium">${esc(libelle)}</span>
           <span class="text-slate-500">— ${esc(T('admin.provider_active'))}</span>
-        </div>${sansClef}`;
+        </div>${sansClef}${notePartage}`;
     }
     if (vu === stage) {
       return `<div class="flex items-center gap-2 text-xs text-amber-800">
           <span class="font-medium">${esc(libelle)}</span>
           <span>— ${esc(T('admin.provider_staged'))}</span>
-        </div>${sansClef}`;
+        </div>${sansClef}${notePartage}`;
     }
     return `<div class="flex items-center gap-2 flex-wrap">
         <span class="text-xs font-medium text-slate-700">${esc(libelle)}</span>
@@ -2795,7 +2826,7 @@
                 class="px-2.5 py-1 rounded-lg bg-teal-700 text-white text-xs font-medium
                        hover:bg-teal-800 transition">
           ${esc(T('admin.provider_use'))}</button>
-      </div>${sansClef}`;
+      </div>${sansClef}${notePartage}`;
   }
 
   function renderAdminFields(groups) {

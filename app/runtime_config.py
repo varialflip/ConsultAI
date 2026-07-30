@@ -91,6 +91,10 @@ LLM_PROVIDERS = (
     ("gemini", "Google Gemini"),
     ("anthropic", "Anthropic Claude"),
     ("openai", "OpenAI"),
+    # Cohere ne reçoit PAS de réglage de clé propre : ``llm._api_key("cohere")``
+    # lit « cohere_api_key », celui du service vocal. Une seule clé pour les deux
+    # usages, comme chez Cohere, et un seul champ à remplir dans le panneau.
+    ("cohere", "Cohere"),
 )
 
 

@@ -5,9 +5,9 @@ médecin dicte, l'application transcrit, un modèle de langage met en forme selo
 un gabarit, le médecin relit et exporte.
 
 * Interface **française ou anglaise**, au choix de chaque usager.
-* **Cinq** services de reconnaissance vocale et **trois** fournisseurs de modèle
-  de langage, commutables depuis le panneau d'administration sans reconstruire
-  l'image.
+* **Cinq** services de reconnaissance vocale et **quatre** fournisseurs de
+  modèle de langage, commutables depuis le panneau d'administration sans
+  reconstruire l'image.
 * Authentification **OpenID Connect**, assurée par l'application elle-même.
 * Aucune spécialité imposée : ce qui est propre à une pratique vit dans les
   gabarits et dans la consigne générale.
@@ -36,7 +36,7 @@ signalés comme tels.
 | Docker + Compose v2 | Fournis par DSM sur Synology |
 | Un fournisseur OIDC | Pocket ID, Authentik, Keycloak, Entra ID… |
 | Un proxy inverse en HTTPS | Obligatoire : le micro et l'installation PWA l'exigent |
-| Une clé de modèle de langage | Gemini, Anthropic ou OpenAI — au moins une |
+| Une clé de modèle de langage | Gemini, Anthropic, OpenAI ou Cohere — au moins une |
 | Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox ou Cohere — au moins une |
 | ~1 Go de RAM | Limite fixée dans `docker-compose.yml` |
 
@@ -160,7 +160,13 @@ COHERE_API_KEY=
 GEMINI_API_KEY=                # ou GOOGLE_CLOUD_PROJECT pour Vertex AI
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
+# Cohere : pas de variable propre, COHERE_API_KEY ci-dessus sert aux deux usages
 ```
+
+> **Cohere n'a qu'une clé pour deux usages** : `COHERE_API_KEY` alimente le
+> service vocal *et* le modèle de langage. Le champ n'apparaît donc qu'une fois
+> dans le panneau, sous Reconnaissance vocale, et le panneau du modèle y
+> renvoie.
 
 ---
 

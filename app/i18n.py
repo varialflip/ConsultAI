@@ -754,6 +754,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Sera activé à l'enregistrement.",
         "Will be activated on save.",
     ),
+    "admin.cohere_shared_key": (
+        "Cohere emploie <strong>la même clé</strong> pour le modèle de langage et "
+        "pour la reconnaissance vocale : elle se règle une seule fois, sous "
+        "l'onglet Reconnaissance vocale → Cohere.",
+        "Cohere uses <strong>the same key</strong> for the language model and for "
+        "speech recognition: set it once, under the Speech recognition tab → "
+        "Cohere.",
+    ),
     "admin.provider_env_only": (
         "Ce service n'a aucun réglage dans ce panneau : il se configure dans le "
         "fichier <code>.env</code> et, pour Google, par le compte de service "

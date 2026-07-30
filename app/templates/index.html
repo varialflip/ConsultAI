@@ -467,7 +467,7 @@
              un brouillon d'il y a deux semaines. -->
         <span id="noteEngines" class="hidden text-[11px] text-slate-400 truncate max-w-[16rem]"></span>
 
-        <div class="ml-auto flex items-center gap-1.5">
+        <div class="ml-auto flex items-end gap-1.5">
           <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs">
             <button id="tabPreview" type="button" class="px-3 py-2 bg-teal-700 text-white font-medium">{{ t('note.preview') }}</button>
             <button id="tabEdit" type="button" class="px-3 py-2 hover:bg-slate-50 text-slate-600">{{ t('note.edit') }}</button>
@@ -479,8 +479,25 @@
                portés par la bordure GAUCHE des boutons suivants : masquer le
                dernier sur petit écran ne laisse ainsi pas de filet orphelin.
                PDF reste à part — ce n'est pas une copie. -->
-          <span class="hidden lg:inline text-[11px] text-slate-400">{{ t('note.copy') }}</span>
-          <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+          <!-- « Copier » COIFFE les trois boutons au lieu de les précéder.
+               En ligne, la séquence se lisait « Aperçu, Éditer, Copier, Mise en
+               forme, Texte simple, Markdown, PDF » : rien ne disait où
+               commençait et où finissait le groupe de copie, et « Copier »
+               passait pour un bouton de plus. L'accolade rattache
+               explicitement les trois boutons à leur intitulé, et laisse PDF
+               visiblement en dehors — ce n'est pas une copie. -->
+          <div class="inline-flex flex-col items-stretch">
+            <span class="text-[10px] leading-none text-slate-400 text-center mb-0.5">
+              {{ t('note.copy') }}
+            </span>
+            <!-- L'accolade : un filet à trois côtés, ouvert vers le bas, qui
+                 embrasse la largeur du groupe. Dessiné en CSS plutôt qu'avec un
+                 caractère « ︷ », dont le rendu varie trop d'une police à
+                 l'autre. Légèrement resserré pour ne pas doubler la bordure du
+                 groupe juste en dessous. -->
+            <span aria-hidden="true"
+                  class="h-1 mx-1.5 border-t border-l border-r border-slate-300 rounded-t-[3px]"></span>
+            <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs">
             <button id="btnCopyRich" type="button"
                     title="{{ t('copy.rich_title') }}"
                     class="px-2.5 py-2 hover:bg-slate-50 text-slate-600">
@@ -495,6 +512,7 @@
                     class="hidden sm:block px-2.5 py-2 border-l border-slate-200 hover:bg-slate-50 text-slate-600">
               {{ t('copy.markdown') }}
             </button>
+            </div>
           </div>
 
           <button id="btnPdf" type="button" title="{{ t('copy.pdf_title') }}"

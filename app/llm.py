@@ -393,7 +393,10 @@ def _api_key(provider: str) -> str:
 
 
 def _missing_key(provider: str) -> GenerationError:
-    labels = {"gemini": "Google Gemini", "anthropic": "Anthropic", "openai": "OpenAI"}
+    labels = {
+        "gemini": "Google Gemini", "anthropic": "Anthropic",
+        "openai": "OpenAI", "cohere": "Cohere",
+    }
     return GenerationError(
         f"Aucune clé API {labels.get(provider, provider)} n'est configurée. "
         "Panneau d'administration → Modèle de langage."
@@ -469,6 +472,19 @@ def list_available_models(provider: Optional[str] = None) -> List[str]:
     et ce qui alimente le bouton « Modèles disponibles » du panneau.
     """
     provider = provider or active_provider()
+
+    if provider == "cohere":
+        # Pas de SDK Cohere dans l'image : une requête HTTP suffit, comme pour
+        # les services vocaux sans bibliothèque. « endpoint=chat » écarte les
+        # modèles d'embedding et de reclassement, sans objet ici.
+        data = _cohere_request("GET", "/v1/models?endpoint=chat&page_size=100")
+        noms = [
+            str(m.get("name") or "")
+            for m in (data.get("models") or [])
+            if m.get("name")
+        ]
+        return sorted(set(noms))
+
     client = get_client(provider)
     names: List[str] = []
     try:
@@ -518,6 +534,8 @@ def complete(
         return _complete_anthropic(system, user, model, temperature, max_tokens, json_mode)
     if provider == "openai":
         return _complete_openai(system, user, model, temperature, max_tokens, json_mode)
+    if provider == "cohere":
+        return _complete_cohere(system, user, model, temperature, max_tokens, json_mode)
     raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
 
 
@@ -976,3 +994,111 @@ def extract_metadata(transcript: str, note_markdown: str = "") -> Dict[str, str]
         ", ".join(key for key, value in metadata.items() if value) or "aucune",
     )
     return metadata
+
+
+# ===========================================================================
+# Cohere
+# ===========================================================================
+# Contrat vérifié sur la documentation courante :
+#   POST https://api.cohere.com/v2/chat
+#   Authorization: Bearer <clé>
+#   {stream: false, model, messages: [{role, content}], temperature, max_tokens}
+#   réponse : message.content[0].text
+#             finish_reason ∈ COMPLETE | MAX_TOKENS | …
+#             usage.billed_units.{input_tokens, output_tokens}
+#
+# LA CLÉ EST CELLE DU SERVICE VOCAL
+# ---------------------------------
+# ``_api_key("cohere")`` lit ``cohere_api_key``, le réglage déjà employé par
+# Cohere Transcribe : une seule clé pour les deux usages, ce qui correspond à la
+# facturation de Cohere. Le réglage n'apparaît donc qu'une fois dans le panneau,
+# sous Reconnaissance vocale, et le panneau du modèle de langage renvoie à lui.
+#
+# Pas de SDK : deux requêtes HTTP suffisent, et l'image ne grossit pas.
+# ===========================================================================
+_COHERE_API = "https://api.cohere.com"
+#: Modèle par défaut proposé dans le panneau. « command-a » est la famille que
+#: Cohere positionne comme la plus performante ; le bouton « Modèles
+#: disponibles » montre ce à quoi la clé donne réellement droit.
+COHERE_DEFAULT_MODEL = "command-a-03-2025"
+
+
+def _cohere_request(method: str, path: str, payload: Optional[dict] = None) -> dict:
+    """Requête JSON authentifiée vers l'API Cohere."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    key = _api_key("cohere")
+    if not key:
+        raise _missing_key("cohere")
+
+    data = _json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(
+        f"{_COHERE_API}{path}",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as reponse:
+            return _json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:300]
+        if exc.code == 429:
+            raise GenerationError(
+                "Cohere a refusé la requête : limite de débit atteinte. Une clé "
+                "d'essai est fortement plafonnée — voir README § 7.2."
+            ) from exc
+        raise GenerationError(f"Erreur Cohere ({exc.code}) : {detail}") from exc
+    except Exception as exc:
+        raise GenerationError(f"Erreur Cohere : {exc}") from exc
+
+
+def _complete_cohere(
+    system: str,
+    user: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    json_mode: bool,
+) -> Completion:
+    corps = {
+        "stream": False,
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if json_mode:
+        # Employé par la relecture des métadonnées, qui attend un objet JSON.
+        corps["response_format"] = {"type": "json_object"}
+
+    data = _cohere_request("POST", "/v2/chat", corps)
+
+    # Le texte arrive en blocs typés : on ne concatène que les blocs « text ».
+    # Un bloc d'un autre type — appel d'outil, citation — n'a rien à faire dans
+    # une note clinique, et le laisser passer y insérerait du bruit.
+    blocs = ((data.get("message") or {}).get("content")) or []
+    texte = "".join(
+        str(b.get("text") or "") for b in blocs if b.get("type", "text") == "text"
+    )
+
+    jetons = (data.get("usage") or {}).get("billed_units") or {}
+    return Completion(
+        text=texte,
+        model=model,
+        provider="cohere",
+        finish_reason=str(data.get("finish_reason") or ""),
+        usage={
+            "input_tokens": jetons.get("input_tokens"),
+            "output_tokens": jetons.get("output_tokens"),
+        },
+    )

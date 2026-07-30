@@ -59,8 +59,9 @@ services:
       # ---- Application ----
       TZ: "${TZ:-America/Toronto}"
       APP_TITLE: "${APP_TITLE:-ConsultAI}"
-      # Langue de départ de l'interface ET de la chaîne : « fr » ou « en ».
-      # Le panneau d'administration la change sans reconstruction.
+      # Langue par DÉFAUT : « fr » ou « en ». Chaque usager choisit la sienne
+      # depuis le menu de la pastille d'identité ; cette valeur ne sert qu'à
+      # ceux qui n'ont jamais choisi.
       APP_LANGUAGE: "${APP_LANGUAGE:-fr}"
       DATABASE_URL: "${DATABASE_URL:-sqlite:////data/consultai.db}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"

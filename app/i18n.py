@@ -41,7 +41,7 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Tuple
 
-#: Langues offertes. L'ordre est celui du menu du panneau d'administration.
+#: Langues offertes. L'ordre est celui du menu d'identité, en haut à droite.
 LANGUAGES: Tuple[Tuple[str, str], ...] = (
     ("fr", "Français"),
     ("en", "English"),
@@ -160,6 +160,18 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "header.settings_title": ("Panneau d'administration", "Administration panel"),
 
     # --- Identité et déconnexion -------------------------------------------
+    # La langue se choisit ici, dans le menu de l'usager, et non dans le
+    # panneau d'administration : elle regarde la personne qui lit l'écran, pas
+    # l'installation.
+    "identity.language": ("Langue", "Language"),
+    "identity.language_saved": (
+        "Langue changée. L'écran se recharge…",
+        "Language changed. Reloading…",
+    ),
+    "identity.language_failed": (
+        "Changement de langue impossible : {error}",
+        "Could not change the language: {error}",
+    ),
     "identity.logout": ("Se déconnecter", "Sign out"),
     "identity.pangolin_logout": ("Fermer la session Pangolin", "Close the Pangolin session"),
     "identity.logout_busy": (
@@ -685,19 +697,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "group.prompts": ("Consignes", "Instructions"),
 
     # --- Panneau d'administration : réglages -------------------------------
-    "set.app_language.label": ("Langue de l'application", "Application language"),
-    "set.app_language.help": (
-        "Change la langue de l'interface ET de toute la chaîne : code de "
-        "langue envoyé au service vocal, et langue dans laquelle le modèle "
-        "rédige la note. Vos gabarits ne sont pas réécrits — ils restent dans "
-        "la langue où vous les avez écrits, et leurs titres de rubriques "
-        "s'imposent au modèle.",
-        "Changes the language of the interface AND of the whole chain: the "
-        "language code sent to the speech service, and the language the model "
-        "writes the note in. Your templates are not rewritten — they stay in "
-        "the language you wrote them in, and their section headings take "
-        "precedence for the model.",
-    ),
     "set.stt_provider.label": (
         "Service de reconnaissance vocale",
         "Speech recognition service",
@@ -959,6 +958,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Access denied: the account “{username}” is not listed in "
         "AUTHORIZED_USERS. Contact your administrator.",
     ),
+    "err.unknown_language": (
+        "Langue inconnue : {language}",
+        "Unknown language: {language}",
+    ),
     "denied.unauthenticated": ("Non authentifié.", "Not authenticated."),
     "denied.not_admin": (
         "Seuls les administrateurs peuvent modifier les gabarits.",
@@ -975,13 +978,19 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 }
 
 
-def t(key: str, language: str = DEFAULT_LANGUAGE, **fields) -> str:
+def t(key: str, language: str = DEFAULT_LANGUAGE, /, **fields) -> str:
     """
     Texte pour la langue demandée, champs entre accolades remplis.
 
     Une clé absente est renvoyée telle quelle plutôt que de lever : un libellé
     qui s'affiche en clair est un défaut visible et réparable, une exception au
     milieu du rendu d'une page ne l'est pas.
+
+    ``key`` et ``language`` sont **positionnels seulement** (le ``/``). Sans
+    cela, un texte comportant un champ ``{language}`` ou ``{key}`` — il en
+    existe — provoquait un ``TypeError`` : « got multiple values for argument
+    'language' ». Le nom d'un champ de traduction ne doit pas pouvoir entrer en
+    collision avec la signature de la fonction qui le remplit.
     """
     couple = _STRINGS.get(key)
     if couple is None:

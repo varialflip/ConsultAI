@@ -35,7 +35,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 
-from app import i18n
+from app import i18n, preferences
 from app.config import settings
 from app.database import AppSetting, SessionLocal
 
@@ -93,16 +93,16 @@ LLM_PROVIDERS = (
 )
 
 
+# NOTE — la langue n'est PAS ici.
+#
+# Elle a d'abord été un réglage de ce panneau, ce qui était une erreur de
+# portée : le panneau est réservé aux administrateurs, si bien qu'un usager
+# ordinaire ne pouvait pas changer la langue de sa propre interface, et qu'un
+# administrateur la changeait pour tout le monde à la fois. Elle vit maintenant
+# dans le menu d'identité, par usager — voir ``app/preferences.py``.
+#
+# Le défaut de l'installation reste ``APP_LANGUAGE`` dans le ``.env``.
 SETTINGS: Tuple[Setting, ...] = (
-    # --- Interface -----------------------------------------------------------
-    # Placée en premier : elle change tout le reste de l'écran, et un réglage
-    # qui se cherche en bas d'une liste de vingt donne l'impression d'être
-    # absent.
-    Setting(
-        "app_language", "choice", "group.interface",
-        default=lambda: settings.app_language, choices=i18n.LANGUAGES,
-    ),
-
     # --- Reconnaissance vocale ---------------------------------------------
     Setting(
         "stt_provider", "choice", "group.stt",
@@ -203,7 +203,7 @@ SETTINGS: Tuple[Setting, ...] = (
 )
 
 #: Ordre d'affichage des groupes dans le panneau.
-GROUPS: Tuple[str, ...] = ("group.interface", "group.stt", "group.llm", "group.prompts")
+GROUPS: Tuple[str, ...] = ("group.stt", "group.llm", "group.prompts")
 
 BY_KEY: Dict[str, Setting] = {item.key: item for item in SETTINGS}
 
@@ -271,14 +271,20 @@ def is_overridden(key: str) -> bool:
 # ---------------------------------------------------------------------------
 def language() -> str:
     """
-    Langue effective de l'application : « fr » ou « en ».
+    Langue effective : « fr » ou « en ».
 
-    Point d'entrée unique. Tout ce qui dépend de la langue — l'interface, le
-    code envoyé au service vocal, la langue de rédaction de la note — passe
-    par ici, de façon qu'un changement dans le panneau se répercute partout
-    sans redémarrage.
+    Point d'entrée unique de tout ce qui dépend de la langue — l'interface, le
+    code envoyé au service vocal, la langue de rédaction de la note.
+
+    Ce n'est **pas** un réglage d'instance : la langue appartient à l'usager qui
+    lit l'écran, et elle se choisit depuis son menu d'identité. La valeur est
+    donc portée par la requête en cours (voir ``preferences``), avec
+    ``APP_LANGUAGE`` du ``.env`` comme défaut pour qui n'a jamais choisi.
+
+    La fonction reste ici parce que c'est l'adresse que connaissent ``stt.py``
+    et ``llm.py`` ; elle ne fait que déléguer.
     """
-    return i18n.normalize(value("app_language"))
+    return preferences.current_language()
 
 
 def stt_language(provider: str) -> str:

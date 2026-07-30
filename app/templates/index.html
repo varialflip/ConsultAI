@@ -206,6 +206,20 @@
             <p class="font-medium text-slate-800 truncate">{{ user.display_name or user.label }}</p>
             <p class="text-[11px] text-slate-500 truncate">{{ user.email or user.username }}</p>
           </div>
+
+          <!-- Langue : préférence PERSONNELLE, et donc ici plutôt que dans le
+               panneau d'administration. Celui-ci est réservé aux
+               administrateurs : un usager ordinaire n'aurait pas pu changer la
+               langue de sa propre interface, et un administrateur l'aurait
+               changée pour tout le monde. Les boutons sont construits par
+               app.js d'après /api/config : ajouter une langue ne demande de
+               toucher qu'à app/i18n.py. -->
+          <div class="px-3 py-2 border-b border-slate-100">
+            <p class="text-[11px] text-slate-500 mb-1">{{ t('identity.language') }}</p>
+            <div id="languageChoices" class="inline-flex rounded-lg border border-slate-200
+                                             overflow-hidden text-xs"></div>
+          </div>
+
           <button id="btnLogout" type="button" role="menuitem"
                   class="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-50
                          active:bg-slate-100 transition">

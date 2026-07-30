@@ -312,6 +312,42 @@ class AppSetting(Base):
     updated_by: Mapped[str] = mapped_column(String(255), default="", nullable=False)
 
 
+class UserPreference(Base):
+    """
+    Préférences propres à un usager, indépendantes des réglages d'instance.
+
+    POURQUOI UNE TABLE SÉPARÉE D'``app_settings``
+    ---------------------------------------------
+    ``app_settings`` décrit l'installation et n'est modifiable que par un
+    administrateur. La langue, elle, n'a rien d'administratif : elle regarde la
+    personne qui lit l'écran. La mettre dans le panneau d'administration
+    obligeait un usager ordinaire à demander à quelqu'un d'autre de changer la
+    langue de sa propre interface — ou, s'il y avait accès, à la changer pour
+    tout le monde.
+
+    POURQUOI PAS UN TÉMOIN DE SESSION
+    ---------------------------------
+    Ce serait la solution habituelle, et elle est ici impossible : Pangolin
+    retire l'en-tête ``Cookie`` des requêtes qu'il relaie au conteneur. Le
+    serveur ne verrait jamais la préférence. Elle est donc rangée en base, sous
+    la clé d'identité que Pangolin transmet, elle.
+
+    La clé est l'identifiant normalisé en minuscules (voir
+    ``Principal.owner_key``) : le fournisseur d'identité peut renvoyer une casse
+    variable d'une session à l'autre, et « Dr.Tremblay@… » ne doit pas perdre le
+    réglage de « dr.tremblay@… ».
+    """
+
+    __tablename__ = "user_preferences"
+
+    username: Mapped[str] = mapped_column(String(255), primary_key=True)
+    #: « fr », « en », ou vide pour suivre le défaut de l'installation.
+    language: Mapped[str] = mapped_column(String(8), default="", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 # ---------------------------------------------------------------------------
 # Dépendance FastAPI
 # ---------------------------------------------------------------------------

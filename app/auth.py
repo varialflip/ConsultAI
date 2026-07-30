@@ -36,7 +36,7 @@ from fastapi import HTTPException, Request, status
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import i18n
+from app import i18n, preferences
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -367,6 +367,19 @@ class SSOAuthMiddleware:
 
         # Mis à disposition des endpoints via `request.state.principal`.
         scope.setdefault("state", {})["principal"] = principal
+
+        # Langue de CET usager, fixée pour toute la durée de la requête.
+        #
+        # Ici plutôt que dans une dépendance FastAPI : une dépendance ne
+        # s'applique qu'aux routes qui la déclarent, et il suffirait d'en
+        # oublier une pour qu'elle réponde dans la langue de quelqu'un d'autre.
+        # Ce point-ci couvre par construction tout ce qui est authentifié.
+        #
+        # Le contexte est recopié par asyncio.create_task et par
+        # run_in_threadpool : la passe de découpage d'une dictée, qui survit à
+        # la réponse HTTP, garde donc cette langue.
+        preferences.bind_language(preferences.language_for(principal.owner_key))
+
         await self.app(scope, receive, send)
 
     @staticmethod

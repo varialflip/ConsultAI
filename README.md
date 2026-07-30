@@ -361,13 +361,8 @@ provenance : `panneau` ou `.env`.
 > du navigateur. Un panneau accessible en ligne ne doit pas pouvoir élargir la
 > liste des personnes autorisées à lire les consultations.
 
-### Interface
-
-**Langue de l'application** — `Français` ou `English`. C'est le premier réglage
-du panneau parce que c'est celui qui change tout le reste : l'interface, le code
-de langue envoyé au service vocal, et la langue dans laquelle le modèle rédige
-la note. La page se recharge après l'enregistrement. Détails et limites en
-§ 5 quater.
+> **La langue n'est pas ici.** C'est une préférence personnelle, choisie dans
+> le menu de la pastille d'identité — voir § 5 quater.
 
 ### Reconnaissance vocale
 
@@ -591,9 +586,23 @@ Deux points de conception :
 
 ## 5 quater. Langue : français ou anglais
 
-Le réglage **Réglages → Interface → Langue de l'application** (`APP_LANGUAGE`
-dans le `.env`, `fr` par défaut) ne change pas seulement l'habillage. La langue
-traverse toute la chaîne :
+**Menu de la pastille d'identité, en haut à droite → Langue.** Chacun choisit la
+sienne ; le choix est enregistré sous son identité et ne touche personne
+d'autre. `APP_LANGUAGE` dans le `.env` (`fr` par défaut) ne sert qu'aux usagers
+qui n'ont jamais choisi.
+
+> **Pourquoi pas dans le panneau d'administration ?** Parce que ce panneau est
+> réservé aux administrateurs. La langue, elle, regarde la personne qui lit
+> l'écran : un usager ordinaire doit pouvoir changer la sienne, et ne doit pas
+> pouvoir changer celle des autres. Deux médecins partageant l'installation
+> travaillent donc l'un en français, l'autre en anglais.
+
+> **Pourquoi en base et non dans un témoin de session ?** Parce que Pangolin
+> retire l'en-tête `Cookie` des requêtes qu'il relaie au conteneur : le serveur
+> ne verrait jamais la préférence. Elle est donc rangée dans la table
+> `user_preferences`, sous l'identité que Pangolin transmet, elle.
+
+Ce n'est pas qu'un habillage : la langue traverse toute la chaîne :
 
 | Ce qui suit la langue | Détail |
 |---|---|
@@ -604,8 +613,10 @@ traverse toute la chaîne :
 | L'extraction des métadonnées | Même invite, dans la langue courante |
 
 Le changement prend effet **immédiatement**, sans reconstruction de l'image. La
-page se recharge d'elle-même après l'enregistrement, l'interface étant rendue
-par le serveur.
+page se recharge d'elle-même, l'interface étant rendue par le serveur. Une
+dictée déjà lancée conserve la langue dans laquelle elle a commencé, jusqu'à sa
+transcription : le changement en cours de dictée est refusé plutôt que de
+produire une transcription à cheval sur deux langues.
 
 ### Ce que la langue ne change pas : vos gabarits
 

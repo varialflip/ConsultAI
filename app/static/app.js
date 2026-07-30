@@ -2621,16 +2621,6 @@
     try {
       const result = await api('/api/admin/settings', { method: 'PUT', body: { values } });
 
-      // La langue vient peut-être de changer. Tout l'écran est rendu par le
-      // serveur avec le catalogue de la langue en cours : le seul moyen honnête
-      // de le retraduire en entier est de le redemander. Un rechargement est
-      // sans danger ici — le brouillon est déjà sauvegardé en base.
-      if (result.language && result.language !== LANG) {
-        toast(T('admin.applied'), 'success');
-        window.location.reload();
-        return;
-      }
-
       adminState.fields = result.settings || [];
       adminState.dirty = new Set();
       renderAdminFields(result.groups || null);
@@ -2715,6 +2705,59 @@
     window.location.href = cible;
   }
 
+  /* -------------------------------------------------------------------------
+   * Choix de la langue
+   * ----------------------------------------------------------------------
+   * Préférence personnelle, enregistrée côté serveur sous l'identité
+   * authentifiée. Elle ne peut pas passer par un témoin de session : Pangolin
+   * retire l'en-tête « Cookie » des requêtes qu'il relaie, le serveur ne le
+   * verrait jamais.
+   *
+   * Le rechargement est nécessaire et non un raccourci : toute l'interface est
+   * rendue par le serveur avec le catalogue de la langue courante, et les
+   * consignes envoyées au modèle en dépendent aussi. Il est sans danger — le
+   * brouillon est déjà en base — sauf pendant une dictée, d'où le garde-fou.
+   * ---------------------------------------------------------------------- */
+
+  function renderLanguageChoices(langues, courante) {
+    const boite = $('languageChoices');
+    if (!boite) return;
+
+    boite.innerHTML = (langues || []).map((langue, index) => {
+      const actif = langue.value === courante;
+      const bordure = index === 0 ? '' : 'border-l border-slate-200';
+      const fond = actif
+        ? 'bg-teal-700 text-white font-medium'
+        : 'hover:bg-slate-50 text-slate-600';
+      return `<button type="button" role="menuitem" data-lang="${esc(langue.value)}"
+                      aria-current="${actif ? 'true' : 'false'}"
+                      class="px-3 py-1.5 transition ${bordure} ${fond}">
+                ${esc(langue.label)}</button>`;
+    }).join('');
+
+    boite.querySelectorAll('button[data-lang]').forEach((bouton) => {
+      bouton.addEventListener('click', () => setLanguage(bouton.dataset.lang));
+    });
+  }
+
+  async function setLanguage(langue) {
+    if (langue === LANG) {
+      toggleIdentityMenu(false);
+      return;
+    }
+    if (state.recording) {
+      showLogoutHint(T('identity.logout_busy'), 'error');
+      return;
+    }
+    try {
+      await api('/api/me/language', { method: 'PUT', body: { language: langue } });
+      showLogoutHint(T('identity.language_saved'));
+      window.location.reload();
+    } catch (err) {
+      showLogoutHint(T('identity.language_failed', { error: err.message }), 'error');
+    }
+  }
+
   /* =========================================================================
    * 9. INITIALISATION
    * ====================================================================== */
@@ -2739,6 +2782,7 @@
     $('templateAdminBadge').classList.toggle('hidden', state.isTemplateAdmin);
     $('btnNewTemplate').classList.toggle('hidden', !state.isTemplateAdmin);
     state.logoutOidcUrl = config.logout_oidc_url || '';
+    renderLanguageChoices(config.languages, config.language || LANG);
     const lien = $('lnkPangolinLogout');
     if (config.logout_pangolin_ui_url) {
       lien.href = config.logout_pangolin_ui_url;

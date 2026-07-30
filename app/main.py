@@ -10,6 +10,7 @@ Routes
   Protégé par Pangolin SSO :
     GET    /                             interface web
     GET    /api/me                       identité de l'utilisateur courant
+    PUT    /api/me/language              langue de l'utilisateur courant
     GET    /api/config                   configuration visible côté client
     GET    /api/models                   modèles Gemini accessibles (diagnostic)
 
@@ -65,7 +66,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app import __version__
-from app import dictation, i18n, llm, recordings, runtime_config
+from app import dictation, i18n, llm, preferences, recordings, runtime_config
 from app.auth import Principal, SSOAuthMiddleware, current_user, require_template_admin
 from app.config import configure_logging, settings
 from app.database import (
@@ -111,9 +112,10 @@ async def lifespan(app: FastAPI):
     # Les fournisseurs effectifs viennent du panneau d'administration, pas du
     # .env : c'est ce couple-là qu'il faut voir dans les journaux quand une
     # génération échoue.
-    # La langue affichée est la langue EFFECTIVE, résolue par le panneau puis
-    # traduite dans la convention du service : c'est ce code-là qui part
-    # réellement, et non le contenu éventuel de STT_LANGUAGE_CODE.
+    # Hors requête HTTP, la langue est celle du .env : les préférences par
+    # usager n'ont de sens qu'une fois qu'on sait de qui il s'agit. C'est donc
+    # le défaut de l'installation qui est journalisé ici, avec le code de langue
+    # qui en découle — et non le contenu éventuel de STT_LANGUAGE_CODE.
     _stt_provider = runtime_config.value("stt_provider")
     logger.info(
         "Modèle : %s / %s | Reconnaissance vocale : %s (%s) | Langue : %s",
@@ -165,6 +167,20 @@ def _t(key: str, **fields) -> str:
     dans la langue de l'écran que le médecin regarde.
     """
     return i18n.t(key, runtime_config.language(), **fields)
+
+
+def _template_translator(language: str):
+    """
+    Traducteur destiné au gabarit Jinja : ``{{ t('cle') }}``.
+
+    Une fonction nommée plutôt qu'une lambda, et des paramètres positionnels
+    seulement, pour la même raison que dans ``i18n.t`` : un champ de traduction
+    appelé « key » ou « language » ne doit pas pouvoir heurter la signature.
+    """
+    def traduire(key, /, **fields) -> str:
+        return i18n.t(key, language, **fields)
+
+    return traduire
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +445,7 @@ async def index(request: Request):
             # « t » est une fonction et non un dictionnaire : le gabarit écrit
             # t('cle') plutôt que t['cle'], ce qui permet de passer des champs
             # à remplir et de ne pas lever sur une clé absente.
-            "t": lambda key, **fields: i18n.t(key, langue, **fields),
+            "t": _template_translator(langue),
             "lang": langue,
             # Catalogue complet inclus dans la page : le navigateur en a besoin
             # avant le premier affichage, et un aller-retour de plus ferait
@@ -446,6 +462,36 @@ async def index(request: Request):
 async def api_me(request: Request):
     user = current_user(request)
     return {"user": user.to_dict(), "auth_header": user.source_header}
+
+
+class LanguageIn(BaseModel):
+    #: Vide = revenir au défaut de l'installation (``APP_LANGUAGE``).
+    language: str = Field("", max_length=8)
+
+
+@app.put("/api/me/language")
+def put_my_language(payload: LanguageIn, request: Request):
+    """
+    Change la langue de l'usager courant.
+
+    Volontairement PAS sous ``/api/admin`` et sans exiger de droits : la langue
+    n'est pas un réglage d'installation mais une préférence personnelle. Chacun
+    change la sienne, personne ne change celle des autres — l'écriture est
+    toujours faite sous l'identité authentifiée, jamais sous un identifiant
+    reçu dans le corps de la requête.
+    """
+    user = current_user(request)
+    try:
+        retenue = preferences.set_language(user.owner_key, payload.language)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=_t("err.unknown_language", language=payload.language),
+        ) from exc
+
+    return {"language": retenue, "languages": [
+        {"value": code, "label": label} for code, label in i18n.LANGUAGES
+    ]}
 
 
 @app.get("/api/config")
@@ -476,6 +522,11 @@ async def api_config(request: Request):
         # l'application y renvoie au lieu de prétendre la faire elle-même.
         "logout_oidc_url": _logout_oidc_url(),
         "logout_pangolin_ui_url": settings.logout_pangolin_ui_url,
+        # Langues offertes, pour le menu d'identité. Le serveur en est la seule
+        # source : ajouter une langue ne demande de toucher qu'à app/i18n.py.
+        "languages": [
+            {"value": code, "label": label} for code, label in i18n.LANGUAGES
+        ],
     }
 
 

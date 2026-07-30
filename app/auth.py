@@ -36,6 +36,7 @@ from fastapi import HTTPException, Request, status
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app import i18n
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,7 @@ class Principal:
         Droit de créer / modifier / supprimer des gabarits.
 
         Par défaut (``TEMPLATE_ADMINS=*``) tout utilisateur autorisé est
-        administrateur des gabarits — un cabinet de gériatrie compte peu
+        administrateur des gabarits — un cabinet médical compte peu
         d'utilisateurs et ils se font mutuellement confiance. Renseignez la
         variable pour restreindre ce droit à quelques comptes.
         """
@@ -252,10 +253,7 @@ def authenticate(request: Request) -> Principal:
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Accès refusé : requête reçue en dehors du proxy de confiance. "
-                "Passez par Pangolin ou ajustez TRUSTED_PROXIES."
-            ),
+            detail=_denied("denied.proxy"),
         )
 
     # -- Vérification 2 : identité ---------------------------------------
@@ -267,9 +265,9 @@ def authenticate(request: Request) -> Principal:
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Accès refusé : aucune identité transmise par le SSO. "
-                f"En-têtes attendus : {', '.join(settings.sso_headers_in_order)}."
+            detail=_denied(
+                "denied.no_identity",
+                headers=", ".join(settings.sso_headers_in_order),
             ),
         )
 
@@ -280,10 +278,7 @@ def authenticate(request: Request) -> Principal:
         logger.warning("Requête refusée : utilisateur « %s » non autorisé", username)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"Accès refusé : le compte « {username} » ne figure pas dans "
-                "AUTHORIZED_USERS. Contactez l'administrateur."
-            ),
+            detail=_denied("denied.not_authorized", username=username),
         )
 
     return Principal(
@@ -301,10 +296,21 @@ def authenticate(request: Request) -> Principal:
 # met la requête en tampon, ce qui pose problème pour les téléversements audio
 # de plusieurs dizaines de mégaoctets.
 # ---------------------------------------------------------------------------
+def _denied(key: str, **fields) -> str:
+    """
+    Message de refus, dans la langue du ``.env``.
+
+    Volontairement pas la langue de la base : ces messages répondent à des
+    requêtes non authentifiées, et rien de ce que dit un appelant refusé ne
+    doit déclencher une lecture de la base.
+    """
+    return i18n.t(key, i18n.normalize(settings.app_language), **fields)
+
+
 _ERROR_PAGE = """<!doctype html>
-<html lang="fr"><head><meta charset="utf-8">
+<html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Accès refusé</title>
+<title>{title}</title>
 <style>
  body{{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#0f172a;color:#e2e8f0;
       display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1.5rem}}
@@ -314,9 +320,9 @@ _ERROR_PAGE = """<!doctype html>
  code{{background:#0f172a;padding:.15rem .4rem;border-radius:.25rem;font-size:.85em}}
 </style></head>
 <body><div class="card">
-  <h1>403 — Accès refusé</h1>
+  <h1>{heading}</h1>
   <p>{detail}</p>
-  <p style="color:#64748b;font-size:.8rem">ConsultAI — accès contrôlé par Pangolin SSO.</p>
+  <p style="color:#64748b;font-size:.8rem">{footer}</p>
 </div></body></html>"""
 
 
@@ -372,8 +378,20 @@ class SSOAuthMiddleware:
         wants_api = request.url.path.startswith("/api/")
 
         if accepts_html and not wants_api:
+            # Langue prise dans le .env et non dans la base : cette page est la
+            # réponse à une requête REFUSÉE. Elle doit pouvoir s'afficher même
+            # si la base est indisponible, et surtout ne rien interroger sur
+            # ordre d'un appelant non authentifié.
+            langue = i18n.normalize(settings.app_language)
             response = HTMLResponse(
-                _ERROR_PAGE.format(detail=exc.detail), status_code=exc.status_code
+                _ERROR_PAGE.format(
+                    lang=langue,
+                    title=i18n.t("denied.title", langue),
+                    heading=i18n.t("denied.heading", langue),
+                    footer=i18n.t("denied.footer", langue),
+                    detail=exc.detail,
+                ),
+                status_code=exc.status_code,
             )
         else:
             response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
@@ -389,7 +407,7 @@ def current_user(request: Request) -> Principal:
     if principal is None:
         # Ne devrait jamais arriver : le middleware couvre toutes les routes
         # non publiques. Filet de sécurité en cas d'erreur de configuration.
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non authentifié.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_denied("denied.unauthenticated"))
     return principal
 
 
@@ -399,6 +417,6 @@ def require_template_admin(request: Request) -> Principal:
     if not principal.is_template_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Seuls les administrateurs peuvent modifier les gabarits.",
+            detail=_denied("denied.not_admin"),
         )
     return principal

@@ -81,7 +81,13 @@ def _parse_networks(entries: List[str]) -> List[ipaddress._BaseNetwork]:
 @dataclass(frozen=True)
 class Settings:
     # --- Général ---
-    app_title: str = "ConsultAI — Gériatrie"
+    # Le titre n'annonce aucune spécialité : ce qui est propre à une pratique
+    # vit dans les gabarits et dans la consigne générale, pas ici.
+    app_title: str = "ConsultAI"
+    #: Langue de départ de l'interface ET de la chaîne de traitement (« fr » ou
+    #: « en »). Le panneau d'administration la surcharge — c'est donc une
+    #: valeur initiale, pas la valeur effective : voir runtime_config.language().
+    app_language: str = "fr"
     log_level: str = "INFO"
     database_url: str = "sqlite:////data/consultai.db"
 
@@ -98,7 +104,11 @@ class Settings:
 
     # --- Speech-to-Text ---
     google_credentials: str = ""
-    stt_language_code: str = "fr-CA"
+    #: Forçage du code de langue envoyé au service vocal. **Vide = suit la
+    #: langue de l'application**, ce qui est le comportement voulu : une valeur
+    #: fixée ici l'emporterait sur le réglage de langue et une dictée en
+    #: anglais partirait avec « fr-CA ».
+    stt_language_code: str = ""
     stt_model: str = "latest_long"
     stt_use_enhanced: bool = True
     stt_api_endpoint: str = ""
@@ -219,7 +229,8 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            app_title=_env("APP_TITLE", "ConsultAI — Gériatrie"),
+            app_title=_env("APP_TITLE", "ConsultAI"),
+            app_language=_env("APP_LANGUAGE", "fr"),
             log_level=_env("LOG_LEVEL", "INFO").upper(),
             database_url=_env("DATABASE_URL", "sqlite:////data/consultai.db"),
 
@@ -242,7 +253,8 @@ class Settings:
             dev_user=_env("DEV_USER", "dev@local"),
 
             google_credentials=_env("GOOGLE_APPLICATION_CREDENTIALS"),
-            stt_language_code=_env("STT_LANGUAGE_CODE", "fr-CA"),
+            # Pas de défaut : vide signifie « suis la langue de l'application ».
+            stt_language_code=_env("STT_LANGUAGE_CODE"),
             stt_model=_env("STT_MODEL", "latest_long"),
             stt_use_enhanced=_env_bool("STT_USE_ENHANCED", True),
             stt_api_endpoint=_env("STT_API_ENDPOINT"),

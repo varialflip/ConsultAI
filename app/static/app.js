@@ -21,6 +21,39 @@
   'use strict';
 
   /* =========================================================================
+   * 0. TRADUCTION
+   * ======================================================================
+   * La langue et le catalogue complet sont inclus dans la page par le serveur
+   * (voir window.CONSULTAI dans index.html). Rien n'est chargé par le réseau :
+   * l'interface doit pouvoir écrire du texte à sa première ligne de code, et
+   * un aller-retour de plus l'afficherait un instant en clés brutes.
+   *
+   * Le code et ses commentaires restent en français — ils s'adressent à qui
+   * maintient l'application. Seul ce que l'usager lit est traduit.
+   * ====================================================================== */
+
+  const LANG = (window.CONSULTAI && window.CONSULTAI.lang) || 'fr';
+  const CATALOG = (window.CONSULTAI && window.CONSULTAI.i18n) || {};
+
+  /** Étiquette de région pour toLocaleString : dates et heures suivent la langue. */
+  const LOCALE = LANG === 'en' ? 'en-CA' : 'fr-CA';
+
+  /**
+   * Texte traduit, champs entre accolades remplis.
+   *
+   * Une clé absente est renvoyée telle quelle plutôt que de lever : un libellé
+   * qui s'affiche en clair est un défaut visible et réparable ; une exception
+   * au milieu d'un rendu laisse un écran à moitié construit.
+   */
+  function T(key, fields) {
+    const texte = CATALOG[key];
+    if (texte === undefined) return key;
+    if (!fields) return texte;
+    return texte.replace(/\{(\w+)\}/g, (motif, nom) =>
+      Object.prototype.hasOwnProperty.call(fields, nom) ? String(fields[nom]) : motif);
+  }
+
+  /* =========================================================================
    * 1. UTILITAIRES
    * ====================================================================== */
 
@@ -54,7 +87,7 @@
 
   /** Voile bloquant pendant les traitements longs (STT, Gemini). */
   function setBusy(active, message) {
-    $('busyMessage').textContent = message || 'Traitement en cours…';
+    $('busyMessage').textContent = message || T('app.busy_default');
     $('busyOverlay').classList.toggle('hidden', !active);
   }
 
@@ -74,7 +107,7 @@
     try {
       response = await fetch(path, config);
     } catch (err) {
-      throw new Error('Serveur injoignable. Vérifiez votre connexion réseau.');
+      throw new Error(T('net.unreachable'));
     }
 
     if (response.status === 204) return null;
@@ -83,7 +116,7 @@
     const payload = isJson ? await response.json().catch(() => null) : null;
 
     if (!response.ok) {
-      const detail = (payload && payload.detail) || `Erreur ${response.status}`;
+      const detail = (payload && payload.detail) || T('net.http_error', { status: response.status });
       throw new Error(detail);
     }
     return payload;
@@ -108,7 +141,7 @@
   function formatDateTime(iso) {
     if (!iso) return '';
     try {
-      return new Date(iso).toLocaleString('fr-CA', {
+      return new Date(iso).toLocaleString(LOCALE, {
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit',
       });
@@ -120,7 +153,7 @@
   function formatTime(iso) {
     if (!iso) return '';
     try {
-      return new Date(iso).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+      return new Date(iso).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
     } catch (_) {
       return '';
     }
@@ -138,17 +171,17 @@
   /** « Aujourd'hui », « Hier », sinon « mercredi 29 juillet 2026 ». */
   function formatDayHeading(iso) {
     const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return 'Date inconnue';
+    if (Number.isNaN(date.getTime())) return T('drafts.unknown_date');
 
     const today = localDayKey(new Date().toISOString());
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
     const key = localDayKey(iso);
-    if (key === today) return "Aujourd'hui";
-    if (key === localDayKey(yesterday.toISOString())) return 'Hier';
+    if (key === today) return T('drafts.today');
+    if (key === localDayKey(yesterday.toISOString())) return T('drafts.yesterday');
 
-    const label = date.toLocaleDateString('fr-CA', {
+    const label = date.toLocaleDateString(LOCALE, {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     });
     return label.charAt(0).toUpperCase() + label.slice(1);
@@ -228,7 +261,7 @@
 
     select.innerHTML = '';
     if (!state.templates.length) {
-      select.innerHTML = '<option value="">Aucun gabarit — créez-en un</option>';
+      select.innerHTML = `<option value="">${esc(T('tpl.none_option'))}</option>`;
       updateTemplateDescription();
       return;
     }
@@ -418,19 +451,18 @@
     if (!pending) {
       line.className = 'text-xs px-1 text-slate-500';
       line.textContent = dictation.sessionId
-        ? 'Dictée envoyée au serveur au fur et à mesure.'
-        : 'Enregistrement conservé dans le navigateur — le serveur est injoignable.';
+        ? T('dictation.streaming')
+        : T('dictation.local_only');
       return;
     }
 
     const seconds = Math.round(pending * dictationConfig.chunkSeconds);
     if (dictation.failures > 0) {
       line.className = 'text-xs px-1 text-amber-700 font-medium';
-      line.textContent = `Envoi interrompu — ${pending} fragment(s) (~${seconds} s) en attente, `
-        + 'nouvelle tentative en cours. Rien n\'est perdu.';
+      line.textContent = T('dictation.retrying', { count: pending, seconds });
     } else {
       line.className = 'text-xs px-1 text-slate-500';
-      line.textContent = `Envoi en cours — ${pending} fragment(s) en attente.`;
+      line.textContent = T('dictation.sending', { count: pending });
     }
   }
 
@@ -502,10 +534,7 @@
 
     while (dictation.queue.length) {
       if (Date.now() > deadline) {
-        throw new Error(
-          `${dictation.queue.length} fragment(s) n'ont pas pu être envoyés. `
-          + 'La dictée reste conservée dans le navigateur : réessayez depuis la bannière.',
-        );
+        throw new Error(T('dictation.drain_failed', { count: dictation.queue.length }));
       }
       await new Promise((resolve) => setTimeout(resolve, 400));
       if (!dictation.sending) pumpQueue();
@@ -754,17 +783,17 @@
 
     if (state.recording && !state.paused) {
       dot.className = 'w-3 h-3 rounded-full bg-red-600 rec-dot shrink-0';
-      label.textContent = 'Enregistrement…';
+      label.textContent = T('rec.recording');
       $('btnPause').innerHTML = ICON_PAUSE;
-      $('btnPause').title = 'Pause';
+      $('btnPause').title = T('rec.pause');
     } else if (state.recording && state.paused) {
       dot.className = 'w-3 h-3 rounded-full bg-amber-500 shrink-0';
-      label.textContent = 'En pause';
+      label.textContent = T('rec.paused');
       $('btnPause').innerHTML = ICON_RESUME;
-      $('btnPause').title = 'Reprendre';
+      $('btnPause').title = T('rec.resume');
     } else {
       dot.className = 'w-3 h-3 rounded-full bg-slate-300 shrink-0';
-      label.textContent = 'Enregistrer';
+      label.textContent = T('rec.record');
       $('btnPause').innerHTML = ICON_PAUSE;
     }
   }
@@ -805,11 +834,7 @@
   async function startRecording() {
     // getUserMedia exige un contexte sécurisé : HTTPS ou localhost.
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast(
-        "Le micro n'est pas accessible. L'application doit être servie en HTTPS "
-        + '(c\'est le cas via Pangolin) pour que le navigateur autorise l\'enregistrement.',
-        'error', 9000,
-      );
+      toast(T('mic.insecure'), 'error', 9000);
       return;
     }
 
@@ -825,15 +850,14 @@
     } catch (err) {
       let message;
       if (err && err.name === 'NotAllowedError') {
-        message = 'Accès au micro refusé. Autorisez le microphone dans les réglages du navigateur.';
+        message = T('mic.denied');
       } else {
-        message = `Micro indisponible : ${err && err.message ? err.message : err}`;
+        message = T('mic.unavailable', { error: err && err.message ? err.message : err });
       }
       // Certaines versions d'iOS refusent le micro à une application lancée
       // depuis l'écran d'accueil : l'indiquer évite un long dépannage.
       if (isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
-        message += " Sur iPhone/iPad, si le problème persiste dans l'application installée,"
-          + ' ouvrez ConsultAI directement dans Safari pour dicter.';
+        message += T('mic.ios_standalone');
       }
       toast(message, 'error', 11000);
       return;
@@ -846,7 +870,7 @@
         ? new MediaRecorder(recorder.stream, { mimeType: recorder.mimeType, audioBitsPerSecond: 64000 })
         : new MediaRecorder(recorder.stream);
     } catch (err) {
-      toast(`Enregistrement impossible sur ce navigateur : ${err.message}`, 'error');
+      toast(T('mic.recorder_failed', { error: err.message }), 'error');
       recorder.stream.getTracks().forEach((track) => track.stop());
       return;
     }
@@ -875,11 +899,7 @@
       // s'accumulent localement et partiront à « Terminer », ou plus tard
       // depuis la bannière de récupération. Refuser de dicter parce que le
       // Wi-Fi est tombé serait le pire des deux mondes.
-      toast(
-        `Serveur injoignable : la dictée est enregistrée dans le navigateur et sera `
-        + `envoyée à la fin. (${err.message})`,
-        'warning', 9000,
-      );
+      toast(T('dictation.server_unreachable', { error: err.message }), 'warning', 9000);
     }
 
     await bestEffort(() => audioStore.createSession({
@@ -902,7 +922,7 @@
       pumpQueue();
     };
     recorder.mediaRecorder.onerror = (event) => {
-      toast(`Erreur d'enregistrement : ${event.error && event.error.name}`, 'error');
+      toast(T('mic.recorder_error', { error: event.error && event.error.name }), 'error');
     };
 
     // Un fragment toutes les quelques secondes : c'est l'unité de
@@ -975,13 +995,13 @@
     await stopMicrophone();
 
     if (!dictation.seq) {
-      toast('Enregistrement trop court — rien à transcrire.', 'warning');
+      toast(T('dictation.too_short'), 'warning');
       await bestEffort(() => audioStore.remove(dictation.localId), 'nettoyage');
       resetDictationState();
       return;
     }
 
-    setBusy(true, 'Transcription des dernières secondes…');
+    setBusy(true, T('dictation.finishing'));
     try {
       if (!dictation.sessionId) {
         // La session n'a jamais pu être ouverte : tout est encore local, on
@@ -1001,9 +1021,9 @@
         // que le titre et les métadonnées suivent.
         state.lastSavedSnapshot = '';
         scheduleSave();
-        toast(`Dictée terminée — ${transcript.length} caractères transcrits.`, 'success');
+        toast(T('dictation.finished', { count: transcript.length }), 'success');
       } else {
-        toast('Aucune parole n\'a été détectée dans cette dictée.', 'warning', 8000);
+        toast(T('dictation.no_speech'), 'warning', 8000);
       }
       // L'audio vient d'être rattaché au brouillon par le serveur.
       loadRecordings();
@@ -1025,10 +1045,8 @@
 
     const alreadyTranscribed = dictation.appliedParts > 0;
     const message = alreadyTranscribed
-      ? 'Arrêter sans envoyer ?\n\nL\'enregistrement sera supprimé du serveur et du '
-        + 'navigateur. Le texte déjà transcrit reste dans la transcription — videz-la '
-        + 'si vous ne le voulez pas.'
-      : 'Arrêter sans envoyer ?\n\nL\'enregistrement sera supprimé, sans transcription.';
+      ? T('dictation.confirm_abort_transcribed')
+      : T('dictation.confirm_abort');
     if (!window.confirm(message)) return;
 
     await stopMicrophone();
@@ -1040,11 +1058,11 @@
       try {
         await api(`/api/dictation/${sessionId}/cancel`, { method: 'POST' });
       } catch (err) {
-        console.warn('Annulation côté serveur impossible :', err);
+        console.warn(T('dictation.cancel_failed'), err);
       }
     }
     await bestEffort(() => audioStore.remove(localId), 'suppression');
-    toast('Dictée arrêtée, enregistrement supprimé.', 'info');
+    toast(T('dictation.aborted'), 'info');
   }
 
   function warnBeforeUnload(event) {
@@ -1117,9 +1135,11 @@
       const when = formatDateTime(new Date(entry.createdAt).toISOString());
       const seconds = entry.server ? entry.server.received_seconds : 0;
       const detail = [
-        entry.label || 'Consultation sans nom',
+        entry.label || T('recovery.unnamed'),
         when,
-        seconds ? `${formatDuration(seconds)} reçues par le serveur` : 'non reçue par le serveur',
+        seconds
+          ? T('recovery.received', { duration: formatDuration(seconds) })
+          : T('recovery.not_received'),
       ].filter(Boolean).join(' · ');
 
       return `<li class="text-sm" data-index="${index}">
@@ -1127,13 +1147,13 @@
         <div class="flex flex-wrap gap-2 mt-1">
           <button type="button" data-act="resume" data-index="${index}"
                   class="px-2.5 py-1 rounded-md bg-amber-600 text-white text-xs font-medium
-                         hover:bg-amber-700">Reprendre et transcrire</button>
+                         hover:bg-amber-700">${esc(T('recovery.resume'))}</button>
           ${entry.localId ? `<button type="button" data-act="download" data-index="${index}"
                   class="px-2.5 py-1 rounded-md border border-amber-400 text-amber-800 text-xs
-                         hover:bg-amber-100">Télécharger l'audio</button>` : ''}
+                         hover:bg-amber-100">${esc(T('recovery.download'))}</button>` : ''}
           <button type="button" data-act="discard" data-index="${index}"
                   class="px-2.5 py-1 rounded-md border border-amber-400 text-amber-800 text-xs
-                         hover:bg-amber-100">Supprimer</button>
+                         hover:bg-amber-100">${esc(T('recovery.discard'))}</button>
         </div>
       </li>`;
     }).join('');
@@ -1161,7 +1181,7 @@
       () => assembleStoredAudio(entry.localId, entry.mimeType), 'assemblage',
     );
     if (!blob) {
-      toast('Aucun fragment local à télécharger.', 'warning');
+      toast(T('recovery.nothing_local'), 'warning');
       return;
     }
     const url = URL.createObjectURL(blob);
@@ -1174,16 +1194,16 @@
   }
 
   async function discardStoredSession(entry) {
-    if (!window.confirm('Supprimer définitivement cet enregistrement ?')) return;
+    if (!window.confirm(T('recovery.confirm_discard'))) return;
     if (entry.server) {
       try {
         await api(`/api/dictation/${entry.server.session_id}/cancel`, { method: 'POST' });
       } catch (err) {
-        console.warn('Suppression côté serveur impossible :', err);
+        console.warn(T('recovery.delete_failed'), err);
       }
     }
     if (entry.localId) await bestEffort(() => audioStore.remove(entry.localId), 'suppression');
-    toast('Enregistrement supprimé.', 'info');
+    toast(T('recovery.deleted'), 'info');
     refreshRecoveryBanner();
   }
 
@@ -1192,7 +1212,7 @@
    * conclut. Le texte retourne dans la consultation d'origine.
    */
   async function resumeStoredSession(entry) {
-    setBusy(true, 'Reprise de la dictée interrompue…');
+    setBusy(true, T('recovery.resuming'));
     try {
       if (entry.server) {
         // Le serveur a déjà une partie de l'audio : on ne lui renvoie que la
@@ -1207,12 +1227,12 @@
         const result = await api(`/api/dictation/${entry.server.session_id}/finish`, { method: 'POST' });
         if (entry.localId) await bestEffort(() => audioStore.remove(entry.localId), 'nettoyage');
         await loadDraft(result.consultation_id);
-        toast(`Dictée récupérée — ${result.part_count} tranche(s) transcrite(s).`, 'success');
+        toast(T('recovery.resumed', { count: result.part_count }), 'success');
       } else {
         await uploadStoredSession(entry.localId);
       }
     } catch (err) {
-      toast(`Reprise impossible : ${err.message}`, 'error', 12000);
+      toast(T('recovery.resume_failed', { error: err.message }), 'error', 12000);
     } finally {
       setBusy(false);
       refreshRecoveryBanner();
@@ -1225,7 +1245,7 @@
    */
   async function uploadStoredSession(localId, options = {}) {
     const chunks = await audioStore.chunks(localId);
-    if (!chunks.length) throw new Error('Aucun fragment audio conservé pour cette dictée.');
+    if (!chunks.length) throw new Error(T('recovery.no_chunks'));
 
     const local = (await audioStore.listSessions()).find((row) => row.localId === localId);
     const consultationId = (local && local.consultationId) || await ensureConsultation();
@@ -1241,11 +1261,11 @@
     });
 
     for (const row of chunks) {
-      setBusy(true, `Envoi de la dictée conservée — ${row.seq + 1}/${chunks.length}…`);
+      setBusy(true, T('recovery.uploading', { current: row.seq + 1, total: chunks.length }));
       await postChunk(session.session_id, row.seq, row.blob, dictationConfig.chunkSeconds * 1000);
     }
 
-    setBusy(true, 'Transcription…');
+    setBusy(true, T('transcribe.busy_short'));
     const result = await api(`/api/dictation/${session.session_id}/finish`, { method: 'POST' });
     await bestEffort(() => audioStore.remove(localId), 'nettoyage');
 
@@ -1350,12 +1370,13 @@
       .filter(Boolean).join(' · ');
     const tpl = currentTemplate();
     const label = $('metaReason').value.trim() || (tpl ? tpl.name : '');
-    return [identity || 'Consultation', label].filter(Boolean).join(' — ').slice(0, 300);
+    return [identity || T('drafts.default_title'), label]
+      .filter(Boolean).join(' — ').slice(0, 300);
   }
 
   async function sendForTranscription(blob, filename) {
     const megabytes = (blob.size / 1048576).toFixed(1);
-    setBusy(true, `Transcription en cours (${megabytes} Mo)… Cela peut prendre une minute.`);
+    setBusy(true, T('transcribe.busy', { size: megabytes }));
 
     try {
       // Le brouillon existe avant l'envoi : si le navigateur se ferme pendant
@@ -1378,8 +1399,10 @@
       updateTranscriptMeta(result);
       loadRecordings();
       toast(
-        `Transcription terminée (${result.transcript.length} caractères, `
-        + `confiance ${(result.confidence * 100).toFixed(0)} %).`,
+        T('transcribe.done', {
+          count: result.transcript.length,
+          confidence: (result.confidence * 100).toFixed(0),
+        }),
         'success',
       );
     } catch (err) {
@@ -1391,8 +1414,10 @@
 
   function updateTranscriptMeta(result) {
     const characters = $('transcript').value.length;
-    const parts = [`${characters} caractères`];
-    if (result && result.duration_seconds) parts.push(`${formatDuration(result.duration_seconds)} d'audio`);
+    const parts = [T('transcript.characters', { count: characters })];
+    if (result && result.duration_seconds) {
+      parts.push(T('transcript.audio', { duration: formatDuration(result.duration_seconds) }));
+    }
     $('transcriptMeta').textContent = parts.join(' · ');
   }
 
@@ -1401,15 +1426,15 @@
     const tpl = currentTemplate();
 
     if (!transcript) {
-      toast('La transcription est vide : dictez ou collez un texte d\'abord.', 'warning');
+      toast(T('generate.empty'), 'warning');
       return;
     }
     if (!tpl) {
-      toast('Sélectionnez un gabarit de consultation.', 'warning');
+      toast(T('generate.no_template'), 'warning');
       return;
     }
 
-    setBusy(true, `Mise en forme avec le gabarit « ${tpl.name} »…`);
+    setBusy(true, T('generate.busy', { name: tpl.name }));
     try {
       const consultationId = await ensureConsultation();
       const result = await api('/api/generate', {
@@ -1440,13 +1465,9 @@
       }
 
       if (result.truncated) {
-        toast(
-          'La note a été tronquée : le modèle a atteint sa limite de longueur. '
-          + 'Augmentez GEMINI_MAX_OUTPUT_TOKENS ou dictez en deux parties.',
-          'warning', 10000,
-        );
+        toast(T('generate.truncated'), 'warning', 10000);
       } else {
-        toast(`Note générée avec ${result.model}. Relisez-la avant utilisation.`, 'success');
+        toast(T('generate.done', { model: result.model }), 'success');
       }
       scheduleSave();
     } catch (err) {
@@ -1515,11 +1536,11 @@
     toggle.type = 'button';   // sans quoi il soumettrait le formulaire du gabarit
     toggle.className = 'px-2 py-0.5 rounded border border-slate-300 text-[11px] '
                      + 'text-slate-600 hover:bg-slate-50 transition';
-    toggle.textContent = 'Aperçu';
+    toggle.textContent = T('note.preview');
 
     const hint = document.createElement('span');
     hint.className = 'text-[11px] text-slate-400';
-    hint.textContent = 'Markdown — # titre, ## sous-titre, **gras**, - liste, | tableau |';
+    hint.textContent = T('markdown.hint');
 
     bar.append(toggle, hint);
     const preview = document.createElement('div');
@@ -1533,9 +1554,9 @@
       // navigateur sur un élément qu'il ne peut pas mettre en évidence :
       // on refuse simplement de basculer.
       if (versApercu && !textarea.value.trim()) {
-        hint.textContent = 'Rien à prévisualiser pour le moment.';
+        hint.textContent = T('markdown.nothing_to_preview');
         setTimeout(() => {
-          hint.textContent = 'Markdown — # titre, ## sous-titre, **gras**, - liste, | tableau |';
+          hint.textContent = T('markdown.hint');
         }, 2500);
         return;
       }
@@ -1547,7 +1568,7 @@
       }
       preview.classList.toggle('hidden', !versApercu);
       textarea.classList.toggle('hidden', versApercu);
-      toggle.textContent = versApercu ? 'Écrire' : 'Aperçu';
+      toggle.textContent = versApercu ? T('note.write') : T('note.preview');
     });
   }
 
@@ -1566,7 +1587,7 @@
     preview.classList.add('hidden');
     textarea.classList.remove('hidden');
     const bouton = bar.querySelector('button');
-    if (bouton) bouton.textContent = 'Aperçu';
+    if (bouton) bouton.textContent = T('note.preview');
   }
 
   /**
@@ -1581,11 +1602,13 @@
     const el = $('noteEngines');
     if (!el) return;
     const parts = [];
-    if (stt) parts.push(`dictée ${stt.split(' / ')[0]}`);
-    if (llm) parts.push(`note ${llm.split(' / ').slice(-1)[0]}`);
+    if (stt) parts.push(T('note.engine_dictation', { engine: stt.split(' / ')[0] }));
+    if (llm) parts.push(T('note.engine_note', { engine: llm.split(' / ').slice(-1)[0] }));
     el.textContent = parts.join(' · ');
-    el.title = [stt ? `Transcription : ${stt}` : '', llm ? `Mise en forme : ${llm}` : '']
-      .filter(Boolean).join('\n');
+    el.title = [
+      stt ? T('note.engine_stt_title', { engine: stt }) : '',
+      llm ? T('note.engine_llm_title', { engine: llm }) : '',
+    ].filter(Boolean).join('\n');
     el.classList.toggle('hidden', !parts.length);
   }
 
@@ -1593,7 +1616,7 @@
     const markdown = $('markdownEditor').value;
     const pane = $('previewPane');
     if (!markdown.trim()) {
-      pane.innerHTML = '<p class="text-slate-400 italic">La note structurée apparaîtra ici après la mise en forme.</p>';
+      pane.innerHTML = `<p class="text-slate-400 italic">${esc(T('note.empty'))}</p>`;
       return;
     }
     pane.innerHTML = markdownToHtml(markdown);
@@ -1656,7 +1679,7 @@
     if (!$('transcript').value.trim() && !$('markdownEditor').value.trim()) return;
 
     const status = $('saveStatus');
-    status.textContent = 'Sauvegarde…';
+    status.textContent = T('save.saving');
     try {
       const consultationId = await ensureConsultation();
       const tpl = currentTemplate();
@@ -1675,9 +1698,11 @@
 
       await api(`/api/consultations/${consultationId}`, { method: 'PATCH', body });
       state.lastSavedSnapshot = snapshot;
-      status.textContent = `Enregistré à ${new Date().toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}`;
+      status.textContent = T('save.saved_at', {
+        time: new Date().toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }),
+      });
     } catch (err) {
-      status.textContent = 'Échec de la sauvegarde';
+      status.textContent = T('save.failed');
       console.error(err);
     }
   }, 1500);
@@ -1695,7 +1720,7 @@
   async function copyRichText() {
     const markdown = $('markdownEditor').value;
     if (!markdown.trim()) {
-      toast('Aucune note à copier.', 'warning');
+      toast(T('copy.nothing'), 'warning');
       return;
     }
 
@@ -1731,9 +1756,9 @@
         selection.removeAllRanges();
         holder.remove();
       }
-      toast('Note copiée avec sa mise en forme.', 'success');
+      toast(T('copy.rich_done'), 'success');
     } catch (err) {
-      toast(`Copie impossible : ${err.message}`, 'error');
+      toast(T('copy.failed', { error: err.message }), 'error');
     }
   }
 
@@ -1868,28 +1893,28 @@
   async function copyPlainText() {
     const markdown = $('markdownEditor').value;
     if (!markdown.trim()) {
-      toast('Aucune note à copier.', 'warning');
+      toast(T('copy.nothing'), 'warning');
       return;
     }
     try {
       await navigator.clipboard.writeText(markdownToPlainText(markdown));
-      toast('Texte simple copié — prêt pour le DME.', 'success');
+      toast(T('copy.plain_done'), 'success');
     } catch (err) {
-      toast(`Copie impossible : ${err.message}`, 'error');
+      toast(T('copy.failed', { error: err.message }), 'error');
     }
   }
 
   async function copyMarkdown() {
     const markdown = $('markdownEditor').value;
     if (!markdown.trim()) {
-      toast('Aucune note à copier.', 'warning');
+      toast(T('copy.nothing'), 'warning');
       return;
     }
     try {
       await navigator.clipboard.writeText(markdown);
-      toast('Markdown copié.', 'success');
+      toast(T('copy.markdown_done'), 'success');
     } catch (err) {
-      toast(`Copie impossible : ${err.message}`, 'error');
+      toast(T('copy.failed', { error: err.message }), 'error');
     }
   }
 
@@ -1902,16 +1927,16 @@
   function exportPdf() {
     const markdown = $('markdownEditor').value;
     if (!markdown.trim()) {
-      toast('Aucune note à imprimer.', 'warning');
+      toast(T('pdf.nothing'), 'warning');
       return;
     }
 
     const patient = [$('metaName').value.trim(), $('metaRecord').value.trim()]
       .filter(Boolean).join(' · ');
-    const printedOn = new Date().toLocaleString('fr-CA');
+    const printedOn = new Date().toLocaleString(LOCALE);
     const footer = `<div class="print-footer">
-        Document produit avec assistance à la dictée et relu par le clinicien.
-        ${patient ? `Patient : ${esc(patient)}. ` : ''}Imprimé le ${esc(printedOn)}.
+        ${esc(T('pdf.footer'))}
+        ${patient ? esc(T('pdf.footer_patient', { patient })) : ''}${esc(T('pdf.footer_printed', { date: printedOn }))}
       </div>`;
 
     $('printArea').innerHTML = markdownToHtml(markdown) + footer;
@@ -1961,8 +1986,8 @@
       item.className = `px-4 py-3 cursor-pointer hover:bg-white transition ${active ? 'bg-white border-l-4 border-teal-600' : ''}`;
       item.innerHTML = `
         <div class="font-medium text-sm text-slate-800">${esc(tpl.name)}</div>
-        <div class="text-xs text-slate-500 mt-0.5 line-clamp-2">${esc(tpl.description || 'Sans description')}</div>
-        ${tpl.is_default ? '<span class="inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">Préchargé</span>' : ''}
+        <div class="text-xs text-slate-500 mt-0.5 line-clamp-2">${esc(tpl.description || T('tpl.no_description'))}</div>
+        ${tpl.is_default ? `<span class="inline-block mt-1.5 text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">${esc(T('tpl.preloaded'))}</span>` : ''}
       `;
       item.addEventListener('click', () => {
         fillTemplateForm(tpl);
@@ -1973,7 +1998,7 @@
     });
 
     if (!state.templates.length) {
-      list.innerHTML = '<li class="px-4 py-6 text-sm text-slate-400 text-center">Aucun gabarit</li>';
+      list.innerHTML = `<li class="px-4 py-6 text-sm text-slate-400 text-center">${esc(T('tpl.none'))}</li>`;
     }
   }
 
@@ -1998,7 +2023,7 @@
     [$('tplInstructions'), $('tplLayout')].forEach(exitMarkdownPreview);
     $('tplDescription').value = '';
     $('tplInstructions').value = '';
-    $('tplLayout').value = '# TITRE DU DOCUMENT\n\n## MOTIF DE CONSULTATION\n\n## HISTOIRE DE LA MALADIE ACTUELLE\n\n## EXAMEN PHYSIQUE\n\n## IMPRESSION\n\n## PLAN\n';
+    $('tplLayout').value = T('tpl.default_layout');
     $('tplHints').value = '';
     $('tplOrder').value = '100';
     $('btnDeleteTemplate').classList.add('hidden');
@@ -2021,11 +2046,11 @@
     };
 
     if (!body.name || !body.system_instructions || !body.layout_format) {
-      toast('Le nom, les instructions et la mise en page sont obligatoires.', 'warning');
+      toast(T('tpl.required_fields'), 'warning');
       return;
     }
 
-    $('templateFormStatus').textContent = 'Enregistrement…';
+    $('templateFormStatus').textContent = T('tpl.saving');
     try {
       const saved = id
         ? await api(`/api/templates/${id}`, { method: 'PUT', body })
@@ -2038,7 +2063,7 @@
       $('templateFormStatus').textContent = '';
       // Retour à la liste sur mobile : confirme visuellement l'enregistrement.
       if (isMobileLayout()) setTemplateMobileView('list');
-      toast(id ? 'Gabarit mis à jour.' : 'Gabarit créé.', 'success');
+      toast(id ? T('tpl.updated') : T('tpl.created'), 'success');
     } catch (err) {
       $('templateFormStatus').textContent = '';
       toast(err.message, 'error', 8000);
@@ -2054,11 +2079,11 @@
   async function duplicateTemplate() {
     const id = $('tplId').value;
     if (!id) {
-      toast('Ouvrez d\'abord le gabarit à dupliquer.', 'warning');
+      toast(T('tpl.open_first'), 'warning');
       return;
     }
 
-    $('templateFormStatus').textContent = 'Duplication…';
+    $('templateFormStatus').textContent = T('tpl.duplicating');
     try {
       const copy = await api(`/api/templates/${id}/duplicate`, { method: 'POST' });
       await loadTemplates(copy.id);
@@ -2071,7 +2096,7 @@
       setTemplateMobileView('form');
       $('tplName').focus();
       $('tplName').select();
-      toast(`Copie créée : « ${copy.name} ».`, 'success');
+      toast(T('tpl.duplicated', { name: copy.name }), 'success');
     } catch (err) {
       $('templateFormStatus').textContent = '';
       toast(err.message, 'error', 8000);
@@ -2083,8 +2108,8 @@
     if (!id) return;
 
     const tpl = state.templates.find((t) => String(t.id) === String(id));
-    const name = tpl ? tpl.name : 'ce gabarit';
-    if (!window.confirm(`Supprimer définitivement « ${name} » ?`)) return;
+    const name = tpl ? tpl.name : T('tpl.this_one');
+    if (!window.confirm(T('tpl.confirm_delete', { name }))) return;
 
     try {
       await api(`/api/templates/${id}`, { method: 'DELETE' });
@@ -2093,7 +2118,7 @@
       renderTemplateList();
       updateTemplateDescription();
       setTemplateMobileView('list');
-      toast('Gabarit supprimé.', 'success');
+      toast(T('tpl.deleted'), 'success');
     } catch (err) {
       toast(err.message, 'error', 8000);
     }
@@ -2114,13 +2139,13 @@
     item.className = 'px-5 py-3 border-b border-slate-100 hover:bg-slate-50 transition '
       + 'flex items-start gap-3';
 
-    const name = draft.patient_name || 'Patient non identifié';
+    const name = draft.patient_name || T('drafts.unnamed_patient');
     const record = draft.patient_ref
       ? `<span class="text-slate-500 font-normal">· ${esc(draft.patient_ref)}</span>`
       : '';
     const reason = draft.reason
       ? `<div class="text-xs text-slate-600 mt-0.5 truncate">${esc(draft.reason)}</div>`
-      : '<div class="text-xs text-slate-400 italic mt-0.5">Raison de consultation non précisée</div>';
+      : `<div class="text-xs text-slate-400 italic mt-0.5">${esc(T('drafts.no_reason'))}</div>`;
 
     item.innerHTML = `
       <span class="text-xs font-mono tabular-nums text-slate-400 pt-0.5 shrink-0 w-11">
@@ -2138,7 +2163,7 @@
       </div>
       <button type="button" data-delete="${draft.id}"
               class="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 shrink-0">
-        Supprimer
+        ${esc(T('drafts.delete'))}
       </button>
     `;
     return item;
@@ -2178,14 +2203,14 @@
   async function openDraftsModal() {
     $('draftsModal').classList.remove('hidden');
     const list = $('draftList');
-    list.innerHTML = '<li class="px-5 py-6 text-sm text-slate-400 text-center">Chargement…</li>';
+    list.innerHTML = `<li class="px-5 py-6 text-sm text-slate-400 text-center">${esc(T('drafts.loading'))}</li>`;
 
     try {
       const data = await api('/api/consultations');
       const drafts = data.consultations || [];
 
       if (!drafts.length) {
-        list.innerHTML = '<li class="px-5 py-8 text-sm text-slate-400 text-center">Aucun brouillon enregistré.</li>';
+        list.innerHTML = `<li class="px-5 py-8 text-sm text-slate-400 text-center">${esc(T('drafts.none'))}</li>`;
         return;
       }
 
@@ -2197,13 +2222,13 @@
       list.querySelectorAll('[data-delete]').forEach((node) => {
         node.addEventListener('click', async (event) => {
           event.stopPropagation();
-          if (!window.confirm('Supprimer définitivement ce brouillon ?')) return;
+          if (!window.confirm(T('drafts.confirm_delete'))) return;
           try {
             await api(`/api/consultations/${node.dataset.delete}`, { method: 'DELETE' });
             if (String(state.consultationId) === String(node.dataset.delete)) {
               state.consultationId = null;
             }
-            toast('Brouillon supprimé.', 'success');
+            toast(T('drafts.deleted'), 'success');
             openDraftsModal();
           } catch (err) {
             toast(err.message, 'error');
@@ -2217,7 +2242,7 @@
 
   async function loadDraft(id) {
     if (state.recording) {
-      toast('Terminez ou arrêtez la dictée en cours avant d\'ouvrir un brouillon.', 'warning');
+      toast(T('drafts.busy_open'), 'warning');
       return;
     }
     try {
@@ -2251,9 +2276,9 @@
       state.lastSavedSnapshot = workspaceSnapshot();
       loadRecordings();
       showNoteEngines(draft.stt_used, draft.llm_used);
-      $('saveStatus').textContent = `Chargé — ${formatDateTime(draft.updated_at)}`;
+      $('saveStatus').textContent = T('save.loaded_at', { date: formatDateTime(draft.updated_at) });
       $('draftsModal').classList.add('hidden');
-      toast(`Brouillon « ${draft.title} » chargé.`, 'success');
+      toast(T('drafts.loaded', { title: draft.title }), 'success');
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -2262,11 +2287,11 @@
   /** Réinitialise l'espace de travail pour une nouvelle consultation. */
   function newConsultation() {
     if (state.recording) {
-      toast('Terminez ou arrêtez la dictée en cours avant de changer de consultation.', 'warning');
+      toast(T('drafts.busy_new'), 'warning');
       return;
     }
     if ($('transcript').value.trim() || $('markdownEditor').value.trim()) {
-      if (!window.confirm('Commencer une nouvelle consultation ? Le brouillon courant reste accessible dans « Mes brouillons ».')) {
+      if (!window.confirm(T('drafts.confirm_new'))) {
         return;
       }
     }
@@ -2309,7 +2334,7 @@
       contexteSecurise: window.isSecureContext,
       protocole: window.location.protocol,
       serviceWorkerSupporte: 'serviceWorker' in navigator,
-      manifeste: 'non vérifié',
+      manifeste: T('pwa.state_unchecked'),
       serviceWorkerActif: false,
       installee: isStandalone(),
     };
@@ -2322,13 +2347,13 @@
         report.manifeste = `HTTP ${response.status}`;
       } else if (type.includes('html')) {
         // Cas typique : Pangolin renvoie sa page de connexion.
-        report.manifeste = 'intercepté par le SSO (HTML reçu au lieu de JSON)';
+        report.manifeste = T('pwa.state_sso');
       } else {
         await response.clone().json();
         report.manifeste = 'OK';
       }
     } catch (err) {
-      report.manifeste = `illisible (${err.message})`;
+      report.manifeste = T('pwa.state_unreadable', { error: err.message });
     }
 
     if ('serviceWorker' in navigator) {
@@ -2340,18 +2365,9 @@
 
     if (verbose) {
       if (!report.contexteSecurise) {
-        toast(
-          `L'installation est impossible en ${report.protocole} : une PWA exige HTTPS. `
-          + 'Passez par l\'adresse Pangolin plutôt que par l\'IP du NAS.',
-          'warning', 12000,
-        );
+        toast(T('pwa.insecure', { protocol: report.protocole }), 'warning', 12000);
       } else if (report.manifeste !== 'OK') {
-        toast(
-          `Manifeste inaccessible (${report.manifeste}). Autorisez `
-          + '/static/manifest.webmanifest, /sw.js et /static/icons/ sans '
-          + 'authentification dans Pangolin.',
-          'warning', 14000,
-        );
+        toast(T('pwa.manifest_blocked', { state: report.manifeste }), 'warning', 14000);
       }
     }
     return report;
@@ -2382,7 +2398,7 @@
             installing.addEventListener('statechange', () => {
               if (installing.state === 'installed' && navigator.serviceWorker.controller) {
                 installing.postMessage('SKIP_WAITING');
-                toast('Mise à jour installée — rechargez pour l\'appliquer.', 'info', 8000);
+                toast(T('pwa.updated'), 'info', 8000);
               }
             });
           });
@@ -2416,7 +2432,7 @@
       renderRecordings(data.recordings || []);
     } catch (err) {
       block.classList.add('hidden');
-      console.warn('Enregistrements non chargés :', err);
+      console.warn(T('recordings.load_failed'), err);
     }
   }
 
@@ -2434,7 +2450,7 @@
 
     list.innerHTML = rows.map((row) => {
       const detail = [
-        row.source === 'import' ? 'Fichier importé' : 'Dictée',
+        row.source === 'import' ? T('recordings.source_import') : T('recordings.source_dictation'),
         row.duration_seconds ? formatDuration(row.duration_seconds) : '',
         formatBytes(row.size_bytes),
         formatDateTime(row.created_at),
@@ -2444,10 +2460,10 @@
         <div class="flex items-center gap-2 text-xs text-slate-600">
           <span class="truncate">${esc(detail)}</span>
           <a class="ml-auto shrink-0 px-2 py-0.5 rounded border border-slate-300 hover:bg-slate-50"
-             href="/api/recordings/${row.id}/audio" download>Télécharger</a>
+             href="/api/recordings/${row.id}/audio" download>${esc(T('recordings.download'))}</a>
           <button type="button" data-delete="${row.id}"
                   class="shrink-0 px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50">
-            Supprimer</button>
+            ${esc(T('recordings.discard'))}</button>
         </div>
         <!-- preload="none" : la liste peut contenir plusieurs dizaines de Mo,
              qu'il serait absurde de télécharger pour l'afficher. -->
@@ -2458,10 +2474,10 @@
 
     list.querySelectorAll('button[data-delete]').forEach((button) => {
       button.addEventListener('click', async () => {
-        if (!window.confirm('Supprimer définitivement cet enregistrement audio ?')) return;
+        if (!window.confirm(T('recordings.confirm_delete'))) return;
         try {
           await api(`/api/recordings/${button.dataset.delete}`, { method: 'DELETE' });
-          toast('Enregistrement supprimé.', 'info');
+          toast(T('recordings.deleted'), 'info');
           loadRecordings();
         } catch (err) {
           toast(err.message, 'error');
@@ -2489,8 +2505,8 @@
     const help = field.help
       ? `<p class="text-[11px] text-slate-500 mt-1 leading-relaxed">${esc(field.help)}</p>` : '';
     const origin = field.overridden
-      ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 ml-1.5">panneau</span>'
-      : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 ml-1.5">.env</span>';
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 ml-1.5">${esc(T('admin.from_panel'))}</span>`
+      : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 ml-1.5">${esc(T('admin.from_env'))}</span>`;
 
     let control;
     if (field.kind === 'choice') {
@@ -2507,15 +2523,15 @@
                           leading-relaxed">${esc(field.value || '')}</textarea>`;
     } else if (field.kind === 'secret') {
       const placeholder = field.configured
-        ? `Clé en place (${field.hint}) — laisser vide pour la conserver`
-        : 'Aucune clé enregistrée';
+        ? T('admin.secret_configured', { hint: field.hint })
+        : T('admin.secret_missing');
       control = `<div class="flex gap-2">
           <input id="${id}" data-key="${field.key}" type="password" autocomplete="off"
                  placeholder="${esc(placeholder)}"
                  class="flex-1 min-w-0 border border-slate-300 rounded-lg px-3 py-2 text-sm">
           <button type="button" data-clear="${field.key}"
                   class="shrink-0 px-2.5 rounded-lg border border-slate-300 text-xs hover:bg-slate-50"
-                  title="Effacer la clé enregistrée">Effacer</button>
+                  title="${esc(T('admin.secret_clear_title'))}">${esc(T('admin.secret_clear'))}</button>
         </div>`;
     } else {
       const type = field.kind === 'number' ? 'number' : 'text';
@@ -2556,7 +2572,7 @@
     container.querySelectorAll('[data-key]').forEach((element) => {
       const mark = () => {
         adminState.dirty.add(element.dataset.key);
-        $('adminStatus').textContent = 'Modifications non enregistrées';
+        $('adminStatus').textContent = T('admin.unsaved');
       };
       element.addEventListener('input', mark);
       element.addEventListener('change', mark);
@@ -2568,9 +2584,9 @@
       button.addEventListener('click', () => {
         const input = container.querySelector(`[data-key="${button.dataset.clear}"]`);
         input.value = '';
-        input.placeholder = 'Sera effacée à l\'enregistrement';
+        input.placeholder = T('admin.secret_will_clear');
         adminState.dirty.add(button.dataset.clear);
-        $('adminStatus').textContent = 'Modifications non enregistrées';
+        $('adminStatus').textContent = T('admin.unsaved');
       });
     });
   }
@@ -2578,7 +2594,7 @@
   async function openAdminModal() {
     $('adminModal').classList.remove('hidden');
     $('adminStatus').textContent = '';
-    $('adminFields').innerHTML = '<p class="text-sm text-slate-500">Chargement…</p>';
+    $('adminFields').innerHTML = `<p class="text-sm text-slate-500">${esc(T('admin.loading'))}</p>`;
     try {
       const data = await api('/api/admin/settings');
       adminState.fields = data.settings || [];
@@ -2592,7 +2608,7 @@
 
   async function saveAdminSettings() {
     if (!adminState.dirty.size) {
-      $('adminStatus').textContent = 'Rien à enregistrer.';
+      $('adminStatus').textContent = T('admin.nothing_to_save');
       return;
     }
     const values = {};
@@ -2601,14 +2617,25 @@
       if (element) values[key] = element.value;
     });
 
-    $('adminStatus').textContent = 'Enregistrement…';
+    $('adminStatus').textContent = T('admin.saving');
     try {
       const result = await api('/api/admin/settings', { method: 'PUT', body: { values } });
+
+      // La langue vient peut-être de changer. Tout l'écran est rendu par le
+      // serveur avec le catalogue de la langue en cours : le seul moyen honnête
+      // de le retraduire en entier est de le redemander. Un rechargement est
+      // sans danger ici — le brouillon est déjà sauvegardé en base.
+      if (result.language && result.language !== LANG) {
+        toast(T('admin.applied'), 'success');
+        window.location.reload();
+        return;
+      }
+
       adminState.fields = result.settings || [];
       adminState.dirty = new Set();
-      renderAdminFields(null);
-      $('adminStatus').textContent = `${result.changed.length} réglage(s) enregistré(s).`;
-      toast('Réglages appliqués — ils prennent effet immédiatement.', 'success');
+      renderAdminFields(result.groups || null);
+      $('adminStatus').textContent = T('admin.saved_count', { count: result.changed.length });
+      toast(T('admin.applied'), 'success');
       // Le bandeau et les cadences du client dépendent de ces valeurs.
       await refreshClientConfig();
     } catch (err) {
@@ -2621,20 +2648,15 @@
   async function listAvailableModels() {
     const select = $('adminFields').querySelector('[data-key="llm_provider"]');
     const provider = select ? select.value : '';
-    $('adminStatus').textContent = 'Interrogation du fournisseur…';
+    $('adminStatus').textContent = T('admin.querying');
     try {
       const data = await api(`/api/models?provider=${encodeURIComponent(provider)}`);
       const datalist = $('modelOptions');
       datalist.innerHTML = (data.models || [])
         .map((name) => `<option value="${esc(name)}"></option>`).join('');
-      $('adminStatus').textContent =
-        `${data.models.length} modèle(s) — proposés dans le champ « Modèle ».`;
+      $('adminStatus').textContent = T('admin.models_listed', { count: data.models.length });
       if (!data.configured_available) {
-        toast(
-          `Attention : « ${data.configured} » ne figure pas dans les modèles `
-          + 'accessibles à cette clé. La mise en forme échouera.',
-          'warning', 10000,
-        );
+        toast(T('admin.model_missing', { model: data.configured }), 'warning', 10000);
       }
     } catch (err) {
       $('adminStatus').textContent = '';
@@ -2680,16 +2702,15 @@
    */
   async function logout() {
     if (state.recording) {
-      showLogoutHint('Terminez ou arrêtez la dictée en cours avant de vous déconnecter.', 'error');
+      showLogoutHint(T('identity.logout_busy'), 'error');
       return;
     }
     const cible = state.logoutOidcUrl;
     if (!cible) {
-      showLogoutHint("LOGOUT_OIDC_URL n'est pas configurée : aucune déconnexion possible.",
-                     'error');
+      showLogoutHint(T('identity.logout_unconfigured'), 'error');
       return;
     }
-    showLogoutHint("Déconnexion du fournisseur d'identité…");
+    showLogoutHint(T('identity.logout_progress'));
     // Navigation de premier niveau : la seule qui emporte à coup sûr le témoin.
     window.location.href = cible;
   }
@@ -2812,7 +2833,7 @@
     // (grand écran) et celui de la barre d'action basse (mobile), qui reste
     // atteignable même depuis l'onglet « Note structurée ».
     const clearTranscript = () => {
-      if (!$('transcript').value.trim() || window.confirm('Vider la transcription ?')) {
+      if (!$('transcript').value.trim() || window.confirm(T('transcript.confirm_clear'))) {
         $('transcript').value = '';
         updateTranscriptMeta(null);
         scheduleSave();
@@ -2871,7 +2892,7 @@
       await refreshClientConfig();
       await loadTemplates();
     } catch (err) {
-      toast(`Chargement impossible : ${err.message}`, 'error', 12000);
+      toast(T('app.load_failed', { error: err.message }), 'error', 12000);
     }
 
     // Une dictée laissée en plan par un onglet fermé se signale d'elle-même.

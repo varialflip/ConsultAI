@@ -21,14 +21,19 @@
 
 // Incrémentez cette version à chaque modification d'un fichier statique :
 // cela purge l'ancien cache et force le rechargement chez tous les usagers.
-const VERSION = 'consultai-v3';
+const VERSION = 'consultai-v4';
 const SHELL_CACHE = `${VERSION}-shell`;
 const VENDOR_CACHE = `${VERSION}-vendor`;
+
+// Le manifeste est servi dynamiquement et dépend de la langue configurée : il
+// est délibérément ABSENT de cette liste et exclu de l'interception plus bas.
+// Mis en cache, il continuerait d'annoncer l'ancienne langue sur l'écran
+// d'accueil après un changement de réglage.
+const MANIFEST_PATH = '/static/manifest.webmanifest';
 
 // Ressources propres à l'application, préchargées à l'installation.
 const SHELL_ASSETS = [
   '/static/app.js',
-  '/static/manifest.webmanifest',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
   '/static/icons/icon-maskable-512.png',
@@ -86,7 +91,9 @@ self.addEventListener('fetch', (event) => {
 
   // --- Ressources statiques de l'application : cache d'abord, puis
   //     rafraîchissement en arrière-plan (« stale-while-revalidate »).
-  if (url.origin === self.location.origin && url.pathname.startsWith('/static/')) {
+  if (url.origin === self.location.origin
+      && url.pathname.startsWith('/static/')
+      && url.pathname !== MANIFEST_PATH) {
     event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
     return;
   }

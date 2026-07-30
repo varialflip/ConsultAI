@@ -1,12 +1,17 @@
-# ConsultAI — Dictée de consultations gériatriques (fr-CA)
+# ConsultAI — Dictée de consultations cliniques (français / anglais)
 
-Application web auto-hébergée permettant à un gériatre de **dicter** une
+Application web auto-hébergée permettant à un médecin de **dicter** une
 consultation, de la faire **transcrire** (Google Speech-to-Text, Deepgram,
 AssemblyAI — ce dernier avec un module de terminologie médicale francophone —
 ou Soniox) puis **structurer** par un modèle de langage (Gemini, Claude
 ou OpenAI) selon un **gabarit personnalisable**, avec relecture, correction,
 copie et export PDF. L'audio reste attaché au brouillon pour lever un doute, et
 s'efface avec lui.
+
+L'application n'est propre à **aucune spécialité** : ce qui l'est vit dans les
+gabarits et dans la consigne générale, que le médecin écrit et modifie
+lui-même. L'interface existe en **français et en anglais**, et la langue
+choisie traverse toute la chaîne — voir § 5 quater.
 
 Conçue pour tourner sur un NAS Synology derrière **Pangolin SSO**.
 
@@ -356,9 +361,17 @@ provenance : `panneau` ou `.env`.
 > du navigateur. Un panneau accessible en ligne ne doit pas pouvoir élargir la
 > liste des personnes autorisées à lire les consultations.
 
+### Interface
+
+**Langue de l'application** — `Français` ou `English`. C'est le premier réglage
+du panneau parce que c'est celui qui change tout le reste : l'interface, le code
+de langue envoyé au service vocal, et la langue dans laquelle le modèle rédige
+la note. La page se recharge après l'enregistrement. Détails et limites en
+§ 5 quater.
+
 ### Reconnaissance vocale
 
-Trois services au choix. Le changement ne touche que la dernière étape : le
+Quatre services au choix. Le changement ne touche que la dernière étape : le
 transcodage en OGG/Opus, le découpage en tranches de trente secondes et le
 lexique d'adaptation leur sont communs. Basculer en cours d'usage est sans
 effet sur les dictées déjà transcrites.
@@ -368,6 +381,10 @@ effet sur les dictées déjà transcrites.
 | **Google Speech-to-Text** | `speech_contexts`, ~300 expressions | aucun modèle médical francophone (`medical_dictation` est anglophone) |
 | **Deepgram** | `keywords`, **nova-2 seulement** | aucun |
 | **AssemblyAI** | `keyterms_prompt`, 1000 termes | **module « medical-v1 », français pris en charge** |
+| **Soniox** | `context.terms`, 60 termes | aucun, mais multilingue par conception |
+
+> Le lexique d'adaptation livré avec l'application est **francophone** : il n'est
+> pas envoyé en mode anglais. Voir § 5 quater.
 
 #### AssemblyAI et son module médical
 
@@ -444,10 +461,10 @@ plus prudent.
 |---|---|
 | Clé API | `console.deepgram.com` → API Keys |
 | Modèle | `nova-2` recommandé en français canadien |
-| Langue | `fr-CA` |
+| Langue | **laisser vide** : suit la langue de l'application (§ 5 quater) |
 
 > **Modèle Deepgram :** l'adaptation par mots-clés (le lexique du réseau de la
-> santé québécois — CHSLD, CIUSSS, les échelles gériatriques, les molécules)
+> santé québécois — CHSLD, CIUSSS, les échelles cliniques, les molécules)
 > passe par le paramètre `keywords`, qui n'existe plus sur nova-3. Ce dernier
 > lui substitue `keyterm`, réservé à l'anglais. En français, l'adaptation n'est
 > donc réellement disponible que sur **nova-2**, d'où la recommandation.
@@ -572,7 +589,79 @@ Deux points de conception :
 
 ---
 
+## 5 quater. Langue : français ou anglais
+
+Le réglage **Réglages → Interface → Langue de l'application** (`APP_LANGUAGE`
+dans le `.env`, `fr` par défaut) ne change pas seulement l'habillage. La langue
+traverse toute la chaîne :
+
+| Ce qui suit la langue | Détail |
+|---|---|
+| L'interface | Boutons, menus, messages d'erreur, panneau d'administration, page de refus d'accès, manifeste de l'application installée |
+| Le service vocal | `fr` → `fr-CA` (Google, Deepgram) et `fr` (AssemblyAI, Soniox) ; `en` → `en-CA` / `en` |
+| Le lexique d'adaptation intégré | Il est **francophone** : en mode anglais il n'est **pas** envoyé au moteur (voir ci-dessous) |
+| La note produite | Les consignes de base existent en deux versions ; le modèle rédige en français québécois ou en anglais canadien |
+| L'extraction des métadonnées | Même invite, dans la langue courante |
+
+Le changement prend effet **immédiatement**, sans reconstruction de l'image. La
+page se recharge d'elle-même après l'enregistrement, l'interface étant rendue
+par le serveur.
+
+### Ce que la langue ne change pas : vos gabarits
+
+Un gabarit appartient au médecin qui l'a écrit et **n'est jamais réécrit ni
+traduit**. Conséquence à connaître : passer l'interface en anglais avec des
+gabarits rédigés en français donne une note dont **les titres de rubriques
+restent français** et le corps devient anglais. Ce n'est pas un défaut — les
+consignes de base exigent de reproduire *exactement* la structure fournie, et
+cette exigence l'emporte volontairement sur la langue de rédaction : un titre
+de rubrique inventé serait bien plus gênant qu'un titre dans l'autre langue.
+
+Pour une note entièrement anglaise, dupliquez le gabarit et traduisez-en les
+titres (**Gérer les gabarits → Dupliquer**). Idem pour la consigne générale du
+panneau d'administration, qui est également recopiée telle quelle.
+
+### Le lexique intégré est francophone
+
+Les ~320 expressions d'adaptation livrées avec l'application (acronymes du
+réseau de la santé québécois, échelles cliniques, molécules souvent mal
+entendues) sont des termes **français**. En mode anglais, les envoyer ne pourrait
+rien améliorer et pousserait le moteur vers des mots qui ne seront pas
+prononcés : ils sont donc **omis**.
+
+Le champ **Vocabulaire additionnel** d'un gabarit, lui, est toujours transmis —
+c'est vous qui l'écrivez, vous savez dans quelle langue vous dictez. En mode
+anglais, il devient donc la seule source de vocabulaire du moteur, et le texte
+d'aide sous le champ le rappelle.
+
+### Forcer un code de langue
+
+Les trois champs **Langue …** du panneau (Deepgram, AssemblyAI, Soniox) et la
+variable `STT_LANGUAGE_CODE` du `.env` acceptent trois états :
+
+| Valeur | Effet |
+|---|---|
+| **vide** (recommandé) | Suit la langue de l'application |
+| `auto` | Détection automatique par le service. Utile pour une consultation qui alterne deux langues — Soniox est multilingue par conception |
+| `fr-CA`, `en-GB`, … | Forçage explicite. **Survit au changement de langue** de l'application : à réserver à l'épinglage d'un dialecte précis |
+
+> Un `STT_LANGUAGE_CODE=fr-CA` laissé dans le `.env` d'une installation
+> antérieure figerait le français même après un passage de l'interface à
+> l'anglais. Videz-le.
+
+---
+
 ## 6. Gabarits
+
+C'est **ici, et nulle part ailleurs**, que vit ce qui est propre à une pratique.
+L'application ne connaît aucune spécialité : elle sait dicter, transcrire et
+mettre en forme. Les gabarits fournis ci-dessous sont donc des **exemples**,
+rédigés pour une pratique gériatrique québécoise — renommez-les, réécrivez-les
+ou supprimez-les selon la vôtre.
+
+> Un gabarit préchargé que vous n'avez jamais enregistré depuis l'éditeur peut
+> être mis à jour par une future version de l'application. Dès que vous le
+> modifiez une fois, il vous appartient et n'est plus jamais écrasé.
 
 Trois gabarits sont préchargés au premier démarrage :
 

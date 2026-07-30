@@ -45,7 +45,7 @@ import uuid
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
-from app import runtime_config
+from app import i18n, runtime_config
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -202,8 +202,16 @@ def build_phrase_hints(extra: Optional[str] = None) -> List[str]:
 
     ``extra`` accepte une liste séparée par des virgules ou des sauts de ligne
     (champ « Vocabulaire » de l'éditeur de gabarits).
+
+    Le lexique global est francophone : comme pour ``_termes_prioritaires``, il
+    n'est pas envoyé en mode anglais, où il ne ferait que biaiser le moteur
+    vers des mots absents de la dictée.
     """
-    phrases = list(DEFAULT_PHRASE_HINTS)
+    phrases = (
+        list(DEFAULT_PHRASE_HINTS)
+        if i18n.uses_french_lexicon(runtime_config.language())
+        else []
+    )
     if extra:
         for chunk in extra.replace("\n", ",").split(","):
             phrase = chunk.strip()
@@ -508,7 +516,7 @@ def _transcribe_google(
         encoding=getattr(speech.RecognitionConfig.AudioEncoding, payload.encoding_name),
         sample_rate_hertz=payload.sample_rate,
         audio_channel_count=1,
-        language_code=settings.stt_language_code,
+        language_code=runtime_config.stt_language("google"),
         enable_automatic_punctuation=True,
         profanity_filter=False,
         max_alternatives=1,
@@ -677,7 +685,7 @@ def _transcribe_deepgram(payload: AudioPayload, extra_phrase_hints: Optional[str
     model = runtime_config.value("deepgram_model") or "nova-2"
     params = [
         ("model", model),
-        ("language", runtime_config.value("deepgram_language") or settings.stt_language_code),
+        ("language", runtime_config.stt_language("deepgram")),
         ("punctuate", "true"),
         ("smart_format", "true"),
     ]
@@ -817,8 +825,19 @@ def _termes_prioritaires(extra_phrase_hints: Optional[str], limite: int) -> List
     expressions de plus de six mots sont écartées — les API les refusent, et ce
     sont de toute façon des phrases entières que l'adaptation n'aide pas.
     """
+    # Le noyau intégré est une liste de termes FRANÇAIS. En mode anglais il ne
+    # peut rien améliorer et pousserait le moteur vers des mots qui ne seront
+    # pas prononcés : on ne l'envoie alors pas. Le vocabulaire du gabarit, lui,
+    # part toujours — c'est le médecin qui l'écrit, il sait dans quelle langue
+    # il dicte.
+    noyau = (
+        list(LEXIQUE_PRIORITAIRE)
+        if i18n.uses_french_lexicon(runtime_config.language())
+        else []
+    )
+
     vus, termes = set(), []
-    for phrase in list(LEXIQUE_PRIORITAIRE) + _extra_phrases(extra_phrase_hints):
+    for phrase in noyau + _extra_phrases(extra_phrase_hints):
         cle = phrase.lower()
         if cle in vus or len(phrase.split()) > _ASSEMBLYAI_MAX_WORDS:
             continue
@@ -880,7 +899,7 @@ def _transcribe_assemblyai(payload: AudioPayload, extra_phrase_hints: Optional[s
         "punctuate": True,
         "format_text": True,
     }
-    language = runtime_config.value("assemblyai_language")
+    language = runtime_config.stt_language("assemblyai")
     if language:
         request_body["language_code"] = language
     else:
@@ -965,11 +984,20 @@ _SONIOX_TIMEOUT_SECONDS = 240
 
 #: Indice de domaine passé en texte libre. Court à dessein : c'est un contexte,
 #: pas une consigne — un moteur de reconnaissance vocale ne raisonne pas.
-_SONIOX_CONTEXTE = (
-    "Consultation médicale de gériatrie au Québec. Vocabulaire clinique, "
-    "posologies, échelles gériatriques et acronymes du réseau de la santé "
-    "québécois."
-)
+#:
+#: Aucune spécialité n'y est nommée : elle varierait d'un utilisateur à l'autre
+#: alors que ce texte est figé dans l'image. Le vocabulaire précis passe par les
+#: « terms », qui viennent eux du lexique et du gabarit.
+_SONIOX_CONTEXTES = {
+    "fr": (
+        "Consultation médicale au Québec. Vocabulaire clinique, posologies, "
+        "échelles cliniques et acronymes du réseau de la santé québécois."
+    ),
+    "en": (
+        "Medical consultation. Clinical vocabulary, drug dosages, clinical "
+        "scales and health-system acronyms."
+    ),
+}
 
 
 def _soniox_request(path: str, api_key: str, data=None, method: Optional[str] = None,
@@ -1032,7 +1060,7 @@ def _transcribe_soniox(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         )
 
     model = runtime_config.value("soniox_model") or "stt-async-v5"
-    langue = runtime_config.value("soniox_language")
+    langue = runtime_config.stt_language("soniox")
     termes = _termes_prioritaires(extra_phrase_hints, _SONIOX_MAX_TERMS)
 
     logger.info(
@@ -1051,7 +1079,10 @@ def _transcribe_soniox(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         requete = {
             "model": model,
             "file_id": file_id,
-            "context": {"text": _SONIOX_CONTEXTE, "terms": termes},
+            "context": {
+                "text": _SONIOX_CONTEXTES[i18n.normalize(runtime_config.language())],
+                "terms": termes,
+            },
         }
         if langue:
             requete["language_hints"] = [langue]

@@ -58,7 +58,10 @@ services:
     environment:
       # ---- Application ----
       TZ: "${TZ:-America/Toronto}"
-      APP_TITLE: "${APP_TITLE:-ConsultAI — Gériatrie}"
+      APP_TITLE: "${APP_TITLE:-ConsultAI}"
+      # Langue de départ de l'interface ET de la chaîne : « fr » ou « en ».
+      # Le panneau d'administration la change sans reconstruction.
+      APP_LANGUAGE: "${APP_LANGUAGE:-fr}"
       DATABASE_URL: "${DATABASE_URL:-sqlite:////data/consultai.db}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
 
@@ -76,7 +79,9 @@ services:
 
       # ---- Google Cloud Speech-to-Text ----
       GOOGLE_APPLICATION_CREDENTIALS: "${GOOGLE_APPLICATION_CREDENTIALS:-/secrets/gcp-sa.json}"
-      STT_LANGUAGE_CODE: "${STT_LANGUAGE_CODE:-fr-CA}"
+      # Vide = suit APP_LANGUAGE. Une valeur ici FORCE la langue du service
+      # vocal et survit au changement de langue de l'application.
+      STT_LANGUAGE_CODE: "${STT_LANGUAGE_CODE:-}"
       STT_MODEL: "${STT_MODEL:-latest_long}"
       STT_USE_ENHANCED: "${STT_USE_ENHANCED:-true}"
       STT_API_ENDPOINT: "${STT_API_ENDPOINT:-}"

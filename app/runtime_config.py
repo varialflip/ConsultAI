@@ -35,6 +35,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 
+from app import i18n
 from app.config import settings
 from app.database import AppSetting, SessionLocal
 
@@ -46,17 +47,32 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Setting:
+    """
+    Description d'un réglage.
+
+    Les textes ne sont pas ici : ``label`` et ``help`` sont cherchés dans le
+    catalogue de traduction sous ``set.<clé>.label`` et ``set.<clé>.help``. Le
+    panneau existe en deux langues, garder les libellés dans cette structure
+    aurait obligé à en tenir deux copies.
+    """
+
     key: str
-    label: str
     kind: str                     # text | secret | choice | textarea | number
-    group: str
+    group: str                    # clé i18n : « group.stt »…
     default: Callable[[], str] = lambda: ""
+    #: (valeur, libellé). Le libellé passe par ``i18n.t`` : une clé connue est
+    #: traduite, un nom propre (« Deepgram ») traverse inchangé.
     choices: Tuple[Tuple[str, str], ...] = ()
-    help: str = ""
     placeholder: str = ""
 
     def default_value(self) -> str:
         return str(self.default() or "")
+
+    def label(self, language: str) -> str:
+        return i18n.t(f"set.{self.key}.label", language)
+
+    def help(self, language: str) -> str:
+        return i18n.t(f"set.{self.key}.help", language)
 
 
 STT_PROVIDERS = (
@@ -68,7 +84,7 @@ STT_PROVIDERS = (
 
 #: Un booléen présenté comme un choix : le panneau sait déjà afficher un
 #: « choice », et cela évite un type de champ de plus pour deux réglages.
-ON_OFF = (("true", "Activé"), ("false", "Désactivé"))
+ON_OFF = (("true", "choice.on"), ("false", "choice.off"))
 
 LLM_PROVIDERS = (
     ("gemini", "Google Gemini"),
@@ -78,142 +94,116 @@ LLM_PROVIDERS = (
 
 
 SETTINGS: Tuple[Setting, ...] = (
+    # --- Interface -----------------------------------------------------------
+    # Placée en premier : elle change tout le reste de l'écran, et un réglage
+    # qui se cherche en bas d'une liste de vingt donne l'impression d'être
+    # absent.
+    Setting(
+        "app_language", "choice", "group.interface",
+        default=lambda: settings.app_language, choices=i18n.LANGUAGES,
+    ),
+
     # --- Reconnaissance vocale ---------------------------------------------
     Setting(
-        "stt_provider", "Service de reconnaissance vocale", "choice", "Reconnaissance vocale",
+        "stt_provider", "choice", "group.stt",
         default=lambda: "google", choices=STT_PROVIDERS,
-        help="Le découpage de la dictée en tranches est identique dans les deux cas : "
-             "seul l'envoi final change.",
     ),
     Setting(
-        "deepgram_api_key", "Clé API Deepgram", "secret", "Reconnaissance vocale",
+        "deepgram_api_key", "secret", "group.stt",
         default=lambda: settings.deepgram_api_key,
-        help="console.deepgram.com → API Keys. Requise si Deepgram est sélectionné.",
     ),
     Setting(
-        "deepgram_model", "Modèle Deepgram", "text", "Reconnaissance vocale",
+        "deepgram_model", "text", "group.stt",
         default=lambda: settings.deepgram_model, placeholder="nova-2",
-        help="nova-2 pour le français canadien (l'adaptation par mots-clés n'existe "
-             "que sur cette génération). nova-3 est plus récent mais ignore les "
-             "mots-clés hors anglais.",
+    ),
+    # Les trois réglages de langue ci-dessous sont vides par défaut : ils
+    # suivent alors la langue de l'application. Y inscrire une valeur est un
+    # forçage, utile pour un dialecte précis, mais qui survit au changement de
+    # langue — c'est pourquoi ce n'est pas le défaut.
+    Setting(
+        "deepgram_language", "text", "group.stt",
+        default=lambda: settings.stt_language_code, placeholder="fr-CA / en-CA",
     ),
     Setting(
-        "deepgram_language", "Langue Deepgram", "text", "Reconnaissance vocale",
-        default=lambda: settings.stt_language_code, placeholder="fr-CA",
-    ),
-    Setting(
-        "assemblyai_api_key", "Clé API AssemblyAI", "secret", "Reconnaissance vocale",
+        "assemblyai_api_key", "secret", "group.stt",
         default=lambda: settings.assemblyai_api_key,
-        help="assemblyai.com → Dashboard → API Keys.",
     ),
     Setting(
-        "assemblyai_model", "Modèle AssemblyAI", "text", "Reconnaissance vocale",
+        "assemblyai_model", "text", "group.stt",
         default=lambda: settings.assemblyai_model, placeholder="universal-3-5-pro",
-        help="universal-3-5-pro (défaut) ou universal-2. Le premier reconnaît "
-             "explicitement le français québécois et accepte 1000 termes "
-             "d'adaptation, contre 200 pour le second.",
     ),
     Setting(
-        "assemblyai_language", "Langue AssemblyAI", "text", "Reconnaissance vocale",
-        default=lambda: "fr", placeholder="fr",
-        help="« fr » couvre le français québécois : AssemblyAI ne demande pas de "
-             "code de dialecte. Laisser vide pour la détection automatique.",
+        "assemblyai_language", "text", "group.stt",
+        default=lambda: "", placeholder="fr / en / auto",
     ),
     Setting(
-        "assemblyai_medical", "Mode médical AssemblyAI", "choice", "Reconnaissance vocale",
+        "assemblyai_medical", "choice", "group.stt",
         default=lambda: "true", choices=ON_OFF,
-        help="Module « medical-v1 » : améliore les noms de médicaments, de "
-             "procédures, les diagnostics et les posologies. Le français en fait "
-             "partie. Facturé en supplément (~0,15 $US/h) ; sur une langue non "
-             "prise en charge, l'option est simplement ignorée, sans frais.",
     ),
 
     Setting(
-        "stt_trim_silence", "Retirer les longues pauses", "choice", "Reconnaissance vocale",
+        "stt_trim_silence", "choice", "group.stt",
         default=lambda: "true" if settings.stt_trim_silence else "false", choices=ON_OFF,
-        help="Les trois services facturent à la durée d'audio. Seule la copie envoyée "
-             "est raccourcie : l'enregistrement conservé avec le brouillon reste "
-             "intact, et la durée affichée reste celle de la dictée réelle.",
     ),
     Setting(
-        "stt_silence_keep_seconds", "Pause conservée (secondes)", "number",
-        "Reconnaissance vocale",
+        "stt_silence_keep_seconds", "number", "group.stt",
         default=lambda: str(settings.stt_silence_keep_seconds),
-        help="Toute pause plus courte est gardée telle quelle ; les plus longues sont "
-             "ramenées à cette durée. Ne pas descendre à 0 : les moteurs se servent "
-             "des pauses pour placer la ponctuation et séparer les phrases — sur une "
-             "liste de médicaments, cela compte.",
     ),
 
     Setting(
-        "soniox_api_key", "Clé API Soniox", "secret", "Reconnaissance vocale",
+        "soniox_api_key", "secret", "group.stt",
         default=lambda: settings.soniox_api_key,
-        help="console.soniox.com → API Keys.",
     ),
     Setting(
-        "soniox_model", "Modèle Soniox", "text", "Reconnaissance vocale",
+        "soniox_model", "text", "group.stt",
         default=lambda: settings.soniox_model, placeholder="stt-async-v5",
-        help="Modèle asynchrone (fichier). Le tarif annoncé est d'environ "
-             "0,10 $US/h, soit le quart d'AssemblyAI avec ses modules.",
     ),
     Setting(
-        "soniox_language", "Langue Soniox", "text", "Reconnaissance vocale",
-        default=lambda: "fr", placeholder="fr",
-        help="Indice de langue. Soniox est multilingue par conception : laisser "
-             "vide active la détection automatique, utile si la consultation "
-             "alterne français et anglais.",
+        "soniox_language", "text", "group.stt",
+        default=lambda: "", placeholder="fr / en / auto",
     ),
 
     # --- Modèle de langage --------------------------------------------------
     Setting(
-        "llm_provider", "Fournisseur", "choice", "Modèle de langage",
+        "llm_provider", "choice", "group.llm",
         default=lambda: "gemini", choices=LLM_PROVIDERS,
     ),
     Setting(
-        "llm_model", "Modèle", "text", "Modèle de langage",
+        "llm_model", "text", "group.llm",
         default=lambda: settings.active_gemini_model,
         placeholder="gemini-2.5-flash",
-        help="Le bouton « Modèles disponibles » interroge le fournisseur avec la clé "
-             "configurée et affiche ce à quoi ce compte a réellement droit.",
     ),
     Setting(
-        "llm_model_fast", "Modèle rapide (métadonnées)", "text", "Modèle de langage",
+        "llm_model_fast", "text", "group.llm",
         default=lambda: settings.gemini_model,
-        help="Utilisé pour la seule relecture des métadonnées, une tâche triviale "
-             "payée au jeton. Laisser vide pour employer le modèle principal.",
     ),
     Setting(
-        "llm_temperature", "Température", "number", "Modèle de langage",
+        "llm_temperature", "number", "group.llm",
         default=lambda: str(settings.gemini_temperature),
-        help="0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
-             "n'a pas sa place dans une note clinique. Les modèles les plus "
-             "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
-             "est produite quand même.",
     ),
     Setting(
-        "gemini_api_key", "Clé API Google Gemini", "secret", "Modèle de langage",
+        "gemini_api_key", "secret", "group.llm",
         default=lambda: settings.gemini_api_key,
     ),
     Setting(
-        "anthropic_api_key", "Clé API Anthropic", "secret", "Modèle de langage",
+        "anthropic_api_key", "secret", "group.llm",
         default=lambda: settings.anthropic_api_key,
     ),
     Setting(
-        "openai_api_key", "Clé API OpenAI", "secret", "Modèle de langage",
+        "openai_api_key", "secret", "group.llm",
         default=lambda: settings.openai_api_key,
     ),
 
     # --- Consignes ----------------------------------------------------------
     Setting(
-        "general_prompt", "Consigne générale", "textarea", "Consignes",
+        "general_prompt", "textarea", "group.prompts",
         default=lambda: "",
-        placeholder="Ex. : Utiliser systématiquement le vouvoiement. Ne jamais "
-                    "abréger les noms de médicaments.",
-        help="Ajoutée aux consignes de TOUS les gabarits et appliquée quel que soit "
-             "le modèle choisi. Elle passe après celles du gabarit : en cas de "
-             "contradiction, c'est elle qui l'emporte.",
+        placeholder="set.general_prompt.placeholder",
     ),
 )
+
+#: Ordre d'affichage des groupes dans le panneau.
+GROUPS: Tuple[str, ...] = ("group.interface", "group.stt", "group.llm", "group.prompts")
 
 BY_KEY: Dict[str, Setting] = {item.key: item for item in SETTINGS}
 
@@ -277,6 +267,59 @@ def is_overridden(key: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Langue
+# ---------------------------------------------------------------------------
+def language() -> str:
+    """
+    Langue effective de l'application : « fr » ou « en ».
+
+    Point d'entrée unique. Tout ce qui dépend de la langue — l'interface, le
+    code envoyé au service vocal, la langue de rédaction de la note — passe
+    par ici, de façon qu'un changement dans le panneau se répercute partout
+    sans redémarrage.
+    """
+    return i18n.normalize(value("app_language"))
+
+
+def stt_language(provider: str) -> str:
+    """
+    Code de langue à envoyer à ``provider``.
+
+    Trois cas, et il fallait les distinguer :
+
+    * champ **vide** → la langue de l'application décide, traduite dans la
+      convention du service. C'est le défaut, et ce qui fait qu'un passage à
+      l'anglais emporte toute la chaîne ;
+    * champ à ``auto`` → chaîne vide renvoyée, ce que Soniox et AssemblyAI
+      interprètent comme « détecte la langue toi-même ». Utile pour une
+      consultation qui alterne deux langues ;
+    * toute autre valeur → forçage explicite, tel quel.
+
+    Le sentinelle ``auto`` existe parce que « vide » était déjà pris : sans
+    elle, demander la détection automatique et laisser l'application choisir
+    s'écriraient de la même façon.
+    """
+    cle = {
+        "deepgram": "deepgram_language",
+        "assemblyai": "assemblyai_language",
+        "soniox": "soniox_language",
+    }.get(provider)
+
+    if cle is not None:
+        forcage = value(cle).strip()
+    else:
+        # Google n'a pas de champ dans le panneau : seul le .env peut forcer.
+        forcage = settings.stt_language_code.strip()
+
+    if forcage.lower() == "auto":
+        return ""
+    if forcage:
+        return forcage
+
+    return i18n.stt_language_code(language(), provider)
+
+
+# ---------------------------------------------------------------------------
 # Vue destinée au panneau d'administration
 # ---------------------------------------------------------------------------
 def _mask(secret: str) -> dict:
@@ -292,18 +335,28 @@ def _mask(secret: str) -> dict:
     return {"configured": True, "hint": f"…{secret[-4:]}" if len(secret) > 4 else "…"}
 
 
-def describe() -> List[dict]:
-    """Schéma + valeurs courantes, prêt à être affiché par le panneau."""
+def describe(language_code: Optional[str] = None) -> List[dict]:
+    """
+    Schéma + valeurs courantes, prêt à être affiché par le panneau.
+
+    Les libellés sont rendus dans ``language_code``, ou dans la langue
+    effective de l'application si l'appelant ne précise rien.
+    """
+    langue = i18n.normalize(language_code or language())
     result = []
     for setting in SETTINGS:
         entry = {
             "key": setting.key,
-            "label": setting.label,
+            "label": setting.label(langue),
             "kind": setting.kind,
-            "group": setting.group,
-            "help": setting.help,
-            "placeholder": setting.placeholder,
-            "choices": [{"value": v, "label": label} for v, label in setting.choices],
+            "group": i18n.t(setting.group, langue),
+            "help": setting.help(langue),
+            # Un nom propre ou une valeur technique traverse ``t`` inchangé :
+            # seules les clés connues du catalogue sont remplacées.
+            "placeholder": i18n.t(setting.placeholder, langue) if setting.placeholder else "",
+            "choices": [
+                {"value": v, "label": i18n.t(label, langue)} for v, label in setting.choices
+            ],
             "overridden": is_overridden(setting.key),
         }
         if setting.kind == "secret":
@@ -328,6 +381,10 @@ def update(values: Dict[str, str], username: str) -> List[str]:
     n'envoyer que ce qui a bougé, ce qui évite de réécrire une clé d'API
     qu'il n'a de toute façon jamais reçue en clair.
     """
+    # Langue lue avant d'appliquer : si c'est justement elle qui change, un
+    # message d'erreur doit sortir dans la langue que le médecin lit en ce
+    # moment, pas dans celle qu'il vient de demander.
+    langue = language()
     changed: List[str] = []
     with SessionLocal() as db:
         for key, raw in values.items():
@@ -340,13 +397,20 @@ def update(values: Dict[str, str], username: str) -> List[str]:
                 allowed = {choice for choice, _ in setting.choices}
                 if new_value not in allowed:
                     raise ValueError(
-                        f"Valeur refusée pour « {setting.label} » : {new_value}"
+                        i18n.t(
+                            "err.setting_rejected", langue,
+                            label=setting.label(langue), value=new_value,
+                        )
                     )
             if setting.kind == "number" and new_value:
                 try:
                     float(new_value.replace(",", "."))
                 except ValueError as exc:
-                    raise ValueError(f"« {setting.label} » doit être un nombre.") from exc
+                    raise ValueError(
+                        i18n.t(
+                            "err.setting_number", langue, label=setting.label(langue)
+                        )
+                    ) from exc
 
             row = db.get(AppSetting, key)
             if not new_value:

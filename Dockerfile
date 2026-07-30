@@ -35,7 +35,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
 FROM python:3.12-slim AS runtime
 
 LABEL org.opencontainers.image.title="ConsultAI" \
-      org.opencontainers.image.description="Dictée de consultations gériatriques (fr-CA) — STT Google + Gemini" \
+      org.opencontainers.image.description="Dictée de consultations cliniques (fr / en) — STT + LLM au choix" \
       org.opencontainers.image.source="https://github.com/local/consultai"
 
 # ffmpeg : indispensable pour normaliser l'audio du navigateur.

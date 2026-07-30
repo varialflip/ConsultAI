@@ -6,7 +6,7 @@ Deux tables :
   * ``templates``     : gabarits de consultation (instructions + squelette)
   * ``consultations`` : brouillons dictés, sauvegardés automatiquement
 
-SQLite est amplement suffisant ici : un cabinet de gériatrie génère quelques
+SQLite est amplement suffisant ici : un cabinet médical génère quelques
 dizaines de documents par jour, et le fichier vit sur un volume Docker
 persistant (/data/consultai.db) trivial à sauvegarder avec Hyper Backup.
 """
@@ -121,7 +121,7 @@ class Template(Base):
     layout_format: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Vocabulaire spécifique au gabarit, transmis en « phrase hints » à
-    # Google STT en plus du lexique gériatrique global (voir stt.py).
+    # Google STT en plus du lexique clinique global (voir stt.py).
     phrase_hints: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
     # Gabarit préchargé à l'installation : signalé dans l'UI, mais restant

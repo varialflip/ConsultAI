@@ -65,7 +65,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app import __version__
-from app import dictation, llm, recordings, runtime_config
+from app import dictation, i18n, llm, recordings, runtime_config
 from app.auth import Principal, SSOAuthMiddleware, current_user, require_template_admin
 from app.config import configure_logging, settings
 from app.database import (
@@ -111,10 +111,15 @@ async def lifespan(app: FastAPI):
     # Les fournisseurs effectifs viennent du panneau d'administration, pas du
     # .env : c'est ce couple-là qu'il faut voir dans les journaux quand une
     # génération échoue.
+    # La langue affichée est la langue EFFECTIVE, résolue par le panneau puis
+    # traduite dans la convention du service : c'est ce code-là qui part
+    # réellement, et non le contenu éventuel de STT_LANGUAGE_CODE.
+    _stt_provider = runtime_config.value("stt_provider")
     logger.info(
-        "Modèle : %s / %s | Reconnaissance vocale : %s (%s)",
+        "Modèle : %s / %s | Reconnaissance vocale : %s (%s) | Langue : %s",
         runtime_config.value("llm_provider"), llm.active_model(),
-        runtime_config.value("stt_provider"), settings.stt_language_code,
+        _stt_provider, runtime_config.stt_language(_stt_provider) or "détection auto",
+        runtime_config.language(),
     )
     os.makedirs(settings.audio_dir, exist_ok=True)
     yield
@@ -123,7 +128,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="ConsultAI",
-    description="Dictée et mise en forme de consultations gériatriques (fr-CA)",
+    description="Dictée et mise en forme de consultations cliniques (fr / en)",
     version=__version__,
     lifespan=lifespan,
     # La documentation interactive reste accessible aux utilisateurs
@@ -146,6 +151,74 @@ app.add_middleware(
     public_paths={"/healthz", "/sw.js", "/static/manifest.webmanifest"},
     public_prefixes=("/static/icons/",),
 )
+
+
+# ---------------------------------------------------------------------------
+# Traduction
+# ---------------------------------------------------------------------------
+def _t(key: str, **fields) -> str:
+    """
+    Texte dans la langue effective de l'application.
+
+    Les messages d'erreur renvoyés par l'API passent par ici : ils s'affichent
+    tels quels dans le navigateur (champ « detail »), et ils doivent donc être
+    dans la langue de l'écran que le médecin regarde.
+    """
+    return i18n.t(key, runtime_config.language(), **fields)
+
+
+# ---------------------------------------------------------------------------
+# Manifeste PWA — servi dynamiquement pour suivre la langue
+# ---------------------------------------------------------------------------
+# Déclaré AVANT le montage de /static : Starlette parcourt les routes dans
+# l'ordre d'enregistrement, et le montage attraperait sinon cette adresse. Le
+# chemin ne change pas, ce qui évite de retoucher la liste des ressources
+# publiques de Pangolin.
+@app.get("/static/manifest.webmanifest", include_in_schema=False)
+async def web_manifest() -> JSONResponse:
+    langue = runtime_config.language()
+    return JSONResponse(
+        {
+            "name": settings.app_title,
+            "short_name": "ConsultAI",
+            "description": i18n.t("app.description", langue),
+            "lang": i18n.stt_language_code(langue, "google"),
+            "dir": "ltr",
+            "start_url": "/",
+            "scope": "/",
+            # « id » identifie l'application installée : l'omettre ou le
+            # changer ferait voir une AUTRE application au navigateur, qui
+            # proposerait une seconde installation à côté de la première.
+            "id": "/",
+            "display": "standalone",
+            "display_override": ["standalone", "minimal-ui"],
+            "orientation": "any",
+            "background_color": "#f1f5f9",
+            "theme_color": "#ffffff",
+            "categories": ["medical", "health", "productivity"],
+            "icons": [
+                {"src": "/static/icons/icon-192.png", "sizes": "192x192",
+                 "type": "image/png", "purpose": "any"},
+                {"src": "/static/icons/icon-512.png", "sizes": "512x512",
+                 "type": "image/png", "purpose": "any"},
+                {"src": "/static/icons/icon-maskable-512.png", "sizes": "512x512",
+                 "type": "image/png", "purpose": "maskable"},
+            ],
+            "shortcuts": [
+                {
+                    "name": i18n.t("header.new_title", langue),
+                    "short_name": i18n.t("header.new", langue),
+                    "url": "/?nouvelle=1",
+                    "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192"}],
+                }
+            ],
+        },
+        media_type="application/manifest+json",
+        # Le manifeste dépend d'un réglage : le mettre en cache longtemps
+        # laisserait l'écran d'accueil dans l'ancienne langue.
+        headers={"Cache-Control": "no-cache, max-age=0"},
+    )
+
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 jinja_templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -231,7 +304,7 @@ def _get_owned_consultation(db: Session, consultation_id: int, user: Principal) 
     """
     consultation = db.get(Consultation, consultation_id)
     if consultation is None or consultation.owner != user.owner_key:
-        raise HTTPException(status_code=404, detail="Consultation introuvable.")
+        raise HTTPException(status_code=404, detail=_t("err.consultation_not_found"))
     return consultation
 
 
@@ -345,6 +418,7 @@ async def service_worker() -> FileResponse:
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def index(request: Request):
     user = current_user(request)
+    langue = runtime_config.language()
     return jinja_templates.TemplateResponse(
         request,
         "index.html",
@@ -352,6 +426,15 @@ async def index(request: Request):
             "app_title": settings.app_title,
             "user": user.to_dict(),
             "version": __version__,
+            # « t » est une fonction et non un dictionnaire : le gabarit écrit
+            # t('cle') plutôt que t['cle'], ce qui permet de passer des champs
+            # à remplir et de ne pas lever sur une clé absente.
+            "t": lambda key, **fields: i18n.t(key, langue, **fields),
+            "lang": langue,
+            # Catalogue complet inclus dans la page : le navigateur en a besoin
+            # avant le premier affichage, et un aller-retour de plus ferait
+            # apparaître l'interface en clés brutes le temps du chargement.
+            "i18n_catalog": i18n.catalog(langue),
         },
     )
 
@@ -369,10 +452,15 @@ async def api_me(request: Request):
 async def api_config(request: Request):
     """Configuration non sensible, consommée par le frontend."""
     user = current_user(request)
+    langue = runtime_config.language()
     return {
         "app_title": settings.app_title,
         "version": __version__,
-        "language": settings.stt_language_code,
+        # Langue de l'interface. Le client s'en sert pour le formatage des
+        # dates et pour savoir s'il doit recharger la page après un
+        # changement de réglage.
+        "language": langue,
+        "stt_language": runtime_config.stt_language(runtime_config.value("stt_provider")),
         "llm_provider": runtime_config.value("llm_provider"),
         "llm_model": llm.active_model(),
         "stt_provider": runtime_config.value("stt_provider"),
@@ -455,9 +543,13 @@ class AdminSettingsIn(BaseModel):
 
 @app.get("/api/admin/settings")
 def get_admin_settings(request: Request, admin: Principal = Depends(require_template_admin)):
+    langue = runtime_config.language()
     return {
-        "settings": runtime_config.describe(),
-        "groups": ["Reconnaissance vocale", "Modèle de langage", "Consignes"],
+        "settings": runtime_config.describe(langue),
+        # Les groupes sont renvoyés traduits et dans l'ordre voulu : le
+        # navigateur ne fait que les afficher, il n'a pas à connaître leur
+        # nombre ni leur intitulé.
+        "groups": [i18n.t(groupe, langue) for groupe in runtime_config.GROUPS],
     }
 
 
@@ -471,7 +563,16 @@ def put_admin_settings(
         changed = runtime_config.update(payload.values, admin.username)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"changed": changed, "settings": runtime_config.describe()}
+
+    # La langue a pu changer à l'instant : on redécrit dans la NOUVELLE langue,
+    # de sorte que le panneau se réaffiche traduit sans recharger la page.
+    langue = runtime_config.language()
+    return {
+        "changed": changed,
+        "settings": runtime_config.describe(langue),
+        "groups": [i18n.t(groupe, langue) for groupe in runtime_config.GROUPS],
+        "language": langue,
+    }
 
 
 # ===========================================================================
@@ -492,7 +593,7 @@ def get_template(template_id: int, request: Request, db: Session = Depends(get_d
     current_user(request)
     row = db.get(TemplateModel, template_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="Gabarit introuvable.")
+        raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
     return row.to_dict()
 
 
@@ -517,7 +618,7 @@ def create_template(
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=409, detail=f"Un gabarit nommé « {payload.name} » existe déjà."
+            status_code=409, detail=_t("err.template_exists", name=payload.name)
         )
     db.refresh(row)
     logger.info("Gabarit créé « %s » par %s", row.name, admin.username)
@@ -533,7 +634,7 @@ def update_template(
 ):
     row = db.get(TemplateModel, template_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="Gabarit introuvable.")
+        raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
 
     row.name = payload.name
     row.description = payload.description
@@ -548,7 +649,7 @@ def update_template(
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=409, detail=f"Un gabarit nommé « {payload.name} » existe déjà."
+            status_code=409, detail=_t("err.template_exists", name=payload.name)
         )
     db.refresh(row)
     logger.info("Gabarit modifié « %s » par %s", row.name, admin.username)
@@ -573,7 +674,7 @@ def duplicate_template(
     """
     source = db.get(TemplateModel, template_id)
     if source is None:
-        raise HTTPException(status_code=404, detail="Gabarit introuvable.")
+        raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
 
     # Le nom est unique en base : on cherche le premier suffixe disponible
     # plutôt que de renvoyer une erreur que l'utilisateur devrait résoudre
@@ -619,13 +720,13 @@ def delete_template(
     """
     row = db.get(TemplateModel, template_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="Gabarit introuvable.")
+        raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
 
     remaining = db.scalar(select(TemplateModel.id).where(TemplateModel.id != template_id))
     if remaining is None:
         raise HTTPException(
             status_code=409,
-            detail="Impossible de supprimer le dernier gabarit : l'application en exige au moins un.",
+            detail=_t("err.template_last"),
         )
 
     name = row.name
@@ -655,7 +756,7 @@ async def api_transcribe(
 
     raw = await file.read()
     if not raw:
-        raise HTTPException(status_code=400, detail="Fichier audio vide.")
+        raise HTTPException(status_code=400, detail=_t("err.audio_empty"))
     if len(raw) > settings.max_audio_bytes:
         raise HTTPException(
             status_code=413,
@@ -682,7 +783,7 @@ async def api_transcribe(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
         logger.exception("Erreur inattendue pendant la transcription")
-        raise HTTPException(status_code=502, detail=f"Erreur de transcription : {exc}") from exc
+        raise HTTPException(status_code=502, detail=_t("err.transcription", error=exc)) from exc
 
     if consultation_id:
         consultation = _get_owned_consultation(db, consultation_id, user)
@@ -799,7 +900,7 @@ async def upload_dictation_chunk(
     user = current_user(request)
     data = await file.read()
     if not data:
-        raise HTTPException(status_code=400, detail="Fragment audio vide.")
+        raise HTTPException(status_code=400, detail=_t("err.chunk_empty"))
 
     try:
         session = await run_in_threadpool(
@@ -855,7 +956,7 @@ async def finish_dictation(session_id: str, request: Request, db: Session = Depe
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
         logger.exception("Erreur inattendue à la clôture de la dictée %s", session_id)
-        raise HTTPException(status_code=502, detail=f"Erreur de transcription : {exc}") from exc
+        raise HTTPException(status_code=502, detail=_t("err.transcription", error=exc)) from exc
 
     result = session.to_public()
     result["transcript"] = " ".join(session.parts).strip()
@@ -905,7 +1006,7 @@ async def api_generate(
 
     template_row = db.get(TemplateModel, payload.template_id)
     if template_row is None:
-        raise HTTPException(status_code=404, detail="Gabarit introuvable.")
+        raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
 
     model_name = settings.gemini_model_pro if payload.use_pro else None
 
@@ -924,7 +1025,7 @@ async def api_generate(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
         logger.exception("Erreur inattendue pendant la génération")
-        raise HTTPException(status_code=502, detail=f"Erreur de génération : {exc}") from exc
+        raise HTTPException(status_code=502, detail=_t("err.generation", error=exc)) from exc
 
     # --- Persistance ------------------------------------------------------
     if payload.consultation_id:
@@ -1106,7 +1207,7 @@ def delete_consultation(consultation_id: int, request: Request, db: Session = De
 def _get_owned_recording(db: Session, recording_id: int, user: Principal) -> Recording:
     recording = db.get(Recording, recording_id)
     if recording is None or recording.owner != user.username:
-        raise HTTPException(status_code=404, detail="Enregistrement introuvable.")
+        raise HTTPException(status_code=404, detail=_t("err.recording_not_found"))
     return recording
 
 
@@ -1134,7 +1235,7 @@ def stream_recording(recording_id: int, request: Request, db: Session = Depends(
     if not path.exists():
         raise HTTPException(
             status_code=410,
-            detail="Le fichier audio de cet enregistrement n'est plus sur le disque.",
+            detail=_t("err.recording_gone"),
         )
     return FileResponse(
         path,

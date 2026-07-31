@@ -825,11 +825,14 @@ async def api_models(request: Request, provider: Optional[str] = None):
         models = await run_in_threadpool(list_available_models, target)
     except GenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    configured = llm.active_model()
+    # Le modèle du fournisseur INTERROGÉ (``target``), pas nécessairement de
+    # celui actif : consulter l'onglet d'un service non activé ne doit pas
+    # comparer son modèle configuré à la liste d'un autre.
+    configured = llm.active_model(target)
     # Le modèle rapide est renvoyé lui aussi : c'en est un second, réglable
     # séparément, et « Modèles disponibles » ne renseignait que le principal —
     # on ne pouvait donc pas vérifier qu'il existait sans lancer une génération.
-    rapide = runtime_config.value("llm_model_fast")
+    rapide = llm.raw_fast_model(target)
     return {
         "provider": target,
         "configured": configured,

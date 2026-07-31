@@ -826,22 +826,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Sera activé à l'enregistrement.",
         "Will be activated on save.",
     ),
-    "admin.cohere_shared_key": (
-        "Cohere emploie <strong>la même clé</strong> pour le modèle de langage et "
-        "pour la reconnaissance vocale : elle se règle une seule fois, sous "
-        "l'onglet Reconnaissance vocale → Cohere.",
-        "Cohere uses <strong>the same key</strong> for the language model and for "
-        "speech recognition: set it once, under the Speech recognition tab → "
-        "Cohere.",
-    ),
-    "admin.mistral_shared_key": (
-        "Mistral emploie <strong>la même clé</strong> pour le modèle de langage et "
-        "pour la reconnaissance vocale (Voxtral) : elle se règle une seule fois, "
-        "sous l'onglet Reconnaissance vocale → Mistral Voxtral.",
-        "Mistral uses <strong>the same key</strong> for the language model and for "
-        "speech recognition (Voxtral): set it once, under the Speech recognition "
-        "tab → Mistral Voxtral.",
-    ),
     "admin.provider_env_only": (
         "Ce service n'a aucun réglage dans ce panneau : il se configure dans le "
         "fichier <code>.env</code> et, pour Google, par le compte de service "
@@ -1143,25 +1127,33 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 
     "set.llm_provider.label": ("Fournisseur", "Provider"),
     "set.llm_provider.help": ("", ""),
-    "set.llm_model.label": ("Modèle", "Model"),
-    "set.llm_model.help": (
+
+    # --- Réglages « modèle » : un jeu de trois par fournisseur ---------------
+    # Le libellé reste générique (« Modèle », et non « Modèle Gemini ») : un
+    # seul fournisseur est visible à la fois, sous son propre sous-onglet — le
+    # nommer suffit à savoir de qui on parle, pas besoin de le répéter ici.
+    # Le contenu est donc volontairement identique d'un fournisseur à l'autre.
+    "set.gemini_api_key.label": ("Clé API Google Gemini", "Google Gemini API key"),
+    "set.gemini_api_key.help": ("", ""),
+    "set.gemini_model.label": ("Modèle", "Model"),
+    "set.gemini_model.help": (
         "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
         "clé configurée et affiche ce à quoi ce compte a réellement droit.",
         "The “Available models” button queries the provider with the "
         "configured key and shows what this account actually has access to.",
     ),
-    "set.llm_model_fast.label": (
+    "set.gemini_model_fast.label": (
         "Modèle rapide (métadonnées)",
         "Fast model (metadata)",
     ),
-    "set.llm_model_fast.help": (
+    "set.gemini_model_fast.help": (
         "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
         "payée au jeton. Laisser vide pour employer le modèle principal.",
         "Used only to re-read metadata, a trivial task paid by the token. "
         "Leave empty to use the main model.",
     ),
-    "set.llm_temperature.label": ("Température", "Temperature"),
-    "set.llm_temperature.help": (
+    "set.gemini_temperature.label": ("Température", "Temperature"),
+    "set.gemini_temperature.help": (
         "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
         "n'a pas sa place dans une note clinique. Les modèles les plus "
         "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
@@ -1171,12 +1163,129 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "accept it: the setting is then ignored and the note is produced "
         "anyway.",
     ),
-    "set.gemini_api_key.label": ("Clé API Google Gemini", "Google Gemini API key"),
-    "set.gemini_api_key.help": ("", ""),
+
     "set.anthropic_api_key.label": ("Clé API Anthropic", "Anthropic API key"),
     "set.anthropic_api_key.help": ("", ""),
+    "set.anthropic_model.label": ("Modèle", "Model"),
+    "set.anthropic_model.help": (
+        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
+        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
+        "The “Available models” button queries the provider with the "
+        "configured key and shows what this account actually has access to.",
+    ),
+    "set.anthropic_model_fast.label": (
+        "Modèle rapide (métadonnées)",
+        "Fast model (metadata)",
+    ),
+    "set.anthropic_model_fast.help": (
+        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
+        "payée au jeton. Laisser vide pour employer le modèle principal.",
+        "Used only to re-read metadata, a trivial task paid by the token. "
+        "Leave empty to use the main model.",
+    ),
+    "set.anthropic_temperature.label": ("Température", "Temperature"),
+    "set.anthropic_temperature.help": (
+        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
+        "n'a pas sa place dans une note clinique. Les modèles les plus "
+        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
+        "est produite quand même.",
+        "0 = deterministic. Above 0.4 the model starts embellishing, which "
+        "has no place in a clinical note. The most recent models no longer "
+        "accept it: the setting is then ignored and the note is produced "
+        "anyway.",
+    ),
+
     "set.openai_api_key.label": ("Clé API OpenAI", "OpenAI API key"),
     "set.openai_api_key.help": ("", ""),
+    "set.openai_model.label": ("Modèle", "Model"),
+    "set.openai_model.help": (
+        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
+        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
+        "The “Available models” button queries the provider with the "
+        "configured key and shows what this account actually has access to.",
+    ),
+    "set.openai_model_fast.label": (
+        "Modèle rapide (métadonnées)",
+        "Fast model (metadata)",
+    ),
+    "set.openai_model_fast.help": (
+        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
+        "payée au jeton. Laisser vide pour employer le modèle principal.",
+        "Used only to re-read metadata, a trivial task paid by the token. "
+        "Leave empty to use the main model.",
+    ),
+    "set.openai_temperature.label": ("Température", "Temperature"),
+    "set.openai_temperature.help": (
+        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
+        "n'a pas sa place dans une note clinique. Les modèles les plus "
+        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
+        "est produite quand même.",
+        "0 = deterministic. Above 0.4 the model starts embellishing, which "
+        "has no place in a clinical note. The most recent models no longer "
+        "accept it: the setting is then ignored and the note is produced "
+        "anyway.",
+    ),
+
+    # Cohere et Mistral n'ont pas de clé propre ici — voir set.cohere_api_key /
+    # set.mistral_api_key, sous Reconnaissance vocale, dont le champ est
+    # répété sous cet onglet (voir app.js, partitionFields()).
+    "set.cohere_llm_model.label": ("Modèle", "Model"),
+    "set.cohere_llm_model.help": (
+        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
+        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
+        "The “Available models” button queries the provider with the "
+        "configured key and shows what this account actually has access to.",
+    ),
+    "set.cohere_llm_model_fast.label": (
+        "Modèle rapide (métadonnées)",
+        "Fast model (metadata)",
+    ),
+    "set.cohere_llm_model_fast.help": (
+        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
+        "payée au jeton. Laisser vide pour employer le modèle principal.",
+        "Used only to re-read metadata, a trivial task paid by the token. "
+        "Leave empty to use the main model.",
+    ),
+    "set.cohere_llm_temperature.label": ("Température", "Temperature"),
+    "set.cohere_llm_temperature.help": (
+        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
+        "n'a pas sa place dans une note clinique. Les modèles les plus "
+        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
+        "est produite quand même.",
+        "0 = deterministic. Above 0.4 the model starts embellishing, which "
+        "has no place in a clinical note. The most recent models no longer "
+        "accept it: the setting is then ignored and the note is produced "
+        "anyway.",
+    ),
+
+    "set.mistral_llm_model.label": ("Modèle", "Model"),
+    "set.mistral_llm_model.help": (
+        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
+        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
+        "The “Available models” button queries the provider with the "
+        "configured key and shows what this account actually has access to.",
+    ),
+    "set.mistral_llm_model_fast.label": (
+        "Modèle rapide (métadonnées)",
+        "Fast model (metadata)",
+    ),
+    "set.mistral_llm_model_fast.help": (
+        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
+        "payée au jeton. Laisser vide pour employer le modèle principal.",
+        "Used only to re-read metadata, a trivial task paid by the token. "
+        "Leave empty to use the main model.",
+    ),
+    "set.mistral_llm_temperature.label": ("Température", "Temperature"),
+    "set.mistral_llm_temperature.help": (
+        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
+        "n'a pas sa place dans une note clinique. Les modèles les plus "
+        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
+        "est produite quand même.",
+        "0 = deterministic. Above 0.4 the model starts embellishing, which "
+        "has no place in a clinical note. The most recent models no longer "
+        "accept it: the setting is then ignored and the note is produced "
+        "anyway.",
+    ),
     "set.general_prompt.label": ("Consigne générale", "General instruction"),
     "set.general_prompt.help": (
         "Ajoutée aux consignes de TOUS les gabarits et appliquée quel que "

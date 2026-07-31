@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from app import i18n, runtime_config
-from app.config import settings
+from app.config import COHERE_DEFAULT_LLM_MODEL, MISTRAL_DEFAULT_LLM_MODEL, settings
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +94,11 @@ STYLE
 - Unités du système international (mg, mL, kg, mmHg, mmol/L).
 - Conserve les abréviations médicales usuelles telles que dictées (ATCD, HTA,
   MPOC, IC, FA, DB2, IRC, TNC).
-- Ne parle jamais du patient à la première personne ; n'ajoute ni salutation,
-  ni signature, ni note de bas de page.
+- Rédige à la troisième personne par défaut (« le patient »), SAUF si la
+  consigne générale du médecin demande explicitement la première personne, ou
+  si un passage de la dictée est rapporté textuellement en discours direct
+  (entre guillemets) : dans ces cas précis, respecte la voix demandée.
+  N'ajoute ni salutation, ni signature, ni note de bas de page.
 
 FORMAT DE SORTIE
 ================
@@ -152,7 +155,10 @@ STYLE
 - SI units (mg, mL, kg, mmHg, mmol/L).
 - Keep the usual medical abbreviations as dictated (PMH, HTN, COPD, CHF, AF,
   T2DM, CKD).
-- Never refer to the patient in the first person; add no greeting, no
+- Write in the third person by default ("the patient"), UNLESS the
+  physician's general instructions explicitly request the first person, or a
+  passage of the dictation is reported verbatim in direct speech (quoted): in
+  those specific cases, honour the requested voice. Add no greeting, no
   signature, no footnote.
 
 OUTPUT FORMAT
@@ -268,7 +274,9 @@ _USER_PROMPT_LABELS = {
         "closing": (
             "Produis maintenant la note clinique complète en Markdown, en "
             "respectant scrupuleusement la mise en page exigée et sans "
-            "inventer aucune donnée."
+            "inventer aucune donnée. Si la dictée est elle-même à la première "
+            "personne, rédige la note à la première personne — ne la "
+            "convertis pas systématiquement en « le patient »."
         ),
     },
     "en": {
@@ -284,7 +292,10 @@ _USER_PROMPT_LABELS = {
         ),
         "closing": (
             "Now produce the complete clinical note in Markdown, following the "
-            "required layout scrupulously and inventing no data whatsoever."
+            "required layout scrupulously and inventing no data whatsoever. If "
+            "the dictation itself is in the first person, write the note in "
+            "the first person — do not systematically convert it to "
+            "\"the patient.\""
         ),
     },
 }
@@ -379,13 +390,62 @@ def active_provider() -> str:
     return runtime_config.value("llm_provider") or "gemini"
 
 
-def active_model() -> str:
-    return runtime_config.value("llm_model") or settings.active_gemini_model
+#: Réglage « modèle principal », par fournisseur. Cohere et Mistral portent le
+#: suffixe « _llm » : leur clé ``<fournisseur>_model`` désigne déjà le modèle
+#: de TRANSCRIPTION (voir stt.py), pas celui de mise en forme.
+_MODEL_KEYS = {
+    "gemini": "gemini_model",
+    "anthropic": "anthropic_model",
+    "openai": "openai_model",
+    "cohere": "cohere_llm_model",
+    "mistral": "mistral_llm_model",
+}
+
+#: Réglage « température », par fournisseur.
+_TEMPERATURE_KEYS = {
+    "gemini": "gemini_temperature",
+    "anthropic": "anthropic_temperature",
+    "openai": "openai_temperature",
+    "cohere": "cohere_llm_temperature",
+    "mistral": "mistral_llm_temperature",
+}
+
+
+def active_model(provider: Optional[str] = None) -> str:
+    """
+    Modèle principal du fournisseur donné (ou de celui actif, à défaut).
+
+    ``provider`` existe pour « Modèles disponibles » : ce bouton interroge le
+    service CONSULTÉ dans le panneau, qui peut différer de celui réellement
+    actif (on visite un onglet sans l'avoir activé) — sans ce paramètre, la
+    vérification « ce modèle figure-t-il dans la liste ? » comparait le
+    modèle configuré d'un AUTRE fournisseur à la liste qu'on vient de
+    recevoir, et affichait un avertissement incohérent.
+
+    Peut être vide (Anthropic/OpenAI n'ont pas de valeur par défaut connue,
+    contrairement à Gemini/Cohere/Mistral) : ``generate_note`` est
+    responsable de refuser une génération avec un modèle vide, avec un
+    message clair. Cette fonction, elle, ne doit JAMAIS lever — elle est
+    aussi appelée au démarrage de l'application pour la journalisation.
+    """
+    key = _MODEL_KEYS.get(provider or active_provider(), "gemini_model")
+    return runtime_config.value(key)
+
+
+def raw_fast_model(provider: Optional[str] = None) -> str:
+    """Valeur BRUTE du modèle rapide, sans repli sur le modèle principal."""
+    key = _MODEL_KEYS.get(provider or active_provider(), "gemini_model") + "_fast"
+    return runtime_config.value(key)
 
 
 def fast_model() -> str:
     """Modèle des tâches mécaniques (relecture des métadonnées)."""
-    return runtime_config.value("llm_model_fast") or active_model()
+    return raw_fast_model() or active_model()
+
+
+def active_temperature() -> float:
+    key = _TEMPERATURE_KEYS.get(active_provider(), "gemini_temperature")
+    return runtime_config.value_float(key, settings.gemini_temperature)
 
 
 def _api_key(provider: str) -> str:
@@ -859,6 +919,11 @@ def generate_note(
 
     provider = active_provider()
     model_name = model or active_model()
+    if not model_name:
+        raise GenerationError(
+            f"Aucun modèle configuré pour {provider}. Panneau d'administration "
+            "→ Modèle de langage."
+        )
 
     # LA LANGUE DU GABARIT PILOTE TOUT : consignes de base, consigne générale
     # employée, et langue de rédaction. Pas de repli sur la préférence
@@ -877,7 +942,7 @@ def generate_note(
             transcript, layout_format, context_lines, extra_instructions, langue
         ),
         model=model_name,
-        temperature=runtime_config.value_float("llm_temperature", settings.gemini_temperature),
+        temperature=active_temperature(),
         max_tokens=settings.gemini_max_output_tokens,
         provider=provider,
     )
@@ -1099,10 +1164,10 @@ def extract_metadata(transcript: str, note_markdown: str = "") -> Dict[str, str]
 # Pas de SDK : deux requêtes HTTP suffisent, et l'image ne grossit pas.
 # ===========================================================================
 _COHERE_API = "https://api.cohere.com"
-#: Modèle par défaut proposé dans le panneau. « command-a » est la famille que
-#: Cohere positionne comme la plus performante ; le bouton « Modèles
-#: disponibles » montre ce à quoi la clé donne réellement droit.
-COHERE_DEFAULT_MODEL = "command-a-03-2025"
+#: Modèle par défaut proposé dans le panneau — voir app/config.py, seule
+#: source pour éviter un import circulaire avec runtime_config.py. Le bouton
+#: « Modèles disponibles » montre ce à quoi la clé donne réellement droit.
+COHERE_DEFAULT_MODEL = COHERE_DEFAULT_LLM_MODEL
 
 
 def _cohere_request(method: str, path: str, payload: Optional[dict] = None) -> dict:
@@ -1216,9 +1281,10 @@ def _complete_cohere(
 # Pas de SDK : une requête HTTP suffit, et l'image ne grossit pas.
 # ===========================================================================
 _MISTRAL_API = "https://api.mistral.ai"
-#: Modèle par défaut proposé dans le panneau. Le bouton « Modèles disponibles »
-#: montre ce à quoi la clé donne réellement droit.
-MISTRAL_DEFAULT_MODEL = "mistral-large-latest"
+#: Modèle par défaut proposé dans le panneau — voir app/config.py, seule
+#: source pour éviter un import circulaire avec runtime_config.py. Le bouton
+#: « Modèles disponibles » montre ce à quoi la clé donne réellement droit.
+MISTRAL_DEFAULT_MODEL = MISTRAL_DEFAULT_LLM_MODEL
 
 
 def _mistral_request(method: str, path: str, payload: Optional[dict] = None) -> dict:

@@ -36,7 +36,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from sqlalchemy import select
 
 from app import default_prompts, i18n, preferences
-from app.config import settings
+from app.config import COHERE_DEFAULT_LLM_MODEL, MISTRAL_DEFAULT_LLM_MODEL, settings
 from app.database import AppSetting, SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -205,35 +205,85 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "", placeholder="fr / en",
     ),
 
-    # --- Modèle de langage --------------------------------------------------
+    # --- Modèle de langage ---------------------------------------------------
+    # AUCUN réglage commun ici, volontairement : un champ « Modèle » unique
+    # partagé par les cinq fournisseurs affichait le nom d'un modèle Gemini
+    # même quand Anthropic ou OpenAI était actif, et changer de fournisseur
+    # écrasait silencieusement ce que l'autre avait de configuré. Chaque
+    # fournisseur a donc désormais SES PROPRES réglages modèle/rapide/
+    # température ; ils s'enregistrent tous ensemble au clic sur
+    # « Enregistrer », comme n'importe quel autre réglage.
     Setting(
         "llm_provider", "choice", "group.llm",
         default=lambda: "gemini", choices=LLM_PROVIDERS,
     ),
-    Setting(
-        "llm_model", "text", "group.llm",
-        default=lambda: settings.active_gemini_model,
-        placeholder="gemini-2.5-flash",
-    ),
-    Setting(
-        "llm_model_fast", "text", "group.llm",
-        default=lambda: settings.gemini_model,
-    ),
-    Setting(
-        "llm_temperature", "number", "group.llm",
-        default=lambda: str(settings.gemini_temperature),
-    ),
+
     Setting(
         "gemini_api_key", "secret", "group.llm",
         default=lambda: settings.gemini_api_key,
     ),
     Setting(
+        "gemini_model", "text", "group.llm",
+        default=lambda: settings.active_gemini_model,
+        placeholder="gemini-2.5-flash",
+    ),
+    Setting(
+        "gemini_model_fast", "text", "group.llm",
+        default=lambda: settings.gemini_model,
+        placeholder="gemini-2.5-flash",
+    ),
+    Setting(
+        "gemini_temperature", "number", "group.llm",
+        default=lambda: str(settings.gemini_temperature),
+    ),
+
+    Setting(
         "anthropic_api_key", "secret", "group.llm",
         default=lambda: settings.anthropic_api_key,
     ),
+    Setting("anthropic_model", "text", "group.llm", default=lambda: ""),
+    Setting("anthropic_model_fast", "text", "group.llm", default=lambda: ""),
+    Setting(
+        "anthropic_temperature", "number", "group.llm",
+        default=lambda: str(settings.gemini_temperature),
+    ),
+
     Setting(
         "openai_api_key", "secret", "group.llm",
         default=lambda: settings.openai_api_key,
+    ),
+    Setting("openai_model", "text", "group.llm", default=lambda: ""),
+    Setting("openai_model_fast", "text", "group.llm", default=lambda: ""),
+    Setting(
+        "openai_temperature", "number", "group.llm",
+        default=lambda: str(settings.gemini_temperature),
+    ),
+
+    # Cohere et Mistral n'ont pas de clé propre ici : elle se règle sous
+    # Reconnaissance vocale (cohere_api_key / mistral_api_key) et le champ y
+    # est répété — voir app.js, partitionFields(). Suffixe « _llm » pour ne
+    # pas entrer en collision avec cohere_model / mistral_model, qui désignent
+    # le modèle de TRANSCRIPTION.
+    Setting(
+        "cohere_llm_model", "text", "group.llm",
+        default=lambda: COHERE_DEFAULT_LLM_MODEL,
+        placeholder=COHERE_DEFAULT_LLM_MODEL,
+    ),
+    Setting("cohere_llm_model_fast", "text", "group.llm", default=lambda: ""),
+    Setting(
+        "cohere_llm_temperature", "number", "group.llm",
+        default=lambda: str(settings.gemini_temperature),
+    ),
+
+    Setting(
+        "mistral_llm_model", "text", "group.llm",
+        default=lambda: MISTRAL_DEFAULT_LLM_MODEL,
+        placeholder=MISTRAL_DEFAULT_LLM_MODEL,
+    ),
+    Setting("mistral_llm_model_fast", "text", "group.llm", default=lambda: ""),
+    Setting(
+        "mistral_llm_temperature", "number", "group.llm",
+        default=lambda: str(settings.gemini_temperature),
     ),
 
     # --- Identité affichée ---------------------------------------------------

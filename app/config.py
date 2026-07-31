@@ -76,6 +76,17 @@ def _parse_networks(entries: List[str]) -> List[ipaddress._BaseNetwork]:
 
 
 # ---------------------------------------------------------------------------
+# Modèles de langage par défaut — Cohere et Mistral
+# ---------------------------------------------------------------------------
+# Centralisés ici plutôt que dans llm.py : runtime_config.py doit pouvoir s'y
+# référer pour le réglage « Modèle » du panneau, et llm.py importe déjà
+# runtime_config — un import dans l'autre sens créerait un cycle.
+#: « command-a » est la famille que Cohere positionne comme la plus performante.
+COHERE_DEFAULT_LLM_MODEL = "command-a-03-2025"
+MISTRAL_DEFAULT_LLM_MODEL = "mistral-large-latest"
+
+
+# ---------------------------------------------------------------------------
 # Objet de configuration
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)

@@ -67,6 +67,12 @@
   }
 
   /** Notification éphémère en bas à droite. */
+  /**
+   * Retourne un ``{ dismiss }`` : nécessaire pour un toast « en cours »
+   * (durée volontairement longue, en attendant qu'une opération se termine),
+   * qu'il faut pouvoir retirer DÈS que le résultat arrive plutôt que le
+   * laisser courir jusqu'à sa propre échéance — voir runRetranscription.
+   */
   function toast(message, type = 'info', durationMs = 4500) {
     const palette = {
       info: 'bg-slate-800',
@@ -79,10 +85,12 @@
                     shadow-lg max-w-md transition-opacity duration-300`;
     el.textContent = message;
     $('toastZone').appendChild(el);
-    setTimeout(() => {
+    const dismiss = () => {
       el.style.opacity = '0';
       setTimeout(() => el.remove(), 320);
-    }, durationMs);
+    };
+    const timer = setTimeout(dismiss, durationMs);
+    return { dismiss: () => { clearTimeout(timer); dismiss(); } };
   }
 
   /** Voile bloquant pendant les traitements longs (STT, Gemini). */
@@ -371,11 +379,15 @@
     );
     const bouton = $('btnRetranscribe');
     if (bouton) bouton.disabled = true;
-    toast(T('retranscribe.running', { langue }), 'info', 60000);
+    // Durée volontairement longue : l'opération peut prendre du temps sur un
+    // long enregistrement. Sans le retirer explicitement dès la réponse, ce
+    // toast restait affiché jusqu'à ses 60 s même après celui de résultat.
+    const enCours = toast(T('retranscribe.running', { langue }), 'info', 60000);
     try {
       const data = await api(`/api/consultations/${state.consultationId}/retranscribe`, {
         method: 'POST', body: { template_id: tpl ? tpl.id : null },
       });
+      enCours.dismiss();
       $('transcript').value = data.transcript || '';
       state.transcriptLanguage = data.stt_language || (tpl ? tpl.language : '');
       // Le serveur a déjà écrit ce texte en base. On force malgré tout une
@@ -396,6 +408,7 @@
         partiel ? 10000 : undefined,
       );
     } catch (err) {
+      enCours.dismiss();
       toast(T('retranscribe.failed', { error: err.message || err }), 'error', 8000);
     } finally {
       if (bouton) bouton.disabled = false;

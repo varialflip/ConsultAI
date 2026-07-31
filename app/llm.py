@@ -399,6 +399,7 @@ _MODEL_KEYS = {
     "openai": "openai_model",
     "cohere": "cohere_llm_model",
     "mistral": "mistral_llm_model",
+    "custom": "custom_llm_model",
 }
 
 #: Réglage « température », par fournisseur.
@@ -408,6 +409,7 @@ _TEMPERATURE_KEYS = {
     "openai": "openai_temperature",
     "cohere": "cohere_llm_temperature",
     "mistral": "mistral_llm_temperature",
+    "custom": "custom_llm_temperature",
 }
 
 
@@ -448,14 +450,22 @@ def active_temperature() -> float:
     return runtime_config.value_float(key, settings.gemini_temperature)
 
 
+#: « custom » porte le suffixe « _llm » : la clé d'un point de terminaison
+#: personnalisé n'a rien à voir avec celle d'un autre fournisseur.
+_API_KEY_SETTING = {"custom": "custom_llm_api_key"}
+
+
 def _api_key(provider: str) -> str:
-    return runtime_config.value(f"{'gemini' if provider == 'gemini' else provider}_api_key")
+    return runtime_config.value(
+        _API_KEY_SETTING.get(provider, f"{provider}_api_key")
+    )
 
 
 def _missing_key(provider: str) -> GenerationError:
     labels = {
         "gemini": "Google Gemini", "anthropic": "Anthropic",
         "openai": "OpenAI", "cohere": "Cohere", "mistral": "Mistral AI",
+        "custom": "du point de terminaison personnalisé",
     }
     return GenerationError(
         f"Aucune clé API {labels.get(provider, provider)} n'est configurée. "
@@ -467,7 +477,12 @@ def get_client(provider: Optional[str] = None):
     """Client du fournisseur demandé, mis en cache."""
     provider = provider or active_provider()
     key = _api_key(provider)
-    cached = _clients.get((provider, key))
+    # L'adresse entre dans la clé de cache pour « custom » : changer de
+    # point de terminaison sans changer la clé API ne doit pas continuer à
+    # servir un client pointé vers l'ancienne adresse.
+    base_url = runtime_config.value("custom_llm_base_url").strip() if provider == "custom" else ""
+    cache_key = (provider, key, base_url)
+    cached = _clients.get(cache_key)
     if cached is not None:
         return cached
 
@@ -517,10 +532,24 @@ def get_client(provider: Optional[str] = None):
             raise GenerationError("La bibliothèque openai n'est pas installée.") from exc
         client = openai.OpenAI(api_key=key)
 
+    elif provider == "custom":
+        if not key:
+            raise _missing_key(provider)
+        if not base_url:
+            raise GenerationError(
+                "Aucune adresse configurée pour le point de terminaison "
+                "personnalisé. Panneau d'administration → Modèle de langage."
+            )
+        try:
+            import openai
+        except ImportError as exc:  # pragma: no cover
+            raise GenerationError("La bibliothèque openai n'est pas installée.") from exc
+        client = openai.OpenAI(api_key=key, base_url=base_url)
+
     else:
         raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
 
-    _clients[(provider, key)] = client
+    _clients[cache_key] = client
     return client
 
 
@@ -678,6 +707,8 @@ def complete(
         return _complete_cohere(system, user, model, temperature, max_tokens, json_mode)
     if provider == "mistral":
         return _complete_mistral(system, user, model, temperature, max_tokens, json_mode)
+    if provider == "custom":
+        return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="custom")
     raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
 
 
@@ -836,8 +867,16 @@ def _complete_anthropic(system, user, model, temperature, max_tokens, json_mode)
     )
 
 
-def _complete_openai(system, user, model, temperature, max_tokens, json_mode) -> Completion:
-    client = get_client("openai")
+def _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="openai") -> Completion:
+    """
+    Appel via le SDK OpenAI.
+
+    Sert aussi « custom » : un point de terminaison personnalisé compatible
+    OpenAI n'est rien d'autre que ce même client pointé vers une autre
+    adresse (voir ``get_client``) — inutile de dupliquer l'appel.
+    """
+    client = get_client(provider)
+    label = "OpenAI" if provider == "openai" else "Point de terminaison personnalisé"
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     kwargs = {
         "model": model,
@@ -851,8 +890,8 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode) ->
     try:
         response = _call_tolerant(client.chat.completions.create, kwargs)
     except Exception as exc:
-        logger.exception("Échec de l'appel OpenAI")
-        raise _translate_error("OpenAI", model, exc) from exc
+        logger.exception("Échec de l'appel %s", label)
+        raise _translate_error(label, model, exc) from exc
 
     choice = (getattr(response, "choices", None) or [None])[0]
     text = getattr(getattr(choice, "message", None), "content", "") or ""
@@ -864,7 +903,7 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode) ->
     } if usage_data else {}
 
     return Completion(
-        text=text, model=model, provider="openai",
+        text=text, model=model, provider=provider,
         finish_reason=str(getattr(choice, "finish_reason", "") or ""), usage=usage,
     )
 

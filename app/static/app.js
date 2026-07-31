@@ -2741,6 +2741,7 @@
     'openai_model', 'openai_model_fast',
     'cohere_llm_model', 'cohere_llm_model_fast',
     'mistral_llm_model', 'mistral_llm_model_fast',
+    'custom_llm_model', 'custom_llm_model_fast',
   ]);
 
   function adminFieldMarkup(field, groupKey) {
@@ -2831,6 +2832,11 @@
     mistral_llm_model: { key: 'llm_provider', value: 'mistral' },
     mistral_llm_model_fast: { key: 'llm_provider', value: 'mistral' },
     mistral_llm_temperature: { key: 'llm_provider', value: 'mistral' },
+    custom_llm_api_key: { key: 'llm_provider', value: 'custom' },
+    custom_llm_base_url: { key: 'llm_provider', value: 'custom' },
+    custom_llm_model: { key: 'llm_provider', value: 'custom' },
+    custom_llm_model_fast: { key: 'llm_provider', value: 'custom' },
+    custom_llm_temperature: { key: 'llm_provider', value: 'custom' },
     // Réglages propres à chaque service vocal
     deepgram_api_key: { key: 'stt_provider', value: 'deepgram' },
     deepgram_model: { key: 'stt_provider', value: 'deepgram' },
@@ -2848,6 +2854,12 @@
     mistral_api_key: { key: 'stt_provider', value: 'mistral' },
     mistral_model: { key: 'stt_provider', value: 'mistral' },
     mistral_language: { key: 'stt_provider', value: 'mistral' },
+    openai_stt_model: { key: 'stt_provider', value: 'openai' },
+    openai_stt_language: { key: 'stt_provider', value: 'openai' },
+    custom_stt_api_key: { key: 'stt_provider', value: 'custom' },
+    custom_stt_base_url: { key: 'stt_provider', value: 'custom' },
+    custom_stt_model: { key: 'stt_provider', value: 'custom' },
+    custom_stt_language: { key: 'stt_provider', value: 'custom' },
   };
 
   /**
@@ -2881,11 +2893,16 @@
     'group.stt|soniox': 'soniox_api_key',
     'group.stt|cohere': 'cohere_api_key',
     'group.stt|mistral': 'mistral_api_key',
+    // Pas de clé propre : même compte que le modèle de langage OpenAI,
+    // réglage porté par « group.llm » (voir runtime_config.py).
+    'group.stt|openai': 'openai_api_key',
+    'group.stt|custom': 'custom_stt_api_key',
     'group.llm|gemini': 'gemini_api_key',
     'group.llm|anthropic': 'anthropic_api_key',
     'group.llm|openai': 'openai_api_key',
     'group.llm|cohere': 'cohere_api_key',
     'group.llm|mistral': 'mistral_api_key',
+    'group.llm|custom': 'custom_llm_api_key',
   };
 
   /**

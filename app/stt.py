@@ -498,6 +498,10 @@ def transcribe_payload(
         return _transcribe_cohere(payload, extra_phrase_hints)
     if provider == "mistral":
         return _transcribe_mistral(payload, extra_phrase_hints)
+    if provider == "openai":
+        return _transcribe_openai(payload, extra_phrase_hints)
+    if provider == "custom":
+        return _transcribe_custom(payload, extra_phrase_hints)
     return _transcribe_google(payload, extra_phrase_hints, boost)
 
 
@@ -1667,5 +1671,179 @@ def _transcribe_mistral(payload: AudioPayload, extra_phrase_hints: Optional[str]
         "duration_seconds": int(round(payload.duration_seconds)),
         "segments": 1 if transcript else 0,
         "provider": "mistral",
+        "model": model,
+    }
+
+
+# ===========================================================================
+# OpenAI (Whisper / gpt-4o-transcribe)
+# ===========================================================================
+#
+#   POST https://api.openai.com/v1/audio/transcriptions
+#   Authorization: Bearer <clé>
+#   multipart/form-data : file, model, language (ISO-639-1, optionnel)
+#   réponse : {"text": "...", ...}
+#
+# Aucune clé propre à ce réglage : « openai_api_key », déjà utilisée pour le
+# modèle de langage (voir llm.py), sert aussi ici — même compte, comme Cohere
+# et Mistral, mais dans l'autre sens puisque la clé LLM existait déjà.
+# ===========================================================================
+_OPENAI_STT_URL = "https://api.openai.com/v1/audio/transcriptions"
+_OPENAI_STT_MODEL_DEFAUT = "whisper-1"
+
+
+def _transcribe_openai(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
+    """
+    Transcription par OpenAI.
+
+    ``extra_phrase_hints`` est ignoré : aucune adaptation au vocabulaire n'est
+    documentée pour ce service, comme pour Cohere et Mistral.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    api_key = runtime_config.value("openai_api_key")
+    if not api_key:
+        raise TranscriptionError(
+            "OpenAI est sélectionné mais aucune clé API n'est renseignée. "
+            "Panneau d'administration → Modèle de langage."
+        )
+
+    model = runtime_config.value("openai_stt_model") or _OPENAI_STT_MODEL_DEFAUT
+    langue = runtime_config.stt_language("openai")
+
+    logger.info(
+        "Envoi à OpenAI : %.2f Mo, %s s facturées, modèle %s, langue %s",
+        len(payload.content) / 1048576,
+        round(payload.effective_seconds, 1) or "?", model, langue or "auto",
+    )
+
+    champs = {"model": model}
+    if langue:
+        champs["language"] = langue
+    corps, ctype = _multipart_body_fields(champs, "file", "dictee.ogg", payload.content)
+
+    requete = urllib.request.Request(
+        _OPENAI_STT_URL,
+        data=corps,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": ctype},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(requete, timeout=240) as reponse:
+            data = _json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:400]
+        logger.error("OpenAI a refusé la requête (%s) : %s", exc.code, detail)
+        if exc.code in (401, 403):
+            raise TranscriptionError(
+                "OpenAI refuse la clé API. Vérifiez-la dans le panneau "
+                "d'administration."
+            ) from exc
+        raise TranscriptionError(f"Erreur OpenAI ({exc.code}) : {detail}") from exc
+    except Exception as exc:
+        logger.exception("Échec de l'appel OpenAI")
+        raise TranscriptionError(f"Erreur OpenAI : {exc}") from exc
+
+    transcript = str(data.get("text") or "").strip()
+    if not transcript and not payload.allow_silence:
+        raise TranscriptionError(
+            "Aucune parole n'a été détectée. Vérifiez le micro et le volume "
+            "de l'enregistrement, puis réessayez."
+        )
+
+    return {
+        "transcript": transcript,
+        "confidence": 0.0,
+        "duration_seconds": int(round(payload.duration_seconds)),
+        "segments": 1 if transcript else 0,
+        "provider": "openai",
+        "model": model,
+    }
+
+
+# ===========================================================================
+# Point de terminaison personnalisé, compatible OpenAI
+# ===========================================================================
+#
+# Même contrat que ci-dessus (``POST {base_url}/audio/transcriptions``, même
+# forme multipart), mais l'adresse ET la clé sont propres à ce réglage : rien
+# ne garantit qu'un serveur auto-hébergé ou un service tiers partage un compte
+# avec un autre fournisseur déjà configuré.
+# ===========================================================================
+
+
+def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
+    """Transcription par un point de terminaison personnalisé, compatible OpenAI."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    base_url = runtime_config.value("custom_stt_base_url").strip().rstrip("/")
+    if not base_url:
+        raise TranscriptionError(
+            "Point de terminaison personnalisé sélectionné mais aucune adresse "
+            "n'est renseignée. Panneau d'administration → Reconnaissance vocale."
+        )
+    api_key = runtime_config.value("custom_stt_api_key")
+    model = runtime_config.value("custom_stt_model") or _OPENAI_STT_MODEL_DEFAUT
+    langue = runtime_config.stt_language("custom")
+
+    logger.info(
+        "Envoi au point de terminaison personnalisé (%s) : %.2f Mo, %s s "
+        "facturées, modèle %s, langue %s",
+        base_url, len(payload.content) / 1048576,
+        round(payload.effective_seconds, 1) or "?", model, langue or "auto",
+    )
+
+    champs = {"model": model}
+    if langue:
+        champs["language"] = langue
+    corps, ctype = _multipart_body_fields(champs, "file", "dictee.ogg", payload.content)
+
+    headers = {"Content-Type": ctype}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    requete = urllib.request.Request(
+        f"{base_url}/audio/transcriptions", data=corps, headers=headers, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(requete, timeout=240) as reponse:
+            data = _json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:400]
+        logger.error(
+            "Le point de terminaison personnalisé a refusé la requête (%s) : %s",
+            exc.code, detail,
+        )
+        if exc.code in (401, 403):
+            raise TranscriptionError(
+                "Le point de terminaison personnalisé refuse la clé API. "
+                "Vérifiez-la dans le panneau d'administration."
+            ) from exc
+        raise TranscriptionError(
+            f"Erreur du point de terminaison personnalisé ({exc.code}) : {detail}"
+        ) from exc
+    except Exception as exc:
+        logger.exception("Échec de l'appel au point de terminaison personnalisé")
+        raise TranscriptionError(
+            f"Erreur du point de terminaison personnalisé : {exc}"
+        ) from exc
+
+    transcript = str(data.get("text") or "").strip()
+    if not transcript and not payload.allow_silence:
+        raise TranscriptionError(
+            "Aucune parole n'a été détectée. Vérifiez le micro et le volume "
+            "de l'enregistrement, puis réessayez."
+        )
+
+    return {
+        "transcript": transcript,
+        "confidence": 0.0,
+        "duration_seconds": int(round(payload.duration_seconds)),
+        "segments": 1 if transcript else 0,
+        "provider": "custom",
         "model": model,
     }

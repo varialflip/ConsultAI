@@ -82,6 +82,8 @@ STT_PROVIDERS = (
     ("soniox", "Soniox"),
     ("cohere", "Cohere Transcribe"),
     ("mistral", "Mistral Voxtral"),
+    ("openai", "OpenAI Whisper"),
+    ("custom", "provider.custom_endpoint"),
 )
 
 #: Un booléen présenté comme un choix : le panneau sait déjà afficher un
@@ -98,6 +100,7 @@ LLM_PROVIDERS = (
     # seul champ à remplir dans le panneau.
     ("cohere", "Cohere"),
     ("mistral", "Mistral AI"),
+    ("custom", "provider.custom_endpoint"),
 )
 
 
@@ -205,6 +208,35 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "", placeholder="fr / en",
     ),
 
+    # Pas de clé propre : « openai_api_key » (sous Modèle de langage) sert aux
+    # deux usages, même compte — comme Cohere et Mistral, mais dans l'autre
+    # sens puisque la clé LLM existait déjà.
+    Setting(
+        "openai_stt_model", "text", "group.stt",
+        default=lambda: "", placeholder="whisper-1",
+    ),
+    Setting(
+        "openai_stt_language", "text", "group.stt",
+        default=lambda: "", placeholder="fr / en",
+    ),
+
+    Setting(
+        "custom_stt_api_key", "secret", "group.stt",
+        default=lambda: "",
+    ),
+    Setting(
+        "custom_stt_base_url", "text", "group.stt",
+        default=lambda: "", placeholder="https://exemple.tld/v1",
+    ),
+    Setting(
+        "custom_stt_model", "text", "group.stt",
+        default=lambda: "", placeholder="whisper-1",
+    ),
+    Setting(
+        "custom_stt_language", "text", "group.stt",
+        default=lambda: "", placeholder="fr / en / auto",
+    ),
+
     # --- Modèle de langage ---------------------------------------------------
     # AUCUN réglage commun ici, volontairement : un champ « Modèle » unique
     # partagé par les cinq fournisseurs affichait le nom d'un modèle Gemini
@@ -283,6 +315,25 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting("mistral_llm_model_fast", "text", "group.llm", default=lambda: ""),
     Setting(
         "mistral_llm_temperature", "number", "group.llm",
+        default=lambda: str(settings.gemini_temperature),
+    ),
+
+    # Point de terminaison personnalisé, compatible OpenAI (serveur
+    # auto-hébergé ou service tiers exposant /v1/chat/completions). Clé et
+    # adresse propres : rien ne garantit que ce soit le même compte qu'un
+    # autre fournisseur.
+    Setting(
+        "custom_llm_api_key", "secret", "group.llm",
+        default=lambda: "",
+    ),
+    Setting(
+        "custom_llm_base_url", "text", "group.llm",
+        default=lambda: "", placeholder="https://exemple.tld/v1",
+    ),
+    Setting("custom_llm_model", "text", "group.llm", default=lambda: ""),
+    Setting("custom_llm_model_fast", "text", "group.llm", default=lambda: ""),
+    Setting(
+        "custom_llm_temperature", "number", "group.llm",
         default=lambda: str(settings.gemini_temperature),
     ),
 
@@ -438,6 +489,8 @@ def stt_language(provider: str) -> str:
         "soniox": "soniox_language",
         "cohere": "cohere_language",
         "mistral": "mistral_language",
+        "openai": "openai_stt_language",
+        "custom": "custom_stt_language",
     }.get(provider)
 
     if cle is not None:

@@ -87,6 +87,8 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         # refusé.
         "cohere": "fr",
         "mistral": "fr",
+        "openai": "fr",
+        "custom": "fr",
     },
     "en": {
         "google": "en-CA",
@@ -95,6 +97,8 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         "soniox": "en",
         "cohere": "en",
         "mistral": "en",
+        "openai": "en",
+        "custom": "en",
     },
 }
 
@@ -1102,6 +1106,53 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "ISO-639-1: “fr”, “en” — never “fr-CA”.",
     ),
 
+    # Pas de clé propre : voir set.openai_api_key, sous Modèle de langage,
+    # dont le champ est répété ici (voir app.js, PROVIDER_KEY_FIELD).
+    "set.openai_stt_model.label": ("Modèle OpenAI", "OpenAI model"),
+    "set.openai_stt_model.help": (
+        "whisper-1 au moment de l'intégration ; gpt-4o-transcribe est plus "
+        "récent et plus précis sur certains accents.",
+        "whisper-1 at the time of integration; gpt-4o-transcribe is newer and "
+        "more accurate on some accents.",
+    ),
+    "set.openai_stt_language.label": ("Langue OpenAI", "OpenAI language"),
+    "set.openai_stt_language.help": (
+        "Laisser vide pour suivre la langue du gabarit. OpenAI n'accepte que "
+        "de l'ISO-639-1 : « fr », « en » — jamais « fr-CA ».",
+        "Leave empty to follow the template language. OpenAI only accepts "
+        "ISO-639-1: “fr”, “en” — never “fr-CA”.",
+    ),
+
+    "set.custom_stt_api_key.label": ("Clé API", "API key"),
+    "set.custom_stt_api_key.help": (
+        "Selon le service : laisser vide si le point de terminaison n'exige "
+        "aucune authentification.",
+        "Depending on the service: leave empty if the endpoint requires no "
+        "authentication.",
+    ),
+    "set.custom_stt_base_url.label": ("Adresse de base", "Base URL"),
+    "set.custom_stt_base_url.help": (
+        "Adresse compatible OpenAI, jusqu'au préfixe de version inclus (ex. "
+        "« https://exemple.tld/v1 »). « /audio/transcriptions » y est ajouté "
+        "automatiquement.",
+        "OpenAI-compatible address, including the version prefix (e.g. "
+        "“https://example.tld/v1”). “/audio/transcriptions” is appended "
+        "automatically.",
+    ),
+    "set.custom_stt_model.label": ("Modèle", "Model"),
+    "set.custom_stt_model.help": (
+        "Nom du modèle tel qu'attendu par ce point de terminaison, par "
+        "exemple « whisper-1 ».",
+        "Model name as expected by this endpoint, e.g. “whisper-1”.",
+    ),
+    "set.custom_stt_language.label": ("Langue", "Language"),
+    "set.custom_stt_language.help": (
+        "Laisser vide pour suivre la langue du gabarit, ou inscrire « auto » "
+        "si le service détecte la langue lui-même.",
+        "Leave empty to follow the template language, or enter “auto” if the "
+        "service detects the language itself.",
+    ),
+
     # Avertissement affiché dans le panneau quand Cohere est sélectionné.
     "admin.cohere_warning": (
         "Cohere est limité à 5 requêtes par minute. La dictée envoie une "
@@ -1286,6 +1337,51 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "accept it: the setting is then ignored and the note is produced "
         "anyway.",
     ),
+
+    "set.custom_llm_api_key.label": ("Clé API", "API key"),
+    "set.custom_llm_api_key.help": (
+        "Selon le service : laisser vide si le point de terminaison n'exige "
+        "aucune authentification.",
+        "Depending on the service: leave empty if the endpoint requires no "
+        "authentication.",
+    ),
+    "set.custom_llm_base_url.label": ("Adresse de base", "Base URL"),
+    "set.custom_llm_base_url.help": (
+        "Adresse compatible OpenAI, jusqu'au préfixe de version inclus (ex. "
+        "« https://exemple.tld/v1 »).",
+        "OpenAI-compatible address, including the version prefix (e.g. "
+        "“https://example.tld/v1”).",
+    ),
+    "set.custom_llm_model.label": ("Modèle", "Model"),
+    "set.custom_llm_model.help": (
+        "Nom du modèle tel qu'attendu par ce point de terminaison.",
+        "Model name as expected by this endpoint.",
+    ),
+    "set.custom_llm_model_fast.label": (
+        "Modèle rapide (métadonnées)",
+        "Fast model (metadata)",
+    ),
+    "set.custom_llm_model_fast.help": (
+        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
+        "payée au jeton. Laisser vide pour employer le modèle principal.",
+        "Used only to re-read metadata, a trivial task paid by the token. "
+        "Leave empty to use the main model.",
+    ),
+    "set.custom_llm_temperature.label": ("Température", "Temperature"),
+    "set.custom_llm_temperature.help": (
+        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
+        "n'a pas sa place dans une note clinique. Certains points de "
+        "terminaison ignorent ce réglage : la note est produite quand même.",
+        "0 = deterministic. Above 0.4 the model starts embellishing, which "
+        "has no place in a clinical note. Some endpoints ignore this setting: "
+        "the note is produced anyway.",
+    ),
+
+    "provider.custom_endpoint": (
+        "Point de terminaison personnalisé",
+        "Custom endpoint",
+    ),
+
     "set.general_prompt.label": ("Consigne générale", "General instruction"),
     "set.general_prompt.help": (
         "Ajoutée aux consignes de TOUS les gabarits et appliquée quel que "

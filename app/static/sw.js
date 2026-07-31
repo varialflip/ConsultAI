@@ -19,8 +19,15 @@
  * réseau, sans interception.
  * ========================================================================== */
 
-// Incrémentez cette version à chaque modification d'un fichier statique :
-// cela purge l'ancien cache et force le rechargement chez tous les usagers.
+// N'INCRÉMENTEZ PLUS CETTE LIGNE À LA MAIN — elle est réécrite au vol.
+//
+// La route « /sw.js » (app/main.py) y substitue la version de l'application
+// avant de servir le fichier : le cache se purge donc à chaque publication,
+// sans que personne ait à y penser. Oublier de le faire servait un app.js
+// périmé devant un serveur à jour, ce qui ressemble à un bogue de
+// l'interface et non à un cache — c'est arrivé deux fois.
+//
+// La valeur ci-dessous ne sert qu'au cas où la substitution échouerait.
 const VERSION = 'consultai-v23';
 const SHELL_CACHE = `${VERSION}-shell`;
 const VENDOR_CACHE = `${VERSION}-vendor`;

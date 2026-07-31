@@ -50,13 +50,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
@@ -495,8 +496,12 @@ async def healthz() -> JSONResponse:
     )
 
 
+#: Ligne « const VERSION = '…' » en tête de sw.js. Voir service_worker().
+_SW_VERSION_RE = re.compile(r"^const VERSION = '[^']*';", re.MULTILINE)
+
+
 @app.get("/sw.js", include_in_schema=False)
-async def service_worker() -> FileResponse:
+async def service_worker() -> Response:
     """
     Service worker servi depuis la RACINE, et non depuis /static/.
 
@@ -506,9 +511,39 @@ async def service_worker() -> FileResponse:
 
     « no-cache » garantit qu'une nouvelle version est détectée immédiatement
     au lieu d'être servie depuis le cache HTTP du navigateur.
+
+    POURQUOI LA VERSION EST RÉÉCRITE ICI
+    ------------------------------------
+    ``VERSION`` gouverne la purge du cache : le service worker supprime à
+    l'activation tout cache dont le nom ne commence pas par elle. Tant qu'elle
+    ne bouge pas, le navigateur continue de servir l'``app.js`` qu'il a en
+    réserve — et une interface périmée devant un serveur à jour ne ressemble
+    pas à un cache oublié, elle ressemble à un bogue : des réglages rangés au
+    mauvais endroit, un fournisseur qui manque. C'est arrivé deux fois, les
+    deux fois en ajoutant un fournisseur.
+
+    L'incrémenter à la main était donc une étape qu'il ne fallait jamais
+    oublier alors que rien ne la rappelait. Elle suit maintenant la version de
+    l'application, qui change à chaque publication : le cache se purge parfois
+    sans nécessité — 231 ko — et c'est tout ce que coûte l'impossibilité de
+    l'oublier. La valeur écrite dans le fichier ne sert plus qu'au cas où la
+    substitution échouerait.
     """
-    return FileResponse(
-        BASE_DIR / "static" / "sw.js",
+    source = (BASE_DIR / "static" / "sw.js").read_text(encoding="utf-8")
+    source, remplacees = _SW_VERSION_RE.subn(
+        f"const VERSION = 'consultai-v{__version__}';", source, count=1,
+    )
+    if not remplacees:
+        # Le fichier reste servi tel quel : un service worker qui garde
+        # l'ancienne version vaut mieux qu'une PWA qui ne s'installe plus.
+        logger.warning(
+            "sw.js : ligne « const VERSION » introuvable, version non "
+            "substituée. Le cache ne se purgera qu'au prochain changement "
+            "manuel de cette ligne.",
+        )
+
+    return Response(
+        source,
         media_type="application/javascript",
         headers={
             "Cache-Control": "no-cache, max-age=0",

@@ -65,7 +65,10 @@
     /* Retire le flash gris au toucher sur Android/iOS */
     button, a, label, summary { -webkit-tap-highlight-color: transparent; }
 
-    .thin-scroll { -webkit-overflow-scrolling: touch; }
+    /* scrollbar-width/-color couvrent Firefox ; ::-webkit-scrollbar couvre
+       Chrome/Safari/Edge — aucun des deux navigateurs ne lit la règle de
+       l'autre, les deux sont donc nécessaires pour un fin défilement partout. */
+    .thin-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
     .thin-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
     .thin-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     .thin-scroll::-webkit-scrollbar-track { background: transparent; }

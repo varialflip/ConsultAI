@@ -3013,7 +3013,7 @@
                 class="px-2.5 py-1 rounded-lg bg-teal-700 text-white text-xs font-medium
                        hover:bg-teal-800 transition">
           ${esc(T('admin.provider_use'))}</button>
-      </div>${sansClef}${notePartage}`;
+      </div>${sansClef}`;
   }
 
   function renderAdminFields(groups) {

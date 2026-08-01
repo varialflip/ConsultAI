@@ -54,7 +54,7 @@ import re
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -69,7 +69,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
 from app import __version__
-from app import dictation, i18n, llm, oidc, preferences, recordings, runtime_config
+from app import dictation, i18n, llm, oidc, preferences, recordings, runtime_config, stt
 from app import users as users_service
 from app.auth import (
     AuthMiddleware,
@@ -435,6 +435,36 @@ def _build_context_lines(payload: GenerateIn) -> List[str]:
     if payload.accompanied_by.strip():
         lines.append(f"Accompagné de : {payload.accompanied_by.strip()}")
     return lines
+
+
+def _prepare_audio_for_generation(
+    db: Session, consultation_id: int
+) -> Optional[Tuple[bytes, str]]:
+    """
+    Extrait audio (silences plafonnés) à joindre à la génération, ou ``None``.
+
+    Best-effort à dessein : aucun enregistrement, ffmpeg indisponible, ou
+    dictée trop longue (``gemini_send_audio_max_minutes``) retombent tous
+    silencieusement sur ``None`` — la note se génère alors comme avant, sur
+    la seule transcription. Ce n'est jamais une raison de faire échouer la
+    génération.
+    """
+    pistes = recordings.for_consultation(db, consultation_id)
+    if not pistes:
+        return None
+    piste = pistes[-1]  # le plus récent : celui de la dictée en cours
+    try:
+        chemin = recordings.absolute_path(piste)
+        trimmed = stt.compress_silence(chemin)
+    except OSError:
+        return None
+    if trimmed is None:
+        return None
+    content, duree = trimmed
+    plafond = runtime_config.value_float("gemini_send_audio_max_minutes", 20.0) * 60
+    if duree <= 0 or duree > plafond:
+        return None
+    return content, "audio/ogg"
 
 
 # Correspondance entre les champs renvoyés par l'extraction et les colonnes.
@@ -1573,6 +1603,16 @@ async def api_generate(
 
     model_name = settings.gemini_model_pro if payload.use_pro else None
 
+    audio_payload = None
+    if (
+        payload.consultation_id
+        and runtime_config.value("gemini_send_audio") == "true"
+        and llm.active_provider() == "gemini"
+    ):
+        audio_payload = await run_in_threadpool(
+            _prepare_audio_for_generation, db, payload.consultation_id
+        )
+
     try:
         result = await run_in_threadpool(
             generate_note,
@@ -1583,6 +1623,7 @@ async def api_generate(
             payload.extra_instructions,
             model_name,
             template_row.language,
+            audio_payload,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -1631,6 +1672,7 @@ async def api_generate(
     consultation.title = _build_title(consultation, template_row.name)
     consultation.model_used = result["model"]
     consultation.llm_provider = result["provider"]
+    consultation.audio_used = result["audio_used"]
     consultation.status = "genere"
     consultation.updated_at = utcnow()
     db.commit()
@@ -1649,6 +1691,7 @@ async def api_generate(
             p for p in (consultation.stt_provider, consultation.stt_model) if p
         ),
         "llm_used": " / ".join(p for p in (result["provider"], result["model"]) if p),
+        "audio_used": result["audio_used"],
         "truncated": result["truncated"],
         "usage": result["usage"],
         "consultation_id": consultation.id,

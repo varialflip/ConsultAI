@@ -1583,7 +1583,7 @@
       // affiche, et on déplie la section pour que le médecin puisse les
       // vérifier d'un coup d'œil plutôt que de les découvrir plus tard dans
       // la liste des brouillons.
-      showNoteEngines(result.stt_used, result.llm_used);
+      showNoteEngines(result.stt_used, result.llm_used, result.audio_used);
       if (applyMetadata(result.metadata)) {
         $('metaDetails').open = true;
       }
@@ -1722,16 +1722,21 @@
    * a changé depuis la génération, et c'est précisément l'écart qu'on veut
    * pouvoir constater.
    */
-  function showNoteEngines(stt, llm) {
+  function showNoteEngines(stt, llm, audioUsed) {
     const el = $('noteEngines');
     if (!el) return;
     const parts = [];
     if (stt) parts.push(T('note.engine_dictation', { engine: stt.split(' / ')[0] }));
-    if (llm) parts.push(T('note.engine_note', { engine: llm.split(' / ').slice(-1)[0] }));
+    if (llm) {
+      let note = T('note.engine_note', { engine: llm.split(' / ').slice(-1)[0] });
+      if (audioUsed) note += ` ${T('note.engine_audio')}`;
+      parts.push(note);
+    }
     el.textContent = parts.join(' · ');
     el.title = [
       stt ? T('note.engine_stt_title', { engine: stt }) : '',
       llm ? T('note.engine_llm_title', { engine: llm }) : '',
+      audioUsed ? T('note.engine_audio_title') : '',
     ].filter(Boolean).join('\n');
     el.classList.toggle('hidden', !parts.length);
     refreshNoteFooter();
@@ -2470,7 +2475,7 @@
       setMobilePane($('markdownEditor').value.trim() ? 'note' : 'dictee');
       state.lastSavedSnapshot = workspaceSnapshot();
       loadRecordings();
-      showNoteEngines(draft.stt_used, draft.llm_used);
+      showNoteEngines(draft.stt_used, draft.llm_used, draft.audio_used);
       state.transcriptLanguage = draft.stt_language || '';
       setSaveStatus(T('save.loaded_at', { date: formatDateTime(draft.updated_at) }));
       $('draftsModal').classList.add('hidden');
@@ -3859,10 +3864,6 @@
     $('tabPreview').addEventListener('click', showPreview);
     $('tabEdit').addEventListener('click', showEditor);
 
-    $('transcript').addEventListener('input', () => {
-      updateTranscriptMeta(null);
-      scheduleSave();
-    });
     $('markdownEditor').addEventListener('input', scheduleSave);
     Object.values(META_ELEMENTS).forEach((id) => {
       $(id).addEventListener('input', scheduleSave);

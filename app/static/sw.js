@@ -28,7 +28,7 @@
 // l'interface et non à un cache — c'est arrivé deux fois.
 //
 // La valeur ci-dessous ne sert qu'au cas où la substitution échouerait.
-const VERSION = 'consultai-v23';
+const VERSION = 'consultai-v1.3.0';
 const SHELL_CACHE = `${VERSION}-shell`;
 const VENDOR_CACHE = `${VERSION}-vendor`;
 

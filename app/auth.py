@@ -38,6 +38,7 @@ d'effet qu'à l'expiration de son témoin, soit jusqu'à douze heures plus tard.
 from __future__ import annotations
 
 import logging
+import posixpath
 import re
 from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence, Tuple
@@ -340,7 +341,31 @@ class AuthMiddleware:
         self.public_prefixes = tuple(public_prefixes)
 
     def _is_public(self, path: str) -> bool:
-        return path in self.public_paths or path.startswith(self.public_prefixes)
+        """
+        Le chemin est-il accessible sans authentification ?
+
+        NORMALISER AVANT DE COMPARER, sinon ``public_prefixes`` se contourne :
+        ``scope["path"]`` arrive tel quel, segments « .. » compris, si bien que
+        « /static/icons/../app.js » satisfaisait ``startswith("/static/icons/")``
+        et traversait le middleware sans authentification. La portée réelle
+        était limitée — ``StaticFiles`` refuse de sortir de son dossier, et le
+        routeur compare le chemin LITTÉRAL, donc aucune route protégée n'était
+        atteignable — mais le contrat annoncé (« protège tout sauf ces
+        chemins ») n'était pas tenu, et il le serait d'autant moins le jour où
+        un fichier sensible atterrirait sous ``/static/``.
+
+        Normaliser ne peut pas ouvrir l'accès à une route protégée : pour
+        atteindre « /api/me », le chemin littéral doit déjà être « /api/me »,
+        qui se normalise en lui-même et reste donc refusé.
+        """
+        # « / » forcé en tête puis normalisation : normpath conserve un double
+        # slash initial (« //x » reste « //x », comportement POSIX), ce qui
+        # rendrait la comparaison dépendante d'un détail d'écriture.
+        normalise = posixpath.normpath("/" + path.lstrip("/"))
+        return (
+            normalise in self.public_paths
+            or normalise.startswith(self.public_prefixes)
+        )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":

@@ -28,7 +28,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from app import i18n, runtime_config
 from app.config import COHERE_DEFAULT_LLM_MODEL, MISTRAL_DEFAULT_LLM_MODEL, settings
@@ -588,7 +588,16 @@ def list_available_models(provider: Optional[str] = None) -> List[str]:
                 actions = getattr(model, "supported_actions", None)
                 if actions and "generateContent" not in actions:
                     continue
-                name = (getattr(model, "name", "") or "").replace("models/", "")
+                # Dernier segment du chemin, et non un simple retrait de
+                # « models/ » : en mode API-key, model.name vaut
+                # « models/gemini-2.5-flash », mais en mode Vertex AI c'est
+                # « publishers/google/models/gemini-2.5-flash ». Un
+                # ``replace`` retirait « models/ » du MILIEU de ce second
+                # chemin et produisait « publishers/google/gemini-2.5-flash »
+                # — un identifiant que generate_content refuse (404), une
+                # fois réinjecté comme nom de modèle depuis cette liste.
+                brut = getattr(model, "name", "") or ""
+                name = brut.rsplit("/", 1)[-1]
                 if name:
                     names.append(name)
         else:
@@ -687,6 +696,7 @@ def complete(
     max_tokens: int,
     json_mode: bool = False,
     provider: Optional[str] = None,
+    audio: Optional[Tuple[bytes, str]] = None,
 ) -> Completion:
     """
     Interroge le modèle configuré et normalise la réponse.
@@ -694,11 +704,16 @@ def complete(
     ``json_mode`` demande une réponse strictement JSON. Gemini et OpenAI ont
     un réglage dédié ; Anthropic n'en a pas, la consigne y est portée par le
     prompt et la réponse passe de toute façon par ``_strip_code_fence``.
+
+    ``audio`` — ``(octets, type_mime)`` — n'est utilisé QUE par Gemini, seul
+    fournisseur ici à savoir construire un message multimodal. Les autres
+    l'ignorent silencieusement plutôt que d'échouer : c'est à l'appelant
+    (``generate_note``) de ne le fournir que si le fournisseur actif le gère.
     """
     provider = provider or active_provider()
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
     if provider == "gemini":
-        return _complete_gemini(system, user, model, temperature, max_tokens, json_mode)
+        return _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio)
     if provider == "anthropic":
         return _complete_anthropic(system, user, model, temperature, max_tokens, json_mode)
     if provider == "openai":
@@ -738,7 +753,7 @@ def _translate_error(provider: str, model: str, exc: Exception) -> GenerationErr
     return GenerationError(f"Erreur {provider} : {message}")
 
 
-def _complete_gemini(system, user, model, temperature, max_tokens, json_mode) -> Completion:
+def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None) -> Completion:
     from google.genai import types
 
     client = get_client("gemini")
@@ -757,9 +772,14 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode) ->
     else:
         config_kwargs["top_p"] = 0.95
 
+    contents = user
+    if audio is not None:
+        audio_bytes, mime_type = audio
+        contents = [user, types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)]
+
     try:
         response = client.models.generate_content(
-            model=model, contents=user, config=types.GenerateContentConfig(**config_kwargs)
+            model=model, contents=contents, config=types.GenerateContentConfig(**config_kwargs)
         )
     except Exception as exc:
         logger.exception("Échec de l'appel Gemini")
@@ -938,6 +958,27 @@ def _strip_code_fence(text: str) -> str:
     return match.group(1).strip() if match else cleaned
 
 
+#: Ajouté au message utilisateur quand un extrait audio est joint. Le
+#: garde-fou est déterminant : sans lui, rien n'empêche le modèle de
+#: « compléter » la transcription avec ce qu'il entend mais qui n'y figure
+#: pas (un aparté hors-sujet, par exemple) — l'audio doit trancher un doute,
+#: jamais ajouter une donnée.
+_AUDIO_CROSSCHECK_NOTE = {
+    "fr": (
+        "UN EXTRAIT AUDIO DE LA DICTÉE EST JOINT À CETTE REQUÊTE. Sers-t'en "
+        "uniquement pour lever un doute sur un terme mal transcrit ci-dessus "
+        "(nom propre, terme médical, dose) ; ne t'en sers jamais pour ajouter "
+        "un contenu absent de la transcription."
+    ),
+    "en": (
+        "AN AUDIO EXCERPT OF THE DICTATION IS ATTACHED TO THIS REQUEST. Use "
+        "it only to resolve doubt about a poorly transcribed term above "
+        "(proper noun, medical term, dose); never use it to add content "
+        "absent from the transcript."
+    ),
+}
+
+
 def generate_note(
     transcript: str,
     system_instructions: str,
@@ -946,10 +987,15 @@ def generate_note(
     extra_instructions: str = "",
     model: Optional[str] = None,
     language: Optional[str] = None,
+    audio: Optional[Tuple[bytes, str]] = None,
 ) -> dict:
     """
     Met la transcription en forme et retourne
     ``{"markdown", "model", "provider", "truncated", "usage"}``.
+
+    ``audio`` — ``(octets, type_mime)`` — n'est envoyé que si le fournisseur
+    actif est Gemini ; avec tout autre fournisseur il est silencieusement
+    ignoré (voir ``complete``).
 
     Lève ``GenerationError`` avec un message en français prêt à afficher.
     """
@@ -973,17 +1019,24 @@ def generate_note(
         "Mise en forme via %s (%s) — %d caractères de transcription, langue %s",
         provider, model_name, len(transcript), langue,
     )
+    audio_to_send = audio if (audio is not None and provider == "gemini") else None
+
+    user_prompt = build_user_prompt(
+        transcript, layout_format, context_lines, extra_instructions, langue
+    )
+    if audio_to_send is not None:
+        user_prompt = f"{user_prompt}\n\n{_AUDIO_CROSSCHECK_NOTE[langue]}"
+
     result = complete(
         build_system_prompt(
             system_instructions, runtime_config.general_prompt(langue), langue
         ),
-        build_user_prompt(
-            transcript, layout_format, context_lines, extra_instructions, langue
-        ),
+        user_prompt,
         model=model_name,
         temperature=active_temperature(),
         max_tokens=settings.gemini_max_output_tokens,
         provider=provider,
+        audio=audio_to_send,
     )
 
     if not result.text.strip():
@@ -1006,6 +1059,7 @@ def generate_note(
         "provider": provider,
         "truncated": result.truncated,
         "usage": result.usage,
+        "audio_used": audio_to_send is not None,
     }
 
 

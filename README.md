@@ -581,6 +581,42 @@ sont pas des recommandations de style.
 * La note générée doit **toujours** être relue par le clinicien avant d'être
   versée au dossier.
 
+### Résidence des données — les deux trajets se décident séparément
+
+Piège facile à manquer : **Vertex AI ne couvre que le trajet texte**. Conclure
+« tout reste au Québec » parce que le modèle de langage est sur Vertex est faux
+si le service vocal, lui, est resté ailleurs. Ce sont deux décisions distinctes :
+
+| Trajet | Donnée | Destination | Résidence |
+|---|---|---|---|
+| Reconnaissance vocale | **audio du patient** | selon `stt_provider` | à vérifier |
+| Modèle de langage | transcription | Vertex `northamerica-northeast1` | Québec |
+
+L'audio brut est la plus identifiante des deux : la voix elle-même, les personnes
+présentes dans la pièce, les propos incidents qui n'atteignent jamais la
+transcription.
+
+Vérification en une commande — ce qui est **réellement** en service, et non ce que
+dit le `.env` (le panneau le surcharge) :
+
+```bash
+docker exec consultai python3 -c "from app import llm, runtime_config; from app.config import settings; \
+print('vertex:', settings.gemini_use_vertex, '| llm:', llm.active_provider(), '| stt:', runtime_config.value('stt_provider'))"
+```
+
+> ⚠️ `gemini_use_vertex` n'est vrai que si `GEMINI_API_KEY` est **vide** *et*
+> `GOOGLE_CLOUD_PROJECT` renseignée. Une clé oubliée fait retomber silencieusement
+> sur l'API grand public, hors région — sans aucun message.
+
+**Décision de ce déploiement (2026-07-31)** : modèle de langage sur Vertex AI à
+Montréal ; reconnaissance vocale maintenue chez **AssemblyAI (États-Unis)**, en
+connaissance de cause. Le module `medical-v1` est le seul de la liste à couvrir la
+terminologie clinique **en français**, et l'écart de justesse sur les noms de
+molécules et les acronymes du réseau québécois a été jugé plus déterminant pour la
+sécurité du patient que la résidence de l'audio. À réévaluer si AssemblyAI ouvre
+une région canadienne, ou si un service hébergé au Canada atteint une justesse
+comparable en français clinique.
+
 ### Fonctionnement sans CDN (facultatif)
 
 L'interface charge Tailwind, `marked` et `DOMPurify` depuis un CDN public — aucune

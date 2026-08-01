@@ -268,6 +268,14 @@ SETTINGS: Tuple[Setting, ...] = (
         "gemini_temperature", "number", "group.llm",
         default=lambda: str(settings.gemini_temperature),
     ),
+    Setting(
+        "gemini_send_audio", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+    Setting(
+        "gemini_send_audio_max_minutes", "number", "group.llm",
+        default=lambda: "20",
+    ),
 
     Setting(
         "anthropic_api_key", "secret", "group.llm",

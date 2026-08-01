@@ -229,6 +229,11 @@ class Consultation(Base):
     # déclencher la proposition de retranscription. La déduire du gabarit ne
     # marcherait pas — il a pu changer depuis, ou être traduit après coup.
     stt_language: Mapped[str] = mapped_column(String(8), default="", nullable=False)
+    # Un extrait audio a-t-il accompagné la transcription lors de la DERNIÈRE
+    # génération ? Même raison de traçabilité que model_used/llm_provider
+    # ci-dessus : un brouillon rouvert doit refléter ce qui l'a produit, pas
+    # le réglage courant du panneau admin.
+    audio_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -264,6 +269,7 @@ class Consultation(Base):
             # choisi pour décider s'il y a lieu de proposer une retranscription.
             "stt_language": self.stt_language,
             "llm_used": " / ".join(p for p in (self.llm_provider, self.model_used) if p),
+            "audio_used": self.audio_used,
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
         }
@@ -1135,6 +1141,7 @@ _ADDED_COLUMNS = {
         ("stt_provider", "VARCHAR(40) NOT NULL DEFAULT ''"),
         ("stt_model", "VARCHAR(80) NOT NULL DEFAULT ''"),
         ("stt_language", "VARCHAR(8) NOT NULL DEFAULT ''"),
+        ("audio_used", "BOOLEAN NOT NULL DEFAULT 0"),
     ],
 }
 

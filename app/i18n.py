@@ -273,6 +273,13 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "note.engine_note": ("note {engine}", "note {engine}"),
     "note.engine_stt_title": ("Transcription : {engine}", "Transcription: {engine}"),
     "note.engine_llm_title": ("Mise en forme : {engine}", "Formatting: {engine}"),
+    "note.engine_audio": ("+ audio", "+ audio"),
+    "note.engine_audio_title": (
+        "Un extrait audio de la dictée a été joint à la transcription pour "
+        "cette mise en forme.",
+        "An audio excerpt of the dictation was attached to the transcript "
+        "for this formatting pass.",
+    ),
 
     # --- Copie et export ----------------------------------------------------
     "copy.rich": ("Mise en forme", "Formatted"),
@@ -1213,6 +1220,34 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "has no place in a clinical note. The most recent models no longer "
         "accept it: the setting is then ignored and the note is produced "
         "anyway.",
+    ),
+    "set.gemini_send_audio.label": (
+        "Joindre aussi l'audio (silences plafonnés)",
+        "Also attach audio (pauses capped)",
+    ),
+    "set.gemini_send_audio.help": (
+        "Envoie l'extrait audio en plus de la transcription : le modèle peut "
+        "trancher un terme mal reconnu (nom propre, terme médical) en "
+        "l'écoutant. Uniquement avec Google Gemini — ignoré sans erreur avec "
+        "tout autre fournisseur. Ajoute un coût et quelques secondes par "
+        "note.",
+        "Sends the audio clip alongside the transcript: the model can "
+        "resolve a poorly recognized term (proper noun, medical term) by "
+        "listening to it. Google Gemini only — silently ignored with any "
+        "other provider. Adds cost and a few seconds per note.",
+    ),
+    "set.gemini_send_audio_max_minutes.label": (
+        "Durée maximale envoyée (minutes)",
+        "Maximum duration sent (minutes)",
+    ),
+    "set.gemini_send_audio_max_minutes.help": (
+        "Au-delà de cette durée d'audio (après retrait des silences), rien "
+        "n'est joint — la note se génère comme avant, sur la seule "
+        "transcription. Protège la latence et le coût sur une très longue "
+        "dictée.",
+        "Beyond this much audio (after silence trimming), nothing is "
+        "attached — the note is generated as before, from the transcript "
+        "alone. Protects latency and cost on a very long dictation.",
     ),
 
     "set.anthropic_api_key.label": ("Clé API Anthropic", "Anthropic API key"),

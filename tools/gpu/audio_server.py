@@ -176,13 +176,27 @@ class Qwen3OmniBackend(ASRBackend):
         text_in = self.processor.apply_chat_template(
             conversation, tokenize=False, add_generation_prompt=True,
         )
-        audios, images, videos = process_mm_info(conversation)
+        # ``use_audio_in_video=False`` : on n'envoie jamais de blocs vidéo,
+        # seulement de l'audio pur — argument positionnel désormais requis
+        # par qwen_omni_utils (absent des versions plus anciennes du paquet).
+        audios, images, videos = process_mm_info(conversation, use_audio_in_video=False)
+        # ``dtype=self.model.dtype`` : la tour audio (bf16) rejette les
+        # ``input_features`` en float32 renvoyés par défaut par le processor
+        # (« Input type (float) and bias type (c10::BFloat16) »). ``.to()``
+        # avec un dtype ne caste que les tenseurs flottants (BatchFeature
+        # laisse ``input_ids``/``attention_mask`` intacts) — idiome standard
+        # des exemples HF pour les modèles multimodaux.
         inputs = self.processor(
             text=text_in, audio=audios, images=images, videos=videos,
             return_tensors="pt", padding=True,
-        ).to(self.model.device)
+        ).to(self.model.device, dtype=self.model.dtype)
+        # ``return_audio=False`` : sans ça, generate() renvoie un tuple
+        # (texte, audio) — ce backend ne sert que du texte. ``thinker_``
+        # (pas ``max_new_tokens`` nu) : generate() ne route la longueur que
+        # via ce préfixe, un ``max_new_tokens`` sans préfixe est absorbé
+        # silencieusement par la valeur par défaut (1024) de thinker_kwargs.
         output_ids = self.model.generate(
-            **inputs, max_new_tokens=max_tokens,
+            **inputs, return_audio=False, thinker_max_new_tokens=max_tokens,
             temperature=temperature if temperature > 0 else None,
             do_sample=temperature > 0,
         )

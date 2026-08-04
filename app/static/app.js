@@ -4262,19 +4262,17 @@
     const boite = $('themeChoices');
     if (!boite) return;
 
-    boite.innerHTML = (themes || []).map((couleur, index) => {
+    boite.innerHTML = (themes || []).map((couleur) => {
       const actif = couleur.value === courant;
-      const bordure = index === 0 ? '' : 'border-l border-slate-200';
-      // On n'utilise pas accent-tab ici parce que le thème n'est pas encore
-      // changé : la couleur active est codée en dur pour le thème actuel.
-      const fond = actif
-        ? 'bg-slate-800 text-white font-medium'
-        : 'hover:bg-slate-50 text-slate-600';
+      const ring = actif
+        ? 'border-slate-700 shadow-[inset_0_0_0_1px_rgba(255,255,255,.45)]'
+        : 'border-transparent hover:border-slate-400';
       const etiquette = LANG === 'en' ? couleur.label_en : couleur.label_fr;
       return `<button type="button" data-theme="${esc(couleur.value)}"
+                      title="${esc(etiquette)}" aria-label="${esc(etiquette)}"
                       aria-current="${actif ? 'true' : 'false'}"
-                      class="px-3 py-1.5 transition ${bordure} ${fond}">
-                ${esc(etiquette)}</button>`;
+                      class="w-5 h-5 rounded-full border-2 transition ${ring}"
+                      style="background-color:${esc(couleur.hex || '#0f766e')}"></button>`;
     }).join('');
 
     boite.querySelectorAll('button[data-theme]').forEach((bouton) => {

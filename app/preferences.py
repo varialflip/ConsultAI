@@ -54,13 +54,14 @@ from app.database import SessionLocal, UserPreference
 # Ajouter une entrée ici suffit : les variables CSS correspondantes sont
 # définies dans le <style> du gabarit, l'API /api/config les expose et le
 # sélecteur dans le menu d'identité les affiche.
-THEMES: list[tuple[str, str, str]] = [
-    ("teal",    "Sarcelle",      "Teal"),
-    ("blue",    "Bleu",          "Blue"),
-    ("indigo",  "Indigo",        "Indigo"),
-    ("emerald", "Émeraude",      "Emerald"),
-    ("violet",  "Violet",        "Violet"),
-    ("rose",    "Rose",          "Rose"),
+THEMES: list[tuple[str, str, str, str]] = [
+    # (clé,     nom_fr,     nom_en,      hex_accent)
+    ("teal",    "Sarcelle",  "Teal",      "#0f766e"),
+    ("crimson", "Carmin",    "Crimson",   "#e11d48"),
+    ("amber",   "Ambre",     "Amber",     "#d97706"),
+    ("blue",    "Bleu",      "Blue",      "#1d4ed8"),
+    ("green",   "Vert",      "Green",     "#16a34a"),
+    ("violet",  "Violet",    "Violet",    "#7c3aed"),
 ]
 
 logger = logging.getLogger(__name__)

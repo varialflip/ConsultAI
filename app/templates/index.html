@@ -182,6 +182,20 @@
       --color-accent-bg-subtle: #f0fdfa;
       --color-accent-wave: #14b8a6;
     }
+    [data-theme="crimson"] {
+      --color-accent: #e11d48;
+      --color-accent-hover: #be123c;
+      --color-accent-border: #f43f5e;
+      --color-accent-bg-subtle: #fff1f2;
+      --color-accent-wave: #fb7185;
+    }
+    [data-theme="amber"] {
+      --color-accent: #d97706;
+      --color-accent-hover: #b45309;
+      --color-accent-border: #f59e0b;
+      --color-accent-bg-subtle: #fffbeb;
+      --color-accent-wave: #fbbf24;
+    }
     [data-theme="blue"] {
       --color-accent: #1d4ed8;
       --color-accent-hover: #1e40af;
@@ -189,33 +203,19 @@
       --color-accent-bg-subtle: #eff6ff;
       --color-accent-wave: #3b82f6;
     }
-    [data-theme="indigo"] {
-      --color-accent: #4338ca;
-      --color-accent-hover: #3730a3;
-      --color-accent-border: #4f46e5;
-      --color-accent-bg-subtle: #eef2ff;
-      --color-accent-wave: #6366f1;
-    }
-    [data-theme="emerald"] {
-      --color-accent: #047857;
-      --color-accent-hover: #065f46;
-      --color-accent-border: #059669;
-      --color-accent-bg-subtle: #ecfdf5;
-      --color-accent-wave: #10b981;
+    [data-theme="green"] {
+      --color-accent: #16a34a;
+      --color-accent-hover: #15803d;
+      --color-accent-border: #22c55e;
+      --color-accent-bg-subtle: #f0fdf4;
+      --color-accent-wave: #4ade80;
     }
     [data-theme="violet"] {
-      --color-accent: #6d28d9;
-      --color-accent-hover: #5b21b6;
-      --color-accent-border: #7c3aed;
+      --color-accent: #7c3aed;
+      --color-accent-hover: #6d28d9;
+      --color-accent-border: #8b5cf6;
       --color-accent-bg-subtle: #f5f3ff;
-      --color-accent-wave: #8b5cf6;
-    }
-    [data-theme="rose"] {
-      --color-accent: #e11d48;
-      --color-accent-hover: #be123c;
-      --color-accent-border: #f43f5e;
-      --color-accent-bg-subtle: #fff1f2;
-      --color-accent-wave: #fb7185;
+      --color-accent-wave: #a78bfa;
     }
 
     /* Classes utilitaires : boutons, bordures, badges, … portant la couleur
@@ -383,8 +383,7 @@
           <!-- Thème de couleur -->
           <div class="px-3 py-2 border-b border-slate-100">
             <p class="text-[11px] text-slate-500 mb-1">{{ t('identity.theme') }}</p>
-            <div id="themeChoices" class="inline-flex rounded-lg border border-slate-200
-                                            overflow-hidden text-xs"></div>
+            <div id="themeChoices" class="flex items-center gap-1.5 py-1"></div>
           </div>
 
           <button id="btnLogout" type="button" role="menuitem"

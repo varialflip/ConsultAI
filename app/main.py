@@ -926,8 +926,8 @@ def put_my_theme(payload: ThemeIn, request: Request):
     return {
         "theme": retenu,
         "themes": [
-            {"value": tid, "label_fr": label_fr, "label_en": label_en}
-            for tid, label_fr, label_en in preferences.THEMES
+            {"value": tid, "label_fr": label_fr, "label_en": label_en, "hex": hex_color}
+            for tid, label_fr, label_en, hex_color in preferences.THEMES
         ],
     }
 
@@ -947,8 +947,8 @@ async def api_config(request: Request):
         "language": langue,
         "theme": preferences.current_theme(),
         "themes": [
-            {"value": tid, "label_fr": label_fr, "label_en": label_en}
-            for tid, label_fr, label_en in preferences.THEMES
+            {"value": tid, "label_fr": label_fr, "label_en": label_en, "hex": hex_color}
+            for tid, label_fr, label_en, hex_color in preferences.THEMES
         ],
         "stt_language": runtime_config.stt_language(stt_provider),
         "stt_provider": stt_provider,

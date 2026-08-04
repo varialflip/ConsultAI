@@ -735,6 +735,11 @@
                    active:scale-95 transition">
     </button>
     <div id="dictaphoneTimer" class="font-mono text-3xl tabular-nums text-slate-300">00:00</div>
+    <!-- Même waveform que la barre d'outils, en miroir : ici c'est le SEUL
+         indice que le micro capte, puisque le reste de l'interface est
+         masqué. Une trace plate signale immédiatement un micro coupé. -->
+    <canvas id="dictaphoneWave" class="w-full max-w-md h-16 rounded bg-slate-800"
+            role="img" aria-label="{{ t('rec.level_aria') }}"></canvas>
     <div id="dictaphoneActions" class="hidden items-center gap-4">
       <button id="btnDictaphoneAbort" type="button" title="{{ t('rec.abort_title') }}"
               aria-label="{{ t('rec.abort_title') }}"

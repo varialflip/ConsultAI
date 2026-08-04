@@ -826,67 +826,68 @@
   const WAVE_SAMPLE_MS = 55;
 
   const wave = {
-    canvas: null,
-    ctx: null,
+    canvases: [],     // { canvas, ctx, capacity, resizeObserver } — barre d'outils ET dictaphone
     levels: [],       // historique, du plus ancien au plus récent
-    capacity: 0,      // nombre de barres tenant dans la largeur courante
     peak: 0,          // crête accumulée depuis le dernier échantillon retenu
     lastSample: 0,
-    resizeObserver: null,
   };
 
+  /** Nombre de barres à conserver : la plus large des zones d'affichage. */
+  function waveCapacity() {
+    return Math.max(1, ...wave.canvases.map((c) => c.capacity || 0));
+  }
+
   /** Adapte la résolution du canvas à sa taille CSS et à la densité d'écran. */
-  function resizeWaveCanvas() {
-    const canvas = wave.canvas;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
+  function resizeWaveCanvas(entry) {
+    const rect = entry.canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
+    entry.canvas.width = Math.round(rect.width * dpr);
+    entry.canvas.height = Math.round(rect.height * dpr);
     // Tout le tracé se fait ensuite en pixels CSS.
-    wave.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    entry.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    wave.capacity = Math.max(1, Math.floor(rect.width / (WAVE_BAR + WAVE_GAP)));
-    if (wave.levels.length > wave.capacity) {
-      wave.levels = wave.levels.slice(-wave.capacity);
+    entry.capacity = Math.max(1, Math.floor(rect.width / (WAVE_BAR + WAVE_GAP)));
+    if (wave.levels.length > waveCapacity()) {
+      wave.levels = wave.levels.slice(-waveCapacity());
     }
     drawWave();
   }
 
   function drawWave() {
-    const canvas = wave.canvas;
-    const ctx = wave.ctx;
-    if (!canvas || !ctx) return;
+    wave.canvases.forEach((entry) => {
+      const rect = entry.canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;   // calque dictaphone masqué
+      const { ctx } = entry;
+      const width = rect.width;
+      const height = rect.height;
 
-    const width = canvas.getBoundingClientRect().width;
-    const height = canvas.getBoundingClientRect().height;
-    if (!width || !height) return;
+      const middle = height / 2;
+      ctx.clearRect(0, 0, width, height);
 
-    const middle = height / 2;
-    ctx.clearRect(0, 0, width, height);
+      // Ligne de repos : sans elle, un canvas vide ressemble à un bogue
+      // d'affichage plutôt qu'à un micro au silence.
+      ctx.fillStyle = '#cbd5e1';                       // slate-300
+      ctx.fillRect(0, middle - 0.5, width, 1);
 
-    // Ligne de repos : sans elle, un canvas vide ressemble à un bogue
-    // d'affichage plutôt qu'à un micro au silence.
-    ctx.fillStyle = '#cbd5e1';                       // slate-300
-    ctx.fillRect(0, middle - 0.5, width, 1);
+      // Teal à l'enregistrement, ambre en pause : la même convention que la
+      // pastille d'état et le bouton, pour qu'un coup d'œil suffise.
+      ctx.fillStyle = state.paused ? '#f59e0b' : '#14b8a6';
 
-    // Teal à l'enregistrement, ambre en pause : la même convention que la
-    // pastille d'état et le bouton, pour qu'un coup d'œil suffise.
-    ctx.fillStyle = state.paused ? '#f59e0b' : '#14b8a6';
+      const step = WAVE_BAR + WAVE_GAP;
+      // Les barres sont ancrées à droite : la plus récente reste au bord, et
+      // l'historique s'échappe vers la gauche.
+      const visible = wave.levels.slice(-entry.capacity);
+      const offset = width - visible.length * step;
 
-    const step = WAVE_BAR + WAVE_GAP;
-    // Les barres sont ancrées à droite : la plus récente reste au bord, et
-    // l'historique s'échappe vers la gauche.
-    const offset = width - wave.levels.length * step;
-
-    for (let i = 0; i < wave.levels.length; i += 1) {
-      // 2 px minimum : un passage silencieux doit rester visible comme une
-      // portion de trace, pas comme un trou dans le tracé.
-      const barHeight = Math.max(2, wave.levels[i] * (height - 4));
-      ctx.fillRect(offset + i * step, middle - barHeight / 2, WAVE_BAR, barHeight);
-    }
+      for (let i = 0; i < visible.length; i += 1) {
+        // 2 px minimum : un passage silencieux doit rester visible comme une
+        // portion de trace, pas comme un trou dans le tracé.
+        const barHeight = Math.max(2, visible[i] * (height - 4));
+        ctx.fillRect(offset + i * step, middle - barHeight / 2, WAVE_BAR, barHeight);
+      }
+    });
   }
 
   /** Waveform du micro — confirme visuellement que le micro capte bien. */
@@ -903,7 +904,7 @@
       wave.levels = [];
       wave.peak = 0;
       wave.lastSample = 0;
-      resizeWaveCanvas();
+      wave.canvases.forEach(resizeWaveCanvas);
 
       const tick = (now) => {
         recorder.analyser.getByteTimeDomainData(buffer);
@@ -928,7 +929,7 @@
             wave.lastSample = now;
             wave.levels.push(wave.peak);
             wave.peak = 0;
-            if (wave.levels.length > wave.capacity) wave.levels.shift();
+            if (wave.levels.length > waveCapacity()) wave.levels.shift();
           }
         } else {
           // À la reprise, l'horloge repart de zéro plutôt que de rattraper
@@ -960,20 +961,28 @@
     drawWave();
   }
 
-  /** Prépare le canvas au chargement : il doit exister même à l'arrêt. */
-  function setupWaveform() {
-    wave.canvas = $('levelWave');
-    if (!wave.canvas || !wave.canvas.getContext) return;
-    wave.ctx = wave.canvas.getContext('2d');
+  /** Prépare un canvas waveform : il doit exister même à l'arrêt. */
+  function registerWaveCanvas(id) {
+    const canvas = $(id);
+    if (!canvas || !canvas.getContext) return;
+    const entry = { canvas, ctx: canvas.getContext('2d'), capacity: 0, resizeObserver: null };
 
     if (typeof ResizeObserver !== 'undefined') {
-      wave.resizeObserver = new ResizeObserver(resizeWaveCanvas);
-      wave.resizeObserver.observe(wave.canvas);
+      entry.resizeObserver = new ResizeObserver(() => resizeWaveCanvas(entry));
+      entry.resizeObserver.observe(canvas);
     } else {
       // Safari ancien : la rotation de l'iPad reste le cas à couvrir.
-      window.addEventListener('resize', resizeWaveCanvas);
+      window.addEventListener('resize', () => resizeWaveCanvas(entry));
     }
-    resizeWaveCanvas();
+    wave.canvases.push(entry);
+    resizeWaveCanvas(entry);
+  }
+
+  function setupWaveform() {
+    registerWaveCanvas('levelWave');
+    // Miroir dans le mode dictaphone : l'historique est partagé, seul le
+    // nombre de barres affichées dépend de la largeur de chaque canvas.
+    registerWaveCanvas('dictaphoneWave');
   }
 
   function startTimer() {

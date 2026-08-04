@@ -2934,16 +2934,8 @@
   }
 
   /** Réinitialise l'espace de travail pour une nouvelle consultation. */
-  function newConsultation() {
-    if (state.recording) {
-      toast(T('drafts.busy_new'), 'warning');
-      return;
-    }
-    if ($('transcript').value.trim() || $('markdownEditor').value.trim()) {
-      if (!window.confirm(T('drafts.confirm_new'))) {
-        return;
-      }
-    }
+  /** Remise à zéro complète de l'écran, sans confirmation ni garde. */
+  function resetWorkspace() {
     state.consultationId = null;
     state.recordedSeconds = 0;
     state.lastSavedSnapshot = '';
@@ -2962,6 +2954,51 @@
     loadRecordings();
     showPreview();
     setMobilePane('dictee');
+  }
+
+  function newConsultation() {
+    if (state.recording) {
+      toast(T('drafts.busy_new'), 'warning');
+      return;
+    }
+    if ($('transcript').value.trim() || $('markdownEditor').value.trim()) {
+      if (!window.confirm(T('drafts.confirm_new'))) {
+        return;
+      }
+    }
+    resetWorkspace();
+  }
+
+  /**
+   * Corbeille : supprime la consultation ENTIÈRE — transcription, note,
+   * métadonnées et le brouillon côté serveur — et non seulement le texte à
+   * l'écran. Même avertissement que la suppression depuis la liste des
+   * brouillons : c'est la même opération, vue depuis la consultation ouverte.
+   */
+  async function deleteCurrentConsultation() {
+    if (state.recording) {
+      toast(T('drafts.busy_new'), 'warning');
+      return;
+    }
+    // Rien à supprimer : ni brouillon serveur, ni contenu local.
+    const vide = !$('transcript').value.trim()
+      && !$('markdownEditor').value.trim()
+      && !state.consultationId;
+    if (vide) return;
+
+    if (!window.confirm(T('drafts.confirm_delete'))) return;
+
+    if (state.consultationId) {
+      try {
+        await api(`/api/consultations/${state.consultationId}`, { method: 'DELETE' });
+        toast(T('drafts.deleted'), 'success');
+      } catch (err) {
+        toast(err.message, 'error');
+        return;
+      }
+    }
+    // L'écran repart sur une consultation vierge, comme après « Nouvelle ».
+    resetWorkspace();
   }
 
   /* -------------------------------------------------------------------------
@@ -4331,17 +4368,11 @@
     // Deux boutons « Mettre en forme » : celui de l'en-tête du panneau
     // (grand écran) et celui de la barre d'action basse (mobile), qui reste
     // atteignable même depuis l'onglet « Note structurée ».
-    const clearTranscript = () => {
-      if (!$('transcript').value.trim() || window.confirm(T('transcript.confirm_clear'))) {
-        $('transcript').value = '';
-        updateTranscriptMeta(null);
-        scheduleSave();
-      }
-    };
     $('btnGenerate').addEventListener('click', generateNote);
     $('btnGenerateMobile').addEventListener('click', generateNote);
-    $('btnClearTranscript').addEventListener('click', clearTranscript);
-    $('btnClearTranscriptMobile').addEventListener('click', clearTranscript);
+    // La corbeille supprime la consultation entière, des deux côtés.
+    $('btnClearTranscript').addEventListener('click', deleteCurrentConsultation);
+    $('btnClearTranscriptMobile').addEventListener('click', deleteCurrentConsultation);
     $('btnNew').addEventListener('click', newConsultation);
     $('tabPreview').addEventListener('click', showPreview);
     $('tabEdit').addEventListener('click', showEditor);

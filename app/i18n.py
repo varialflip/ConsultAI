@@ -276,8 +276,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "pane.dictation": ("Dictée", "Dictation"),
     "pane.note": ("Note structurée", "Structured note"),
     "pane.raw": ("Transcription brute", "Raw transcript"),
-    "pane.clear": ("Vider", "Clear"),
-    "pane.clear_title": ("Vider la transcription", "Clear the transcript"),
+    "pane.clear": ("Supprimer", "Delete"),
+    "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),
     "pane.generate": ("Mettre en forme", "Format"),
     "transcript.placeholder": (
         "Appuyez sur « Enregistrer » et dictez la consultation, ou collez ici "
@@ -570,7 +570,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "transcript.characters": ("{count} caractères", "{count} characters"),
     "transcript.audio": ("{duration} d'audio", "{duration} of audio"),
-    "transcript.confirm_clear": ("Vider la transcription ?", "Clear the transcript?"),
     "generate.empty": (
         "La transcription est vide : dictez ou collez un texte d'abord.",
         "The transcript is empty: dictate or paste text first.",

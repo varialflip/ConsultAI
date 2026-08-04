@@ -242,6 +242,10 @@
     .accent-dot { background-color: var(--color-accent-border); }
     .accent-spinner { border-top-color: var(--color-accent-border); }
     .toast-success { background-color: var(--color-accent); }
+    /* Le texte d'aide (placeholder) de la transcription adopte la même
+       apparence que le message « La note structurée apparaît ici… » du
+       panneau de droite — couleur, italique. */
+    #transcript::placeholder { color: #94a3b8; font-style: italic; }
   </style>
 </head>
 
@@ -623,7 +627,7 @@
       <div class="flex-1 min-h-0 flex flex-col">
         <textarea id="transcript" spellcheck="true" readonly
                   class="flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 text-[13px]
-                         leading-relaxed text-slate-700 thin-scroll font-mono"
+                         leading-relaxed text-slate-700 thin-scroll"
                   placeholder="{{ t('transcript.placeholder') }}"></textarea>
 
         <!-- PIED DE LA DICTÉE — même rôle que celui de la note (moteur qui a

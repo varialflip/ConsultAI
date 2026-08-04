@@ -72,6 +72,11 @@
    * (durée volontairement longue, en attendant qu'une opération se termine),
    * qu'il faut pouvoir retirer DÈS que le résultat arrive plutôt que le
    * laisser courir jusqu'à sa propre échéance — voir runRetranscription.
+   *
+   * Le toast se ferme aussi à la main : croix en regard, ou glissé latéral
+   * (le glissé suit le doigt, relâché au-delà de 64 px il emporte le toast).
+   * Le compte à rebours est suspendu pendant le glissé — disparaître sous le
+   * doigt serait pire qu'une notification qui s'attarde.
    */
   function toast(message, type = 'info', durationMs = 4500) {
     const palette = {
@@ -81,16 +86,79 @@
       warning: 'bg-amber-600',
     };
     const el = document.createElement('div');
-    el.className = `${palette[type] || palette.info} text-white text-sm px-4 py-2.5 rounded-lg
-                    shadow-lg max-w-md transition-opacity duration-300`;
-    el.textContent = message;
+    el.className = `${palette[type] || palette.info} text-white text-sm pl-4 pr-2 py-2 rounded-lg
+                    shadow-lg max-w-md transition-opacity duration-300 flex items-center gap-2`;
+    const text = document.createElement('span');
+    text.className = 'flex-1';
+    text.textContent = message;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'shrink-0 -mr-1 p-1 rounded text-white/70 hover:text-white';
+    close.setAttribute('aria-label', T('toast.dismiss'));
+    close.innerHTML = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    el.append(text, close);
     $('toastZone').appendChild(el);
-    const dismiss = () => {
-      el.style.opacity = '0';
-      setTimeout(() => el.remove(), 320);
+
+    let dismissed = false;
+    let timer;
+    const dismiss = (slideX) => {
+      if (dismissed) return;
+      dismissed = true;
+      clearTimeout(timer);
+      if (slideX) {
+        el.style.transition = 'transform 200ms ease-in, opacity 200ms ease-in';
+        el.style.transform = `translateX(${slideX}px)`;
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 220);
+      } else {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 320);
+      }
     };
-    const timer = setTimeout(dismiss, durationMs);
-    return { dismiss: () => { clearTimeout(timer); dismiss(); } };
+    timer = setTimeout(dismiss, durationMs);
+    close.addEventListener('click', () => dismiss());
+
+    // Glissé pour fermer. La croix gère son propre clic : le glissé ne la
+    // concerne pas. pan-y laisse le défilement vertical au navigateur, seul
+    // l'axe horizontal nous revient.
+    let swipeX = null;
+    el.style.touchAction = 'pan-y';
+    el.addEventListener('pointerdown', (ev) => {
+      if (ev.target.closest('button')) return;
+      swipeX = ev.clientX;
+      clearTimeout(timer);
+      el.setPointerCapture(ev.pointerId);
+    });
+    el.addEventListener('pointermove', (ev) => {
+      if (swipeX === null) return;
+      const dx = ev.clientX - swipeX;
+      el.style.transition = 'none';
+      el.style.transform = `translateX(${dx}px)`;
+      el.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / 160));
+    });
+    el.addEventListener('pointerup', (ev) => {
+      if (swipeX === null) return;
+      const dx = ev.clientX - swipeX;
+      swipeX = null;
+      if (Math.abs(dx) > 64) {
+        dismiss(Math.sign(dx) * el.offsetWidth * 1.2);
+      } else {
+        // Retour élastique, puis un sursis avant l'auto-fermeture.
+        el.style.transition = 'transform 150ms ease-out, opacity 150ms ease-out';
+        el.style.transform = '';
+        el.style.opacity = '';
+        timer = setTimeout(dismiss, 3000);
+      }
+    });
+    el.addEventListener('pointercancel', () => {
+      if (swipeX === null) return;
+      swipeX = null;
+      el.style.transition = '';
+      el.style.transform = '';
+      el.style.opacity = '';
+    });
+    return { dismiss: () => dismiss() };
   }
 
   /** Voile bloquant pendant les traitements longs (STT, Gemini). */

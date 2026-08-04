@@ -869,10 +869,11 @@ def _qwen_audio_part(audio_bytes: bytes, mime_type: str) -> dict:
     OpenAI standard.
     """
     fmt = (mime_type.split("/", 1)[-1] or "wav").split(";")[0].strip()
+    b64 = base64.b64encode(audio_bytes).decode("ascii")
     return {
         "type": "input_audio",
         "input_audio": {
-            "data": base64.b64encode(audio_bytes).decode("ascii"),
+            "data": f"data:{mime_type};base64,{b64}",
             "format": fmt,
         },
     }

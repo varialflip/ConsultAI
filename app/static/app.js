@@ -4024,7 +4024,10 @@
     // sort différente de d'habitude, et la réponse n'était nulle part.
     const label = $('engineLabel');
     if (label) {
-      label.textContent = `${config.stt_provider} → ${config.llm_provider} · ${config.llm_model}`;
+      const stt = config.stt_provider === 'custom' && config.stt_model
+        ? config.stt_model
+        : config.stt_provider;
+      label.textContent = `${stt} → ${config.llm_provider} · ${config.llm_model}`;
     }
     return config;
   }

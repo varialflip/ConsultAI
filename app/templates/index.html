@@ -542,22 +542,24 @@
           </button>
         </div>
       </div>
-      <textarea id="transcript" spellcheck="true" readonly
-                class="flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 text-[15px]
-                       leading-relaxed text-slate-700 thin-scroll bg-slate-50"
-                placeholder="{{ t('transcript.placeholder') }}"></textarea>
+      <div class="flex-1 min-h-0 flex flex-col">
+        <textarea id="transcript" spellcheck="true" readonly
+                  class="flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 text-[15px]
+                         leading-relaxed text-slate-700 thin-scroll bg-slate-50"
+                  placeholder="{{ t('transcript.placeholder') }}"></textarea>
 
-      <!-- PIED DE LA DICTÉE — même rôle que celui de la note (moteur qui a
-           produit CE texte, état de sauvegarde), mais sur ce panneau-ci : sur
-           mobile les deux panneaux ne sont jamais visibles en même temps, et
-           sans ce pied l'état de sauvegarde restait invisible tant qu'on
-           n'avait pas basculé sur l'onglet « Note structurée ». -->
-      <footer id="transcriptFooter"
-              class="hidden shrink-0 items-center gap-3 border-t border-slate-200
-                     px-4 sm:px-6 py-1.5 text-[11px] text-slate-400">
-        <span id="transcriptEngine" class="hidden truncate"></span>
-        <span id="saveStatusDictee" class="ml-auto shrink-0"></span>
-      </footer>
+        <!-- PIED DE LA DICTÉE — même rôle que celui de la note (moteur qui a
+             produit CE texte, état de sauvegarde), mais sur ce panneau-ci : sur
+             mobile les deux panneaux ne sont jamais visibles en même temps, et
+             sans ce pied l'état de sauvegarde restait invisible tant qu'on
+             n'avait pas basculé sur l'onglet « Note structurée ». -->
+        <footer id="transcriptFooter"
+                class="hidden shrink-0 items-center gap-3 border-t border-slate-200
+                       px-4 sm:px-6 py-1.5 text-[11px] text-slate-400">
+          <span id="transcriptEngine" class="hidden truncate"></span>
+          <span id="saveStatusDictee" class="ml-auto shrink-0"></span>
+        </footer>
+      </div>
     </section>
 
     <!-- PANNEAU : note structurée -->

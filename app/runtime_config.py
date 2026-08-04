@@ -517,6 +517,26 @@ def stt_language(provider: str) -> str:
     return i18n.stt_language_code(preferences.document_language(), provider)
 
 
+def stt_model(provider: Optional[str] = None) -> str:
+    """
+    Modèle STT actuel pour le fournisseur donné (ou l'actif).
+    """
+    if provider is None:
+        provider = value("stt_provider")
+    cle = {
+        "deepgram": "deepgram_model",
+        "assemblyai": "assemblyai_model",
+        "soniox": "soniox_model",
+        "cohere": "cohere_model",
+        "mistral": "mistral_model",
+        "openai": "openai_stt_model",
+        "custom": "custom_stt_model",
+    }.get(provider)
+    if cle is not None:
+        return value(cle) or ""
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Vue destinée au panneau d'administration
 # ---------------------------------------------------------------------------

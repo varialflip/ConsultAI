@@ -914,6 +914,7 @@ async def api_config(request: Request):
     """Configuration non sensible, consommée par le frontend."""
     user = current_user(request)
     langue = runtime_config.language()
+    stt_provider = runtime_config.value("stt_provider")
     return {
         "app_title": settings.app_title,
         "version": __version__,
@@ -921,10 +922,11 @@ async def api_config(request: Request):
         # dates et pour savoir s'il doit recharger la page après un
         # changement de réglage.
         "language": langue,
-        "stt_language": runtime_config.stt_language(runtime_config.value("stt_provider")),
+        "stt_language": runtime_config.stt_language(stt_provider),
+        "stt_provider": stt_provider,
+        "stt_model": runtime_config.stt_model(stt_provider),
         "llm_provider": runtime_config.value("llm_provider"),
         "llm_model": llm.active_model(),
-        "stt_provider": runtime_config.value("stt_provider"),
         "gemini_backend": "vertex" if settings.gemini_use_vertex else "api_key",
         "max_audio_mb": settings.max_audio_mb,
         "is_template_admin": user.is_template_admin,

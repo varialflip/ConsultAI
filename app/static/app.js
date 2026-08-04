@@ -4392,6 +4392,7 @@
     $('btnNewTemplate').addEventListener('click', () => {
       resetTemplateForm();
       renderTemplateList();
+      setTemplateMobileView('form');
     });
     // Instructions et mise en page contiennent du Markdown que le modèle
     // reproduit tel quel ; le vocabulaire ne l'est pas, mais la correction

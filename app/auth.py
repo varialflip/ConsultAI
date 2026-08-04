@@ -398,6 +398,7 @@ class AuthMiddleware:
         # run_in_threadpool : la passe de découpage d'une dictée, qui survit à
         # la réponse HTTP, garde donc cette langue.
         preferences.bind_language(preferences.language_for(principal.owner_key))
+        preferences.bind_theme(preferences.theme_for(principal.owner_key))
 
         await self.app(scope, receive, send)
 

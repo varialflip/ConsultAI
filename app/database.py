@@ -507,6 +507,8 @@ class UserPreference(Base):
     username: Mapped[str] = mapped_column(String(255), primary_key=True)
     #: « fr », « en », ou vide pour suivre le défaut de l'installation.
     language: Mapped[str] = mapped_column(String(8), default="", nullable=False)
+    #: Thème de couleur : « teal », « blue », … ou vide pour suivre le défaut.
+    theme_color: Mapped[str] = mapped_column(String(32), default="", nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
@@ -1139,6 +1141,9 @@ def _adopt_authorized_users(db: Session) -> int:
 _ADDED_COLUMNS = {
     "users": [
         ("avatar_url", "VARCHAR(1000) NOT NULL DEFAULT ''"),
+    ],
+    "user_preferences": [
+        ("theme_color", "VARCHAR(32) NOT NULL DEFAULT ''"),
     ],
     "templates": [
         ("language", "VARCHAR(8) NOT NULL DEFAULT 'fr'"),

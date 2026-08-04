@@ -174,6 +174,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     # panneau d'administration : elle regarde la personne qui lit l'écran, pas
     # l'installation.
     "identity.language": ("Langue", "Language"),
+    "identity.theme": ("Thème", "Theme"),
     "identity.language_saved": (
         "Langue changée. L'écran se recharge…",
         "Language changed. Reloading…",

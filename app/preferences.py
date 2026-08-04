@@ -48,6 +48,21 @@ from app import i18n
 from app.config import settings
 from app.database import SessionLocal, UserPreference
 
+# ---------------------------------------------------------------------------
+# Thèmes de couleur offerts à l'usager
+# ---------------------------------------------------------------------------
+# Ajouter une entrée ici suffit : les variables CSS correspondantes sont
+# définies dans le <style> du gabarit, l'API /api/config les expose et le
+# sélecteur dans le menu d'identité les affiche.
+THEMES: list[tuple[str, str, str]] = [
+    ("teal",    "Sarcelle",      "Teal"),
+    ("blue",    "Bleu",          "Blue"),
+    ("indigo",  "Indigo",        "Indigo"),
+    ("emerald", "Émeraude",      "Emerald"),
+    ("violet",  "Violet",        "Violet"),
+    ("rose",    "Rose",          "Rose"),
+]
+
 logger = logging.getLogger(__name__)
 
 
@@ -108,6 +123,35 @@ def current_language() -> str:
     if portee:
         return portee
     return i18n.normalize(settings.app_language)
+
+
+# ---------------------------------------------------------------------------
+# Thème de la requête en cours
+# ---------------------------------------------------------------------------
+# Même mécanisme que la langue : le middleware fixe la valeur une fois, et le
+# reste de l'application la lit sans repasser par la base.
+_request_theme: ContextVar[Optional[str]] = ContextVar(
+    "consultai_request_theme", default=None
+)
+
+
+def bind_theme(theme: Optional[str]) -> None:
+    """Fixe le thème de la requête en cours. Appelé par le middleware."""
+    _request_theme.set(theme if theme else None)
+
+
+def current_theme() -> str:
+    """
+    Thème effectif : celui de l'usager de la requête, sinon le défaut.
+
+    Le défaut est toujours « teal », qui est le thème historique. Une
+    installation qui voudrait en changer pourrait ajouter une variable
+    d'environnement, mais le besoin n'existe pas pour l'instant.
+    """
+    portee = _request_theme.get()
+    if portee:
+        return portee
+    return "teal"
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +238,83 @@ def set_language(username: str, language: str) -> str:
     return demande or i18n.normalize(settings.app_language)
 
 
+# ---------------------------------------------------------------------------
+# Stockage — thème
+# ---------------------------------------------------------------------------
+# Même stratégie que pour la langue : cache en mémoire, lecture à l'écriture.
+_theme_cache: Dict[str, str] = {}
+_theme_cache_lock = threading.Lock()
+
+# Clefs valides, pratique pour les vérifications.
+_THEME_KEYS = {t[0] for t in THEMES}
+
+
+def theme_for(username: str) -> str:
+    """
+    Thème enregistré, ou chaîne vide.
+
+    Une erreur de base retourne une chaîne vide : l'appelant retombe sur le
+    défaut « teal ».
+    """
+    cle = _key(username)
+    if not cle:
+        return ""
+
+    with _theme_cache_lock:
+        if cle in _theme_cache:
+            return _theme_cache[cle]
+
+    valeur = ""
+    try:
+        with SessionLocal() as db:
+            row = db.get(UserPreference, cle)
+            if row is not None and row.theme_color:
+                valeur = row.theme_color
+    except Exception as exc:
+        logger.warning("Thème non lu pour %s : %s", cle, exc)
+        return ""
+
+    with _theme_cache_lock:
+        _theme_cache[cle] = valeur
+    return valeur
+
+
+def set_theme(username: str, theme: str) -> str:
+    """
+    Enregistre le thème et retourne la valeur retenue.
+
+    Une valeur vide SUPPRIME la préférence — l'usager suit le défaut.
+    Un thème inconnu est refusé.
+    """
+    cle = _key(username)
+    if not cle:
+        raise ValueError("Identité manquante.")
+
+    demande = (theme or "").strip().lower()
+    if demande and demande not in _THEME_KEYS:
+        raise ValueError(f"Thème inconnu : {theme}")
+
+    with SessionLocal() as db:
+        row = db.get(UserPreference, cle)
+        if not demande:
+            if row is not None:
+                row.theme_color = ""
+        elif row is None:
+            db.add(UserPreference(username=cle, theme_color=demande))
+        else:
+            row.theme_color = demande
+        db.commit()
+
+    with _theme_cache_lock:
+        _theme_cache[cle] = demande
+
+    logger.info("Thème de %s : %s", cle, demande or "défaut")
+    return demande or "teal"
+
+
 def invalidate() -> None:
     """Vide le cache. Utile aux tests et après une écriture directe en base."""
     with _cache_lock:
         _cache.clear()
+    with _theme_cache_lock:
+        _theme_cache.clear()

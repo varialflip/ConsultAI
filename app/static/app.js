@@ -59,6 +59,15 @@
 
   const $ = (id) => document.getElementById(id);
 
+  /**
+   * Renvoie la valeur résolue d'une variable CSS personnalisée, utile pour
+   * les couleurs qui dépendent du thème (toile, …). La fonction lit le
+   * ``<html>`` (où les variables sont définies via ``data-theme``) et non un
+   * élément arbitraire, pour que le résultat soit le même partout.
+   */
+  const accentColor = (prop) =>
+    getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
+
   /** Échappe le HTML avant insertion dans le DOM (contenu saisi par l'usager). */
   function esc(value) {
     const div = document.createElement('div');
@@ -81,7 +90,7 @@
   function toast(message, type = 'info', durationMs = 4500) {
     const palette = {
       info: 'bg-slate-800',
-      success: 'bg-teal-700',
+      success: 'toast-success',
       error: 'bg-red-700',
       warning: 'bg-amber-600',
     };
@@ -873,7 +882,7 @@
 
       // Teal à l'enregistrement, ambre en pause : la même convention que la
       // pastille d'état et le bouton, pour qu'un coup d'œil suffise.
-      ctx.fillStyle = state.paused ? '#f59e0b' : '#14b8a6';
+      ctx.fillStyle = state.paused ? '#f59e0b' : (state.accentWaveColor || '#14b8a6');
 
       const step = WAVE_BAR + WAVE_GAP;
       // Les barres sont ancrées à droite : la plus récente reste au bord, et
@@ -2186,7 +2195,7 @@
     const el = $(id);
     if (!el) return;
     el.style.transition = 'none';
-    el.style.backgroundColor = '#dbeee3';
+    el.style.backgroundColor = accentColor('--color-accent-bg-subtle') || '#f0fdfa';
     void el.offsetWidth; // force le navigateur à appliquer la couleur ci-dessus avant la transition
     el.style.transition = 'background-color 10000ms ease-out';
     el.style.backgroundColor = '';
@@ -2241,7 +2250,7 @@
     state.editingMarkdown = false;
     $('previewPane').classList.remove('hidden');
     $('markdownEditor').classList.add('hidden');
-    $('tabPreview').className = 'px-3 py-1.5 bg-teal-700 text-white font-medium';
+    $('tabPreview').className = 'px-3 py-1.5 accent-tab font-medium';
     $('tabEdit').className = 'px-3 py-1.5 hover:bg-slate-50 text-slate-600';
     renderMarkdown();
   }
@@ -2250,7 +2259,7 @@
     state.editingMarkdown = true;
     $('previewPane').classList.add('hidden');
     $('markdownEditor').classList.remove('hidden');
-    $('tabEdit').className = 'px-3 py-1.5 bg-teal-700 text-white font-medium';
+    $('tabEdit').className = 'px-3 py-1.5 accent-tab font-medium';
     $('tabPreview').className = 'px-3 py-1.5 hover:bg-slate-50 text-slate-600';
     $('markdownEditor').focus();
   }
@@ -2580,7 +2589,7 @@
     state.templates.forEach((tpl) => {
       const item = document.createElement('li');
       const active = String(tpl.id) === $('tplId').value;
-      item.className = `px-4 py-3 cursor-pointer hover:bg-white transition ${active ? 'bg-white border-l-4 border-teal-600' : ''}`;
+      item.className = `px-4 py-3 cursor-pointer hover:bg-white transition ${active ? 'bg-white border-l-4 accent-border' : ''}`;
       // La langue est affichée pour CHAQUE gabarit : c'est elle qui décide de
       // la langue de la note produite, et s'en apercevoir après coup coûte une
       // régénération.
@@ -2595,7 +2604,7 @@
         </div>
         <div class="text-xs text-slate-500 mt-0.5 line-clamp-2">${esc(tpl.description || T('tpl.no_description'))}</div>
         <div class="mt-1.5 flex items-center gap-1 flex-wrap">
-          <span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 font-medium">${esc(langue)}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded accent-badge font-medium">${esc(langue)}</span>
           ${tpl.is_locked ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">${esc(T('tpl.locked_badge'))}</span>` : ''}
           ${tpl.is_default && !tpl.is_locked ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">${esc(T('tpl.preloaded'))}</span>` : ''}
         </div>
@@ -3271,7 +3280,7 @@
     const help = field.help
       ? `<p class="text-[11px] text-slate-500 mt-1 leading-relaxed">${esc(field.help)}</p>` : '';
     const origin = field.overridden
-      ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 ml-1.5">${esc(T('admin.from_panel'))}</span>`
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded accent-badge ml-1.5">${esc(T('admin.from_panel'))}</span>`
       : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 ml-1.5">${esc(T('admin.from_env'))}</span>`;
 
     let control;
@@ -3515,7 +3524,7 @@
                     ? 'bg-white border-slate-300 text-slate-800 font-medium shadow-sm'
                     : 'bg-transparent border-transparent text-slate-500 hover:text-slate-700'}">
                 ${esc(choix.label)}${choix.value === enregistre
-                  ? '<span class="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-teal-600"'
+                   ? '<span class="ml-1.5 inline-block w-1.5 h-1.5 rounded-full accent-dot"'
                     + ` title="${esc(T('admin.provider_active'))}"></span>`
                   : ''}</button>`;
     }).join('');
@@ -3543,8 +3552,8 @@
       : '';
 
     if (vu === enregistre && vu === stage) {
-      return `<div class="flex items-center gap-2 text-xs text-teal-800">
-          <span class="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+      return `<div class="flex items-center gap-2 text-xs accent-text">
+          <span class="w-1.5 h-1.5 rounded-full accent-dot"></span>
           <span class="font-medium">${esc(libelle)}</span>
           <span class="text-slate-500">— ${esc(T('admin.provider_active'))}</span>
         </div>${sansClef}`;
@@ -3558,8 +3567,7 @@
     return `<div class="flex items-center gap-2 flex-wrap">
         <span class="text-xs font-medium text-slate-700">${esc(libelle)}</span>
         <button type="button" data-activate="${esc(vu)}" data-provider-key="${esc(cle)}"
-                class="px-2.5 py-1 rounded-lg bg-teal-700 text-white text-xs font-medium
-                       hover:bg-teal-800 transition">
+                class="accent-btn px-2.5 py-1 rounded-lg text-xs font-medium transition">
           ${esc(T('admin.provider_use'))}</button>
       </div>${sansClef}`;
   }
@@ -3713,7 +3721,7 @@
       return `<button type="button" data-tab-index="${index}"
                 class="shrink-0 px-3 py-2 text-xs font-medium border-b-2 transition ${
                   actif
-                    ? 'border-teal-600 text-teal-700'
+                    ? 'accent-border accent-text'
                     : 'border-transparent text-slate-500 hover:text-slate-700'}">
                 ${esc(onglet.label)}</button>`;
     }).join('');
@@ -3844,13 +3852,13 @@
                   aria-pressed="${coche}"
                   class="px-2 py-0.5 rounded-full text-[11px] border transition ${
                     coche
-                      ? 'bg-teal-700 text-white border-teal-700'
+                      ? 'accent-btn accent-btn-bordered'
                       : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'}">
                   ${esc(groupe.name)}</button>`;
       }).join(' ');
 
       const etat = user.is_active
-        ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700">${
+        ? `<span class="text-[10px] px-1.5 py-0.5 rounded accent-badge">${
             esc(T('people.active'))}</span>`
         : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">${
             esc(T('people.disabled'))}</span>`;
@@ -3891,7 +3899,7 @@
                   class="ml-auto text-xs px-2 py-1 rounded border transition ${
                     user.is_active
                       ? 'border-red-200 text-red-600 hover:bg-red-50'
-                      : 'border-teal-300 text-teal-700 hover:bg-teal-50'}">
+                      : 'accent-btn-ghost hover:accent-bg-subtle'}">
             ${esc(user.is_active ? T('people.deactivate') : T('people.reactivate'))}</button>
         </div>
         <p class="text-[11px] text-slate-500">${esc(details)}</p>
@@ -3918,12 +3926,12 @@
           <label class="inline-flex items-center gap-1.5 text-xs text-slate-600">
             <input type="checkbox" data-perm-group="${groupe.id}" data-perm="is_admin"
                    ${groupe.is_admin ? 'checked' : ''}
-                   class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
+                   class="rounded border-slate-300 accent-ring" style="accent-color: var(--color-accent-border)">
             ${esc(T('people.perm_admin'))}</label>
           <label class="inline-flex items-center gap-1.5 text-xs text-slate-600">
             <input type="checkbox" data-perm-group="${groupe.id}" data-perm="can_manage_templates"
                    ${groupe.can_manage_templates ? 'checked' : ''}
-                   class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">
+                   class="rounded border-slate-300 accent-ring" style="accent-color: var(--color-accent-border)">
             ${esc(T('people.perm_templates'))}</label>
           ${groupe.is_system ? '' : `<button type="button" data-delete-group="${groupe.id}"
                    data-name="${esc(groupe.name)}"
@@ -3955,7 +3963,7 @@
                    placeholder="${esc(T('people.group_desc_ph'))}"
                    class="flex-[2] min-w-[10rem] rounded-lg border-slate-300 text-sm">
             <button type="button" id="btnCreateGroup"
-                    class="px-3 py-2 rounded-lg bg-teal-700 text-white text-sm hover:bg-teal-800">
+                     class="accent-btn px-3 py-2 rounded-lg text-sm">
               ${esc(T('people.create'))}</button>
           </div>
         </div>
@@ -4207,7 +4215,7 @@
       const actif = langue.value === courante;
       const bordure = index === 0 ? '' : 'border-l border-slate-200';
       const fond = actif
-        ? 'bg-teal-700 text-white font-medium'
+        ? 'accent-tab font-medium'
         : 'hover:bg-slate-50 text-slate-600';
       return `<button type="button" role="menuitem" data-lang="${esc(langue.value)}"
                       aria-current="${actif ? 'true' : 'false'}"
@@ -4238,6 +4246,57 @@
     }
   }
 
+  /* ------ Thème de couleur ------ */
+
+  /**
+   * Applique un thème en posant l'attribut ``data-theme`` sur ``<html>``,
+   * ce qui active le bloc de variables CSS correspondant dans la feuille
+   * de style. Sans rechargement de page.
+   */
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme || 'teal');
+    state.accentWaveColor = accentColor('--color-accent-wave') || '#14b8a6';
+  }
+
+  function renderThemeChoices(themes, courant) {
+    const boite = $('themeChoices');
+    if (!boite) return;
+
+    boite.innerHTML = (themes || []).map((couleur, index) => {
+      const actif = couleur.value === courant;
+      const bordure = index === 0 ? '' : 'border-l border-slate-200';
+      // On n'utilise pas accent-tab ici parce que le thème n'est pas encore
+      // changé : la couleur active est codée en dur pour le thème actuel.
+      const fond = actif
+        ? 'bg-slate-800 text-white font-medium'
+        : 'hover:bg-slate-50 text-slate-600';
+      const etiquette = LANG === 'en' ? couleur.label_en : couleur.label_fr;
+      return `<button type="button" data-theme="${esc(couleur.value)}"
+                      aria-current="${actif ? 'true' : 'false'}"
+                      class="px-3 py-1.5 transition ${bordure} ${fond}">
+                ${esc(etiquette)}</button>`;
+    }).join('');
+
+    boite.querySelectorAll('button[data-theme]').forEach((bouton) => {
+      bouton.addEventListener('click', () => setTheme(bouton.dataset.theme));
+    });
+  }
+
+  async function setTheme(theme) {
+    if (theme === (document.documentElement.getAttribute('data-theme') || 'teal')) {
+      toggleIdentityMenu(false);
+      return;
+    }
+    try {
+      const resp = await api('/api/me/theme', { method: 'PUT', body: { theme } });
+      applyTheme(resp.theme);
+      renderThemeChoices(resp.themes, resp.theme);
+      toggleIdentityMenu(false);
+    } catch (err) {
+      toast(T('identity.language_failed', { error: err.message }), 'error');
+    }
+  }
+
   /* =========================================================================
    * 9. INITIALISATION
    * ====================================================================== */
@@ -4264,6 +4323,9 @@
     state.logoutUrl = config.logout_url || '/auth/logout';
     state.isAdmin = Boolean(config.is_admin);
     renderLanguageChoices(config.languages, config.language || LANG);
+
+    if (config.theme) applyTheme(config.theme);
+    if (config.themes) renderThemeChoices(config.themes, config.theme || 'teal');
 
     // Le panneau est réservé aux administrateurs, pas à quiconque peut écrire
     // un gabarit : ce sont deux droits distincts depuis l'arrivée des groupes.

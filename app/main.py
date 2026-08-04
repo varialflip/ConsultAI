@@ -884,6 +884,11 @@ class LanguageIn(BaseModel):
     language: str = Field("", max_length=8)
 
 
+class ThemeIn(BaseModel):
+    #: Clef du thème (« teal », « blue », …), vide = défaut « teal ».
+    theme: str = Field("", max_length=32)
+
+
 @app.put("/api/me/language")
 def put_my_language(payload: LanguageIn, request: Request):
     """
@@ -909,6 +914,24 @@ def put_my_language(payload: LanguageIn, request: Request):
     ]}
 
 
+@app.put("/api/me/theme")
+def put_my_theme(payload: ThemeIn, request: Request):
+    """Change le thème de couleur de l'usager courant."""
+    user = current_user(request)
+    try:
+        retenu = preferences.set_theme(user.owner_key, payload.theme)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        "theme": retenu,
+        "themes": [
+            {"value": tid, "label_fr": label_fr, "label_en": label_en}
+            for tid, label_fr, label_en in preferences.THEMES
+        ],
+    }
+
+
 @app.get("/api/config")
 async def api_config(request: Request):
     """Configuration non sensible, consommée par le frontend."""
@@ -922,6 +945,11 @@ async def api_config(request: Request):
         # dates et pour savoir s'il doit recharger la page après un
         # changement de réglage.
         "language": langue,
+        "theme": preferences.current_theme(),
+        "themes": [
+            {"value": tid, "label_fr": label_fr, "label_en": label_en}
+            for tid, label_fr, label_en in preferences.THEMES
+        ],
         "stt_language": runtime_config.stt_language(stt_provider),
         "stt_provider": stt_provider,
         "stt_model": runtime_config.stt_model(stt_provider),

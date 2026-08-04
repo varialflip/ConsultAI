@@ -1038,6 +1038,14 @@
       label.textContent = T('rec.record');
       $('btnPause').innerHTML = ICON_PAUSE;
     }
+
+    // Le texte d'aide cède la place à l'état de la dictée : tant que la
+    // première tranche n'est pas revenue, la zone vide doit dire ce qui se
+    // passe plutôt que répéter comment démarrer — on l'a déjà fait.
+    $('transcript').placeholder = state.recording
+      ? T('transcript.placeholder_recording')
+      : T('transcript.placeholder');
+
     syncDictaphoneUI();
   }
 

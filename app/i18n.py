@@ -280,12 +280,18 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),
     "pane.generate": ("Mettre en forme", "Format"),
     "transcript.placeholder": (
-        "Appuyez sur « Enregistrer » et dictez la consultation, ou collez ici "
-        "un texte existant.\n\nAstuce : vous pouvez dicter en plusieurs fois, "
-        "chaque nouvelle dictée s'ajoute à la suite.",
-        "Press “Record” and dictate the consultation, or paste existing text "
-        "here.\n\nTip: you can dictate in several passes — each new dictation "
+        "Appuyez sur « Enregistrer » et dictez la consultation.\n\n"
+        "Astuce : vous pouvez dicter en plusieurs fois, chaque nouvelle "
+        "dictée s'ajoute à la suite.",
+        "Press “Record” and dictate the consultation.\n\n"
+        "Tip: you can dictate in several passes — each new dictation "
         "is appended.",
+    ),
+    # Affiché pendant l'enregistrement, le temps que la première tranche
+    # revienne du service vocal : la zone est sinon vide et muable.
+    "transcript.placeholder_recording": (
+        "Dictée en cours — la transcription s'affiche ici au fil de la parole.",
+        "Dictation in progress — the transcript appears here as you speak.",
     ),
     "note.preview": ("Aperçu", "Preview"),
     "note.write": ("Écrire", "Write"),

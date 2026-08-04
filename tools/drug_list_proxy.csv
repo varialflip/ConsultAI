@@ -1,0 +1,174 @@
+brand,generic,dosage,class
+Synthroid,lévothyroxine,"25, 50, 75, 88, 100, 112, 125, 150, 175, 200 mcg",thyroïde (hormone substitutive)
+Cytomel,liothyronine,25 mcg,thyroïde (hormone substitutive)
+Lipitor,atorvastatine,"10, 20, 40, 80 mg",statine
+Crestor,rosuvastatine,"5, 10, 20, 40 mg",statine
+Zocor,simvastatine,"10, 20, 40 mg",statine
+Pravachol,pravastatine,"10, 20, 40 mg",statine
+Ezetrol,ézétimibe,10 mg,hypolipémiant (inhibiteur d'absorption)
+Caduet,atorvastatine/amlodipine,"10/5, 20/5, 40/5 mg",statine + bloqueur calcique (combo)
+Altace,ramipril,"2.5, 5, 10 mg",IECA
+Coversyl,périndopril,"2, 4, 8 mg",IECA
+Zestril,lisinopril,"5, 10, 20 mg",IECA
+Vasotec,énalapril,"5, 10, 20 mg",IECA
+Atacand,candésartan,"8, 16, 32 mg",ARA
+Cozaar,losartan,"25, 50, 100 mg",ARA
+Diovan,valsartan,"80, 160, 320 mg",ARA
+Micardis,telmisartan,"40, 80 mg",ARA
+Avapro,irbésartan,"75, 150, 300 mg",ARA
+Norvasc,amlodipine,"2.5, 5, 10 mg",bloqueur des canaux calciques
+Adalat XL,nifédipine,"30, 60, 90 mg",bloqueur des canaux calciques
+Cardizem CD,diltiazem,"120, 180, 240, 300 mg",bloqueur des canaux calciques
+Lopresor,métoprolol,"25, 50, 100 mg",bêta-bloquant
+Monocor,bisoprolol,"2.5, 5, 10 mg",bêta-bloquant
+Tenormin,aténolol,"25, 50, 100 mg",bêta-bloquant
+Coreg,carvédilol,"3.125, 6.25, 12.5, 25 mg",bêta-bloquant
+Lasix,furosémide,"20, 40, 80 mg",diurétique de l'anse
+Lozide,indapamide,"1.25, 2.5 mg",diurétique thiazidique
+Aldactone,spironolactone,"25, 50, 100 mg",diurétique épargneur de potassium
+Plavix,clopidogrel,75 mg,antiplaquettaire
+Brilinta,ticagrélor,90 mg,antiplaquettaire
+Xarelto,rivaroxaban,"10, 15, 20 mg",anticoagulant (AOD)
+Eliquis,apixaban,"2.5, 5 mg",anticoagulant (AOD)
+Pradaxa,dabigatran,"110, 150 mg",anticoagulant (AOD)
+Coumadin,warfarine,"1, 2, 3, 4, 5, 10 mg",anticoagulant (antagoniste vit. K)
+Aspirine,acide acétylsalicylique (AAS),"80, 325 mg",antiplaquettaire
+Cordarone,amiodarone,200 mg,antiarythmique
+Lanoxin,digoxine,"0.0625, 0.125, 0.25 mg",antiarythmique / inotrope
+Glucophage,metformine,"500, 850, 1000 mg",antidiabétique (biguanide)
+Diamicron MR,gliclazide,"30, 60, 80 mg",antidiabétique (sulfonylurée)
+Januvia,sitagliptine,"25, 50, 100 mg",antidiabétique (iDPP-4)
+Jardiance,empagliflozine,"10, 25 mg",antidiabétique (iSGLT2)
+Invokana,canagliflozine,"100, 300 mg",antidiabétique (iSGLT2)
+Forxiga,dapagliflozine,"5, 10 mg",antidiabétique (iSGLT2)
+Ozempic,sémaglutide,"0.25, 0.5, 1, 2 mg",antidiabétique (agoniste GLP-1)
+Victoza,liraglutide,"0.6, 1.2, 1.8 mg",antidiabétique (agoniste GLP-1)
+Lantus,insuline glargine,U-100,insuline basale
+NovoRapid,insuline asparte,U-100,insuline rapide
+Losec,oméprazole,"10, 20, 40 mg",IPP
+Pantoloc,pantoprazole,"20, 40 mg",IPP
+Nexium,ésoméprazole,"20, 40 mg",IPP
+Pariet,rabéprazole,"10, 20 mg",IPP
+Motilium,dompéridone,10 mg,antiémétique / prokinétique
+Gravol,dimenhydrinate,50 mg,antiémétique
+Zofran,ondansétron,"4, 8 mg",antiémétique
+Colace,docusate,100 mg,laxatif émollient
+Senokot,séné,8.6 mg,laxatif stimulant
+Lax-A-Day,polyéthylène glycol 3350,17 g,laxatif osmotique
+Imodium,lopéramide,2 mg,antidiarrhéique
+Zoloft,sertraline,"25, 50, 100 mg",antidépresseur (ISRS)
+Celexa,citalopram,"10, 20, 40 mg",antidépresseur (ISRS)
+Cipralex,escitalopram,"10, 20 mg",antidépresseur (ISRS)
+Effexor XR,venlafaxine,"37.5, 75, 150 mg",antidépresseur (IRSN)
+Cymbalta,duloxétine,"30, 60 mg",antidépresseur (IRSN)
+Wellbutrin SR/XL,bupropion,"150, 300 mg",antidépresseur
+Remeron,mirtazapine,"15, 30, 45 mg",antidépresseur
+Trazodone,trazodone,"50, 100, 150 mg",antidépresseur / hypnotique
+Seroquel,quétiapine,"25, 100, 200, 300 mg (XR : 50, 150, 200, 300, 400 mg)",antipsychotique
+Risperdal,rispéridone,"0.5, 1, 2, 3, 4 mg",antipsychotique
+Zyprexa,olanzapine,"2.5, 5, 10, 15 mg",antipsychotique
+Abilify,aripiprazole,"5, 10, 15, 20, 30 mg",antipsychotique
+Haldol,halopéridol,"0.5, 1, 2, 5, 10 mg",antipsychotique
+Xanax,alprazolam,"0.25, 0.5, 1 mg",benzodiazépine
+Ativan,lorazépam,"0.5, 1, 2 mg",benzodiazépine
+Rivotril,clonazépam,"0.5, 2 mg",benzodiazépine
+Imovane,zopiclone,"5, 7.5 mg",hypnotique (Z-drug)
+Aricept,donépézil,"5, 10 mg",cognition (anticholinestérasique)
+Exelon,rivastigmine,"1.5, 3, 4.5, 6 mg (timbre : 4.6, 9.5, 13.3 mg/24h)",cognition (anticholinestérasique)
+Ebixa,mémantine,"5, 10 mg",cognition (antagoniste NMDA)
+Neurontin,gabapentine,"100, 300, 400 mg",gabapentinoïde
+Lyrica,prégabaline,"25, 50, 75, 150, 300 mg",gabapentinoïde
+Buspar,buspirone,"5, 10 mg",anxiolytique (non-benzodiazépine)
+Depakote / Epival,divalproex,"250, 500 mg",stabilisateur de l'humeur / anticonvulsivant
+Lamictal,lamotrigine,"25, 100, 150, 200 mg",anticonvulsivant / stabilisateur de l'humeur
+Tegretol,carbamazépine,200 mg,anticonvulsivant
+Topamax,topiramate,"25, 50, 100 mg",anticonvulsivant
+Carbolith,carbonate de lithium,"150, 300, 600 mg",stabilisateur de l'humeur
+Tylenol,acétaminophène,"325, 500, 650 mg",analgésique
+Advil / Motrin,ibuprofène,"200, 400 mg",AINS
+Aleve / Naprosyn,naproxène,"250, 375, 500 mg",AINS
+Celebrex,célécoxib,"100, 200 mg",AINS (inhibiteur COX-2)
+Tramacet,tramadol/acétaminophène,37.5/325 mg,opioïde (combo)
+Tylenol No.1/2/3/4,codéine/acétaminophène,"8, 15, 30, 60 mg codéine",opioïde
+OxyContin / OxyNEO,oxycodone,"5, 10, 20, 40, 80 mg",opioïde
+Percocet,oxycodone/acétaminophène,"5/325, 10/325 mg",opioïde (combo)
+Dilaudid,hydromorphone,"1, 2, 4, 8 mg",opioïde
+Statex / MS Contin,morphine,"5, 10, 15, 30, 60, 100, 200 mg",opioïde
+Duragesic,fentanyl (timbre),"12, 25, 50, 75, 100 mcg/h",opioïde
+Flexeril,cyclobenzaprine,10 mg,myorelaxant
+Lioresal,baclofène,"10, 20 mg",myorelaxant
+Robaxin,méthocarbamol,500 mg,myorelaxant
+Singulair,montélukast,10 mg,antileucotriène
+Amoxil,amoxicilline,"250, 500 mg",antibiotique (pénicilline)
+Clavulin,amoxicilline/acide clavulanique,"500/125, 875/125 mg",antibiotique (pénicilline + inhibiteur)
+Zithromax,azithromycine,"250, 500 mg",antibiotique (macrolide)
+Cipro,ciprofloxacine,"250, 500 mg",antibiotique (fluoroquinolone)
+Keflex,céphalexine,"250, 500 mg",antibiotique (céphalosporine)
+Vibramycin / Doxycin,doxycycline,100 mg,antibiotique (tétracycline)
+Macrobid,nitrofurantoïne,100 mg,antibiotique (voies urinaires)
+Septra / Bactrim,triméthoprime/sulfaméthoxazole,"80/400, 160/800 mg",antibiotique (sulfamide)
+Flagyl,métronidazole,"250, 500 mg",antibiotique (nitro-imidazolé)
+Vesicare,solifénacine,"5, 10 mg",antimuscarinique (vessie hyperactive)
+Flomax,tamsulosine,0.4 mg,alpha-bloquant (HBP)
+Proscar,finastéride,5 mg,inhibiteur 5-alpha-réductase (HBP)
+Avodart,dutastéride,0.5 mg,inhibiteur 5-alpha-réductase (HBP)
+Viagra,sildénafil,"25, 50, 100 mg",dysfonction érectile
+Cialis,tadalafil,"5, 10, 20 mg",dysfonction érectile
+Reactine,cétirizine,10 mg,antihistaminique
+Claritin,loratadine,10 mg,antihistaminique
+Allegra,fexofénadine,"120, 180 mg",antihistaminique
+Benadryl,diphenhydramine,"25, 50 mg",antihistaminique (1re génération)
+Betaderm,bétaméthasone (crème),"0.05, 0.1 %",corticostéroïde topique
+Dermovate,clobétasol,0.05 %,corticostéroïde topique (puissant)
+Bactroban,mupirocine,2 %,antibiotique topique
+Canesten,clotrimazole,1 %,antifongique topique
+Fosamax,alendronate,70 mg (hebdomadaire),biphosphonate (ostéoporose)
+Actonel,risédronate,35 mg (hebdomadaire),biphosphonate (ostéoporose)
+Prolia,dénosumab,"60 mg (sous-cutané, 6 mois)",anticorps monoclonal (ostéoporose)
+Caltrate,calcium/vitamine D,500-600 mg / 400-500 UI,supplément
+Zyloprim,allopurinol,"100, 300 mg",hypouricémiant (goutte)
+Colchicine,colchicine,0.6 mg,anti-inflammatoire (goutte)
+Sinemet,lévodopa/carbidopa,"100/25, 250/25 mg",antiparkinsonien
+Mirapex,pramipexole,"0.125, 0.25, 0.5, 1 mg",antiparkinsonien (agoniste dopaminergique)
+Serc,bétahistine,"8, 16, 24 mg",vertiges (Ménière)
+Bonamine,méclizine,25 mg,antivertigineux / antiémétique
+Welchol,colesevelam,625 mg,hypolipémiant (résine)
+Questran,cholestyramine,4 g,hypolipémiant (résine)
+Tricor,fénofibrate,"100, 145, 160, 200 mg",hypolipémiant (fibrate)
+Lopid,gemfibrozil,600 mg,hypolipémiant (fibrate)
+Detrol LA,toltérodine,"2, 4 mg",antimuscarinique (vessie hyperactive)
+Myrbetriq,mirabégron,"25, 50 mg",bêta-3 agoniste (vessie hyperactive)
+Nitro-Dur / Nitrostat,nitroglycérine,"0.2-0.8 mg/h (timbre), 0.3-0.6 mg (sublingual)",vasodilatateur (angine)
+Imdur,mononitrate d'isosorbide,"30, 60 mg",vasodilatateur (angine)
+Rocaltrol,calcitriol,"0.25, 0.5 mcg",vitamine D active
+Nephrocaps,complexe vitaminique (rénal),1 comprimé/jour,supplément (insuffisance rénale)
+Slow-K / Micro-K,chlorure de potassium,"8, 10 mEq",supplément électrolytique
+Toviaz,fésotérodine,"4, 8 mg",antimuscarinique (vessie hyperactive)
+Betaloc,métoprolol,"50, 100 mg",bêta-bloquant
+Apo-Hydro,hydrochlorothiazide,"12.5, 25 mg",diurétique thiazidique
+Novo-Ramipril,ramipril,"2.5, 5, 10 mg",IECA (générique)
+Teva-Atorvastatin,atorvastatine,"10, 20, 40, 80 mg",statine (générique)
+Sandoz-Amlodipine,amlodipine,"2.5, 5, 10 mg",bloqueur des canaux calciques (générique)
+Pms-Metformin,metformine,"500, 850, 1000 mg",antidiabétique (générique)
+Ran-Rosuvastatin,rosuvastatine,"5, 10, 20, 40 mg",statine (générique)
+Auro-Sertraline,sertraline,"25, 50, 100 mg",antidépresseur (générique)
+Mylan-Escitalopram,escitalopram,"10, 20 mg",antidépresseur (générique)
+Levemir,insuline détémir,U-100,insuline basale
+NPH / Humulin N,insuline NPH,U-100,insuline intermédiaire
+Trulicity,dulaglutide,"0.75, 1.5, 3, 4.5 mg",antidiabétique (agoniste GLP-1)
+Actos,pioglitazone,"15, 30, 45 mg",antidiabétique (thiazolidinédione)
+Amaryl,glimépiride,"1, 2, 4 mg",antidiabétique (sulfonylurée)
+Flomax CR,tamsulosine,0.4 mg,alpha-bloquant (HBP)
+Feosol / Palafer,sulfate ferreux,300 mg (60 mg fer élémentaire),supplément en fer
+Neo-Citran,pseudoéphédrine/acétaminophène,divers,décongestionnant (combo)
+Benylin,dextrométhorphane,15 mg/15 mL,antitussif
+Metamucil,psyllium,3.4 g/dose,laxatif de masse
+Prepopik / PegLyte,polyéthylène glycol (préparation colonoscopie),1 L à 4 L selon produit,laxatif osmotique (préparation)
+Diovan HCT,valsartan/hydrochlorothiazide,"80/12.5, 160/12.5, 160/25 mg",ARA + diurétique (combo)
+Micardis Plus,telmisartan/hydrochlorothiazide,"40/12.5, 80/12.5 mg",ARA + diurétique (combo)
+Entresto,sacubitril/valsartan,"24/26, 49/51, 97/103 mg",insuffisance cardiaque (ARNI)
+Inspra,éplérénone,"25, 50 mg",antagoniste de l'aldostérone
+Trajenta,linagliptine,5 mg,antidiabétique (iDPP-4)
+Onglyza,saxagliptine,"2.5, 5 mg",antidiabétique (iDPP-4)
+Xigduo,dapagliflozine/metformine,"5/500, 5/1000, 10/1000 mg",antidiabétique (combo)
+Janumet,sitagliptine/metformine,"50/500, 50/1000 mg",antidiabétique (combo)

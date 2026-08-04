@@ -20,6 +20,7 @@ from typing import Iterator, List, Optional
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -234,6 +235,15 @@ class Consultation(Base):
     # ci-dessus : un brouillon rouvert doit refléter ce qui l'a produit, pas
     # le réglage courant du panneau admin.
     audio_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Jetons et durée RÉELS de la dernière génération, tels que renvoyés par
+    # le fournisseur — jamais un nombre que le modèle prétendrait donner dans
+    # le corps de la note, qui serait inventé (aucun modèle n'a accès à son
+    # propre décompte). Nullable et non 0 : un 0 serait indiscernable d'une
+    # mesure réelle de zéro jeton, ce qui n'arrive jamais mais brouillerait
+    # « jamais mesuré » (brouillons antérieurs à ce champ) et « mesuré à 0 ».
+    usage_prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    usage_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    generation_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -270,6 +280,9 @@ class Consultation(Base):
             "stt_language": self.stt_language,
             "llm_used": " / ".join(p for p in (self.llm_provider, self.model_used) if p),
             "audio_used": self.audio_used,
+            "usage_prompt_tokens": self.usage_prompt_tokens,
+            "usage_output_tokens": self.usage_output_tokens,
+            "generation_seconds": self.generation_seconds,
             "created_at": _iso(self.created_at),
             "updated_at": _iso(self.updated_at),
         }
@@ -1142,6 +1155,9 @@ _ADDED_COLUMNS = {
         ("stt_model", "VARCHAR(80) NOT NULL DEFAULT ''"),
         ("stt_language", "VARCHAR(8) NOT NULL DEFAULT ''"),
         ("audio_used", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("usage_prompt_tokens", "INTEGER"),
+        ("usage_output_tokens", "INTEGER"),
+        ("generation_seconds", "FLOAT"),
     ],
 }
 

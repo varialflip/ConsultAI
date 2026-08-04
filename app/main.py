@@ -51,6 +51,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -445,26 +446,96 @@ def _prepare_audio_for_generation(
 
     Best-effort à dessein : aucun enregistrement, ffmpeg indisponible, ou
     dictée trop longue (``gemini_send_audio_max_minutes``) retombent tous
-    silencieusement sur ``None`` — la note se génère alors comme avant, sur
-    la seule transcription. Ce n'est jamais une raison de faire échouer la
-    génération.
+    sur ``None`` — la note se génère alors comme avant, sur la seule
+    transcription. Ce n'est jamais une raison de faire échouer la génération,
+    mais chaque repli est journalisé : silencieux pour l'usager, visible dans
+    les journaux, sinon un audio manquant est indiscernable d'un bogue.
     """
     pistes = recordings.for_consultation(db, consultation_id)
     if not pistes:
+        logger.info(
+            "Audio non joint (consultation %s) : aucun enregistrement conservé",
+            consultation_id,
+        )
         return None
     piste = pistes[-1]  # le plus récent : celui de la dictée en cours
     try:
         chemin = recordings.absolute_path(piste)
         trimmed = stt.compress_silence(chemin)
-    except OSError:
+    except OSError as exc:
+        logger.warning(
+            "Audio non joint (consultation %s, enregistrement %s) : %s",
+            consultation_id, piste.id, exc,
+        )
         return None
     if trimmed is None:
+        logger.info(
+            "Audio non joint (consultation %s, enregistrement %s) : "
+            "retrait des silences indisponible ou désactivé",
+            consultation_id, piste.id,
+        )
         return None
     content, duree = trimmed
     plafond = runtime_config.value_float("gemini_send_audio_max_minutes", 20.0) * 60
     if duree <= 0 or duree > plafond:
+        logger.info(
+            "Audio non joint (consultation %s, enregistrement %s) : "
+            "%.1f s après retrait des silences, hors bornes (plafond %.0f s)",
+            consultation_id, piste.id, duree, plafond,
+        )
         return None
+    logger.info(
+        "Audio joint (consultation %s, enregistrement %s) : %.1f s après "
+        "retrait des silences",
+        consultation_id, piste.id, duree,
+    )
     return content, "audio/ogg"
+
+
+# ---------------------------------------------------------------------------
+# Garde contre les appels qui se chevauchent (génération, retranscription,
+# transcription d'un import)
+# ---------------------------------------------------------------------------
+# Un clic pendant qu'un appel précédent tourne encore (point de terminaison
+# personnalisé lent, ou simplement impatience) l'annule CÔTÉ NAVIGATEUR —
+# mais rien n'arrête le thread serveur en cours, qui a toutes les chances de
+# se terminer quand même avec un client HTTP synchrone. Sans ce compteur,
+# celui des deux appels qui finit en dernier écraserait le brouillon en base
+# sans qu'on sache lequel des deux résultats on regarde. Même principe que
+# ``dictation._processing`` : un entier par ressource, incrémenté à chaque
+# tentative, comparé après l'appel bloquant — s'il a bougé entre-temps, une
+# tentative plus récente a pris le relais et celle-ci n'écrit rien.
+#
+# Une instance par TYPE d'appel (et non une seule partagée) : une
+# régénération de note et une retranscription en cours pour la MÊME
+# consultation sont deux opérations indépendantes, ni l'une ni l'autre ne
+# doit invalider le compteur de l'autre.
+class _SequenceGuard:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._seq: dict[int, int] = {}
+
+    def begin(self, key: Optional[int]) -> int:
+        """Réserve un numéro de tentative. 0 sans identifiant (brouillon pas
+        encore créé) — il n'existe alors qu'une seule requête possible."""
+        if key is None:
+            return 0
+        with self._lock:
+            seq = self._seq.get(key, 0) + 1
+            self._seq[key] = seq
+            return seq
+
+    def is_current(self, key: Optional[int], seq: int) -> bool:
+        """Cette tentative est-elle toujours la plus récente pour cette clé ?"""
+        if key is None:
+            return True
+        with self._lock:
+            return self._seq.get(key) == seq
+
+
+_generation_guard = _SequenceGuard()    # /api/generate
+_retranscribe_guard = _SequenceGuard()  # /api/consultations/{id}/retranscribe
+_transcribe_guard = _SequenceGuard()    # /api/transcribe (import de fichier)
 
 
 # Correspondance entre les champs renvoyés par l'extraction et les colonnes.
@@ -1310,6 +1381,12 @@ async def api_transcribe(
     """
     user = current_user(request)
 
+    # Réservé avant l'appel bloquant, comme pour la génération et la
+    # retranscription : si un autre import pour la même consultation démarre
+    # avant que celui-ci ne revienne, c'est ce compteur qui décide lequel des
+    # deux a le droit d'écrire son texte dans le brouillon.
+    transcribe_seq = _transcribe_guard.begin(consultation_id)
+
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail=_t("err.audio_empty"))
@@ -1348,27 +1425,44 @@ async def api_transcribe(
 
     if consultation_id:
         consultation = _get_owned_consultation(db, consultation_id, user)
-        # On ajoute à la suite : le médecin peut dicter en plusieurs fois.
-        existing = (consultation.raw_transcript or "").strip()
-        consultation.raw_transcript = (
-            f"{existing}\n\n{result['transcript']}" if existing else result["transcript"]
-        )
-        consultation.audio_seconds = (consultation.audio_seconds or 0) + result["duration_seconds"]
-        consultation.status = "transcrit"
-        if result.get("provider"):
-            consultation.stt_provider = result["provider"]
-            consultation.stt_model = result.get("model") or ""
-        consultation.stt_language = preferences.document_language()
-        consultation.updated_at = utcnow()
-        db.commit()
-        result["consultation_id"] = consultation.id
-        # L'interface la garde pour comparer, plus tard, à la langue du
-        # gabarit choisi (proposition de retranscription).
-        result["stt_language"] = consultation.stt_language
 
-        # Le fichier importé est conservé au même titre qu'une dictée : il
-        # sert à trancher un doute sur une posologie, et il s'effacera avec
-        # le brouillon.
+        # Périmé par un import plus récent pour la même consultation : on
+        # n'ajoute pas ce texte, dans le désordre, à la suite d'un texte
+        # qu'une tentative plus récente a peut-être déjà remplacé. L'audio
+        # lui-même reste conservé plus bas — un fichier réellement envoyé n'a
+        # pas de raison d'être perdu à cause d'une course sur le texte.
+        if not _transcribe_guard.is_current(consultation_id, transcribe_seq):
+            logger.info(
+                "Transcription abandonnée pour la consultation %s : supplantée "
+                "par une tentative plus récente",
+                consultation_id,
+            )
+            result["superseded"] = True
+        else:
+            # On ajoute à la suite : le médecin peut dicter en plusieurs fois.
+            existing = (consultation.raw_transcript or "").strip()
+            consultation.raw_transcript = (
+                f"{existing}\n\n{result['transcript']}" if existing else result["transcript"]
+            )
+            consultation.audio_seconds = (consultation.audio_seconds or 0) + result["duration_seconds"]
+            consultation.status = "transcrit"
+            if result.get("provider"):
+                consultation.stt_provider = result["provider"]
+                consultation.stt_model = result.get("model") or ""
+            consultation.stt_language = preferences.document_language()
+            consultation.updated_at = utcnow()
+            db.commit()
+            result["consultation_id"] = consultation.id
+            # L'interface la garde pour comparer, plus tard, à la langue du
+            # gabarit choisi (proposition de retranscription).
+            result["stt_language"] = consultation.stt_language
+            result["stt_used"] = " / ".join(
+                p for p in (consultation.stt_provider, consultation.stt_model) if p
+            )
+
+        # Le fichier importé est conservé au même titre qu'une dictée, qu'il
+        # ait ou non gagné la course ci-dessus : il sert à trancher un doute
+        # sur une posologie, et il s'effacera avec le brouillon.
         try:
             stored = await run_in_threadpool(
                 recordings.store_bytes, db, consultation, raw,
@@ -1558,6 +1652,9 @@ async def finish_dictation(session_id: str, request: Request, db: Session = Depe
         # Langue réellement employée par les tranches : l'interface s'en sert
         # pour proposer une retranscription si le gabarit choisi diverge.
         result["stt_language"] = consultation.stt_language
+        result["stt_used"] = " / ".join(
+            p for p in (consultation.stt_provider, consultation.stt_model) if p
+        )
         try:
             stored = await run_in_threadpool(
                 recordings.store_path, db, consultation, session.audio_path,
@@ -1601,16 +1698,24 @@ async def api_generate(
     if template_row is None:
         raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
 
+    # Réservé AVANT l'appel au modèle : si un autre clic pour cette même
+    # consultation arrive pendant que celui-ci attend encore, c'est ce
+    # compteur qui décidera lequel des deux a le droit d'écrire son résultat.
+    generation_seq = _generation_guard.begin(payload.consultation_id)
+
     model_name = settings.gemini_model_pro if payload.use_pro else None
 
     audio_payload = None
-    if (
-        payload.consultation_id
-        and runtime_config.value("gemini_send_audio") == "true"
-        and llm.active_provider() == "gemini"
-    ):
+    audio_enabled = runtime_config.value("gemini_send_audio") == "true"
+    if audio_enabled and llm.active_provider() == "gemini" and payload.consultation_id:
         audio_payload = await run_in_threadpool(
             _prepare_audio_for_generation, db, payload.consultation_id
+        )
+    elif audio_enabled:
+        logger.info(
+            "Audio non tenté (consultation %s) : fournisseur « %s » ou aucune "
+            "consultation associée",
+            payload.consultation_id, llm.active_provider(),
         )
 
     try:
@@ -1632,6 +1737,23 @@ async def api_generate(
         logger.exception("Erreur inattendue pendant la génération")
         raise HTTPException(status_code=502, detail=_t("err.generation", error=exc)) from exc
 
+    # Une régénération plus récente est arrivée pendant que celle-ci
+    # attendait le modèle : ce résultat est périmé, on ne l'écrit jamais en
+    # base. Le navigateur qui l'a demandé a de toute façon déjà annulé sa
+    # requête — voir ``pendingGenerate`` côté JS — mais rien ne garantit
+    # qu'un thread abandonné ne finisse pas quand même par répondre.
+    if not _generation_guard.is_current(payload.consultation_id, generation_seq):
+        logger.info(
+            "Génération abandonnée pour la consultation %s : supplantée par "
+            "une tentative plus récente",
+            payload.consultation_id,
+        )
+        return {
+            "markdown": result["markdown"],
+            "superseded": True,
+            "consultation_id": payload.consultation_id,
+        }
+
     # --- Persistance ------------------------------------------------------
     if payload.consultation_id:
         consultation = _get_owned_consultation(db, payload.consultation_id, user)
@@ -1643,10 +1765,12 @@ async def api_generate(
     consultation.template_name = template_row.name
     consultation.raw_transcript = payload.transcript
     consultation.generated_markdown = result["markdown"]
-    # La version éditable n'est initialisée que la première fois : on ne veut
-    # pas écraser silencieusement les corrections manuelles du médecin.
-    if not consultation.edited_markdown:
-        consultation.edited_markdown = result["markdown"]
+    # Toujours écrasée, y compris sur une régénération : l'interface ne montre
+    # plus jamais cette valeur qu'à l'ouverture (voir loadDraft côté JS) et
+    # prévient déjà l'usager AVANT l'appel si des modifications seraient
+    # perdues — la garder ici en plus ferait diverger les deux copies
+    # silencieusement, exactement le bogue que ce choix corrige.
+    consultation.edited_markdown = result["markdown"]
 
     # Ce que le médecin a saisi lui-même est repris tel quel et fait autorité.
     for field, column in (
@@ -1673,6 +1797,9 @@ async def api_generate(
     consultation.model_used = result["model"]
     consultation.llm_provider = result["provider"]
     consultation.audio_used = result["audio_used"]
+    consultation.usage_prompt_tokens = result["usage"].get("prompt_tokens")
+    consultation.usage_output_tokens = result["usage"].get("output_tokens")
+    consultation.generation_seconds = result["elapsed_seconds"]
     consultation.status = "genere"
     consultation.updated_at = utcnow()
     db.commit()
@@ -1694,6 +1821,7 @@ async def api_generate(
         "audio_used": result["audio_used"],
         "truncated": result["truncated"],
         "usage": result["usage"],
+        "elapsed_seconds": result["elapsed_seconds"],
         "consultation_id": consultation.id,
         "template_name": template_row.name,
         "metadata": metadata,
@@ -1854,6 +1982,12 @@ async def retranscribe_consultation(
     user = current_user(request)
     consultation = _get_owned_consultation(db, consultation_id, user)
 
+    # Réservé AVANT la boucle de transcription (potentiellement longue, un
+    # ou plusieurs enregistrements) : si une autre retranscription pour cette
+    # même consultation démarre pendant que celle-ci tourne encore, c'est ce
+    # compteur qui décide laquelle des deux a le droit d'écrire son résultat.
+    retranscribe_seq = _retranscribe_guard.begin(consultation_id)
+
     pistes = recordings.for_consultation(db, consultation_id)
     if not pistes:
         raise HTTPException(status_code=409, detail=_t("err.retranscribe_no_audio"))
@@ -1922,6 +2056,20 @@ async def retranscribe_consultation(
         raise HTTPException(
             status_code=422, detail=dernier_refus or _t("err.retranscribe_empty")
         )
+
+    # Une retranscription plus récente est arrivée pendant que celle-ci
+    # attendait le service vocal (un ou plusieurs enregistrements, donc
+    # potentiellement long) : ce résultat est périmé, on ne l'écrit jamais en
+    # base. Le navigateur qui l'a demandé a de toute façon déjà annulé sa
+    # requête côté client, mais rien ne garantit qu'un thread abandonné ne
+    # finisse pas quand même par répondre.
+    if not _retranscribe_guard.is_current(consultation_id, retranscribe_seq):
+        logger.info(
+            "Retranscription abandonnée pour la consultation %s : supplantée "
+            "par une tentative plus récente",
+            consultation_id,
+        )
+        return {"transcript": "\n\n".join(morceaux), "superseded": True}
 
     consultation.raw_transcript = "\n\n".join(morceaux)
     consultation.audio_seconds = int(round(secondes))

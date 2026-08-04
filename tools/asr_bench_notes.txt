@@ -1,0 +1,472 @@
+==========================================================================================
+Georges Simen — Évaluation d'un trouble cognitif
+--- A_assemblyai_to_flash ---
+# CONSULTATION EN GÉRIATRIE
+**Lieu de la consultation :** Non abordé lors de la dictée.
+**Date de l'évaluation :** Non abordé lors de la dictée.
+**Patient :** Georges Simen, 50854
+**Demande de :** Dr Cuzim, psychiatrie
+
+## MOTIF DE CONSULTATION
+Évaluation d'un trouble cognitif.
+
+## ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX
+*   Trouble anxieux non spécifique versus trouble anxieux généralisé
+*   Insomnie chronique
+*   Dépression majeure en 1996
+*   Hypertension
+*   Dyslipidémie
+*   Diabète de type 2
+*   Apnée du sommeil non traitée pour refus d'appareillage
+*   Cure d'hernie inguinale
+*   Fracture de la cheville droite
+*   Mélanome in situ en 2024
+
+## MÉDICATION ACTUELLE
+| Médicament | Dose |
+| :-------------------------------- | :-------------------------------- |
+| **SNC** | |
+| Sertraline | 175 mg |
+| Quétiapine XR | 100 mg au coucher |
+| Buspirone | 10 mg 3 fois par jour |
+| Zopiclone | 7,5 mg |
+| Alprazolam | 0,25 mg BID PRN |
+| **Autres systèmes** | |
+| Invokana | 300 mg die |
+| Nexium | 40 mg |
+| Sitagliptine | 50 mg |
+| Atacan | 16 mg |
+| Norvasc | 10 mg |
+
+### ALLERGIES
+Non abordé lors de la dictée.
+
+## HABITUDES DE VIE
+Tabac : Ne fume pas.
+Alcool : Ne prend pas d'alcool.
+Cannabis : Non abordé lors de la dictée.
+Activité physique : Non abordé lors de la dictée.
+
+## HISTOIRE SOCIALE ET MILIEU DE VIE
+Demeure avec sa conjointe. Il a 2 enfants. Il a travaillé dans une usine d'assemblage et travaille présentement dans l'entretien des pelouses. Il est témoin de Jéhovah.
+
+### Autonomie fonctionnelle
+**AVQ :** Réputé autonome.
+**AVD :** Réputé autonome.
+**Mobilité :** Marche sans aide technique.
+
+## HMA
+Monsieur est hospitalisé dans le contexte d'une tentative de suicide. Il a pris sa voiture et a foncé sur un arbre. Il a été amené à l'Hôpital de Saint-Jérôme. Le bilan est sans particularité. Il a été vu par plusieurs psychiatres depuis son séjour, entre autres le Dr Taderne et le Dr Cuzim. On conclut à un épisode dépressif majeur avec caractéristiques anxieuses. Il accepte l'hospitalisation et l'ajustement de médicaments, entre autres la quétiapine et la sertraline. On se questionne cependant sur des éléments neurocognitifs en installation. Un MoCA est fait à l'urgence, avec un score de 20/30. Le rappel libre différé n'est pas précisé pour le MMSE.
+
+J'ai rencontré monsieur à sa chambre. L'histoire est laborieuse avec monsieur, il revient souvent sur son questionnement par rapport à ses paiements de TPS-TVQ. Il me dit être anxieux de longue date, depuis qu'il a 2 ans. Cette anxiété est nettement pire cette année. Il se plaint des médicaments prescrits par son psychiatre à Saint-Eustache. Il me dira que la quétiapine semble atteindre sa mémoire. Il dort mal, il est triste et il perd ses moyens, ce pourquoi il a décidé de prendre sa voiture pour rentrer dans un arbre. Il est malheureux et il décrit cependant avoir manqué l'arbre puis être tombé dans un fossé. Il y a eu déploiement des coussins gonflables. Il me dira que le scanner cérébral à l'hôpital est anormal. Il se trouve nettement pire au niveau de la mémoire depuis qu'il est hospitalisé. Il ne voit pas d'amélioration de son anxiété. Il est pessimiste de façon non raisonnable. Il me dit qu'il ne sortira jamais de l'hôpital. Il me dit qu'il a perdu sa femme, qu'elle ne voudra plus jamais le reprendre. Il est incertain si sa mémoire était parfaite dans le passé. Il ne fait que me parler de son questionnement par rapport à ses chèques de pension.
+
+## EXAMEN OBJECTIF
+*   Agité, se couche et s'assoit à répétition.
+*   Voix tremblante.
+*   Très pessimiste et remet rapidement en échec.
+*   Orienté à juillet 2026. Sait qu'il est à l'Hôpital de Saint-Jérôme.
+*   Marche normale.
+*   Tonus souple.
+*   Mouvements extracurriculaires normaux.
+*   Réflexe glabéral normal.
+
+## INVESTIGATIONS
+### Laboratoires
+*   Dépistage des drogues : négatif.
+*   TSH : 2,5.
+*   FSC : globules blancs à 13,7, autrement normale.
+*   Électrolytes : légère hypokaliémie à 3,37, créatinine à 78.
+
+### Imagerie
+*   Scan cérébral : légère atrophie diffuse à prédominance sous-corticale. Pas de leucopathie.
+
+## IMPRESSION
+1.  Monsieur est hospitalisé pour une tentative de suicide.
+2.  Il a une anxiété et des symptômes dépressifs qui affectent son fonctionnement.
+3.  Le MoCA est à 20/30, mais avec l'anxiété observée aujourd'hui, je ne m'attendrais pas à une meilleure performance que ça.
+4.  Il m'est impossible présentement de me prononcer sur ses capacités mnésiques sous-jacentes.
+5.  Même s'il avait des troubles cognitifs, le symptôme prédominant en ce moment est son humeur anxio-dépressive.
+6.  Il est possible que son accident d'auto avec déploiement des coussins gonflables ait atteint son attention de façon temporaire.
+
+## PLAN
+1.  Je laisse le soin à la psychiatrie de faire l'ajustement des médicaments nécessaires pour obtenir un état de fonctionnement un peu plus normal.
+2.  Si jamais il y avait amélioration du tableau anxio-dépressif et qu'il demeurait des questionnements par rapport à sa sécurité à domicile non psychiatrique, je suggère de faire une évaluation en ergothérapie et de tenter un retour à domicile si cette évaluation montre des difficultés qui sont compensables par les ressources communautaires.
+3.  Je crois qu'un suivi en gérontopsychiatrie serait pertinent advenant son congé d'hôpital.
+
+Rédigé à l'aide de la reconnaissance vocale.
+
+--- B_whisper_transcript_plus_audio_to_flash ---
+# CONSULTATION EN GÉRIATRIE
+**Lieu de la consultation :** Non abordé lors de la dictée.
+**Date de l'évaluation :** {{DATE}}
+**Patient :** M. Georges Simen, dossier 508-54
+**Demande de :** Dr. Cuzim, psychiatrie
+
+## MOTIF DE CONSULTATION
+Évaluer un trouble cognitif chez un homme de 78 ans, hospitalisé dans le contexte d'une tentative de suicide. Il y a un questionnement sur des éléments neurocognitifs en installation.
+
+## ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX
+- Trouble anxieux non spécifique versus trouble anxieux généralisé
+- Insomnie chronique
+- Dépression majeure en 1996
+- Hypertension
+- Dyslipidémie
+- Diabète de type 2
+- Apnée du sommeil non traitée pour refus d'appareillage
+- Cure d'hernie inguinale
+- Fracture de la cheville droite
+- Mélanome in situ en 2024
+
+## MÉDICATION ACTUELLE
+| Médicament (cognition) | Dose |
+|---|---|
+| Non abordé lors de la dictée. | |
+| **Médicament (SNC)** | |
+| Zopiclone | 7,5 mg |
+| Alprazolam | 0,25 mg BID PRN |
+| Sertraline | 175 mg |
+| Buspirone | 10 mg TID |
+| Seroquel XR | 100 mg HS |
+| **Autres systèmes** | |
+| Invokana | 300 mg DIE |
+| Nexium | 40 mg |
+| Sitagliptine | 50 mg |
+| Atacand | 16 mg |
+| Norvasc | 10 mg |
+
+### ALLERGIES
+Non abordé lors de la dictée.
+
+## HABITUDES DE VIE
+Il ne fume pas et ne prend pas d'alcool.
+
+## HISTOIRE SOCIALE ET MILIEU DE VIE
+Il demeure avec sa conjointe et a deux enfants. Il a travaillé dans une usine d'assemblage et travaille présentement dans l'entretien des pelouses. Il est Témoin de Jéhovah.
+
+### Autonomie fonctionnelle
+**AVQ :** Il est réputé autonome aux AVQ.
+**AVD :** Il est réputé autonome aux AVD.
+**Mobilité :** Il marche sans aide technique.
+
+## HMA
+J'ai rencontré monsieur à sa chambre. Il est hospitalisé dans le contexte d'une tentative de suicide, ayant pris sa voiture et foncé sur un arbre. Il a été amené à l'Hôpital de Saint-Jérôme. Le bilan est sans particularité. Il a été vu par plusieurs psychiatres depuis son séjour, entre autres le Dr. Tallern et le Dr. Cuzim, qui ont conclu à un épisode dépressif majeur avec caractéristiques anxieuses. Il accepte l'hospitalisation et a eu un ajustement de médicaments, entre autres la quétiapine et la sertraline. On se questionne cependant sur des éléments neurocognitifs en installation. Un MoCA a été fait à l'urgence avec un score de 20/30. Le rappel libre différé n'est pas précisé pour le score de MIS.
+
+L'histoire est un peu laborieuse avec monsieur. Il revient souvent sur son questionnement par rapport à ses paiements de TPS-TVQ. Il me dit être anxieux de longue date, depuis qu'il a deux ans. Cette anxiété est nettement pire cette année. Il se plaint des médicaments prescrits par son psychiatre à Saint-Eustache. Il me dira que la quétiapine semble atteindre sa mémoire. Il dort mal, il est triste, il perd ses moyens. C'est pourquoi il a décidé de prendre sa voiture pour rentrer dans un arbre. Il est malheureux. Il décrit cependant avoir manqué l'arbre et être tombé dans un fossé. Il y a eu déploiement des coussins gonflables. Il me dira que le scanner cérébral à l'hôpital était normal. Il se trouve nettement pire au niveau de la mémoire depuis qu'il est hospitalisé. Il ne voit pas d'amélioration de son anxiété. Il est pessimiste de façon non raisonnable. Il me dit qu'il ne sortira jamais de l'hôpital. Il me dit qu'il a perdu sa femme, qu'elle ne voudra plus jamais le reprendre. Il est incertain si sa mémoire était parfaite dans le passé. Il ne fait que me parler de son questionnement par rapport à ses chèques de pension. Dans les notes de la psychiatrie, on relate surtout des inquiétudes par rapport à l'état de santé mentale de monsieur, beaucoup plus que par rapport à sa mémoire.
+
+## EXAMEN OBJECTIF
+- Agité, se couche et s'assoit à répétition.
+- Voix tremblante.
+- Très pessimiste, me remet rapidement en échec.
+- Orienté à juillet 2026.
+- Sait qu'il est à l'Hôpital de Saint-Jérôme.
+- Marche de façon normale.
+- Tonus souple.
+- Mouvements oculaires normaux.
+- Réflexe glabellaire normal.
+
+## INVESTIGATIONS
+### Laboratoires
+- Dépistage des drogues : négatif.
+- TSH : 2,5.
+- Formule sanguine : globules blancs à 13,7, mais autrement normale.
+- Électrolytes : légère hypokaliémie à 3,37 mmol/L, créatinine à 78 µmol/L.
+
+### Imagerie
+- Scan cérébral : légère atrophie diffuse à prédominance sous-corticale. On ne décrit pas de leucopathie.
+
+## IMPRESSION
+1. Monsieur est hospitalisé pour une tentative de suicide.
+2. Il a une anxiété et des symptômes dépressifs avec atteinte de son fonctionnement.
+3. Le MoCA est à 20/30, mais avec l'anxiété que j'observe aujourd'hui, je ne m'attendrais pas à une meilleure performance que ça.
+4. Il m'est impossible présentement de me prononcer sur ses capacités mnésiques sous-jacentes.
+5. Il est possible que son accident de voiture avec déploiement des coussins gonflables ait atteint son attention de façon temporaire.
+
+## PLAN
+1. Même s'il avait des troubles cognitifs, le symptôme prédominant en ce moment est son humeur anxio-dépressive.
+2. Je laisse le soin à la psychiatrie de faire l'ajustement des médicaments nécessaires pour obtenir un état de fonctionnement un peu plus normal.
+3. Si jamais il y avait amélioration du tableau anxio-dépressif et qu'il demeurait des questionnements par rapport à sa sécurité à domicile non psychiatrique, je suggère de faire une évaluation en ergothérapie.
+4. Tenter un retour à domicile si cette évaluation montre des difficultés qui sont compensables par les ressources communautaires.
+5. Je crois qu'un suivi en gérontopsychiatrie serait pertinent advenant son congé de l'hôpital.
+
+Rédigé à l'aide de la reconnaissance vocale.
+
+--- C_direct_audio_to_flash ---
+# CONSULTATION EN GÉRIATRIE
+**Lieu de la consultation :** Hôpital de Saint-Jérôme
+**Date de l'évaluation :** Non abordé lors de la dictée.
+**Patient :** Georges Simen, dossier 50854, 78 ans
+**Demande de :** Dr. Cuzin, psychiatre
+
+## MOTIF DE CONSULTATION
+Évaluation d'un trouble cognitif.
+
+## ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX
+Trouble anxieux non spécifique versus trouble anxieux généralisé, insomnie chronique, dépression majeure en 1996, hypertension, dyslipidémie, diabète de type 2, apnée du sommeil non traitée (refus d'appareillage), cure de hernie inguinale, fracture de la cheville droite, mélanome in situ en 2024.
+
+## MÉDICATION ACTUELLE
+| Médicament | Dose |
+| :---------------- | :-------------------------------- |
+| Zoloft | 125 mg |
+| Buspirone | 10 mg trois fois par jour |
+| Zopiclone | 7,5 mg |
+| Alprazolam | 0,25 mg BID PRN |
+| Seroquel XR | 100 mg au coucher |
+| Invokana | 300 mg die |
+| Nexium | 40 mg |
+| Sitagliptine | 50 mg |
+| Atacand | 16 mg |
+| Norvasc | 10 mg |
+| Sertraline | 175 mg (augmentée) |
+
+### ALLERGIES
+Non abordé lors de la dictée.
+
+## HABITUDES DE VIE
+Ne fume pas, ne prend pas d'alcool.
+
+## HISTOIRE SOCIALE ET MILIEU DE VIE
+Il demeure avec sa conjointe et a deux enfants. Il a travaillé dans une usine d'assemblage et travaille présentement dans l'entretien des pelouses. Il est témoin de Jéhovah.
+
+### Autonomie fonctionnelle
+**AVQ :** Il est réputé autonome aux AVQ.
+**AVD :** Il est réputé autonome aux AVD.
+**Mobilité :** Il marche sans aide technique.
+
+## HMA
+Monsieur a été hospitalisé dans le contexte d'une tentative de suicide. Il a pris sa voiture et a foncé sur un arbre. Il a été amené à l'Hôpital de Saint-Jérôme. Le bilan était sans particularité.
+
+Il a été vu par plusieurs psychiatres depuis son séjour, entre autres le Dr. Taverne et le Dr. Cuzin. Ils ont conclu à un épisode dépressif majeur avec caractéristiques anxieuses. Il a accepté l'hospitalisation et un ajustement de médicaments, entre autres la quétiapine et la sertraline.
+
+On se questionne cependant sur des éléments neurocognitifs en installation. Un MoCA a été fait à l'urgence avec un score de 20/30. Le rappel libre différé n'est pas précisé pour ce qui est du score de MIS.
+
+J'ai rencontré monsieur à sa chambre. L'histoire est un peu laborieuse avec monsieur. Il revient souvent sur ses questionnements par rapport à ses paiements de TPS et TVQ. Il me dit être anxieux de longue date depuis qu'il a deux ans. Son anxiété est nettement pire cette année. Il se plaint des médicaments prescrits par son psychiatre à Sainte-Eustache. Il me dira que la quétiapine semble atteindre sa mémoire et qu'il dort mal. Il est triste et il perd ses moyens, c'est pourquoi il a décidé de prendre sa voiture pour rentrer dans un arbre. Il est malheureux et il décrit cependant avoir manqué l'arbre et être tombé dans un fossé. Il y a eu déploiement des coussins gonflables. Il me dira que le scanner cérébral à l'hôpital était normal. Il se trouve nettement pire au niveau de la mémoire depuis qu'il a été hospitalisé. Il ne voit pas d'amélioration de son anxiété. Il est pessimiste de façon non raisonnable. Il me dit qu'il ne sortira jamais de l'hôpital. Il me dit qu'il a perdu sa femme et qu'elle ne voudra plus jamais le reprendre. Il est incertain si sa mémoire était parfaite dans le passé. Il ne fait que me parler de son questionnement par rapport à ses chèques de pension.
+
+## EXAMEN OBJECTIF
+Il est agité, se couche et s'assoit à répétition.
+Il a une voix tremblante.
+Il est très pessimiste et il me remet rapidement en échec.
+Il est orienté à juillet 2026 [à vérifier].
+Il sait qu'il est à l'Hôpital de Saint-Jérôme.
+Il marche de façon normale, le tonus est souple.
+Les mouvements extraoculaires sont normaux.
+Le réflexe glabellaire est normal.
+
+## INVESTIGATIONS
+### Laboratoires
+Le dépistage des drogues est négatif. La TSH est à 2,5. La formule sanguine montre des globules blancs à 13,7, mais autrement normale. Les électrolytes montrent une légère hypokaliémie à 3,37 avec une créatinine à 78.
+### Imagerie
+Un scan cérébral a été fait et il y a une légère atrophie diffuse à prédominance sous-corticale. On ne décrit pas de leucoencéphalopathie.
+
+## IMPRESSION
+1.  Monsieur est hospitalisé pour une tentative de suicide.
+2.  Il a une anxiété et des symptômes dépressifs avec atteinte de son fonctionnement.
+3.  Effectivement, le MoCA est à 20/30, mais avec l'anxiété que j'observe aujourd'hui, je ne m'attendrais pas à une meilleure performance que ça.
+4.  Il m'est impossible présentement de me prononcer sur ses capacités mnésiques sous-jacentes.
+5.  Il est possible que son accident d'auto avec déploiement de coussins gonflables ait atteint son attention de façon temporaire.
+
+## PLAN
+1.  Je laisse le soin à la psychiatrie de faire l'ajustement des médicaments nécessaires pour obtenir un état de fonctionnement un peu plus normal.
+2.  Si jamais il y avait amélioration du tableau anxio-dépressif et qu'il demeurait des questionnements par rapport à sa sécurité à domicile non psychiatrique, je suggère de faire une évaluation en neuropsychologie, puis de tenter un retour à domicile si cette évaluation montre des difficultés qui sont compensables par les ressources communautaires.
+3.  Je crois qu'un suivi en gérontopsychiatrie serait pertinent advenant son congé de l'hôpital.
+4.  Je complète le bilan avec [inaudible].
+
+Rédigé à l'aide de la reconnaissance vocale.
+
+==========================================================================================
+Michel Beaulieu — Suivi médical après hospitalisation
+--- A_assemblyai_to_flash ---
+# Note de suivi - Gériatrie
+
+## RÉSUMÉ
+Monsieur Michel Beaulieu est un homme de 72 ans, hospitalisé pour une insuffisance cardiaque décompensée avec atteinte des organes cibles. Il habite à L'Ascension. Il a consulté à Mont-Laurier pour des difficultés à la marche depuis 3 mois, a été évalué en choc cardiogénique, puis transféré à l'Hôpital de Saint-Jérôme. Il a séjourné aux soins intensifs pour une pneumonie et des œdèmes [à vérifier], et a présenté un délirium important sous Precedex. Il présente une polypharmacie significative et des lombalgies chroniques secondaires à un ancien accident d'auto, avec sténose spinale sévère L4-L5.
+
+## HMA
+J'ai rencontré monsieur seul. Il habite en HLM. Il est cohérent dans l'ensemble, mais a des difficultés à faire la différence entre son délirium aux soins intensifs et des rêves à domicile. Il me dit avoir une cognition plutôt intacte et sortait peu de la maison en raison de douleurs chroniques. Il reconnaît que son logement est insalubre, sans pouvoir en expliquer les raisons, mais mentionne qu'il y a de la terre un peu partout à l'intérieur. Il ne me parle pas spontanément de ses douleurs chroniques, alors qu'il prenait 210 mg par jour d'OxyContin. L'hydromorphone 15 mg deux fois par jour vient d'être débutée, ce qui représente une dose nettement inférieure.
+
+## EXAMEN OBJECTIF
+*   Partiellement orienté au 26 juillet [année à vérifier].
+*   Langage un peu ralenti, mais normal autrement.
+*   Non psychotique.
+*   Couché dans son lit.
+*   Traces de selles sur ses draps [à vérifier].
+
+## INVESTIGATIONS
+Non abordé lors de la dictée.
+
+## IMPRESSION
+1.  Monsieur a fait un délirium important lors de son choc cardiogénique. Ceci est en nette amélioration.
+2.  J'ignore s'il y a une composante de sevrage de ses opiacés, mais présentement, il est nettement mieux.
+3.  Il a un déconditionnement post-séjour aux soins intensifs, mais qui était probablement précédé d'un trouble de la marche et de l'équilibre à domicile.
+4.  Je ne crois pas qu'il avait des troubles neurocognitifs majeurs au préalable, mais son fonctionnement devait être un peu marginal.
+
+## PLAN
+1.  Implications en physiothérapie, puis selon l'évolution, en ergothérapie et en gestion de cas, à moins que monsieur soit rapatrié à Mont-Laurier.
+2.  Pour l'analgésie, je continue avec l'hydromorphone continue qui a été prescrite par le Dr Au bain [à vérifier], puisque la diminution semble pour l'instant tolérée.
+
+Rédigé à l'aide de la reconnaissance vocale.
+
+--- B_whisper_transcript_plus_audio_to_flash ---
+# Note de suivi - Gériatrie
+
+## RÉSUMÉ
+M. Michel Beaulieu, 72 ans, est hospitalisé pour une insuffisance cardiaque décompensée avec atteinte des organes cibles. Il est originaire de L'Ascension et habite en HLM. Il a consulté à Mont-Laurier pour une difficulté à la marche depuis trois mois. Il a été évalué en choc cardiogénique et transféré à l'Hôpital de Saint-Jérôme. Il a fait un séjour aux soins intensifs avec une pneumonie et des amines. Il a présenté un délirium important sous Precedex. Il a également une polypharmacie significative avec des lombalgies chroniques faisant suite à un ancien accident d'auto, et une sténose spinale sévère L4-L5.
+
+## HMA
+J'ai rencontré monsieur seul. Il est cohérent dans l'ensemble, mais a des difficultés à faire la différence entre ce qui était son délirium aux soins intensifs et ce qui était des rêves à domicile. Il me dit avoir une cognition plutôt intacte. Il sortait peu de la maison en raison de douleurs chroniques. Il reconnaît que son logement est insalubre pour des raisons qu'il ne peut expliquer, mentionnant qu'il y a de la terre un peu partout à l'intérieur.
+
+## EXAMEN OBJECTIF
+*   Partiellement orienté au 26 juillet 2026.
+*   Langage un peu ralenti, mais normal autrement.
+*   Non psychotique.
+*   Couché dans son lit.
+*   Traces de sel sur son piqué.
+*   Ne parle pas spontanément de ses douleurs chroniques, alors qu'il prenait 210 mg par jour d'oxycodone. Le médicament vient d'être débuté à raison d'hydromorphone 15 mg deux fois par jour, ce qui est une dose nettement inférieure.
+
+## INVESTIGATIONS
+Non abordé lors de la dictée.
+
+## IMPRESSION
+1.  Monsieur a fait un délirium important lors de son choc cardiogénique. Ceci est en nette amélioration.
+2.  J'ignore s'il y a une composante de sevrage de ses opiacés, mais présentement, il est nettement mieux.
+3.  Il a un déconditionnement post-séjour aux soins intensifs, mais qui était probablement précédé d'un trouble de la marche et d'équilibre à domicile.
+4.  Je ne crois pas qu'il avait des troubles neurocognitifs majeurs préalables, mais son fonctionnement devait être un peu marginal.
+
+## PLAN
+1.  Implication physio.
+2.  Selon l'évolution, ergo et gestion de cas, à moins que monsieur soit rapatrié à Mont-Laurier.
+3.  Pour l'analgésie, je continue avec l'hydromorphone Conten qui a été prescrit par le Dr Aubin, puisque la diminution semble pour l'instant tolérée.
+
+Rédigé à l'aide de la reconnaissance vocale.
+
+--- C_direct_audio_to_flash ---
+# Note de suivi - Gériatrie
+
+## RÉSUMÉ
+
+M. Michel Beaulieu, âgé de 72 ans, a été hospitalisé pour une insuffisance cardiaque décompensée avec atteinte des organes cibles. Il avait consulté à Mont-Laurier pour une difficulté à la marche présente depuis 3 mois. Il a été évalué en choc cardiogénique et transféré à l'Hôpital de Saint-Jérôme. Il a fait un séjour aux soins intensifs avec une pneumonie et des amines, et a présenté un délirium important sous prise de Dex. M. Beaulieu présente une polypharmacie significative et des lombalgies chroniques faisant suite à un ancien accident d'auto, avec sténose spinale sévère L4 et L5. Il habite en CHSLD. Il présente un déconditionnement post-séjour aux soins intensifs, probablement précédé d'un trouble de la marche et de l'équilibre. Son fonctionnement préalable devait être un peu marginal.
+
+## HMA
+
+J'ai rencontré M. Beaulieu seul. Il est cohérent dans l'ensemble, mais a des difficultés à faire la différence entre ce qui était son délirium aux soins intensifs et ce qui était des rêves. Il me dit avoir une cognition plutôt intacte. Il sortait peu de la maison en raison de douleurs chroniques. Il reconnaît que son logement est insalubre pour des raisons qu'il ne peut m'expliquer, mentionnant entre autres qu'il y a de la terre un peu partout à l'intérieur. Il ne me parle pas spontanément de ses douleurs chroniques, alors qu'il prenait 210 mg par jour d'Oxycodone. Le médicament vient d'être débuté à raison d'hydromorphone 15 mg deux fois par jour, ce qui est une dose nettement inférieure.
+
+## EXAMEN OBJECTIF
+
+*   Partiellement orienté au 26 juillet 2026.
+*   Langage un peu ralenti, mais normal autrement.
+*   Non psychotique.
+*   Couché dans son lit.
+*   Traces de selles sur son piqué.
+
+## INVESTIGATIONS
+
+Non abordé lors de la dictée.
+
+## IMPRESSION
+
+1.  M. a fait un délirium important lors de son choc cardiogénique. Ceci est en nette amélioration.
+2.  J'ignore s'il y a une composante sevrage de ses opiacés, mais présentement, il est nettement mieux.
+3.  Déconditionnement post-séjour aux soins intensifs, mais qui était probablement précédé d'un trouble de la marche et de l'équilibre.
+4.  Je ne crois pas qu'il avait des troubles cognitifs majeurs au préalable, mais son fonctionnement devait être un peu marginal.
+
+## PLAN
+
+1.  Implication physio.
+2.  Selon l'évolution, RD et gestion de cas, à moins que M. soit rapatrié à Mont-Laurier.
+3.  Pour ce qui est de l'analgésie, je continue avec l'hydromorphone qui a été prescrite par Dr Aubin, puisque la diminution semble pour l'instant tolérée.
+
+Rédigé à l'aide de la reconnaissance vocale.
+
+==========================================================================================
+Monique Saint-Arnaud — Chute et évaluation cognitive
+--- A_assemblyai_to_flash ---
+# Note de suivi - Gériatrie
+
+## RÉSUMÉ
+Madame Monique Saint-Arnaud, dossier 295334, a été évaluée par le Dr Aubin le 28 juillet dans le cadre d'un délirium. Elle a été consultée pour une chute survenue le 23 juillet, où elle a été retrouvée au sol. Le bilan à l'urgence a révélé une lithiase obstructive nécessitant la pose d'un double J. Alors qu'elle devait obtenir son congé, elle a fait une nouvelle chute. Une évaluation en physiothérapie a été demandée, et une atteinte cognitive significative a été remarquée. Sur le plan fonctionnel, elle limitait ses déplacements à l'extérieur, avait cessé de conduire et dépendait de ses amis pour ses repas. Elle n'a pas d'enfant et habite seule. Dans ce contexte, elle a été admise à l'UCDG à la demande du Dr Aubin pour une évaluation de la marche et de son autonomie fonctionnelle. Une démence vasculaire légère à modérée et un parkinsonisme vasculaire sont suspectés. Une rationalisation des médicaments a été effectuée, avec l'arrêt du Dilaudid, du Gravol, du Tramadol et du Vizicure. Un scan cérébral a démontré une atrophie supra- et infratentorielles ainsi qu'une légère leucopathie.
+
+## HMA
+J'ai rencontré madame seule dans sa chambre, la dérangeant pendant son souper. Elle est capable de me dire que son médecin de famille était le Dr Bolduc, mais qu'il n'est plus là, sans pouvoir en expliquer la raison. Elle décrit habiter au manoir au Treadwell. Elle ne rapporte ni diarrhée ni malaise abdominal présentement, bien qu'elle ait mentionné des douleurs abdominales lors de son évaluation en physiothérapie. Elle souhaite manger et ne désire pas marcher pour l'instant.
+
+## EXAMEN OBJECTIF
+- Calme, collabore et répond aux questions.
+- Difficulté à ouvrir le couvercle de la soupe.
+- Mobilité : Un examen en physiothérapie récent a révélé une marche de 62 mètres avec de très petits pas, à une vitesse très lente, sans aide technique, nécessitant une supervision étroite.
+- Je n'ai pas réévalué sa mobilité aujourd'hui.
+
+## INVESTIGATIONS
+- Scan cérébral : Démontre de l'atrophie supra- et infratentorielles, une légère leucopathie et une myélopathie légère.
+- Prise de sang : Je n'ai pas de prise de sang récente pertinente.
+
+## IMPRESSION
+1.  Suspicion de démence vasculaire légère à modérée, sous réserve d'une évaluation en ergothérapie à venir.
+2.  Parkinsonisme vasculaire.
+
+## PLAN
+1.  La suite de l'évaluation et de l'investigation sera assurée par le médecin de l'UCDG.
+2.  Il faudra apporter le soutien nécessaire pour son maintien à domicile avec les services communautaires.
+3.  Je lui donne congé de la gériatrie.
+4.  Il n'y a pas de suivi en externe de prévu pour cette patiente.
+
+Rédigé à l'aide de la reconnaissance vocale.
+
+--- B_whisper_transcript_plus_audio_to_flash ---
+# Note de suivi - Gériatrie
+
+## RÉSUMÉ
+Mme Monique Saint-Arnaud, dossier 12-629-5334, a été évaluée par le Dr Aubin le 28 juillet dans le cadre d'un délirium. Elle a consulté pour une chute le 23 juillet, ayant été retrouvée au sol. Au bilan à l'urgence, il y avait une lithiase obstructive avec la pose d'un double J. Elle devait obtenir son congé, mais a fait une chute. Une évaluation a été demandée, et une atteinte clinique significative a été remarquée. Au niveau fonctionnel, elle limitait ses déplacements à l'extérieur, avait arrêté de conduire et ses amis l'amenaient manger. Elle n'a pas d'enfant et habite seule. Dans ce contexte, elle a été admise à la demande du Dr Aubin de l'UCDG pour une évaluation de la marche et fonctionnelle. Une démence vasculaire légère à modérée et un parkinsonisme vasculaire sont suspectés. Une rationalisation des médicaments a été effectuée avec l'arrêt du Dilaudid, du Gravol, du Tramadol et du Visken. Le scan cérébral a montré de l'atrophie, un espace infratentoriel [à vérifier] et une légère leucopathie.
+
+## HMA
+J'ai rencontré Mme Saint-Arnaud à la chambre et l'ai dérangée pendant son souper. Elle a un peu de difficulté à ouvrir le couvercle de la soupe. Elle a pu me dire que son médecin de famille était le Dr Bolduc, mais qu'il n'est plus là, sans pouvoir expliquer pourquoi. Elle décrit habiter au Manoir Chartwell. Elle ne présente ni diarrhée ni malaise abdominal présentement, bien qu'elle ait mentionné des douleurs abdominales en physiothérapie. Elle souhaite manger et ne souhaite pas marcher pour l'instant.
+
+## EXAMEN OBJECTIF
+*   Calme, collabore et répond aux questions.
+*   Un examen en physiothérapie récent a montré qu'elle a marché 62 mètres avec de très petits pas, à une vitesse très lente, sans aide technique, mais avec une supervision étroite.
+
+## INVESTIGATIONS
+*   Le scan cérébral a montré une leucopathie légère et de l'atrophie.
+*   Je n'ai pas de prises de sang récentes pertinentes.
+
+## IMPRESSION
+1.  Sous réserve d'une évaluation en ergothérapie à venir, mon impression à ce jour est une démence vasculaire légère à modérée.
+2.  Je n'ai pas réévalué sa mobilité aujourd'hui.
+
+## PLAN
+1.  La suite de l'évaluation et de l'investigation sera assurée par le médecin de l'UCDG.
+2.  Il faudra apporter le soutien nécessaire à son maintien à domicile avec les services communautaires.
+3.  Je lui donne congé de la gériatrie.
+4.  Il n'y a pas de suivi externe de prévu pour cette patiente.
+
+Rédigé à l'aide de la reconnaissance vocale.
+
+--- C_direct_audio_to_flash ---
+# Note de suivi - Gériatrie
+
+## RÉSUMÉ
+Madame Monique Saint-Arnaud, numéro de dossier 295334, a été évaluée par Dre Aubin le 28 juillet dans le cadre d'un délirium. Elle a consulté suite à une chute le 23 juillet, où elle a été retrouvée au sol. Une atteinte cognitive significative a été remarquée. Au niveau fonctionnel, elle limitait ses déplacements à l'extérieur, avait arrêté de conduire et ses amis l'amenaient manger. Elle n'a pas d'enfant et habite seule. Dans ce contexte, elle a été admise à l'UCDG à la demande de Dre Aubin pour une évaluation de la marche et fonctionnelle. Une démence vasculaire légère à modérée et un parkinsonisme vasculaire sont suspectés.
+
+## HMA
+J'ai rencontré Madame seule à la chambre et l'ai dérangée pendant son souper. Elle décrit une hypotension orthostatique (HTO) lors d'une manœuvre au Treadmill. Elle ne rapporte ni diarrhée ni malaise abdominal présentement, bien qu'en physiothérapie elle ait mentionné des douleurs abdominales. Elle souhaite manger, mais ne souhaite pas marcher pour l'instant. Elle m'informe que son médecin de famille était Dr Bolduc, mais qu'il n'est plus là.
+
+## EXAMEN OBJECTIF
+*   Calme, collabore et répond aux questions.
+*   Difficulté à ouvrir le couvercle de sa soupe.
+*   Un examen de physiothérapie récent indique qu'elle marche 62 mètres avec de très petits pas, à une vitesse très lente, sans ataxie et avec une base étroite.
+*   Sa mobilité n'a pas été réévaluée aujourd'hui.
+
+## INVESTIGATIONS
+*   Bilan à l'urgence : lithiase obstructive avec pose d'un double J.
+*   Scan cérébral : atrophie supratentorielle et légère leucopathie.
+*   Pas de prise de sang récente pertinente.
+
+## IMPRESSION
+1.  Démence vasculaire légère à modérée (sous réserve d'une évaluation en ergothérapie à venir).
+2.  Parkinsonisme vasculaire.
+
+## PLAN
+1.  Le suivi de l'évaluation et des investigations se fera par les médecins de l'UCDG.
+2.  Il faudra apporter le soutien nécessaire à son médecin de domicile avec les services communautaires.
+3.  Je lui donne congé de la gériatrie.
+4.  Il n'y a pas de suivi en externe de prévu pour cette patiente.
+
+Rédigé à l'aide de la reconnaissance vocale.
+

@@ -115,6 +115,11 @@
     try {
       response = await fetch(path, config);
     } catch (err) {
+      // Une annulation volontaire (AbortController.abort()) n'est pas une
+      // panne réseau : on laisse l'appelant la distinguer par son nom plutôt
+      // que de la maquiller en « injoignable », ce qui afficherait un toast
+      // d'erreur pour une requête supplantée intentionnellement.
+      if (err.name === 'AbortError') throw err;
       throw new Error(T('net.unreachable'));
     }
 
@@ -199,6 +204,19 @@
    * 2. ÉTAT APPLICATIF
    * ====================================================================== */
 
+  // Requêtes en cours, une par type d'appel : permettent à un nouveau clic
+  // d'annuler le précédent plutôt que de laisser les deux courir en
+  // parallèle contre un point de terminaison lent, où celui qui finit en
+  // dernier écraserait silencieusement l'autre en base (voir les gardes
+  // ``_generation_guard``/``_retranscribe_guard``/``_transcribe_guard`` côté
+  // serveur, qui appliquent la même règle si l'annulation côté navigateur
+  // n'empêche pas le thread abandonné de répondre quand même). Hors de
+  // ``state`` volontairement : ce n'est pas une donnée du brouillon,
+  // seulement la mécanique d'annulation d'une requête réseau.
+  let pendingGenerate = null;
+  let pendingRetranscribe = null;
+  let pendingTranscribe = null;
+
   const state = {
     templates: [],
     isTemplateAdmin: true,
@@ -207,6 +225,13 @@
     paused: false,
     recordedSeconds: 0,
     lastSavedSnapshot: '',
+    // Nombre d'enregistrements conservés pour ce brouillon — décide si
+    // « Retranscrire » a quelque chose à renvoyer au service vocal (voir
+    // updateActionButtons()). Mis à jour uniquement par renderRecordings().
+    recordingsCount: 0,
+    // Dernière note réellement générée (pas éditée) pour ce brouillon : sert
+    // à savoir, avant une régénération, s'il y a une modification à perdre.
+    lastGeneratedMarkdown: '',
     // Langue dans laquelle l'audio a réellement été reconnu — pas celle du
     // gabarit courant. C'est l'écart entre les deux qui déclenche la
     // proposition de retranscription (voir maybeOfferRetranscription).
@@ -377,17 +402,28 @@
     const langue = languageName(
       (tpl && tpl.language) ? tpl.language : state.transcriptLanguage,
     );
-    const bouton = $('btnRetranscribe');
-    if (bouton) bouton.disabled = true;
+    // Un nouveau clic annule le précédent au lieu de les laisser courir en
+    // parallèle — même logique que generateNote(). Placé APRÈS le confirm()
+    // ci-dessus : refuser la boîte de dialogue ne doit pas annuler une
+    // retranscription légitimement en cours.
+    if (pendingRetranscribe) pendingRetranscribe.abort();
+    const controller = new AbortController();
+    pendingRetranscribe = controller;
+
     // Durée volontairement longue : l'opération peut prendre du temps sur un
     // long enregistrement. Sans le retirer explicitement dès la réponse, ce
     // toast restait affiché jusqu'à ses 60 s même après celui de résultat.
     const enCours = toast(T('retranscribe.running', { langue }), 'info', 60000);
     try {
       const data = await api(`/api/consultations/${state.consultationId}/retranscribe`, {
-        method: 'POST', body: { template_id: tpl ? tpl.id : null },
+        method: 'POST', signal: controller.signal,
+        body: { template_id: tpl ? tpl.id : null },
       });
       enCours.dismiss();
+      // Supplantée par une tentative plus récente (voir le garde côté
+      // serveur) : ce texte n'a jamais été écrit en base, on ne l'affiche
+      // donc pas non plus — silencieusement, ce n'est pas un échec.
+      if (data.superseded) return;
       $('transcript').value = data.transcript || '';
       state.transcriptLanguage = data.stt_language || (tpl ? tpl.language : '');
       // Le serveur a déjà écrit ce texte en base. On force malgré tout une
@@ -395,6 +431,9 @@
       // écrase une éventuelle sauvegarde différée partie avec l'ancien texte.
       state.lastSavedSnapshot = '';
       scheduleSave();
+      updateActionButtons();
+      showTranscriptEngine(data.stt_used);
+      flashElement('transcriptFooter');
       const total = data.recordings_total || 0;
       const utilises = data.recordings || 0;
       const partiel = total > utilises;
@@ -409,9 +448,11 @@
       );
     } catch (err) {
       enCours.dismiss();
-      toast(T('retranscribe.failed', { error: err.message || err }), 'error', 8000);
+      if (err.name !== 'AbortError') {
+        toast(T('retranscribe.failed', { error: err.message || err }), 'error', 8000);
+      }
     } finally {
-      if (bouton) bouton.disabled = false;
+      if (pendingRetranscribe === controller) pendingRetranscribe = null;
     }
   }
 
@@ -600,6 +641,7 @@
     box.value = existing ? `${existing} ${fresh.join(' ')}` : fresh.join(' ');
     box.scrollTop = box.scrollHeight;
     updateTranscriptMeta({ duration_seconds: session.transcribed_seconds });
+    updateActionButtons();
   }
 
   async function postChunk(sessionId, seq, blob, durationMs) {
@@ -1134,6 +1176,7 @@
         const result = await api(`/api/dictation/${dictation.sessionId}/finish`, { method: 'POST' });
         applyDictationParts(result);
         if (result.stt_language) state.transcriptLanguage = result.stt_language;
+        showTranscriptEngine(result.stt_used);
         await bestEffort(() => audioStore.remove(dictation.localId), 'nettoyage');
       }
 
@@ -1144,6 +1187,7 @@
         // que le titre et les métadonnées suivent.
         state.lastSavedSnapshot = '';
         scheduleSave();
+        flashElement('transcriptFooter');
         toast(T('dictation.finished', { count: transcript.length }), 'success');
       } else {
         toast(T('dictation.no_speech'), 'warning', 8000);
@@ -1499,6 +1543,14 @@
 
   async function sendForTranscription(blob, filename) {
     const megabytes = (blob.size / 1048576).toFixed(1);
+
+    // Même logique que generateNote()/runRetranscription() : un nouvel
+    // import annule le précédent plutôt que de laisser les deux écrire dans
+    // le même brouillon dans le désordre.
+    if (pendingTranscribe) pendingTranscribe.abort();
+    const controller = new AbortController();
+    pendingTranscribe = controller;
+
     setBusy(true, T('transcribe.busy', { size: megabytes }));
 
     try {
@@ -1512,7 +1564,18 @@
       if (tpl) form.append('template_id', String(tpl.id));
       form.append('consultation_id', String(consultationId));
 
-      const result = await api('/api/transcribe', { method: 'POST', body: form });
+      const result = await api('/api/transcribe', {
+        method: 'POST', signal: controller.signal, body: form,
+      });
+
+      // Supplantée par un import plus récent (voir le garde côté serveur) :
+      // ce texte n'a jamais été écrit en base, on ne l'affiche donc pas non
+      // plus — silencieusement, ce n'est pas un échec. L'audio, lui, a bien
+      // été conservé (voir main.py) : loadRecordings() le montrera quand même.
+      if (result.superseded) {
+        loadRecordings();
+        return;
+      }
 
       const existing = $('transcript').value.trim();
       $('transcript').value = existing
@@ -1522,6 +1585,9 @@
       if (result.stt_language) state.transcriptLanguage = result.stt_language;
       updateTranscriptMeta(result);
       loadRecordings();
+      showTranscriptEngine(result.stt_used);
+      flashElement('transcriptFooter');
+      updateActionButtons();
       toast(
         T('transcribe.done', {
           count: result.transcript.length,
@@ -1530,9 +1596,12 @@
         'success',
       );
     } catch (err) {
-      toast(err.message, 'error', 10000);
+      if (err.name !== 'AbortError') toast(err.message, 'error', 10000);
     } finally {
-      setBusy(false);
+      if (pendingTranscribe === controller) {
+        pendingTranscribe = null;
+        setBusy(false);
+      }
     }
   }
 
@@ -1558,11 +1627,34 @@
       return;
     }
 
+    // Régénérer remplace toujours la note affichée par la nouvelle — on ne
+    // prévient que s'il y a réellement une modification à perdre, pour ne
+    // pas interrompre le cas courant (première génération, ou régénération
+    // sans qu'on ait touché au texte depuis).
+    if (
+      state.lastGeneratedMarkdown
+      && $('markdownEditor').value.trim() !== state.lastGeneratedMarkdown.trim()
+      && !window.confirm(T('generate.confirm_overwrite'))
+    ) {
+      return;
+    }
+
+    // Un clic pendant qu'une génération tourne déjà annule la précédente :
+    // sur un point de terminaison lent (auto-hébergé), les deux finiraient
+    // sinon par se terminer l'une après l'autre, la seconde écrasant
+    // silencieusement le résultat de la première sans qu'on sache laquelle
+    // est réellement affichée (voir le garde-fou serveur, qui rejette de
+    // toute façon toute réponse devenue périmée entre-temps).
+    if (pendingGenerate) pendingGenerate.abort();
+    const controller = new AbortController();
+    pendingGenerate = controller;
+
     setBusy(true, T('generate.busy', { name: tpl.name }));
     try {
       const consultationId = await ensureConsultation();
       const result = await api('/api/generate', {
         method: 'POST',
+        signal: controller.signal,
         body: Object.assign({
           template_id: tpl.id,
           transcript,
@@ -1573,6 +1665,7 @@
       });
 
       state.consultationId = result.consultation_id;
+      state.lastGeneratedMarkdown = result.markdown;
       $('markdownEditor').value = result.markdown;
       renderMarkdown();
       showPreview();
@@ -1584,6 +1677,17 @@
       // vérifier d'un coup d'œil plutôt que de les découvrir plus tard dans
       // la liste des brouillons.
       showNoteEngines(result.stt_used, result.llm_used, result.audio_used);
+      showDebugInfo({
+        llm: result.llm_used,
+        stt: result.stt_used,
+        audioUsed: result.audio_used,
+        promptTokens: result.usage && result.usage.prompt_tokens,
+        outputTokens: result.usage && result.usage.output_tokens,
+        elapsedSeconds: result.elapsed_seconds,
+        truncated: result.truncated,
+      });
+      flashElement('noteFooter');
+      updateActionButtons();
       if (applyMetadata(result.metadata)) {
         $('metaDetails').open = true;
       }
@@ -1595,9 +1699,19 @@
       }
       scheduleSave();
     } catch (err) {
-      toast(err.message, 'error', 10000);
+      // Une annulation volontaire (supplantée par un clic plus récent) ne
+      // doit produire ni toast d'erreur ni changement d'état : c'est
+      // exactement le comportement voulu, pas une panne.
+      if (err.name !== 'AbortError') toast(err.message, 'error', 10000);
     } finally {
-      setBusy(false);
+      // Les deux lignes ci-dessous ne s'exécutent que si RIEN de plus récent
+      // n'a pris la relève — sinon le ``finally`` de CET appel annulé,
+      // exécuté après coup, effacerait la référence du nouvel appel en cours
+      // ET masquerait sa barre de progression alors qu'il tourne toujours.
+      if (pendingGenerate === controller) {
+        pendingGenerate = null;
+        setBusy(false);
+      }
     }
   }
 
@@ -1722,13 +1836,28 @@
    * a changé depuis la génération, et c'est précisément l'écart qu'on veut
    * pouvoir constater.
    */
+  /**
+   * Nom court à afficher pour un « fournisseur / modèle » (ex. « custom /
+   * gemma4-26b-a4b-grounded »). Le nom du FOURNISSEUR d'ordinaire — il
+   * suffit à identifier le service (« gemini », « assemblyai »). Exception
+   * pour « custom » : ce nom-là ne distingue rien, tous les points de
+   * terminaison personnalisés le partagent, donc c'est le modèle qui
+   * identifie réellement ce qui a tourné.
+   */
+  function shortEngineName(providerModel) {
+    const parts = (providerModel || '').split(' / ');
+    const provider = parts[0] || '';
+    if (provider.toLowerCase() !== 'custom') return provider;
+    return parts.slice(1).join(' / ') || provider;
+  }
+
   function showNoteEngines(stt, llm, audioUsed) {
     const el = $('noteEngines');
     if (!el) return;
     const parts = [];
-    if (stt) parts.push(T('note.engine_dictation', { engine: stt.split(' / ')[0] }));
+    if (stt) parts.push(T('note.engine_dictation', { engine: shortEngineName(stt) }));
     if (llm) {
-      let note = T('note.engine_note', { engine: llm.split(' / ').slice(-1)[0] });
+      let note = T('note.engine_note', { engine: shortEngineName(llm) });
       if (audioUsed) note += ` ${T('note.engine_audio')}`;
       parts.push(note);
     }
@@ -1740,6 +1869,62 @@
     ].filter(Boolean).join('\n');
     el.classList.toggle('hidden', !parts.length);
     refreshNoteFooter();
+  }
+
+  /**
+   * Grise (plutôt que masque) « Retranscrire » et « Mettre en forme » quand
+   * l'action n'a rien à faire — pas de transcription, pas de gabarit choisi,
+   * pas d'audio conservé. Appelée à chaque événement qui peut changer l'une
+   * de ces trois conditions : chargement d'un brouillon, nouvelle
+   * consultation, réception de texte (dictée, import, retranscription),
+   * chargement des enregistrements, changement de gabarit.
+   */
+  function updateActionButtons() {
+    const hasTranscript = Boolean($('transcript').value.trim());
+    const hasTemplate = Boolean(currentTemplate());
+    const hasAudio = Boolean(state.consultationId) && state.recordingsCount > 0;
+
+    [$('btnGenerate'), $('btnGenerateMobile')].forEach((el) => {
+      if (el) el.disabled = !(hasTranscript && hasTemplate);
+    });
+    [$('btnRetranscribe'), $('btnRetranscribeMobile')].forEach((el) => {
+      if (el) el.disabled = !hasAudio;
+    });
+  }
+
+  /**
+   * Informations RÉELLES sur la dernière génération — jamais celles que le
+   * modèle prétendrait fournir dans le corps de la note (voir la consigne
+   * générale : un modèle n'a aucun accès à son propre décompte de jetons, et
+   * ce qu'il en dirait serait inventé). Jetons et durée sont conservés en
+   * base (``usage_prompt_tokens``/``usage_output_tokens``/
+   * ``generation_seconds``) depuis la version 1.3.1 : un brouillon généré
+   * avant ce champ les montre comme indisponibles plutôt que d'afficher un 0
+   * qui laisserait croire à une vraie mesure.
+   */
+  function showDebugInfo(info) {
+    const wrap = $('debugInfo');
+    const list = $('debugInfoList');
+    if (!wrap || !list) return;
+    info = info || {};
+    const lines = [];
+    if (info.llm) lines.push(T('debug.llm', { value: info.llm }));
+    if (info.stt) lines.push(T('debug.stt', { value: info.stt }));
+    if (info.audioUsed) lines.push(T('debug.audio'));
+    if (info.promptTokens != null || info.outputTokens != null) {
+      lines.push(T('debug.tokens', {
+        in_tokens: info.promptTokens != null ? info.promptTokens : '?',
+        out_tokens: info.outputTokens != null ? info.outputTokens : '?',
+      }));
+    } else if (info.llm) {
+      lines.push(T('debug.tokens_unavailable'));
+    }
+    if (info.elapsedSeconds != null) {
+      lines.push(T('debug.duration', { seconds: info.elapsedSeconds.toFixed(1) }));
+    }
+    if (info.truncated) lines.push(T('debug.truncated'));
+    list.innerHTML = lines.map((line) => `<li>${esc(line)}</li>`).join('');
+    wrap.classList.toggle('hidden', !lines.length);
   }
 
   /**
@@ -1760,14 +1945,64 @@
   }
 
   /**
+   * Même rôle que showNoteEngines(), côté dictée : quel service a RÉELLEMENT
+   * produit la transcription affichée. Un seul moteur ici (pas de LLM), d'où
+   * une fonction plus courte plutôt qu'un paramètre optionnel sur l'originale.
+   */
+  function showTranscriptEngine(sttUsed) {
+    const el = $('transcriptEngine');
+    if (!el) return;
+    if (sttUsed) {
+      el.textContent = T('note.engine_dictation', { engine: shortEngineName(sttUsed) });
+      el.title = T('note.engine_stt_title', { engine: sttUsed });
+    } else {
+      el.textContent = '';
+      el.title = '';
+    }
+    el.classList.toggle('hidden', !sttUsed);
+    refreshTranscriptFooter();
+  }
+
+  /** Pendant de refreshNoteFooter() pour le pied du panneau de dictée. */
+  function refreshTranscriptFooter() {
+    const pied = $('transcriptFooter');
+    if (!pied) return;
+    const moteur = $('transcriptEngine');
+    const etat = $('saveStatusDictee');
+    const visible = (moteur && !moteur.classList.contains('hidden') && moteur.textContent.trim())
+                 || (etat && etat.textContent.trim());
+    pied.classList.toggle('hidden', !visible);
+  }
+
+  /**
+   * Confirmation visuelle qu'un résultat VIENT d'arriver (note générée,
+   * transcription reçue), sans dépendre d'une relecture du texte : un vert
+   * désaturé plein, qui s'efface tout seul en 10 s. Même mécanique que
+   * ``toast()`` (style en ligne + minuterie) plutôt qu'une classe Tailwind —
+   * la durée voulue (10 000 ms) n'a pas d'utilitaire tout fait.
+   */
+  function flashElement(id) {
+    const el = $(id);
+    if (!el) return;
+    el.style.transition = 'none';
+    el.style.backgroundColor = '#dbeee3';
+    void el.offsetWidth; // force le navigateur à appliquer la couleur ci-dessus avant la transition
+    el.style.transition = 'background-color 10000ms ease-out';
+    el.style.backgroundColor = '';
+    setTimeout(() => { el.style.transition = ''; }, 10000);
+  }
+
+  /**
    * Seule écriture de l'état de sauvegarde : passer par ici garantit que le
    * pied s'ouvre et se referme avec lui.
    */
   function setSaveStatus(texte) {
     const el = $('saveStatus');
-    if (!el) return;
-    el.textContent = texte || '';
+    if (el) el.textContent = texte || '';
     refreshNoteFooter();
+    const elDictee = $('saveStatusDictee');
+    if (elDictee) elDictee.textContent = texte || '';
+    refreshTranscriptFooter();
   }
 
   function renderMarkdown() {
@@ -1790,6 +2025,10 @@
 
     $('paneDictee').classList.toggle('max-lg:hidden', name !== 'dictee');
     $('paneNote').classList.toggle('max-lg:hidden', name !== 'note');
+    // Retranscrire n'a de sens que devant la transcription — masqué sur
+    // l'onglet Note plutôt que gardé grisé, ce serait un bouton de plus sans
+    // rien à y faire. Mettre en forme, lui, reste joignable des deux côtés.
+    $('btnRetranscribeMobile').classList.toggle('hidden', name !== 'dictee');
 
     const activeClasses = 'py-2 rounded-md text-sm font-medium bg-white shadow-sm text-slate-800';
     const idleClasses = 'py-2 rounded-md text-sm font-medium text-slate-500';
@@ -2451,7 +2690,13 @@
       state.recordedSeconds = draft.audio_seconds || 0;
 
       $('transcript').value = draft.raw_transcript || '';
-      $('markdownEditor').value = draft.edited_markdown || draft.generated_markdown || '';
+      // Toujours la dernière note GÉNÉRÉE, jamais une version éditée : une
+      // régénération remplace désormais ``edited_markdown`` sans condition
+      // (voir api_generate), donc les deux ne divergent plus qu'en cours de
+      // relecture — et c'est cet état de relecture qu'on ne veut pas montrer
+      // à la réouverture, pour ne jamais rouvrir sur un texte périmé.
+      state.lastGeneratedMarkdown = draft.generated_markdown || '';
+      $('markdownEditor').value = draft.generated_markdown || '';
       $('timer').textContent = formatDuration(state.recordedSeconds);
 
       clearMetadata();
@@ -2468,6 +2713,7 @@
         $('templateSelect').value = String(draft.template_id);
         updateTemplateDescription();
       }
+      updateActionButtons();
 
       updateTranscriptMeta(null);
       showPreview();
@@ -2476,6 +2722,15 @@
       state.lastSavedSnapshot = workspaceSnapshot();
       loadRecordings();
       showNoteEngines(draft.stt_used, draft.llm_used, draft.audio_used);
+      showTranscriptEngine(draft.stt_used);
+      showDebugInfo({
+        llm: draft.llm_used,
+        stt: draft.stt_used,
+        audioUsed: draft.audio_used,
+        promptTokens: draft.usage_prompt_tokens,
+        outputTokens: draft.usage_output_tokens,
+        elapsedSeconds: draft.generation_seconds,
+      });
       state.transcriptLanguage = draft.stt_language || '';
       setSaveStatus(T('save.loaded_at', { date: formatDateTime(draft.updated_at) }));
       $('draftsModal').classList.add('hidden');
@@ -2499,6 +2754,7 @@
     state.consultationId = null;
     state.recordedSeconds = 0;
     state.lastSavedSnapshot = '';
+    state.lastGeneratedMarkdown = '';
     $('transcript').value = '';
     $('markdownEditor').value = '';
     $('ctxExtra').value = '';
@@ -2508,6 +2764,8 @@
     setSaveStatus('');
     state.transcriptLanguage = '';
     showNoteEngines('', '');
+    showTranscriptEngine('');
+    showDebugInfo(null);
     loadRecordings();
     showPreview();
     setMobilePane('dictee');
@@ -2629,6 +2887,8 @@
     if (!state.consultationId) {
       block.classList.add('hidden');
       $('recordingsList').innerHTML = '';
+      state.recordingsCount = 0;
+      updateActionButtons();
       return;
     }
     try {
@@ -2643,10 +2903,12 @@
   function renderRecordings(rows) {
     const block = $('recordingsBlock');
     const list = $('recordingsList');
+    state.recordingsCount = rows.length;
 
     if (!rows.length) {
       block.classList.add('hidden');
       list.innerHTML = '';
+      updateActionButtons();
       return;
     }
     block.classList.remove('hidden');
@@ -2688,6 +2950,7 @@
         }
       });
     });
+    updateActionButtons();
   }
 
   /* =========================================================================
@@ -3789,17 +4052,20 @@
     $('templateSelect').addEventListener('change', () => {
       updateTemplateDescription();
       scheduleSave();
+      updateActionButtons();
       // Le seul moment où l'on peut s'apercevoir que la dictée a été
       // transcrite dans la mauvaise langue.
       maybeOfferRetranscription();
     });
-    $('btnRetranscribe').addEventListener('click', () => {
+    const handleRetranscribeClick = () => {
       const tpl = currentTemplate();
       const langue = languageName(
         (tpl && tpl.language) ? tpl.language : state.transcriptLanguage,
       );
       runRetranscription(tpl, T('retranscribe.confirm_manual', { langue }));
-    });
+    };
+    $('btnRetranscribe').addEventListener('click', handleRetranscribeClick);
+    $('btnRetranscribeMobile').addEventListener('click', handleRetranscribeClick);
     $('btnManageTemplates').addEventListener('click', openTemplatesModal);
     $('btnCloseTemplates').addEventListener('click', closeTemplatesModal);
     $('btnNewTemplate').addEventListener('click', () => {
@@ -3922,6 +4188,7 @@
     setupWaveform();
     showPreview();
     setMobilePane('dictee');
+    updateActionButtons();
 
     // Raccourci « Nouvelle consultation » du manifeste (appui long sur
     // l'icône de l'écran d'accueil) : /?nouvelle=1

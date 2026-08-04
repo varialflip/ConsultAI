@@ -208,6 +208,28 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 
     # --- Détails ------------------------------------------------------------
     "details.summary": ("Détails", "Details"),
+    "debug.title": ("Informations techniques", "Technical details"),
+    "debug.llm": ("Mise en forme : {value}", "Formatting: {value}"),
+    "debug.stt": ("Transcription : {value}", "Transcription: {value}"),
+    "debug.audio": ("Audio joint à la mise en forme", "Audio attached to formatting"),
+    "debug.tokens": (
+        "Jetons — entrée : {in_tokens} · sortie : {out_tokens}",
+        "Tokens — input: {in_tokens} · output: {out_tokens}",
+    ),
+    "debug.duration": (
+        "Durée de la mise en forme : {seconds} s",
+        "Formatting duration: {seconds} s",
+    ),
+    "debug.tokens_unavailable": (
+        "Jetons : non disponibles après réouverture (valables seulement "
+        "juste après la génération).",
+        "Tokens: unavailable after reopening (only available right after "
+        "generating).",
+    ),
+    "debug.truncated": (
+        "Réponse tronquée (limite de longueur atteinte).",
+        "Response truncated (length limit reached).",
+    ),
     "details.hint": (
         "métadonnées, consigne ponctuelle, enregistrements",
         "metadata, one-off instruction, recordings",
@@ -548,6 +570,13 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "generate.empty": (
         "La transcription est vide : dictez ou collez un texte d'abord.",
         "The transcript is empty: dictate or paste text first.",
+    ),
+    "generate.confirm_overwrite": (
+        "La note affichée a été modifiée depuis la dernière mise en forme. "
+        "Régénérer remplace ces modifications par la nouvelle note — "
+        "continuer ?",
+        "The displayed note has been edited since the last formatting pass. "
+        "Regenerating replaces those edits with the new note — continue?",
     ),
     "generate.no_template": (
         "Sélectionnez un gabarit de consultation.",

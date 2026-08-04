@@ -4,9 +4,12 @@ llm.py — Mise en forme clinique de la transcription.
 
 Rôle du modèle : agir comme un **scribe médical**, PAS comme un clinicien.
 Il réorganise, corrige la transcription et applique le gabarit choisi ; il
-n'ajoute jamais de contenu clinique. Toutes les consignes anti-hallucination
-sont regroupées dans ``BASE_SYSTEM_PROMPT`` ci-dessous — c'est le garde-fou
-le plus important de l'application, et il s'applique quel que soit le modèle.
+n'ajoute jamais de contenu clinique. Les consignes anti-hallucination vivent
+dans la consigne générale (panneau d'administration → Modèle de langage) —
+c'est le garde-fou le plus important de l'application, et il s'applique quel
+que soit le modèle. Volontairement là et non ici : un garde-fou qu'on ne peut
+ni lire ni ajuster depuis le panneau n'est un garde-fou que pour qui lit le
+code.
 
 CINQ FOURNISSEURS
 -----------------
@@ -16,10 +19,11 @@ du fichier ignore lequel est en service. Gemini garde en plus le mode Vertex AI
 (``GOOGLE_CLOUD_PROJECT``), recommandé pour des données de santé québécoises
 puisqu'il permet de rester en région de Montréal.
 
-TROIS NIVEAUX DE CONSIGNES
+DEUX NIVEAUX DE CONSIGNES
 --------------------------
-``BASE_SYSTEM_PROMPT`` (ici) → consignes du gabarit → consigne générale du
-médecin (panneau d'administration). Voir ``build_system_prompt``.
+Consignes du gabarit → consigne générale du médecin (panneau
+d'administration). Cette dernière contient les règles qui s'appliquent à
+TOUTES les notes, gabarit inclus — voir ``build_system_prompt``.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -40,182 +45,31 @@ class GenerationError(RuntimeError):
     """Erreur métier de génération, avec un message affichable à l'écran."""
 
 
-# ===========================================================================
-# CONSIGNES DE BASE — communes à tous les gabarits
-# ===========================================================================
-# Deux versions, une par langue de rédaction. Ce n'est pas une traduction de
-# confort : une consigne rédigée en français produit une note en français bien
-# plus sûrement qu'une consigne anglaise réclamant du français, et l'inverse
-# est vrai aussi.
-#
-# Aucune spécialité n'est nommée ici. Ce qui est propre à une pratique — les
-# syndromes à rechercher, les échelles employées, le vocabulaire — appartient
-# aux gabarits et à la consigne générale du médecin, qui les écrit et les
-# modifie sans reconstruire l'image.
-# ===========================================================================
-_BASE_SYSTEM_PROMPT_FR = """\
-Tu es un scribe médical expérimenté travaillant pour un médecin au Québec.
-Tu reçois la transcription brute et non ponctuée d'une consultation dictée à
-voix haute, puis tu produis une note clinique structurée en français québécois.
-
-RÈGLE ABSOLUE — AUCUNE INVENTION
-================================
-Tu ne dois JAMAIS ajouter, déduire ou compléter une information clinique qui
-n'a pas été dictée. Il est interdit d'inventer un signe vital, un score de
-test, une dose, une date, un résultat de laboratoire, un antécédent ou un
-diagnostic. Une note incomplète est acceptable ; une note contenant une
-donnée fabriquée est une faute grave.
-- Si une rubrique du gabarit n'a fait l'objet d'aucune dictée, écris
-  exactement : « Non abordé lors de la dictée. »
-- Si un élément est audible mais incertain ou inintelligible, écris-le suivi
-  de « [à vérifier] » plutôt que de deviner.
-- Tu peux reformuler, réorganiser et rédiger en phrases complètes : ce n'est
-  pas inventer. Tu ne peux pas ajouter de contenu clinique nouveau.
-
-CORRECTION DE LA TRANSCRIPTION
-==============================
-La transcription provient d'un moteur de reconnaissance vocale et contient des
-erreurs typiques. Corrige-les à l'aide du contexte clinique :
-- Rétablis l'orthographe exacte des médicaments, des acronymes du réseau de la
-  santé québécois (CHSLD, CLSC, GMF, CISSS, CIUSSS, RPA, SAD, SAPA, UCDG,
-  RAMQ, SAAQ) et des échelles cliniques usuelles (MoCA, MMSE, AVQ, AVD, TUG,
-  GDS, SMAF, NPI).
-- Supprime les hésitations, répétitions, faux départs, « euh », ainsi que les
-  apartés non cliniques (« attends », « je reprends », « efface ça »).
-- Respecte les instructions de dictée : si le médecin dit « nouveau
-  paragraphe », « point », « à la ligne », « ouvrez la parenthèse », applique
-  la mise en forme au lieu d'écrire les mots.
-- Si le médecin se corrige lui-même, ne conserve que la version corrigée.
-
-STYLE
-=====
-- Français québécois professionnel, terminologie médicale standard, ton neutre.
-- Phrases complètes et sobres ; pas de style télégraphique, pas de verbiage.
-- Unités du système international (mg, mL, kg, mmHg, mmol/L).
-- Conserve les abréviations médicales usuelles telles que dictées (ATCD, HTA,
-  MPOC, IC, FA, DB2, IRC, TNC).
-- Rédige à la troisième personne par défaut (« le patient »), SAUF si la
-  consigne générale du médecin demande explicitement la première personne, ou
-  si un passage de la dictée est rapporté textuellement en discours direct
-  (entre guillemets) : dans ces cas précis, respecte la voix demandée.
-  N'ajoute ni salutation, ni signature, ni note de bas de page.
-
-FORMAT DE SORTIE
-================
-- Réponds UNIQUEMENT avec le document en Markdown. Aucune phrase
-  d'introduction, aucun commentaire, aucune explication de ta démarche, aucun
-  bloc de code englobant (pas de ```).
-- Reproduis EXACTEMENT la structure de titres du gabarit fourni : mêmes
-  intitulés, même ordre, même niveau de titre. N'ajoute pas de rubrique
-  absente du gabarit et n'en supprime aucune.
-- Les lignes du gabarit décrivant ce qu'il faut mettre dans une rubrique sont
-  des consignes : remplace-les par le contenu clinique, ne les recopie pas.
-- Remplace chaque champ entre doubles accolades (par exemple {{DATE}}) par la
-  valeur correspondante du contexte fourni. Si la valeur est inconnue,
-  supprime simplement la ligne entière qui contient ce champ.
-- Conserve les tableaux Markdown du gabarit lorsqu'il y en a ; supprime les
-  lignes vides inutilisées.
-"""
-
-_BASE_SYSTEM_PROMPT_EN = """\
-You are an experienced medical scribe working for a physician.
-You receive the raw, unpunctuated transcript of a consultation dictated aloud,
-and you produce a structured clinical note in Canadian English.
-
-ABSOLUTE RULE — NEVER INVENT
-===========================
-You must NEVER add, infer or complete any clinical information that was not
-dictated. You may not invent a vital sign, a test score, a dose, a date, a
-laboratory result, a past history item or a diagnosis. An incomplete note is
-acceptable; a note containing fabricated data is a serious fault.
-- If a template section was not dictated at all, write exactly:
-  "Not addressed during dictation."
-- If an item is audible but uncertain or unintelligible, write it followed by
-  "[to verify]" rather than guessing.
-- You may rephrase, reorganize and write in complete sentences: that is not
-  inventing. You may not add new clinical content.
-
-CORRECTING THE TRANSCRIPT
-=========================
-The transcript comes from a speech recognition engine and contains typical
-errors. Correct them using the clinical context:
-- Restore the exact spelling of medications, of health-system acronyms and of
-  the usual clinical scales (MoCA, MMSE, ADL, IADL, TUG, GDS, NPI).
-- Remove hesitations, repetitions, false starts, "uh", and non-clinical asides
-  ("wait", "let me start over", "delete that").
-- Honour dictation commands: if the physician says "new paragraph", "period",
-  "new line", "open parenthesis", apply the formatting instead of writing the
-  words.
-- If the physician corrects themselves, keep only the corrected version.
-
-STYLE
-=====
-- Professional Canadian English, standard medical terminology, neutral tone.
-- Complete, plain sentences; no telegraphic style, no padding.
-- SI units (mg, mL, kg, mmHg, mmol/L).
-- Keep the usual medical abbreviations as dictated (PMH, HTN, COPD, CHF, AF,
-  T2DM, CKD).
-- Write in the third person by default ("the patient"), UNLESS the
-  physician's general instructions explicitly request the first person, or a
-  passage of the dictation is reported verbatim in direct speech (quoted): in
-  those specific cases, honour the requested voice. Add no greeting, no
-  signature, no footnote.
-
-OUTPUT FORMAT
-=============
-- Reply ONLY with the document in Markdown. No introductory sentence, no
-  commentary, no explanation of your reasoning, no enclosing code block
-  (no ```).
-- Reproduce EXACTLY the heading structure of the supplied template: same
-  wording, same order, same heading level. Do not add a section absent from
-  the template and do not remove any.
-- Lines in the template that describe what a section should contain are
-  instructions: replace them with the clinical content, do not copy them.
-- Replace each double-brace field (for example {{DATE}}) with the matching
-  value from the supplied context. If the value is unknown, simply delete the
-  entire line containing that field.
-- Keep the template's Markdown tables where present; remove unused empty rows.
-"""
-
-BASE_SYSTEM_PROMPTS = {
-    "fr": _BASE_SYSTEM_PROMPT_FR,
-    "en": _BASE_SYSTEM_PROMPT_EN,
-}
-
-#: Conservé pour compatibilité : du code appelant historiquement cette
-#: constante attend le français.
-BASE_SYSTEM_PROMPT = _BASE_SYSTEM_PROMPT_FR
-
-
-def base_system_prompt(language: Optional[str] = None) -> str:
-    """Consignes de base dans la langue de rédaction demandée."""
-    langue = i18n.normalize(language or runtime_config.language())
-    return BASE_SYSTEM_PROMPTS[langue]
-
-
 def build_system_prompt(
     template_instructions: str,
     general_prompt: str = "",
     language: Optional[str] = None,
 ) -> str:
     """
-    Assemble les trois niveaux de consignes, du plus général au plus impératif.
+    Assemble les deux niveaux de consignes, du plus spécifique au plus impératif.
 
     L'ordre compte : un modèle qui rencontre deux consignes contradictoires
-    suit en général la dernière. La consigne générale du médecin est donc
-    placée en fin de prompt, après celles du gabarit — c'est une préférence
-    personnelle et durable (« toujours vouvoyer », « ne jamais abréger les
-    noms de molécules »), elle doit l'emporter sur un gabarit qu'on n'a pas
-    forcément pensé à mettre à jour.
+    suit en général la dernière. La consigne générale du médecin — qui
+    contient désormais les règles de base (anti-invention, fidélité au
+    gabarit) en plus de ses propres préférences — est donc placée en fin de
+    prompt, après celles du gabarit : elle doit l'emporter sur un gabarit
+    qu'on n'a pas forcément pensé à mettre à jour, ou qui contredirait par
+    erreur une règle censée s'appliquer à toutes les notes.
 
     Les gabarits et la consigne générale sont recopiés **tels quels**, dans la
     langue où le médecin les a écrits. C'est voulu : ce sont ses textes, et un
     gabarit français conserve donc ses titres de rubriques même en mode
-    anglais — les consignes de base exigent de reproduire exactement la
-    structure fournie, et cette exigence l'emporte sur la langue de rédaction.
+    anglais — les consignes de base (dans la consigne générale) exigent de
+    reproduire exactement la structure fournie, et cette exigence l'emporte
+    sur la langue de rédaction.
     """
     langue = i18n.normalize(language or runtime_config.language())
-    parts = [base_system_prompt(langue)]
+    parts: List[str] = []
 
     en_tete = {
         "fr": (
@@ -473,6 +327,13 @@ def _missing_key(provider: str) -> GenerationError:
     )
 
 
+#: Un point de terminaison personnalisé tourne souvent sur du matériel local
+#: (voir le service vocal auto-hébergé) : plus lent qu'une API commerciale,
+#: et le délai par défaut du SDK OpenAI peut couper la requête avant la fin
+#: d'une note longue.
+_CUSTOM_LLM_TIMEOUT_SECONDS = 300
+
+
 def get_client(provider: Optional[str] = None):
     """Client du fournisseur demandé, mis en cache."""
     provider = provider or active_provider()
@@ -544,7 +405,9 @@ def get_client(provider: Optional[str] = None):
             import openai
         except ImportError as exc:  # pragma: no cover
             raise GenerationError("La bibliothèque openai n'est pas installée.") from exc
-        client = openai.OpenAI(api_key=key, base_url=base_url)
+        client = openai.OpenAI(
+            api_key=key, base_url=base_url, timeout=_CUSTOM_LLM_TIMEOUT_SECONDS,
+        )
 
     else:
         raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
@@ -1027,6 +890,7 @@ def generate_note(
     if audio_to_send is not None:
         user_prompt = f"{user_prompt}\n\n{_AUDIO_CROSSCHECK_NOTE[langue]}"
 
+    t0 = time.monotonic()
     result = complete(
         build_system_prompt(
             system_instructions, runtime_config.general_prompt(langue), langue
@@ -1038,6 +902,7 @@ def generate_note(
         provider=provider,
         audio=audio_to_send,
     )
+    elapsed_seconds = time.monotonic() - t0
 
     if not result.text.strip():
         if result.blocked:
@@ -1060,6 +925,7 @@ def generate_note(
         "truncated": result.truncated,
         "usage": result.usage,
         "audio_used": audio_to_send is not None,
+        "elapsed_seconds": round(elapsed_seconds, 2),
     }
 
 

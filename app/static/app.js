@@ -914,6 +914,7 @@
       if (!state.paused) {
         state.recordedSeconds += 1;
         $('timer').textContent = formatDuration(state.recordedSeconds);
+        if (dphone.active) $('dictaphoneTimer').textContent = formatDuration(state.recordedSeconds);
       }
     }, 1000);
   }
@@ -959,6 +960,121 @@
       dot.className = 'w-3 h-3 rounded-full bg-slate-300 shrink-0';
       label.textContent = T('rec.record');
       $('btnPause').innerHTML = ICON_PAUSE;
+    }
+    syncDictaphoneUI();
+  }
+
+  /* -------------------------------------------------------------------------
+   * Mode dictaphone (téléphone retourné)
+   * ----------------------------------------------------------------------
+   * Le micro du téléphone est en bas : retourné, il fait face à qui parle.
+   * L'écran devient alors un unique gros bouton Enregistrer / Pause.
+   *
+   * Deux détections, car les plateformes ne se comportent pas pareil :
+   *
+   * * screen.orientation à 180° — Android laisse (parfois) l'écran pivoter
+   *   tête en bas ; l'affichage est alors DÉJÀ à l'endroit, le calque est
+   *   posé tel quel ;
+   * * deviceorientation — iOS ne pivote jamais l'écran à 180°, mais les
+   *   capteurs voient le téléphone physiquement retourné : le calque est
+   *   alors tourné de 180° en CSS. Sur iOS 13+, ces événements exigent une
+   *   permission demandée sur un geste (voir maybeRequestOrientationPermission).
+   *
+   * Anti-rebond : un état ne s'applique qu'après 400 ms stables, pour ne
+   * pas faire clignoter le calque pendant le mouvement de bascule.
+   * ---------------------------------------------------------------------- */
+  const dphone = { active: false, rotate: false, candidate: null, since: 0 };
+
+  const ICON_MIC_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>'
+    + '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
+  const ICON_PAUSE_BIG = '<svg class="w-16 h-16" viewBox="0 0 24 24" fill="currentColor">'
+    + '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  const ICON_RESUME_BIG = '<svg class="w-16 h-16" viewBox="0 0 24 24" fill="currentColor">'
+    + '<path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l10.7-6.86a1 1 0 0 0 0-1.7L9.53 4.29A1 1 0 0 0 8 5.14z"/></svg>';
+
+  function screenIsUpsideDown() {
+    const angle = (screen.orientation && typeof screen.orientation.angle === 'number')
+      ? screen.orientation.angle
+      : (typeof window.orientation === 'number' ? window.orientation : 0);
+    return Math.abs(angle) === 180;
+  }
+
+  /** Téléphone vertical, tête en bas : beta ≈ -90°, quelle que soit la bascule. */
+  function sensorSaysUpsideDown(ev) {
+    if (!ev || ev.beta === null || ev.beta === undefined) return false;
+    return ev.beta < -45 && ev.beta > -135 && Math.abs(ev.gamma || 0) < 45;
+  }
+
+  function setDictaphone(active, rotate) {
+    if (dphone.active === active && dphone.rotate === rotate) return;
+    dphone.active = active;
+    dphone.rotate = active ? rotate : false;
+    const overlay = $('dictaphoneOverlay');
+    if (!overlay) return;
+    overlay.classList.toggle('hidden', !active);
+    overlay.style.transform = dphone.rotate ? 'rotate(180deg)' : '';
+    if (active) syncDictaphoneUI();
+  }
+
+  function applyDictaphoneCandidate(ev) {
+    // L'écran pivoté par l'OS prime : l'affichage est déjà à l'endroit.
+    const c = screenIsUpsideDown()
+      ? { active: true, rotate: false }
+      : sensorSaysUpsideDown(ev)
+        ? { active: true, rotate: true }
+        : { active: false, rotate: false };
+    const now = Date.now();
+    if (!dphone.candidate || dphone.candidate.active !== c.active || dphone.candidate.rotate !== c.rotate) {
+      dphone.candidate = c;
+      dphone.since = now;
+      return;
+    }
+    if (now - dphone.since >= 400) setDictaphone(c.active, c.rotate);
+  }
+
+  window.addEventListener('deviceorientation', applyDictaphoneCandidate);
+  if (screen.orientation && screen.orientation.addEventListener) {
+    screen.orientation.addEventListener('change', () => applyDictaphoneCandidate(null));
+  } else {
+    // Safari ancien : l'événement fenêtre tient lieu de change.
+    window.addEventListener('orientationchange',
+      () => setTimeout(() => applyDictaphoneCandidate(null), 100));
+  }
+
+  /** iOS 13+ n'émet deviceorientation qu'après une permission, sur un geste. */
+  let orientationPermissionAsked = false;
+  function maybeRequestOrientationPermission() {
+    if (orientationPermissionAsked) return;
+    if (typeof DeviceOrientationEvent === 'undefined'
+        || typeof DeviceOrientationEvent.requestPermission !== 'function') return;
+    orientationPermissionAsked = true;
+    DeviceOrientationEvent.requestPermission().catch(() => {});
+  }
+  document.addEventListener('pointerdown', maybeRequestOrientationPermission);
+
+  /** Calque du mode dictaphone : miroir de updateRecordingUI(). */
+  function syncDictaphoneUI() {
+    const main = $('btnDictaphoneMain');
+    if (!main) return;
+    const actions = $('dictaphoneActions');
+    $('dictaphoneTimer').textContent = formatDuration(state.recordedSeconds);
+    actions.classList.toggle('hidden', !state.recording);
+    actions.classList.toggle('flex', state.recording);
+    const base = 'w-56 h-56 rounded-full grid place-items-center shadow-2xl active:scale-95 transition ';
+    if (state.recording && !state.paused) {
+      main.className = base + 'bg-red-600 rec-dot';
+      main.innerHTML = ICON_PAUSE_BIG;
+      main.title = T('rec.pause');
+    } else if (state.recording && state.paused) {
+      main.className = base + 'bg-amber-500';
+      main.innerHTML = ICON_RESUME_BIG;
+      main.title = T('rec.resume');
+    } else {
+      main.className = base + 'bg-red-600';
+      main.innerHTML = ICON_MIC_BIG;
+      main.title = T('rec.record');
     }
   }
 
@@ -4042,6 +4158,14 @@
     $('btnPause').addEventListener('click', togglePause);
     $('btnFinish').addEventListener('click', finishRecording);
     $('btnAbort').addEventListener('click', abortRecording);
+
+    // --- Mode dictaphone (téléphone retourné) ---
+    $('btnDictaphoneMain').addEventListener('click', () => {
+      if (!state.recording) startRecording();
+      else togglePause();
+    });
+    $('btnDictaphoneFinish').addEventListener('click', finishRecording);
+    $('btnDictaphoneAbort').addEventListener('click', abortRecording);
 
     // --- Import d'un fichier audio existant ---
     $('audioFileInput').addEventListener('change', async (event) => {

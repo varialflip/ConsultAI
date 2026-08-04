@@ -205,6 +205,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "rec.abort_title": ("Arrêter sans envoyer", "Stop without sending"),
     "rec.import_title": ("Importer un fichier audio", "Import an audio file"),
     "rec.level_aria": ("Niveau sonore du micro", "Microphone level"),
+    "dictaphone.hint": (
+        "Retournez le téléphone pour quitter ce mode",
+        "Flip the phone back to leave this mode",
+    ),
 
     # --- Détails ------------------------------------------------------------
     "details.summary": ("Détails", "Details"),

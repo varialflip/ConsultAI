@@ -100,6 +100,7 @@ LLM_PROVIDERS = (
     # seul champ à remplir dans le panneau.
     ("cohere", "Cohere"),
     ("mistral", "Mistral AI"),
+    ("qwen_omni", "Qwen Omni"),
     ("custom", "provider.custom_endpoint"),
 )
 
@@ -276,6 +277,14 @@ SETTINGS: Tuple[Setting, ...] = (
         "gemini_send_audio_max_minutes", "number", "group.llm",
         default=lambda: "20",
     ),
+    Setting(
+        "gemini_bypass_stt", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+    Setting(
+        "gemini_bypass_stt_keep_transcript", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
 
     Setting(
         "anthropic_api_key", "secret", "group.llm",
@@ -324,6 +333,42 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting(
         "mistral_llm_temperature", "number", "group.llm",
         default=lambda: str(settings.gemini_temperature),
+    ),
+
+    # Qwen Omni (Alibaba Cloud DashScope, mode compatible OpenAI). Clé et
+    # adresse propres, comme « custom » : la région (internationale ou Chine
+    # continentale) détermine l'adresse exacte, laissée à saisir plutôt que
+    # devinée.
+    Setting(
+        "qwen_omni_api_key", "secret", "group.llm",
+        default=lambda: settings.qwen_omni_api_key,
+    ),
+    Setting(
+        "qwen_omni_base_url", "text", "group.llm",
+        default=lambda: settings.qwen_omni_base_url,
+        placeholder="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    ),
+    Setting("qwen_omni_model", "text", "group.llm", default=lambda: ""),
+    Setting("qwen_omni_model_fast", "text", "group.llm", default=lambda: ""),
+    Setting(
+        "qwen_omni_temperature", "number", "group.llm",
+        default=lambda: str(settings.gemini_temperature),
+    ),
+    Setting(
+        "qwen_omni_send_audio", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+    Setting(
+        "qwen_omni_send_audio_max_minutes", "number", "group.llm",
+        default=lambda: "20",
+    ),
+    Setting(
+        "qwen_omni_bypass_stt", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+    Setting(
+        "qwen_omni_bypass_stt_keep_transcript", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
     ),
 
     # Point de terminaison personnalisé, compatible OpenAI (serveur

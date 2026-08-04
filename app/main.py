@@ -383,7 +383,10 @@ class GenerateIn(BaseModel):
     """Demande de mise en forme par Gemini."""
 
     template_id: int
-    transcript: str = Field(..., min_length=1)
+    # Pas de ``min_length`` : une transcription vide est valide quand le
+    # fournisseur actif contourne le STT (audio envoyé seul) — c'est
+    # ``generate_note`` qui tranche, seule source de vérité sur cette règle.
+    transcript: str = ""
     consultation_id: Optional[int] = None
     # Métadonnées d'identification. Le médecin peut les saisir avant la
     # dictée, mais le cas normal est qu'elles restent vides ici et soient
@@ -439,14 +442,14 @@ def _build_context_lines(payload: GenerateIn) -> List[str]:
 
 
 def _prepare_audio_for_generation(
-    db: Session, consultation_id: int
+    db: Session, consultation_id: int, max_minutes: float = 20.0
 ) -> Optional[Tuple[bytes, str]]:
     """
     Extrait audio (silences plafonnés) à joindre à la génération, ou ``None``.
 
     Best-effort à dessein : aucun enregistrement, ffmpeg indisponible, ou
-    dictée trop longue (``gemini_send_audio_max_minutes``) retombent tous
-    sur ``None`` — la note se génère alors comme avant, sur la seule
+    dictée trop longue (``<fournisseur>_send_audio_max_minutes``) retombent
+    tous sur ``None`` — la note se génère alors comme avant, sur la seule
     transcription. Ce n'est jamais une raison de faire échouer la génération,
     mais chaque repli est journalisé : silencieux pour l'usager, visible dans
     les journaux, sinon un audio manquant est indiscernable d'un bogue.
@@ -476,7 +479,7 @@ def _prepare_audio_for_generation(
         )
         return None
     content, duree = trimmed
-    plafond = runtime_config.value_float("gemini_send_audio_max_minutes", 20.0) * 60
+    plafond = max_minutes * 60
     if duree <= 0 or duree > plafond:
         logger.info(
             "Audio non joint (consultation %s, enregistrement %s) : "
@@ -938,6 +941,7 @@ async def api_config(request: Request):
     user = current_user(request)
     langue = runtime_config.language()
     stt_provider = runtime_config.value("stt_provider")
+    audio_opts = llm.audio_settings()
     return {
         "app_title": settings.app_title,
         "version": __version__,
@@ -955,6 +959,12 @@ async def api_config(request: Request):
         "stt_model": runtime_config.stt_model(stt_provider),
         "llm_provider": runtime_config.value("llm_provider"),
         "llm_model": llm.active_model(),
+        # Le fournisseur actif contourne-t-il le STT (audio envoyé seul) ?
+        # Consommé par le client pour activer « Générer » sans transcription
+        # quand un enregistrement existe — voir updateActionButtons/
+        # generateNote côté app.js.
+        "llm_bypass_stt": audio_opts["bypass_stt"],
+        "llm_bypass_stt_keep_transcript": audio_opts["keep_transcript"],
         "gemini_backend": "vertex" if settings.gemini_use_vertex else "api_key",
         "max_audio_mb": settings.max_audio_mb,
         "is_template_admin": user.is_template_admin,
@@ -1735,17 +1745,20 @@ async def api_generate(
 
     model_name = settings.gemini_model_pro if payload.use_pro else None
 
+    active_provider = llm.active_provider()
+    audio_opts = llm.audio_settings(active_provider)
+    need_audio = audio_opts["send_audio"] or audio_opts["bypass_stt"]
+
     audio_payload = None
-    audio_enabled = runtime_config.value("gemini_send_audio") == "true"
-    if audio_enabled and llm.active_provider() == "gemini" and payload.consultation_id:
+    if need_audio and payload.consultation_id:
         audio_payload = await run_in_threadpool(
-            _prepare_audio_for_generation, db, payload.consultation_id
+            _prepare_audio_for_generation, db, payload.consultation_id, audio_opts["max_minutes"],
         )
-    elif audio_enabled:
+    elif need_audio:
         logger.info(
             "Audio non tenté (consultation %s) : fournisseur « %s » ou aucune "
             "consultation associée",
-            payload.consultation_id, llm.active_provider(),
+            payload.consultation_id, active_provider,
         )
 
     try:

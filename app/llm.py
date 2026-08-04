@@ -11,10 +11,11 @@ que soit le modèle. Volontairement là et non ici : un garde-fou qu'on ne peut
 ni lire ni ajuster depuis le panneau n'est un garde-fou que pour qui lit le
 code.
 
-CINQ FOURNISSEURS
------------------
-Gemini, Anthropic Claude, OpenAI, Cohere ou Mistral AI, au choix depuis le
-panneau d'administration. Ils sont réunis derrière ``complete()`` : le reste
+PLUSIEURS FOURNISSEURS
+----------------------
+Gemini, Anthropic Claude, OpenAI, Cohere, Mistral AI ou Qwen Omni, au choix
+depuis le panneau d'administration (plus un point de terminaison
+personnalisé, « custom »). Ils sont réunis derrière ``complete()`` : le reste
 du fichier ignore lequel est en service. Gemini garde en plus le mode Vertex AI
 (``GOOGLE_CLOUD_PROJECT``), recommandé pour des données de santé québécoises
 puisqu'il permet de rester en région de Montréal.
@@ -28,6 +29,7 @@ TOUTES les notes, gabarit inclus — voir ``build_system_prompt``.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import re
@@ -193,12 +195,18 @@ def build_user_prompt(
             "CONSIGNES>>>"
         )
 
-    parts.append(
-        f"{libelles['transcript']}\n"
-        "<<<DICTEE\n"
-        f"{transcript.strip()}\n"
-        "DICTEE>>>"
-    )
+    # Vide seulement en contournement du STT (audio envoyé seul) : dans tous
+    # les autres cas, ``generate_note`` a déjà refusé une transcription vide
+    # avant d'appeler cette fonction — inutile d'exposer un bloc <<<DICTEE
+    # vide au modèle, qui n'ajouterait qu'une confusion avec la consigne
+    # audio-seul ajoutée juste après.
+    if transcript.strip():
+        parts.append(
+            f"{libelles['transcript']}\n"
+            "<<<DICTEE\n"
+            f"{transcript.strip()}\n"
+            "DICTEE>>>"
+        )
 
     parts.append(libelles["closing"])
     return "\n\n".join(parts)
@@ -244,6 +252,40 @@ def active_provider() -> str:
     return runtime_config.value("llm_provider") or "gemini"
 
 
+#: Fournisseurs sachant traiter l'audio directement (au-delà du simple
+#: texte) : Gemini et Qwen Omni sont tous deux multimodaux. C'est la seule
+#: liste à tenir à jour pour étendre « Joindre l'audio » / « Contourner le
+#: STT » à un futur fournisseur — ``audio_settings`` s'en sert pour tout le
+#: reste (panneau, dictée, génération).
+_AUDIO_CAPABLE_PROVIDERS = ("gemini", "qwen_omni")
+
+
+def audio_settings(provider: Optional[str] = None) -> Dict[str, object]:
+    """
+    Options audio du fournisseur donné (ou de celui actif).
+
+    Tout à ``False`` (et le plafond par défaut) si le fournisseur ne gère pas
+    l'audio — évite à chaque appelant de vérifier lui-même
+    ``provider in _AUDIO_CAPABLE_PROVIDERS`` avant de lire ces réglages.
+    """
+    provider = provider or active_provider()
+    if provider not in _AUDIO_CAPABLE_PROVIDERS:
+        return {
+            "send_audio": False, "bypass_stt": False,
+            "keep_transcript": False, "max_minutes": 20.0,
+        }
+    return {
+        "send_audio": runtime_config.value(f"{provider}_send_audio") == "true",
+        "bypass_stt": runtime_config.value(f"{provider}_bypass_stt") == "true",
+        "keep_transcript": runtime_config.value(
+            f"{provider}_bypass_stt_keep_transcript"
+        ) == "true",
+        "max_minutes": runtime_config.value_float(
+            f"{provider}_send_audio_max_minutes", 20.0
+        ),
+    }
+
+
 #: Réglage « modèle principal », par fournisseur. Cohere et Mistral portent le
 #: suffixe « _llm » : leur clé ``<fournisseur>_model`` désigne déjà le modèle
 #: de TRANSCRIPTION (voir stt.py), pas celui de mise en forme.
@@ -253,6 +295,7 @@ _MODEL_KEYS = {
     "openai": "openai_model",
     "cohere": "cohere_llm_model",
     "mistral": "mistral_llm_model",
+    "qwen_omni": "qwen_omni_model",
     "custom": "custom_llm_model",
 }
 
@@ -263,6 +306,7 @@ _TEMPERATURE_KEYS = {
     "openai": "openai_temperature",
     "cohere": "cohere_llm_temperature",
     "mistral": "mistral_llm_temperature",
+    "qwen_omni": "qwen_omni_temperature",
     "custom": "custom_llm_temperature",
 }
 
@@ -319,6 +363,7 @@ def _missing_key(provider: str) -> GenerationError:
     labels = {
         "gemini": "Google Gemini", "anthropic": "Anthropic",
         "openai": "OpenAI", "cohere": "Cohere", "mistral": "Mistral AI",
+        "qwen_omni": "Qwen Omni",
         "custom": "du point de terminaison personnalisé",
     }
     return GenerationError(
@@ -338,10 +383,15 @@ def get_client(provider: Optional[str] = None):
     """Client du fournisseur demandé, mis en cache."""
     provider = provider or active_provider()
     key = _api_key(provider)
-    # L'adresse entre dans la clé de cache pour « custom » : changer de
-    # point de terminaison sans changer la clé API ne doit pas continuer à
-    # servir un client pointé vers l'ancienne adresse.
-    base_url = runtime_config.value("custom_llm_base_url").strip() if provider == "custom" else ""
+    # L'adresse entre dans la clé de cache pour « custom » et « qwen_omni » :
+    # changer de point de terminaison sans changer la clé API ne doit pas
+    # continuer à servir un client pointé vers l'ancienne adresse.
+    if provider == "custom":
+        base_url = runtime_config.value("custom_llm_base_url").strip()
+    elif provider == "qwen_omni":
+        base_url = runtime_config.value("qwen_omni_base_url").strip()
+    else:
+        base_url = ""
     cache_key = (provider, key, base_url)
     cached = _clients.get(cache_key)
     if cached is not None:
@@ -408,6 +458,20 @@ def get_client(provider: Optional[str] = None):
         client = openai.OpenAI(
             api_key=key, base_url=base_url, timeout=_CUSTOM_LLM_TIMEOUT_SECONDS,
         )
+
+    elif provider == "qwen_omni":
+        if not key:
+            raise _missing_key(provider)
+        if not base_url:
+            raise GenerationError(
+                "Aucune adresse configurée pour Qwen Omni (mode compatible "
+                "DashScope). Panneau d'administration → Modèle de langage."
+            )
+        try:
+            import openai
+        except ImportError as exc:  # pragma: no cover
+            raise GenerationError("La bibliothèque openai n'est pas installée.") from exc
+        client = openai.OpenAI(api_key=key, base_url=base_url)
 
     else:
         raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
@@ -568,9 +632,10 @@ def complete(
     un réglage dédié ; Anthropic n'en a pas, la consigne y est portée par le
     prompt et la réponse passe de toute façon par ``_strip_code_fence``.
 
-    ``audio`` — ``(octets, type_mime)`` — n'est utilisé QUE par Gemini, seul
-    fournisseur ici à savoir construire un message multimodal. Les autres
-    l'ignorent silencieusement plutôt que d'échouer : c'est à l'appelant
+    ``audio`` — ``(octets, type_mime)`` — n'est utilisé QUE par Gemini et Qwen
+    Omni, les deux seuls fournisseurs ici à savoir construire un message
+    multimodal (voir ``_AUDIO_CAPABLE_PROVIDERS``). Les autres l'ignorent
+    silencieusement plutôt que d'échouer : c'est à l'appelant
     (``generate_note``) de ne le fournir que si le fournisseur actif le gère.
     """
     provider = provider or active_provider()
@@ -585,6 +650,8 @@ def complete(
         return _complete_cohere(system, user, model, temperature, max_tokens, json_mode)
     if provider == "mistral":
         return _complete_mistral(system, user, model, temperature, max_tokens, json_mode)
+    if provider == "qwen_omni":
+        return _complete_qwen_omni(system, user, model, temperature, max_tokens, json_mode, audio=audio)
     if provider == "custom":
         return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="custom")
     raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
@@ -791,6 +858,74 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
     )
 
 
+def _qwen_audio_part(audio_bytes: bytes, mime_type: str) -> dict:
+    """
+    Construit le contenu audio du message, forme « input_audio » d'OpenAI.
+
+    Le format déclaré (``wav``, ``mp3``, ``ogg``…) est déduit du type MIME
+    fourni par l'appelant. À corriger ici si Qwen Omni refuse un extrait :
+    c'est le seul endroit qui connaît la forme exacte attendue par le mode
+    compatible DashScope, susceptible de différer légèrement du schéma
+    OpenAI standard.
+    """
+    fmt = (mime_type.split("/", 1)[-1] or "wav").split(";")[0].strip()
+    return {
+        "type": "input_audio",
+        "input_audio": {
+            "data": base64.b64encode(audio_bytes).decode("ascii"),
+            "format": fmt,
+        },
+    }
+
+
+def _complete_qwen_omni(system, user, model, temperature, max_tokens, json_mode, audio=None) -> Completion:
+    """
+    Appel via le SDK OpenAI, pointé sur le mode compatible DashScope.
+
+    Comme ``_complete_openai``, avec en plus un extrait audio optionnel :
+    Qwen Omni est multimodal, contrairement aux autres fournisseurs
+    compatibles OpenAI de ce fichier (OpenAI lui-même, « custom »).
+    """
+    client = get_client("qwen_omni")
+    if audio is not None:
+        audio_bytes, mime_type = audio
+        user_content = [
+            {"type": "text", "text": user},
+            _qwen_audio_part(audio_bytes, mime_type),
+        ]
+    else:
+        user_content = user
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
+    kwargs = {
+        "model": model,
+        "messages": messages,
+        "max_completion_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+
+    try:
+        response = _call_tolerant(client.chat.completions.create, kwargs)
+    except Exception as exc:
+        logger.exception("Échec de l'appel Qwen Omni")
+        raise _translate_error("Qwen Omni", model, exc) from exc
+
+    choice = (getattr(response, "choices", None) or [None])[0]
+    text = getattr(getattr(choice, "message", None), "content", "") or ""
+    usage_data = getattr(response, "usage", None)
+    usage = {
+        "prompt_tokens": getattr(usage_data, "prompt_tokens", None),
+        "output_tokens": getattr(usage_data, "completion_tokens", None),
+        "total_tokens": getattr(usage_data, "total_tokens", None),
+    } if usage_data else {}
+
+    return Completion(
+        text=text, model=model, provider="qwen_omni",
+        finish_reason=str(getattr(choice, "finish_reason", "") or ""), usage=usage,
+    )
+
+
 def _safety_settings():
     """
     Filtres de sécurité assouplis (BLOCK_ONLY_HIGH).
@@ -821,11 +956,11 @@ def _strip_code_fence(text: str) -> str:
     return match.group(1).strip() if match else cleaned
 
 
-#: Ajouté au message utilisateur quand un extrait audio est joint. Le
-#: garde-fou est déterminant : sans lui, rien n'empêche le modèle de
-#: « compléter » la transcription avec ce qu'il entend mais qui n'y figure
-#: pas (un aparté hors-sujet, par exemple) — l'audio doit trancher un doute,
-#: jamais ajouter une donnée.
+#: Ajouté au message utilisateur quand un extrait audio est joint EN PLUS
+#: d'une transcription. Le garde-fou est déterminant : sans lui, rien
+#: n'empêche le modèle de « compléter » la transcription avec ce qu'il entend
+#: mais qui n'y figure pas (un aparté hors-sujet, par exemple) — l'audio doit
+#: trancher un doute, jamais ajouter une donnée.
 _AUDIO_CROSSCHECK_NOTE = {
     "fr": (
         "UN EXTRAIT AUDIO DE LA DICTÉE EST JOINT À CETTE REQUÊTE. Sers-t'en "
@@ -838,6 +973,28 @@ _AUDIO_CROSSCHECK_NOTE = {
         "it only to resolve doubt about a poorly transcribed term above "
         "(proper noun, medical term, dose); never use it to add content "
         "absent from the transcript."
+    ),
+}
+
+#: Ajouté à la place de la note ci-dessus quand le STT a été contourné :
+#: aucune transcription n'existe, l'audio est la SEULE source. Le modèle doit
+#: alors transcrire et structurer en un seul passage plutôt que de trancher un
+#: doute — un rôle différent, qui appelle une consigne différente.
+_AUDIO_PRIMARY_NOTE = {
+    "fr": (
+        "AUCUNE TRANSCRIPTION N'EST FOURNIE : la reconnaissance vocale a été "
+        "volontairement contournée pour cette dictée. Un EXTRAIT AUDIO EST "
+        "JOINT À CETTE REQUÊTE — c'est ta SEULE source. Écoute-le et rédige "
+        "directement la note structurée en appliquant la mise en page et les "
+        "consignes ci-dessus, exactement comme si tu travaillais à partir "
+        "d'une transcription."
+    ),
+    "en": (
+        "NO TRANSCRIPT IS PROVIDED: speech recognition was deliberately "
+        "bypassed for this dictation. AN AUDIO EXCERPT IS ATTACHED TO THIS "
+        "REQUEST — it is your ONLY source. Listen to it and write the "
+        "structured note directly, applying the layout and instructions "
+        "above exactly as if you were working from a transcript."
     ),
 }
 
@@ -857,15 +1014,21 @@ def generate_note(
     ``{"markdown", "model", "provider", "truncated", "usage"}``.
 
     ``audio`` — ``(octets, type_mime)`` — n'est envoyé que si le fournisseur
-    actif est Gemini ; avec tout autre fournisseur il est silencieusement
-    ignoré (voir ``complete``).
+    actif gère l'audio (Gemini, Qwen Omni — voir ``_AUDIO_CAPABLE_PROVIDERS``) ;
+    avec tout autre fournisseur il est silencieusement ignoré (voir
+    ``complete``). Une transcription vide n'est tolérée que si ce même
+    fournisseur a activé le contournement du STT (``<fournisseur>_bypass_stt``)
+    ET qu'un audio est fourni — l'audio devient alors la seule source.
 
     Lève ``GenerationError`` avec un message en français prêt à afficher.
     """
-    if not (transcript or "").strip():
+    provider = active_provider()
+    opts = audio_settings(provider)
+    transcript_clean = (transcript or "").strip()
+    audio_only = opts["bypass_stt"] and audio is not None and not transcript_clean
+    if not transcript_clean and not audio_only:
         raise GenerationError("La transcription est vide : rien à mettre en forme.")
 
-    provider = active_provider()
     model_name = model or active_model()
     if not model_name:
         raise GenerationError(
@@ -879,16 +1042,18 @@ def generate_note(
     langue = i18n.normalize(language or runtime_config.language())
 
     logger.info(
-        "Mise en forme via %s (%s) — %d caractères de transcription, langue %s",
+        "Mise en forme via %s (%s) — %d caractères de transcription, langue %s%s",
         provider, model_name, len(transcript), langue,
+        " (audio seul, STT contourné)" if audio_only else "",
     )
-    audio_to_send = audio if (audio is not None and provider == "gemini") else None
+    audio_to_send = audio if (audio is not None and provider in _AUDIO_CAPABLE_PROVIDERS) else None
 
     user_prompt = build_user_prompt(
         transcript, layout_format, context_lines, extra_instructions, langue
     )
     if audio_to_send is not None:
-        user_prompt = f"{user_prompt}\n\n{_AUDIO_CROSSCHECK_NOTE[langue]}"
+        note = _AUDIO_PRIMARY_NOTE if audio_only else _AUDIO_CROSSCHECK_NOTE
+        user_prompt = f"{user_prompt}\n\n{note[langue]}"
 
     t0 = time.monotonic()
     result = complete(

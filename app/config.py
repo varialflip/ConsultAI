@@ -225,6 +225,8 @@ class Settings:
     # --- Autres fournisseurs de modèle de langage ---
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    qwen_omni_api_key: str = ""
+    qwen_omni_base_url: str = ""
 
     # --- Enregistrements conservés avec les brouillons ---
     audio_dir: str = "/data/audio"
@@ -394,6 +396,8 @@ class Settings:
             google_cloud_location=_env("GOOGLE_CLOUD_LOCATION", "northamerica-northeast1"),
             anthropic_api_key=_env("ANTHROPIC_API_KEY"),
             openai_api_key=_env("OPENAI_API_KEY"),
+            qwen_omni_api_key=_env("QWEN_OMNI_API_KEY"),
+            qwen_omni_base_url=_env("QWEN_OMNI_BASE_URL"),
         )
 
     # -- Diagnostic de démarrage --------------------------------------------

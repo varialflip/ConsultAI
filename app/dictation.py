@@ -53,6 +53,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+from app import llm
 from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
 from app.stt import (
@@ -510,6 +511,19 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
     """
     with _lock_for(session_id):
         session = load_session(session_id, username)
+
+        # STT contourné pour ce fournisseur (audio envoyé seul à la
+        # génération) : ni transcription ni repli ``_finalise``, on se
+        # contente de faire progresser le statut de la session. L'audio brut
+        # est déjà sur disque (voir ``append_chunk``), c'est tout ce dont la
+        # génération aura besoin.
+        opts = llm.audio_settings(llm.active_provider())
+        if opts["bypass_stt"] and not opts["keep_transcript"]:
+            if final:
+                session.status = "finished"
+                session.save()
+            return session
+
         _bind_template_language(session.template_id)
         hints = _phrase_hints(session.template_id)
         _, _, high = _window()

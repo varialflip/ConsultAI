@@ -315,6 +315,11 @@
     transcriptLanguage: '',
     editingMarkdown: false,
     mobilePane: 'dictee',   // panneau visible sur petit écran
+    // Le fournisseur actif contourne-t-il le STT (audio envoyé seul) ? Lu
+    // depuis /api/config (voir refreshClientConfig) — decide si « Générer »
+    // peut s'activer sans transcription, voir updateActionButtons().
+    llmBypassStt: false,
+    llmBypassSttKeepTranscript: false,
   };
 
   // Objets liés à l'enregistrement, regroupés pour un nettoyage simple.
@@ -1827,8 +1832,12 @@
   async function generateNote() {
     const transcript = $('transcript').value.trim();
     const tpl = currentTemplate();
+    // Même condition que updateActionButtons() : contournement du STT actif
+    // et un enregistrement existe déjà, l'audio suffit sans transcription.
+    const hasAudio = Boolean(state.consultationId) && state.recordingsCount > 0;
+    const audioOnlyReady = state.llmBypassStt && !state.llmBypassSttKeepTranscript && hasAudio;
 
-    if (!transcript) {
+    if (!transcript && !audioOnlyReady) {
       toast(T('generate.empty'), 'warning');
       return;
     }
@@ -2093,9 +2102,13 @@
     const hasTranscript = Boolean($('transcript').value.trim());
     const hasTemplate = Boolean(currentTemplate());
     const hasAudio = Boolean(state.consultationId) && state.recordingsCount > 0;
+    // STT contourné (audio envoyé seul) : l'audio à lui seul suffit à
+    // activer « Générer », sans attendre de transcription — voir
+    // refreshClientConfig() et generateNote().
+    const audioOnlyReady = state.llmBypassStt && !state.llmBypassSttKeepTranscript && hasAudio;
 
     [$('btnGenerate'), $('btnGenerateMobile')].forEach((el) => {
-      if (el) el.disabled = !(hasTranscript && hasTemplate);
+      if (el) el.disabled = !((hasTranscript || audioOnlyReady) && hasTemplate);
     });
     [$('btnRetranscribe'), $('btnRetranscribeMobile')].forEach((el) => {
       if (el) el.disabled = !hasAudio;
@@ -3268,6 +3281,7 @@
     'openai_model', 'openai_model_fast',
     'cohere_llm_model', 'cohere_llm_model_fast',
     'mistral_llm_model', 'mistral_llm_model_fast',
+    'qwen_omni_model', 'qwen_omni_model_fast',
     'custom_llm_model', 'custom_llm_model_fast',
   ]);
 
@@ -3343,6 +3357,12 @@
     gemini_model: { key: 'llm_provider', value: 'gemini' },
     gemini_model_fast: { key: 'llm_provider', value: 'gemini' },
     gemini_temperature: { key: 'llm_provider', value: 'gemini' },
+    // Options audio : propres à Gemini, PAS des réglages communs — sans ces
+    // entrées elles s'affichaient (à tort) sous les six autres onglets.
+    gemini_send_audio: { key: 'llm_provider', value: 'gemini' },
+    gemini_send_audio_max_minutes: { key: 'llm_provider', value: 'gemini' },
+    gemini_bypass_stt: { key: 'llm_provider', value: 'gemini' },
+    gemini_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'gemini' },
     anthropic_api_key: { key: 'llm_provider', value: 'anthropic' },
     anthropic_model: { key: 'llm_provider', value: 'anthropic' },
     anthropic_model_fast: { key: 'llm_provider', value: 'anthropic' },
@@ -3359,6 +3379,15 @@
     mistral_llm_model: { key: 'llm_provider', value: 'mistral' },
     mistral_llm_model_fast: { key: 'llm_provider', value: 'mistral' },
     mistral_llm_temperature: { key: 'llm_provider', value: 'mistral' },
+    qwen_omni_api_key: { key: 'llm_provider', value: 'qwen_omni' },
+    qwen_omni_base_url: { key: 'llm_provider', value: 'qwen_omni' },
+    qwen_omni_model: { key: 'llm_provider', value: 'qwen_omni' },
+    qwen_omni_model_fast: { key: 'llm_provider', value: 'qwen_omni' },
+    qwen_omni_temperature: { key: 'llm_provider', value: 'qwen_omni' },
+    qwen_omni_send_audio: { key: 'llm_provider', value: 'qwen_omni' },
+    qwen_omni_send_audio_max_minutes: { key: 'llm_provider', value: 'qwen_omni' },
+    qwen_omni_bypass_stt: { key: 'llm_provider', value: 'qwen_omni' },
+    qwen_omni_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'qwen_omni' },
     custom_llm_api_key: { key: 'llm_provider', value: 'custom' },
     custom_llm_base_url: { key: 'llm_provider', value: 'custom' },
     custom_llm_model: { key: 'llm_provider', value: 'custom' },
@@ -3429,6 +3458,7 @@
     'group.llm|openai': 'openai_api_key',
     'group.llm|cohere': 'cohere_api_key',
     'group.llm|mistral': 'mistral_api_key',
+    'group.llm|qwen_omni': 'qwen_omni_api_key',
     'group.llm|custom': 'custom_llm_api_key',
   };
 
@@ -4320,6 +4350,9 @@
     $('btnNewTemplate').classList.toggle('hidden', !state.isTemplateAdmin);
     state.logoutUrl = config.logout_url || '/auth/logout';
     state.isAdmin = Boolean(config.is_admin);
+    state.llmBypassStt = Boolean(config.llm_bypass_stt);
+    state.llmBypassSttKeepTranscript = Boolean(config.llm_bypass_stt_keep_transcript);
+    updateActionButtons();
     renderLanguageChoices(config.languages, config.language || LANG);
 
     if (config.theme) applyTheme(config.theme);

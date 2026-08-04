@@ -1267,13 +1267,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.gemini_send_audio.help": (
         "Envoie l'extrait audio en plus de la transcription : le modèle peut "
         "trancher un terme mal reconnu (nom propre, terme médical) en "
-        "l'écoutant. Uniquement avec Google Gemini — ignoré sans erreur avec "
-        "tout autre fournisseur. Ajoute un coût et quelques secondes par "
-        "note.",
+        "l'écoutant. Ajoute un coût et quelques secondes par note.",
         "Sends the audio clip alongside the transcript: the model can "
         "resolve a poorly recognized term (proper noun, medical term) by "
-        "listening to it. Google Gemini only — silently ignored with any "
-        "other provider. Adds cost and a few seconds per note.",
+        "listening to it. Adds cost and a few seconds per note.",
     ),
     "set.gemini_send_audio_max_minutes.label": (
         "Durée maximale envoyée (minutes)",
@@ -1287,6 +1284,34 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Beyond this much audio (after silence trimming), nothing is "
         "attached — the note is generated as before, from the transcript "
         "alone. Protects latency and cost on a very long dictation.",
+    ),
+    "set.gemini_bypass_stt.label": (
+        "Ignorer la reconnaissance vocale (audio direct)",
+        "Skip speech recognition (direct audio)",
+    ),
+    "set.gemini_bypass_stt.help": (
+        "L'audio part directement au modèle, sans passer par le service de "
+        "reconnaissance vocale — économise son coût et sa latence. La note "
+        "peut alors se générer sans transcription, dès qu'un enregistrement "
+        "existe.",
+        "Audio goes straight to the model, without passing through speech "
+        "recognition — saves its cost and latency. The note can then be "
+        "generated without a transcript, as soon as a recording exists.",
+    ),
+    "set.gemini_bypass_stt_keep_transcript.label": (
+        "Conserver une transcription pendant l'enregistrement",
+        "Keep a transcript during recording",
+    ),
+    "set.gemini_bypass_stt_keep_transcript.help": (
+        "Sans effet si l'option ci-dessus est désactivée. Activée : la "
+        "reconnaissance vocale continue de tourner pendant la dictée (texte "
+        "visible et modifiable), mais la note se génère quand même à partir "
+        "de l'audio. Désactivée (par défaut) : aucun appel au service vocal "
+        "pendant l'enregistrement, économie maximale.",
+        "No effect if the option above is off. On: speech recognition keeps "
+        "running during dictation (visible, editable text), but the note is "
+        "still generated from the audio. Off (default): no call to the "
+        "speech service during recording, maximum savings.",
     ),
 
     "set.anthropic_api_key.label": ("Clé API Anthropic", "Anthropic API key"),
@@ -1410,6 +1435,102 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "has no place in a clinical note. The most recent models no longer "
         "accept it: the setting is then ignored and the note is produced "
         "anyway.",
+    ),
+
+    "set.qwen_omni_api_key.label": ("Clé API Qwen Omni", "Qwen Omni API key"),
+    "set.qwen_omni_api_key.help": (
+        "Clé du compte Alibaba Cloud DashScope.",
+        "Alibaba Cloud DashScope account key.",
+    ),
+    "set.qwen_omni_base_url.label": ("Adresse de base", "Base URL"),
+    "set.qwen_omni_base_url.help": (
+        "Adresse du mode compatible OpenAI de DashScope, jusqu'au préfixe de "
+        "version inclus. Diffère selon la région du compte (internationale "
+        "ou Chine continentale) — voir la documentation DashScope.",
+        "Address of DashScope's OpenAI-compatible mode, including the "
+        "version prefix. Differs by account region (international or "
+        "mainland China) — see the DashScope documentation.",
+    ),
+    "set.qwen_omni_model.label": ("Modèle", "Model"),
+    "set.qwen_omni_model.help": (
+        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
+        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
+        "The “Available models” button queries the provider with the "
+        "configured key and shows what this account actually has access to.",
+    ),
+    "set.qwen_omni_model_fast.label": (
+        "Modèle rapide (métadonnées)",
+        "Fast model (metadata)",
+    ),
+    "set.qwen_omni_model_fast.help": (
+        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
+        "payée au jeton. Laisser vide pour employer le modèle principal.",
+        "Used only to re-read metadata, a trivial task paid by the token. "
+        "Leave empty to use the main model.",
+    ),
+    "set.qwen_omni_temperature.label": ("Température", "Temperature"),
+    "set.qwen_omni_temperature.help": (
+        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
+        "n'a pas sa place dans une note clinique. Les modèles les plus "
+        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
+        "est produite quand même.",
+        "0 = deterministic. Above 0.4 the model starts embellishing, which "
+        "has no place in a clinical note. The most recent models no longer "
+        "accept it: the setting is then ignored and the note is produced "
+        "anyway.",
+    ),
+    "set.qwen_omni_send_audio.label": (
+        "Joindre aussi l'audio (silences plafonnés)",
+        "Also attach audio (pauses capped)",
+    ),
+    "set.qwen_omni_send_audio.help": (
+        "Envoie l'extrait audio en plus de la transcription : le modèle peut "
+        "trancher un terme mal reconnu (nom propre, terme médical) en "
+        "l'écoutant. Ajoute un coût et quelques secondes par note.",
+        "Sends the audio clip alongside the transcript: the model can "
+        "resolve a poorly recognized term (proper noun, medical term) by "
+        "listening to it. Adds cost and a few seconds per note.",
+    ),
+    "set.qwen_omni_send_audio_max_minutes.label": (
+        "Durée maximale envoyée (minutes)",
+        "Maximum duration sent (minutes)",
+    ),
+    "set.qwen_omni_send_audio_max_minutes.help": (
+        "Au-delà de cette durée d'audio (après retrait des silences), rien "
+        "n'est joint — la note se génère comme avant, sur la seule "
+        "transcription. Protège la latence et le coût sur une très longue "
+        "dictée.",
+        "Beyond this much audio (after silence trimming), nothing is "
+        "attached — the note is generated as before, from the transcript "
+        "alone. Protects latency and cost on a very long dictation.",
+    ),
+    "set.qwen_omni_bypass_stt.label": (
+        "Ignorer la reconnaissance vocale (audio direct)",
+        "Skip speech recognition (direct audio)",
+    ),
+    "set.qwen_omni_bypass_stt.help": (
+        "L'audio part directement au modèle, sans passer par le service de "
+        "reconnaissance vocale — économise son coût et sa latence. La note "
+        "peut alors se générer sans transcription, dès qu'un enregistrement "
+        "existe.",
+        "Audio goes straight to the model, without passing through speech "
+        "recognition — saves its cost and latency. The note can then be "
+        "generated without a transcript, as soon as a recording exists.",
+    ),
+    "set.qwen_omni_bypass_stt_keep_transcript.label": (
+        "Conserver une transcription pendant l'enregistrement",
+        "Keep a transcript during recording",
+    ),
+    "set.qwen_omni_bypass_stt_keep_transcript.help": (
+        "Sans effet si l'option ci-dessus est désactivée. Activée : la "
+        "reconnaissance vocale continue de tourner pendant la dictée (texte "
+        "visible et modifiable), mais la note se génère quand même à partir "
+        "de l'audio. Désactivée (par défaut) : aucun appel au service vocal "
+        "pendant l'enregistrement, économie maximale.",
+        "No effect if the option above is off. On: speech recognition keeps "
+        "running during dictation (visible, editable text), but the note is "
+        "still generated from the audio. Off (default): no call to the "
+        "speech service during recording, maximum savings.",
     ),
 
     "set.custom_llm_api_key.label": ("Clé API", "API key"),

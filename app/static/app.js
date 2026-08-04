@@ -3060,6 +3060,18 @@
         })
         .catch((err) => console.warn('Service worker non enregistré :', err));
     });
+
+    // Le nouveau service worker vient de prendre le contrôle, mais la page
+    // tourne encore avec l'ANCIEN app.js — un décalage qui ressemble à un
+    // bogue d'interface (HTML neuf, JS périmé). On recharge donc soi-même,
+    // sauf pendant une dictée : le toast « pwa.updated » invite alors à le
+    // faire à la main plutôt que de couper l'enregistrement. Sans garde
+    // particulière contre les boucles : controllerchange ne se déclenche
+    // qu'un changement de contrôleur, jamais au rechargement sous le même.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (state.recording) return;
+      window.location.reload();
+    });
   }
 
   /* =========================================================================

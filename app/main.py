@@ -2108,6 +2108,7 @@ async def api_generate(
         provider=result["provider"], model=result["model"],
         prompt_tokens=result["usage"].get("prompt_tokens"),
         output_tokens=result["usage"].get("output_tokens"),
+        audio_prompt_tokens=result["usage"].get("audio_prompt_tokens"),
     )
     db.commit()
     db.refresh(consultation)

@@ -4509,7 +4509,7 @@
         <td class="px-2 py-1.5">${esc(r.provider)}</td>
         <td class="px-2 py-1.5 text-slate-500">${esc(r.model || '—')}</td>
         <td class="px-2 py-1.5">${esc(T(`admin.stats.kind.${r.kind}`))}</td>
-        <td class="px-2 py-1.5 tabular-nums">${(r.prompt_tokens + r.output_tokens) ? `${r.prompt_tokens}/${r.output_tokens}` : '—'}</td>
+        <td class="px-2 py-1.5 tabular-nums">${(r.prompt_tokens + r.output_tokens + (r.audio_prompt_tokens || 0)) ? `${r.prompt_tokens}${r.audio_prompt_tokens ? `+${r.audio_prompt_tokens}♪` : ''}/${r.output_tokens}` : '—'}</td>
         <td class="px-2 py-1.5 tabular-nums">${r.audio_seconds ? (r.audio_seconds / 60).toFixed(1) : '—'}</td>
         <td class="px-2 py-1.5 tabular-nums">${r.cost.toFixed(4)} ${esc(r.currency || data.currency)}</td>
       </tr>`).join('');
@@ -4545,7 +4545,7 @@
       </div>`;
   }
 
-  const PRICING_UNITS = ['token_input_1m', 'token_output_1m', 'audio_minute'];
+  const PRICING_UNITS = ['token_input_1m', 'token_output_1m', 'token_audio_input_1m', 'audio_minute'];
 
   function renderPricingTable() {
     const rates = adminState.pricing || [];
@@ -4788,12 +4788,12 @@
     boite.textContent = T('identity.usage.loading');
     try {
       const data = await api('/api/me/usage');
-      if (!data.prompt_tokens && !data.output_tokens && !data.audio_seconds) {
+      if (!data.prompt_tokens && !data.output_tokens && !data.audio_seconds && !data.audio_prompt_tokens) {
         boite.textContent = T('identity.usage.empty');
         return;
       }
       const morceaux = [];
-      const tokens = (data.prompt_tokens || 0) + (data.output_tokens || 0);
+      const tokens = (data.prompt_tokens || 0) + (data.output_tokens || 0) + (data.audio_prompt_tokens || 0);
       if (tokens) morceaux.push(T('identity.usage.tokens', { count: tokens.toLocaleString() }));
       if (data.audio_seconds) {
         morceaux.push(T('identity.usage.audio_minutes', { count: (data.audio_seconds / 60).toFixed(1) }));

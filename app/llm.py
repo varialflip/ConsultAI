@@ -726,6 +726,21 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
             "output_tokens": getattr(usage_metadata, "candidates_token_count", None),
             "total_tokens": getattr(usage_metadata, "total_token_count", None),
         }
+        # Gemini 2.5 Flash facture l'audio entrant à un tarif distinct du
+        # texte et le ventile dans prompt_tokens_details (vérifié sur Vertex
+        # AI : une entrée AUDIO et une entrée TEXT par requête multimodale).
+        # On range donc l'audio à part : prompt_tokens = texte seul,
+        # audio_prompt_tokens = audio. Sans ventilation (modèle plus ancien),
+        # prompt_tokens reste le total, comme avant.
+        details = getattr(usage_metadata, "prompt_tokens_details", None) or []
+        if details and usage["prompt_tokens"] is not None:
+            audio_tokens = sum(
+                (getattr(d, "token_count", None) or 0)
+                for d in details
+                if str(getattr(getattr(d, "modality", None), "value", getattr(d, "modality", ""))).upper() == "AUDIO"
+            )
+            usage["audio_prompt_tokens"] = audio_tokens
+            usage["prompt_tokens"] = usage["prompt_tokens"] - audio_tokens
 
     return Completion(
         text=getattr(response, "text", None) or "",
@@ -920,6 +935,16 @@ def _complete_qwen_omni(system, user, model, temperature, max_tokens, json_mode,
         "output_tokens": getattr(usage_data, "completion_tokens", None),
         "total_tokens": getattr(usage_data, "total_tokens", None),
     } if usage_data else {}
+
+    # Comme Gemini, Qwen Omni facture l'audio entrant à part et le ventile
+    # (vérifié sur DashScope : prompt_tokens_details.audio_tokens/text_tokens,
+    # dont la somme vaut prompt_tokens). Même rangement : texte et audio
+    # voyagent séparément jusqu'à la tarification.
+    details = getattr(usage_data, "prompt_tokens_details", None) if usage_data else None
+    audio_tokens = getattr(details, "audio_tokens", None) if details else None
+    if audio_tokens is not None and usage.get("prompt_tokens") is not None:
+        usage["audio_prompt_tokens"] = audio_tokens
+        usage["prompt_tokens"] = usage["prompt_tokens"] - audio_tokens
 
     return Completion(
         text=text, model=model, provider="qwen_omni",

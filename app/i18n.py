@@ -1070,7 +1070,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "admin.stats.col_provider": ("Fournisseur", "Provider"),
     "admin.stats.col_model": ("Modèle", "Model"),
     "admin.stats.col_kind": ("Type", "Kind"),
-    "admin.stats.col_tokens": ("Jetons (entrée/sortie)", "Tokens (input/output)"),
+    "admin.stats.col_tokens": ("Jetons (texte+♪audio/sortie)", "Tokens (text+♪audio/output)"),
     "admin.stats.col_audio": ("Audio", "Audio"),
     "admin.stats.col_cost": ("Coût", "Cost"),
     "admin.stats.kind.llm": ("Modèle de langage", "Language model"),
@@ -1087,6 +1087,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "admin.stats.unit.token_input_1m": ("$ / 1M jetons entrée", "$ / 1M input tokens"),
     "admin.stats.unit.token_output_1m": ("$ / 1M jetons sortie", "$ / 1M output tokens"),
+    "admin.stats.unit.token_audio_input_1m": (
+        "$ / 1M jetons audio entrée",
+        "$ / 1M input audio tokens",
+    ),
     "admin.stats.unit.audio_minute": ("$ / minute d'audio", "$ / audio minute"),
 
     # --- Menu identité : usage personnel -------------------------------------

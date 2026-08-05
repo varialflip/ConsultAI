@@ -448,6 +448,12 @@ class UsageEvent(Base):
     model: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Jetons d'entrée AUDIO, comptés à part du texte : Gemini 2.5 Flash et
+    # Qwen Omni facturent l'audio entrant à un tarif distinct du texte, et
+    # le ventilent dans la réponse (``prompt_tokens_details``). ``None``
+    # chez les fournisseurs qui ne ventilent pas — ``prompt_tokens`` reste
+    # alors le total d'entrée, comme avant.
+    audio_prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     audio_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
@@ -472,6 +478,7 @@ class UsageDaily(Base):
     model: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    audio_prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     audio_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     cost: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
@@ -1284,6 +1291,12 @@ _ADDED_COLUMNS = {
         ("usage_output_tokens", "INTEGER"),
         ("generation_seconds", "FLOAT"),
         ("transcript_used", "BOOLEAN NOT NULL DEFAULT 1"),
+    ],
+    "usage_events": [
+        ("audio_prompt_tokens", "INTEGER"),
+    ],
+    "usage_daily": [
+        ("audio_prompt_tokens", "INTEGER NOT NULL DEFAULT 0"),
     ],
 }
 

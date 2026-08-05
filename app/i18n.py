@@ -773,6 +773,29 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "drafts.yesterday": ("Hier", "Yesterday"),
     "drafts.default_title": ("Consultation", "Consultation"),
 
+    # --- Synchronisation en direct (autre onglet, autre appareil) ----------
+    "sync.reload": ("Recharger", "Reload"),
+    "sync.conflict_transcript": (
+        "Une nouvelle dictée est arrivée d'un autre appareil, mais cet onglet "
+        "a des modifications non enregistrées. Recharger affichera la version "
+        "la plus récente et perdra ces modifications.",
+        "New dictation arrived from another device, but this tab has unsaved "
+        "changes. Reloading will show the latest version and lose those "
+        "changes.",
+    ),
+    "sync.conflict_generic": (
+        "Cette consultation a été modifiée depuis un autre appareil, mais cet "
+        "onglet a des modifications non enregistrées. Recharger affichera la "
+        "version la plus récente et perdra ces modifications.",
+        "This consultation was changed from another device, but this tab has "
+        "unsaved changes. Reloading will show the latest version and lose "
+        "those changes.",
+    ),
+    "sync.consultation_deleted": (
+        "Cette consultation a été supprimée depuis un autre appareil.",
+        "This consultation was deleted from another device.",
+    ),
+
     # --- Panneau d'administration : chrome ---------------------------------
     "admin.title": ("Réglages", "Settings"),
     "admin.badge": ("Administrateur", "Administrator"),

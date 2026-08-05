@@ -1040,6 +1040,26 @@
 </div>
 
 <!-- ===================================================================
+     MODALE — SYNCHRONISATION EN DIRECT
+     ===================================================================
+     Volontairement SANS croix ni clic-en-dehors pour fermer (voir
+     showBlockingSyncModal côté JS) : elle n'apparaît que si CET onglet a des
+     modifications non enregistrées au moment où une mise à jour arrive d'un
+     autre appareil — laisser la refermer sans agir referait perdre l'une des
+     deux versions en silence au prochain enregistrement automatique.
+     =================================================================== -->
+<div id="syncModal" class="no-print hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm
+                           grid place-items-center p-4">
+  <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5 space-y-4">
+    <p id="syncModalMessage" class="text-sm text-slate-700 leading-relaxed"></p>
+    <button id="btnSyncReload" type="button"
+            class="w-full accent-btn px-4 py-2.5 rounded-lg text-sm font-medium transition">
+      {{ t('sync.reload') }}
+    </button>
+  </div>
+</div>
+
+<!-- ===================================================================
      MODALE — PANNEAU D'ADMINISTRATION
      ===================================================================
      Les champs sont construits par app.js à partir du schéma renvoyé par

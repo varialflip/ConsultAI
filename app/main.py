@@ -48,6 +48,7 @@ Routes
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -58,7 +59,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
@@ -70,7 +71,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
 from app import __version__
-from app import dictation, i18n, llm, oidc, preferences, recordings, runtime_config, stt
+from app import dictation, i18n, live, llm, oidc, preferences, recordings, runtime_config, stt
 from app import users as users_service
 from app.auth import (
     AuthMiddleware,
@@ -117,6 +118,10 @@ async def lifespan(app: FastAPI):
     logger.info("Démarrage de ConsultAI v%s", __version__)
     init_db()
     dictation.purge_expired()
+    # Capturée une fois : c'est elle que live.publish() utilise pour remettre
+    # un évènement en main propre depuis n'importe quel fil d'exécution
+    # (threadpool inclus — voir app/live.py).
+    live.bind_loop(asyncio.get_running_loop())
 
     # Les erreurs de configuration sont la première cause de « ça ne marche
     # pas » sur un NAS : on les affiche bien en évidence dans les journaux.
@@ -1701,6 +1706,12 @@ async def finish_dictation(session_id: str, request: Request, db: Session = Depe
                 session.mime_type, result["transcribed_seconds"], "dictee",
             )
             result["recording_id"] = stored.id if stored else None
+            if stored:
+                live.publish(user.owner_key, "recording_added", {
+                    "consultation_id": consultation.id,
+                    "recording_id": stored.id,
+                    "origin_tab": request.headers.get("x-consultai-tab", ""),
+                })
         except OSError as exc:
             logger.warning("Dictée %s : audio non conservé — %s", session_id, exc)
 
@@ -1847,6 +1858,11 @@ async def api_generate(
     consultation.updated_at = utcnow()
     db.commit()
     db.refresh(consultation)
+    live.publish(user.owner_key, "generated", {
+        "consultation_id": consultation.id,
+        "updated_at": consultation.updated_at.isoformat(),
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
 
     logger.info(
         "Note générée pour %s (gabarit « %s », %s / %s, %d caractères)",
@@ -1869,6 +1885,51 @@ async def api_generate(
         "template_name": template_row.name,
         "metadata": metadata,
     }
+
+
+# ===========================================================================
+# Diffusion en direct (SSE)
+# ===========================================================================
+@app.get("/api/events")
+async def stream_events(request: Request):
+    """
+    Flux permanent : chaque évènement publié par live.publish() pour cet
+    usager (consultation modifiée, tranche dictée, note générée,
+    enregistrement ajouté/retiré) rejoint aussitôt tous ses onglets ouverts.
+
+    Un « ping » toutes les 10 s comble les silences : sans lui, un proxy
+    inverse aux réglages par défaut (souvent 30-60 s d'inactivité max) peut
+    couper une réponse HTTP qui ne renvoie rien pendant plusieurs minutes,
+    même si la connexion elle-même reste parfaitement valide.
+    """
+    user = current_user(request)
+    queue = live.subscribe(user.owner_key)
+
+    async def gen():
+        try:
+            yield "retry: 3000\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event, data = await asyncio.wait_for(queue.get(), timeout=10)
+                    yield f"event: {event}\ndata: {json.dumps(data)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            live.unsubscribe(user.owner_key, queue)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # Sans cet en-tête, nginx tamponne la réponse par défaut et rien
+            # n'arrive au navigateur avant plusieurs Ko accumulés — annulant
+            # tout l'intérêt d'un flux en direct.
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ===========================================================================
@@ -1927,6 +1988,12 @@ def create_consultation(
     db.add(consultation)
     db.commit()
     db.refresh(consultation)
+    live.publish(user.owner_key, "consultation_created", {
+        "consultation_id": consultation.id,
+        "title": consultation.title,
+        "created_at": consultation.created_at.isoformat(),
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     return consultation.to_dict()
 
 
@@ -1957,6 +2024,12 @@ def patch_consultation(
     consultation.updated_at = utcnow()
     db.commit()
     db.refresh(consultation)
+    live.publish(user.owner_key, "consultation_patched", {
+        "consultation_id": consultation.id,
+        "updated_at": consultation.updated_at.isoformat(),
+        "fields": list(updates.keys()),
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     return consultation.to_dict(include_body=False)
 
 
@@ -1976,6 +2049,10 @@ def delete_consultation(consultation_id: int, request: Request, db: Session = De
         "Consultation %d supprimée par %s (%d enregistrement(s))",
         consultation_id, user.username, removed,
     )
+    live.publish(user.owner_key, "consultation_deleted", {
+        "consultation_id": consultation_id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     return None
 
 
@@ -2122,6 +2199,12 @@ async def retranscribe_consultation(
     consultation.stt_language = preferences.document_language()
     consultation.updated_at = utcnow()
     db.commit()
+    live.publish(user.owner_key, "consultation_patched", {
+        "consultation_id": consultation.id,
+        "updated_at": consultation.updated_at.isoformat(),
+        "fields": ["raw_transcript", "status", "stt_language"],
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
 
     logger.info(
         "Retranscription de la consultation %s pour %s : %d enregistrement(s), "
@@ -2167,6 +2250,12 @@ def stream_recording(recording_id: int, request: Request, db: Session = Depends(
 def delete_recording(recording_id: int, request: Request, db: Session = Depends(get_db)):
     user = current_user(request)
     recording = _get_owned_recording(db, recording_id, user)
+    consultation_id = recording.consultation_id  # lu avant delete() : la ligne est détruite ensuite
     recordings.delete(db, recording)
     logger.info("Enregistrement %d supprimé par %s", recording_id, user.username)
+    live.publish(user.owner_key, "recording_deleted", {
+        "consultation_id": consultation_id,
+        "recording_id": recording_id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     return None

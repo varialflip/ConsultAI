@@ -53,7 +53,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from app import llm
+from app import live, llm
 from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
 from app.stt import (
@@ -204,6 +204,22 @@ def _forget_lock(session_id: str) -> None:
     with _locks_guard:
         _locks.pop(session_id, None)
         _processing.discard(session_id)
+
+
+#: Verrous par CONSULTATION, distincts des verrous par session ci-dessus.
+#: Deux sessions différentes (par exemple, une par appareil) peuvent cibler la
+#: même consultation — chacune a son propre verrou de session, qui ne les
+#: empêche donc pas d'écrire dans ``raw_transcript`` en même temps. Rare tant
+#: que rien ne l'encourageait, mais la diffusion en direct (voir app/live.py)
+#: rend ce scénario plus tentant : un médecin qui voit ses deux appareils
+#: progresser en direct peut être tenté de dicter depuis les deux à la fois.
+_consultation_locks: Dict[int, threading.Lock] = {}
+_consultation_locks_guard = threading.Lock()
+
+
+def _lock_for_consultation(consultation_id: int) -> threading.Lock:
+    with _consultation_locks_guard:
+        return _consultation_locks.setdefault(consultation_id, threading.Lock())
 
 
 def try_begin_processing(session_id: str) -> bool:
@@ -432,7 +448,7 @@ def _store_part(session: DictationSession, text: str, moteur: tuple = ("", "")) 
     """
     if text:
         session.parts.append(text)
-    with SessionLocal() as db:
+    with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
         consultation = db.get(Consultation, session.consultation_id)
         if consultation is None:
             logger.warning("Dictée %s : brouillon %s disparu",
@@ -456,6 +472,13 @@ def _store_part(session: DictationSession, text: str, moteur: tuple = ("", "")) 
         consultation.stt_language = preferences.document_language()
         consultation.updated_at = utcnow()
         db.commit()
+        if text:
+            live.publish(consultation.owner, "transcript", {
+                "consultation_id": consultation.id,
+                "session_id": session.id,
+                "text": text,
+                "audio_seconds": consultation.audio_seconds,
+            })
 
 
 def _transcribe_one(session: DictationSession, hints: str, final: bool) -> Optional[float]:

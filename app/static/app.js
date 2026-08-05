@@ -187,6 +187,10 @@
       config.headers['Content-Type'] = 'application/json';
       config.body = JSON.stringify(config.body);
     }
+    // Permet au flux SSE (voir connectLiveEvents) de reconnaître les
+    // écritures faites par CET onglet et de ne pas se les appliquer à
+    // lui-même une seconde fois.
+    config.headers['X-ConsultAI-Tab'] = state.tabId;
 
     let response;
     try {
@@ -297,6 +301,10 @@
   const state = {
     templates: [],
     isTemplateAdmin: true,
+    // Identifiant propre à CET onglet, régénéré à chaque chargement — sert
+    // uniquement à reconnaître ses propres écritures dans le flux SSE
+    // (voir connectLiveEvents) pour ne pas se les appliquer à soi-même.
+    tabId: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()),
     consultationId: null,   // brouillon courant en base
     recording: false,
     paused: false,
@@ -1207,6 +1215,13 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && state.recording && !recorder.wakeLock) {
       acquireWakeLock();
+    }
+    // Filet de sécurité : EventSource se reconnecte tout seul, mais une mise
+    // en veille prolongée (Safari iOS notamment) peut la tuer sans jamais
+    // relancer ce mécanisme intégré.
+    if (document.visibilityState === 'visible' && liveSource
+        && liveSource.readyState === EventSource.CLOSED) {
+      connectLiveEvents();
     }
   });
 
@@ -4376,6 +4391,121 @@
     return config;
   }
 
+  /* =========================================================================
+   * 9 bis. DIFFUSION EN DIRECT (SSE)
+   * ========================================================================
+   * Un même médecin ouvre parfois la même consultation sur deux appareils à
+   * la fois (téléphone en dictée, bureau en lecture). Un seul flux SSE par
+   * onglet, ouvert une fois pour toute la session, reçoit tout ce que
+   * live.publish() (voir app/live.py) diffuse pour cet usager : nouvelle
+   * tranche dictée, note générée, enregistrement ajouté/retiré, brouillon
+   * modifié ailleurs. Chaque évènement porte de quoi reconnaître ses propres
+   * écritures (voir X-ConsultAI-Tab dans api()) pour ne jamais se les
+   * appliquer à soi-même une seconde fois.
+   * ====================================================================== */
+
+  let liveSource = null;
+
+  /** Y a-t-il, dans CET onglet, quelque chose qu'un rechargement ferait perdre ? */
+  function hasUnsavedChanges() {
+    return dictation.active || workspaceSnapshot() !== state.lastSavedSnapshot;
+  }
+
+  /**
+   * Bloque l'édition et impose un rechargement.
+   *
+   * Volontairement sans échappatoire (pas de croix, pas de clic en dehors —
+   * voir la modale dans index.html) : la seule sortie est « Recharger », qui
+   * part sur la version la plus récente et abandonne ce que cet onglet avait
+   * en cours. Fermer la modale sans agir laisserait croire que tout va bien
+   * jusqu'à la prochaine sauvegarde automatique, qui écraserait alors en
+   * silence ce que l'autre appareil vient d'écrire.
+   */
+  function showBlockingSyncModal(messageKey) {
+    $('syncModalMessage').textContent = T(messageKey);
+    $('syncModal').classList.remove('hidden');
+  }
+
+  function hideBlockingSyncModal() {
+    $('syncModal').classList.add('hidden');
+  }
+
+  function onSyncTranscript(evt) {
+    const payload = JSON.parse(evt.data);
+    if (dictation.sessionId && payload.session_id === dictation.sessionId) return;
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    if (!payload.text) return;
+
+    if (hasUnsavedChanges()) {
+      showBlockingSyncModal('sync.conflict_transcript');
+      return;
+    }
+    const box = $('transcript');
+    const existing = box.value.replace(/\s+$/, '');
+    box.value = existing ? `${existing} ${payload.text}` : payload.text;
+    box.scrollTop = box.scrollHeight;
+    updateTranscriptMeta({ duration_seconds: payload.audio_seconds });
+    updateActionButtons();
+    // Le texte poussé est déjà durable côté serveur : ne pas le marquer
+    // « à sauvegarder », sinon la prochaine sauvegarde automatique renverrait
+    // inutilement ce qui vient d'arriver.
+    state.lastSavedSnapshot = workspaceSnapshot();
+  }
+
+  function onSyncRecording(evt) {
+    const payload = JSON.parse(evt.data);
+    if (payload.origin_tab === state.tabId) return;
+    if (String(payload.consultation_id) === String(state.consultationId)) loadRecordings();
+  }
+
+  function onSyncGeneratedOrPatched(evt) {
+    const payload = JSON.parse(evt.data);
+    if (payload.origin_tab === state.tabId) return;
+    if (String(payload.consultation_id) !== String(state.consultationId)) {
+      if (evt.type === 'consultation_patched' && !$('draftsModal').classList.contains('hidden')) {
+        openDraftsModal();
+      }
+      return;
+    }
+    if (hasUnsavedChanges()) {
+      showBlockingSyncModal('sync.conflict_generic');
+      return;
+    }
+    loadDraft(state.consultationId);
+    if (!$('draftsModal').classList.contains('hidden')) openDraftsModal();
+  }
+
+  function onSyncConsultationCreated() {
+    if (!$('draftsModal').classList.contains('hidden')) openDraftsModal();
+  }
+
+  function onSyncConsultationDeleted(evt) {
+    const payload = JSON.parse(evt.data);
+    if (payload.origin_tab === state.tabId) return;
+    if (!$('draftsModal').classList.contains('hidden')) openDraftsModal();
+    if (String(payload.consultation_id) === String(state.consultationId)) {
+      toast(T('sync.consultation_deleted'), 'warning', 8000);
+      resetWorkspace();
+    }
+  }
+
+  /** Ouvre (ou rouvre) le flux SSE de cet usager. Un seul à la fois. */
+  function connectLiveEvents() {
+    if (liveSource) liveSource.close();
+    liveSource = new EventSource('/api/events');
+    liveSource.addEventListener('transcript', onSyncTranscript);
+    liveSource.addEventListener('recording_added', onSyncRecording);
+    liveSource.addEventListener('recording_deleted', onSyncRecording);
+    liveSource.addEventListener('generated', onSyncGeneratedOrPatched);
+    liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);
+    liveSource.addEventListener('consultation_created', onSyncConsultationCreated);
+    liveSource.addEventListener('consultation_deleted', onSyncConsultationDeleted);
+    // EventSource se reconnecte déjà tout seul (avec le délai « retry: » du
+    // serveur) : on se contente de journaliser plutôt que de dupliquer cette
+    // logique.
+    liveSource.onerror = () => console.warn('Flux en direct interrompu, reconnexion automatique en cours.');
+  }
+
   async function init() {
     // Date du jour pré-remplie : c'est le cas de très loin le plus fréquent,
     // et une valeur déjà présente n'est jamais écrasée par l'extraction.
@@ -4444,6 +4574,12 @@
     // --- Brouillons ---
     $('btnDrafts').addEventListener('click', openDraftsModal);
     $('btnCloseDrafts').addEventListener('click', () => $('draftsModal').classList.add('hidden'));
+
+    // --- Synchronisation en direct ---
+    $('btnSyncReload').addEventListener('click', () => {
+      hideBlockingSyncModal();
+      loadDraft(state.consultationId);
+    });
 
     // --- Identité et déconnexion ---
     $('btnIdentity').addEventListener('click', (event) => {
@@ -4527,11 +4663,14 @@
     // Une dictée laissée en plan par un onglet fermé se signale d'elle-même.
     refreshRecoveryBanner().catch((err) => console.warn('Récupération :', err));
 
+    connectLiveEvents();
+
     // Le réseau revient : la file d'attente repart sans attendre le prochain
     // fragment, qui pourrait ne jamais venir si le médecin est en pause.
     window.addEventListener('online', () => {
       dictation.failures = 0;
       pumpQueue();
+      if (liveSource && liveSource.readyState === EventSource.CLOSED) connectLiveEvents();
     });
 
     updateRecordingUI();

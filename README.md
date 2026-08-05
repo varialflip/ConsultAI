@@ -233,6 +233,18 @@ affiche « Connexion expirée ou témoin de session absent ».
 | `/static/manifest.webmanifest`, `/sw.js`, `/static/icons/` | Installation PWA : le navigateur les demande **sans** témoin |
 | Corps de requête ≥ 200 Mo | Une dictée longue dépasse les limites par défaut |
 
+### Flux en direct (`/api/events`)
+
+Cette route reste ouverte en permanence : c'est elle qui synchronise deux
+appareils sur la même consultation (dictée sur le téléphone visible aussitôt
+sur l'écran de bureau). Un proxy aux réglages par défaut coupe souvent une
+réponse HTTP inactive après 30 à 60 secondes — l'application envoie un signal
+toutes les 10 s pour éviter ça, mais un proxy avec un délai d'inactivité plus
+court que ce signal fermera quand même la connexion. Si la synchronisation
+semble se couper puis reprendre sans cesse, augmentez ce délai côté proxy
+(`proxy_read_timeout` sur nginx, par exemple) plutôt que du côté de
+l'application.
+
 ### Pare-feu
 
 Le port du conteneur n'a aucune raison d'être joignable au-delà du proxy :

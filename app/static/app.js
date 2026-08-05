@@ -309,9 +309,20 @@
   function formatDuration(totalSeconds) {
     const seconds = Math.max(0, Math.floor(totalSeconds));
     const m = String(Math.floor(seconds / 60)).padStart(2, '0');
-    const s = String(seconds % 60).padStart(2, '0');
+    const s = String(Math.floor(seconds % 60)).padStart(2, '0');
     return `${m}:${s}`;
   }
+
+  /**
+   * Nom du mois en toutes lettres (« août » → « Août »), dans la langue de
+   * l'interface : le navigateur connaît les noms, inutile de les traduire
+   * dans i18n.py. Sert à « Mon usage » et au récapitulatif des statistiques.
+   */
+  function monthName(year, month) {
+    const nom = new Date(year, month - 1).toLocaleString(LOCALE, { month: 'long' });
+    return nom.charAt(0).toUpperCase() + nom.slice(1);
+  }
+
 
   function formatDateTime(iso) {
     if (!iso) return '';
@@ -4501,6 +4512,39 @@
     }
   }
 
+  /**
+   * Tableau récapitulatif en tête d'onglet : une rangée par usager (trié par
+   * coût du mois en cours décroissant), en colonnes les trois derniers mois
+   * calendaires, l'année en cours et l'année précédente. Contrairement au
+   * tableau de détail plus bas, il ne dépend pas de la plage de dates
+   * choisie — c'est le coup d'œil « qui dépense quoi ».
+   */
+  function renderCostOverview() {
+    const overview = (adminState.stats && adminState.stats.overview) || null;
+    if (!overview || !overview.rows.length) return '';
+    const cellule = (v) => `<td class="px-2 py-1.5 text-right tabular-nums">${v ? v.toFixed(2) : '—'}</td>`;
+    const lignes = overview.rows.map((r) => `
+      <tr class="border-b border-slate-100">
+        <td class="px-2 py-1.5">${esc(r.owner)}</td>
+        ${r.month_costs.map(cellule).join('')}
+        ${r.year_costs.map(cellule).join('')}
+      </tr>`).join('');
+    return `
+      <h3 class="text-sm font-semibold text-slate-700">${esc(T('admin.stats.overview_title'))}</h3>
+      <div class="overflow-auto rounded-lg border border-slate-200">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-xs text-slate-500">
+            <tr>
+              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
+              ${overview.months.map((m) => `<th class="px-2 py-1.5 text-right">${esc(monthName(m.year, m.month))}</th>`).join('')}
+              ${overview.years.map((a) => `<th class="px-2 py-1.5 text-right">${a}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>${lignes}</tbody>
+        </table>
+      </div>`;
+  }
+
   function renderStatsTable() {
     const data = adminState.stats || { rows: [], total_cost: 0, currency: 'USD' };
     const lignes = data.rows.map((r) => `
@@ -4599,7 +4643,7 @@
 
   function renderStats() {
     const boite = $('adminStats');
-    boite.innerHTML = renderStatsTable() + renderPricingTable();
+    boite.innerHTML = renderCostOverview() + renderStatsTable() + renderPricingTable();
 
     ['statsFrom', 'statsTo'].forEach((id) => {
       $(id).addEventListener('change', () => {
@@ -4788,18 +4832,26 @@
     boite.textContent = T('identity.usage.loading');
     try {
       const data = await api('/api/me/usage');
-      if (!data.prompt_tokens && !data.output_tokens && !data.audio_seconds && !data.audio_prompt_tokens) {
-        boite.textContent = T('identity.usage.empty');
-        return;
-      }
-      const morceaux = [];
-      const tokens = (data.prompt_tokens || 0) + (data.output_tokens || 0) + (data.audio_prompt_tokens || 0);
-      if (tokens) morceaux.push(T('identity.usage.tokens', { count: tokens.toLocaleString() }));
-      if (data.audio_seconds) {
-        morceaux.push(T('identity.usage.audio_minutes', { count: (data.audio_seconds / 60).toFixed(1) }));
-      }
-      boite.innerHTML = `<p>${esc(morceaux.join(' · '))}</p>` +
-        (data.cost ? `<p class="mt-0.5 text-slate-500">${esc(T('identity.usage.cost', { amount: data.cost.toFixed(2) }))}</p>` : '');
+
+      const rendreMois = (mois) => {
+        const morceaux = [];
+        const tokens = (mois.prompt_tokens || 0) + (mois.output_tokens || 0) + (mois.audio_prompt_tokens || 0);
+        if (tokens) morceaux.push(T('identity.usage.tokens', { count: tokens.toLocaleString() }));
+        if (mois.audio_seconds) {
+          morceaux.push(T('identity.usage.audio_minutes', { count: (mois.audio_seconds / 60).toFixed(1) }));
+        }
+        const lignes = morceaux.length
+          ? `<p>${esc(morceaux.join(' · '))}</p>`
+          + (mois.cost ? `<p class="mt-0.5 text-slate-500">${esc(T('identity.usage.cost', { amount: mois.cost.toFixed(2) }))}</p>` : '')
+          : `<p class="text-slate-400">${esc(T('identity.usage.empty'))}</p>`;
+        return `<div>
+          <p class="text-[11px] text-slate-500 mb-1">${esc(T('identity.usage.month', { month: monthName(mois.year, mois.month) }))}</p>
+          <div class="text-xs text-slate-600">${lignes}</div>
+        </div>`;
+      };
+
+      boite.className = 'space-y-3';
+      boite.innerHTML = rendreMois(data.current) + rendreMois(data.previous);
     } catch (err) {
       boite.textContent = '';
     }

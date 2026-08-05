@@ -137,17 +137,24 @@ def _empty_summary() -> dict:
             "by_provider": []}
 
 
-def summary_for_owner(db: Session, owner: str, since: datetime) -> dict:
-    """Alimente GET /api/me/usage : cumul depuis `since`, sur les
-    événements bruts ET les lignes déjà compactées (une fenêtre de 30 jours
-    peut chevaucher les deux si le compactage a tourné entre-temps)."""
+def summary_for_owner(
+    db: Session, owner: str, since: datetime, until: Optional[datetime] = None,
+) -> dict:
+    """Alimente GET /api/me/usage : cumul sur [`since`, `until`[ (sans borne
+    haute si `until` est absent), sur les événements bruts ET les lignes déjà
+    compactées (un mois peut chevaucher les deux si le compactage a tourné
+    entre-temps)."""
     since_day = since.date().isoformat()
+    until_day = until.date().isoformat() if until else None
     totals: dict[tuple, dict] = defaultdict(lambda: {
         "prompt_tokens": 0, "output_tokens": 0, "audio_seconds": 0,
         "audio_prompt_tokens": 0, "cost": 0.0,
     })
 
-    for row in db.scalars(select(UsageEvent).where(UsageEvent.owner == owner, UsageEvent.created_at >= since)):
+    event_query = select(UsageEvent).where(UsageEvent.owner == owner, UsageEvent.created_at >= since)
+    if until is not None:
+        event_query = event_query.where(UsageEvent.created_at < until)
+    for row in db.scalars(event_query):
         key = (row.kind, row.provider, row.model)
         totals[key]["prompt_tokens"] += row.prompt_tokens or 0
         totals[key]["output_tokens"] += row.output_tokens or 0
@@ -155,7 +162,10 @@ def summary_for_owner(db: Session, owner: str, since: datetime) -> dict:
         totals[key]["audio_seconds"] += row.audio_seconds or 0
         totals[key]["cost"] += row.cost or 0.0
 
-    for row in db.scalars(select(UsageDaily).where(UsageDaily.owner == owner, UsageDaily.date >= since_day)):
+    daily_query = select(UsageDaily).where(UsageDaily.owner == owner, UsageDaily.date >= since_day)
+    if until_day is not None:
+        daily_query = daily_query.where(UsageDaily.date < until_day)
+    for row in db.scalars(daily_query):
         key = (row.kind, row.provider, row.model)
         totals[key]["prompt_tokens"] += row.prompt_tokens
         totals[key]["output_tokens"] += row.output_tokens
@@ -175,6 +185,61 @@ def summary_for_owner(db: Session, owner: str, since: datetime) -> dict:
         })
     result["by_provider"].sort(key=lambda item: item["cost"], reverse=True)
     return result
+
+
+def admin_cost_overview(db: Session) -> dict:
+    """
+    Coût par usager sur des périodes calendaires fixes : les trois derniers
+    mois (courant compris), l'année en cours et l'année précédente. Alimente
+    le tableau récapitulatif en tête de l'onglet admin « Statistiques ».
+
+    Additionne, comme partout ici, les événements bruts récents ET les lignes
+    quotidiennes compactées — une année calendaire couvre largement les deux.
+    Le nom des mois est mis en forme côté navigateur (langue de l'interface) ;
+    on ne renvoie que des numéros.
+    """
+    maintenant = utcnow()
+    mois = []  # (année, mois), courant d'abord
+    annee, m = maintenant.year, maintenant.month
+    for _ in range(3):
+        mois.append((annee, m))
+        annee, m = (annee - 1, 12) if m == 1 else (annee, m - 1)
+    annees = [maintenant.year, maintenant.year - 1]
+
+    par_usager: dict[str, dict] = defaultdict(lambda: {
+        "month_costs": [0.0, 0.0, 0.0], "year_costs": [0.0, 0.0],
+    })
+
+    def cumule(owner: str, cout: Optional[float], annee: int, mois_num: int) -> None:
+        if not cout:
+            return
+        agregat = par_usager[owner]
+        for i, (a, mm) in enumerate(mois):
+            if (a, mm) == (annee, mois_num):
+                agregat["month_costs"][i] += cout
+        for i, a in enumerate(annees):
+            if a == annee:
+                agregat["year_costs"][i] += cout
+
+    for row in db.scalars(select(UsageEvent)):
+        cumule(row.owner, row.cost, row.created_at.year, row.created_at.month)
+    for row in db.scalars(select(UsageDaily)):
+        # date = « YYYY-MM-DD » : le découpage de chaîne évite toute
+        # conversion de fuseau.
+        cumule(row.owner, row.cost, int(row.date[:4]), int(row.date[5:7]))
+
+    rows = [
+        {"owner": owner, **agregat}
+        for owner, agregat in par_usager.items()
+        if any(agregat["month_costs"]) or any(agregat["year_costs"])
+    ]
+    rows.sort(key=lambda item: item["month_costs"][0], reverse=True)
+    return {
+        "months": [{"year": a, "month": m} for a, m in mois],
+        "years": annees,
+        "rows": rows,
+        "currency": "USD",
+    }
 
 
 def admin_breakdown(

@@ -985,13 +985,26 @@ def put_my_theme(payload: ThemeIn, request: Request):
 @app.get("/api/me/usage")
 def get_my_usage(request: Request, db: Session = Depends(get_db)):
     """
-    Récapitulatif d'usage des 30 derniers jours de l'usager courant — jamais
-    celui d'un autre, ``owner`` vient toujours de l'identité authentifiée,
-    jamais d'un paramètre.
+    Récapitulatif d'usage de l'usager courant, mois calendaire en cours et
+    mois précédent — jamais celui d'un autre, ``owner`` vient toujours de
+    l'identité authentifiée, jamais d'un paramètre. Les bornes sont des
+    dates serveur ; le nom du mois est mis en forme côté navigateur, dans la
+    langue de l'interface.
     """
     user = current_user(request)
-    since = utcnow() - timedelta(days=30)
-    return usage.summary_for_owner(db, user.owner_key, since)
+    now = utcnow()
+    debut_mois = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    debut_mois_precedent = (debut_mois - timedelta(days=1)).replace(day=1)
+    return {
+        "current": {
+            **usage.summary_for_owner(db, user.owner_key, debut_mois),
+            "year": now.year, "month": now.month,
+        },
+        "previous": {
+            **usage.summary_for_owner(db, user.owner_key, debut_mois_precedent, debut_mois),
+            "year": debut_mois_precedent.year, "month": debut_mois_precedent.month,
+        },
+    }
 
 
 @app.get("/api/config")
@@ -1151,7 +1164,12 @@ def get_admin_usage(
     db: Session = Depends(get_db),
     admin: Principal = Depends(require_template_admin),
 ):
-    return usage.admin_breakdown(db, date_from, date_to, owner)
+    return {
+        **usage.admin_breakdown(db, date_from, date_to, owner),
+        # Tableau récapitulatif en tête d'onglet : périodes calendaires fixes,
+        # indépendantes de la plage date_from/date_to choisie pour le détail.
+        "overview": usage.admin_cost_overview(db),
+    }
 
 
 class PricingRateIn(BaseModel):

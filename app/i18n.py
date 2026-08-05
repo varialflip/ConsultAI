@@ -1063,6 +1063,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     # --- Panneau d'administration : onglet Statistiques ---------------------
     "admin.stats.loading": ("Chargement…", "Loading…"),
     "admin.stats.empty": ("Aucune donnée sur cette période.", "No data for this period."),
+    "admin.stats.overview_title": ("Coût par usager (USD)", "Cost per user (USD)"),
     "admin.stats.date_from": ("Du", "From"),
     "admin.stats.date_to": ("Au", "To"),
     "admin.stats.total_cost": ("Coût total estimé", "Estimated total cost"),
@@ -1094,9 +1095,9 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "admin.stats.unit.audio_minute": ("$ / minute d'audio", "$ / audio minute"),
 
     # --- Menu identité : usage personnel -------------------------------------
-    "identity.usage": ("Mon usage (30 derniers jours)", "My usage (last 30 days)"),
+    "identity.usage.month": ("Mon usage — {month}", "My usage — {month}"),
     "identity.usage.loading": ("Chargement…", "Loading…"),
-    "identity.usage.empty": ("Aucune activité récente.", "No recent activity."),
+    "identity.usage.empty": ("Aucune activité.", "No activity."),
     "identity.usage.tokens": ("{count} jetons", "{count} tokens"),
     "identity.usage.audio_minutes": ("{count} min d'audio", "{count} audio min"),
     "identity.usage.cost": ("≈ {amount} $ estimé", "≈ US${amount} estimated"),

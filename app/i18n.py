@@ -307,6 +307,16 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "note.engine_stt_title": ("Transcription : {engine}", "Transcription: {engine}"),
     "note.engine_llm_title": ("Mise en forme : {engine}", "Formatting: {engine}"),
     "note.engine_audio": ("+ audio", "+ audio"),
+    "transcript.bypass_notice": (
+        "Affichage seulement — la note se génère à partir de l'audio",
+        "Display only — the note is generated from the audio",
+    ),
+    "transcript.bypass_notice_title": (
+        "Le STT continue de tourner pour l'affichage, mais la note se génère "
+        "directement à partir de l'audio : ce texte n'y entre pour rien.",
+        "Speech recognition keeps running for display, but the note is "
+        "generated directly from the audio: this text plays no part in it.",
+    ),
     "note.engine_audio_title": (
         "Un extrait audio de la dictée a été joint à la transcription pour "
         "cette mise en forme.",

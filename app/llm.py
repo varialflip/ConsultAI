@@ -1017,16 +1017,20 @@ def generate_note(
     ``audio`` — ``(octets, type_mime)`` — n'est envoyé que si le fournisseur
     actif gère l'audio (Gemini, Qwen Omni — voir ``_AUDIO_CAPABLE_PROVIDERS``) ;
     avec tout autre fournisseur il est silencieusement ignoré (voir
-    ``complete``). Une transcription vide n'est tolérée que si ce même
-    fournisseur a activé le contournement du STT (``<fournisseur>_bypass_stt``)
-    ET qu'un audio est fourni — l'audio devient alors la seule source.
+    ``complete``). Dès que ce même fournisseur a activé le contournement du
+    STT (``<fournisseur>_bypass_stt``) ET qu'un audio est fourni, l'audio
+    devient la SEULE source envoyée au modèle — que la transcription soit
+    vide ou non. Une transcription conservée pour l'affichage (voir
+    ``<fournisseur>_bypass_stt_keep_transcript``) reste donc visible à
+    l'écran mais n'est jamais transmise : c'est le comportement documenté
+    du réglage, pas seulement le cas où rien n'a été transcrit.
 
     Lève ``GenerationError`` avec un message en français prêt à afficher.
     """
     provider = active_provider()
     opts = audio_settings(provider)
     transcript_clean = (transcript or "").strip()
-    audio_only = opts["bypass_stt"] and audio is not None and not transcript_clean
+    audio_only = opts["bypass_stt"] and audio is not None
     if not transcript_clean and not audio_only:
         raise GenerationError("La transcription est vide : rien à mettre en forme.")
 
@@ -1049,8 +1053,14 @@ def generate_note(
     )
     audio_to_send = audio if (audio is not None and provider in _AUDIO_CAPABLE_PROVIDERS) else None
 
+    # En audio seul, la transcription — même non vide (voir keep_transcript
+    # ci-dessus) — reste hors du prompt : elle n'existe que pour l'affichage
+    # à l'écran pendant la dictée, jamais comme entrée du modèle. Sans ce
+    # blanc, _AUDIO_PRIMARY_NOTE (« aucune transcription n'est fournie »)
+    # mentirait dès qu'une transcription conservée traînait encore.
     user_prompt = build_user_prompt(
-        transcript, layout_format, context_lines, extra_instructions, langue
+        "" if audio_only else transcript,
+        layout_format, context_lines, extra_instructions, langue,
     )
     if audio_to_send is not None:
         note = _AUDIO_PRIMARY_NOTE if audio_only else _AUDIO_CROSSCHECK_NOTE
@@ -1091,10 +1101,10 @@ def generate_note(
         "truncated": result.truncated,
         "usage": result.usage,
         "audio_used": audio_to_send is not None,
-        # Faux uniquement en audio seul (STT contourné, transcription vide) :
-        # dans tous les autres cas — y compris le contournement avec
-        # transcription conservée — le texte reste la source PRINCIPALE,
-        # l'audio ne sert qu'à trancher un doute (_AUDIO_CROSSCHECK_NOTE).
+        # Faux dès que le contournement du STT est actif et qu'un audio est
+        # fourni — y compris avec une transcription conservée pour
+        # l'affichage : elle n'a alors pris aucune part dans cette note (voir
+        # audio_only ci-dessus).
         "transcript_used": not audio_only,
         "elapsed_seconds": round(elapsed_seconds, 2),
     }

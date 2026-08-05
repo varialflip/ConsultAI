@@ -647,6 +647,10 @@
                 class="hidden shrink-0 items-center gap-3 border-t border-slate-200
                        px-4 sm:px-6 py-1.5 text-[11px] text-slate-400">
           <span id="transcriptEngine" class="hidden truncate"></span>
+          <!-- Rempli par updateBypassSttNotice() : visible seulement quand le
+               STT tourne pour l'affichage sans jamais nourrir la génération
+               (contournement actif ET transcription conservée). -->
+          <span id="transcriptBypassNotice" class="hidden truncate text-amber-700"></span>
           <span id="saveStatusDictee" class="ml-auto shrink-0"></span>
         </footer>
       </div>

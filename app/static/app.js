@@ -811,6 +811,20 @@
     }
   }
 
+  /**
+   * Amène la transcription à son tout dernier caractère. Recalé dans la trame
+   * de rendu suivante : la valeur vient d'être réécrite, et attendre le replan
+   * de mise en page garantit que scrollHeight reflète le NOUVEAU contenu —
+   * sinon certains navigateurs déroulent trop tôt, à l'ancien fond, et la
+   * nouvelle ligne reste masquée sous le pied. La première tentative synchrone
+   * couvre le cas général ; la seconde, différée, rattrape le replan différé.
+   */
+  function scrollTranscriptToBottom() {
+    const box = $('transcript');
+    box.scrollTop = box.scrollHeight;
+    requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+  }
+
   /** Recopie dans la transcription les tranches que le serveur vient de rendre. */
   function applyDictationParts(session) {
     if (!session || !Array.isArray(session.parts)) return;
@@ -821,7 +835,7 @@
     const box = $('transcript');
     const existing = box.value.replace(/\s+$/, '');
     box.value = formatSentences(existing ? `${existing} ${fresh.join(' ')}` : fresh.join(' '));
-    box.scrollTop = box.scrollHeight;
+    scrollTranscriptToBottom();
     updateTranscriptMeta({ duration_seconds: session.transcribed_seconds });
     updateActionButtons();
   }
@@ -5096,7 +5110,7 @@
     const box = $('transcript');
     const existing = box.value.replace(/\s+$/, '');
     box.value = formatSentences(existing ? `${existing} ${payload.text}` : payload.text);
-    box.scrollTop = box.scrollHeight;
+    scrollTranscriptToBottom();
     updateTranscriptMeta({ duration_seconds: payload.audio_seconds });
     updateActionButtons();
     // Le texte poussé est déjà durable côté serveur : ne pas le marquer

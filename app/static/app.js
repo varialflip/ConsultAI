@@ -4569,7 +4569,12 @@
           <tbody>${lignes}</tbody>
         </table>
       </div>
-      <form id="formAddPricing" class="flex flex-wrap items-end gap-2">
+      <!-- Un <div>, jamais un <form> : cette section vit à l'intérieur de
+           #adminForm (le formulaire du panneau admin, voir index.html) — un
+           <form> imbriqué dans un autre est invalide en HTML, le navigateur
+           l'ignore silencieusement, et le bouton ne déclenche alors plus
+           rien. -->
+      <div id="formAddPricing" class="flex flex-wrap items-end gap-2">
         <input name="provider" required placeholder="${esc(T('admin.stats.pricing_provider'))}"
                class="border border-slate-300 rounded px-2 py-1 text-sm w-32">
         <input name="model" placeholder="${esc(T('admin.stats.pricing_model'))}"
@@ -4583,8 +4588,8 @@
         </select>
         <input name="rate" type="number" step="0.0001" required placeholder="${esc(T('admin.stats.pricing_rate'))}"
                class="border border-slate-300 rounded px-2 py-1 text-sm w-24">
-        <button type="submit" class="accent-btn px-3 py-1.5 rounded-lg text-sm font-medium">${esc(T('admin.stats.pricing_add'))}</button>
-      </form>`;
+        <button type="button" id="btnAddPricing" class="accent-btn px-3 py-1.5 rounded-lg text-sm font-medium">${esc(T('admin.stats.pricing_add'))}</button>
+      </div>`;
   }
 
   function renderStats() {
@@ -4629,20 +4634,26 @@
       });
     });
 
-    const formAjout = $('formAddPricing');
-    if (formAjout) {
-      formAjout.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const data = new FormData(formAjout);
+    const zoneAjout = $('formAddPricing');
+    const btnAjout = $('btnAddPricing');
+    if (zoneAjout && btnAjout) {
+      btnAjout.addEventListener('click', async () => {
+        const champ = (nom) => zoneAjout.querySelector(`[name="${nom}"]`).value;
+        const provider = champ('provider').trim();
+        const rateBrut = champ('rate');
+        if (!provider || rateBrut === '') {
+          zoneAjout.querySelector('[name="provider"]').reportValidity();
+          return;
+        }
         try {
           await api('/api/admin/pricing', {
             method: 'POST',
             body: {
-              provider: data.get('provider').trim(),
-              model: data.get('model').trim(),
-              kind: data.get('kind'),
-              unit: data.get('unit'),
-              rate: Number(data.get('rate')),
+              provider,
+              model: champ('model').trim(),
+              kind: champ('kind'),
+              unit: champ('unit'),
+              rate: Number(rateBrut),
               currency: 'USD',
             },
           });

@@ -1682,8 +1682,14 @@
     list.querySelectorAll('button[data-act]').forEach((button) => {
       button.addEventListener('click', () => {
         const entry = entries[Number(button.dataset.index)];
-        if (button.dataset.act === 'follow') loadDraft(entry.consultationId);
-        else if (button.dataset.act === 'resume') peekStoredSession(entry);
+        if (button.dataset.act === 'follow') {
+          // Rien à recharger ni à conclure ici (voir onSyncTranscript) : le
+          // seul geste manquant est de sortir le bandeau de l'écran, sinon
+          // il reste affiché au-dessus de la consultation qu'on vient
+          // d'ouvrir pour la suivre.
+          loadDraft(entry.consultationId);
+          hideRecoveryBanner();
+        } else if (button.dataset.act === 'resume') peekStoredSession(entry);
         else if (button.dataset.act === 'finish') finishStoredSession(entry);
         else if (button.dataset.act === 'download') downloadStoredSession(entry);
         else discardStoredSession(entry);

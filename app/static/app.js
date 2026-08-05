@@ -211,6 +211,11 @@
    * exemple : suivre une dictée commencée sur un autre appareil). Volontairement
    * plus simple que toast() — pas de glissé pour fermer, une croix suffit —
    * pour ne pas risquer de régression sur le toast partout ailleurs utilisé.
+   *
+   * ``durationMs = 0`` rend le toast persistant : il ne part que par la croix
+   * ou par le bouton d'action. Une invitation manquée parce qu'on regardait
+   * ailleurs pendant 12 s ne doit pas exiger un rechargement de page pour
+   * réapparaître.
    */
   function toastWithAction(message, actionLabel, onAction, durationMs = 12000) {
     const el = document.createElement('div');
@@ -241,7 +246,7 @@
       el.style.opacity = '0';
       setTimeout(() => el.remove(), 320);
     };
-    timer = setTimeout(dismiss, durationMs);
+    timer = durationMs > 0 ? setTimeout(dismiss, durationMs) : null;
     close.addEventListener('click', dismiss);
     action.addEventListener('click', () => { dismiss(); onAction(); });
   }
@@ -5081,16 +5086,35 @@
    * suivre en direct, plutôt que de laisser le médecin la découvrir plus
    * tard dans « Mes brouillons ». Celle qu'on regarde déjà se met à jour
    * toute seule (voir onSyncTranscript) — rien à proposer dans ce cas.
+   *
+   * Le toast est persistant (durationMs = 0) : une invitation qui disparaît
+   * au bout de 12 s obligeait à recharger la page quand on n'avait pas les
+   * yeux dessus. Le bandeau de récupération, lui aussi rafraîchi ici, garde
+   * une trace durable de la dictée à suivre.
    */
   function onSyncDictationStarted(evt) {
     const payload = JSON.parse(evt.data);
     if (payload.origin_tab === state.tabId) return;
+    refreshRecoveryBanner();
     if (String(payload.consultation_id) === String(state.consultationId)) return;
     toastWithAction(
       T('sync.dictation_started', { title: payload.title }),
       T('sync.follow'),
       () => loadDraft(payload.consultation_id),
+      0,
     );
+  }
+
+  /**
+   * La dictée suivie (ou démarrée) ailleurs vient de se conclure ou d'être
+   * abandonnée : la session a disparu du serveur, le bandeau « Suivre »
+   * n'a plus de raison d'être — on le recalcule plutôt que d'attendre le
+   * prochain chargement de page.
+   */
+  function onSyncDictationStopped(evt) {
+    const payload = JSON.parse(evt.data);
+    if (payload.origin_tab === state.tabId) return;
+    refreshRecoveryBanner();
   }
 
   function onSyncConsultationDeleted(evt) {
@@ -5109,6 +5133,7 @@
     liveSource = new EventSource('/api/events');
     liveSource.addEventListener('transcript', onSyncTranscript);
     liveSource.addEventListener('dictation_started', onSyncDictationStarted);
+    liveSource.addEventListener('dictation_stopped', onSyncDictationStopped);
     liveSource.addEventListener('recording_added', onSyncRecording);
     liveSource.addEventListener('recording_deleted', onSyncRecording);
     liveSource.addEventListener('generated', onSyncGeneratedOrPatched);

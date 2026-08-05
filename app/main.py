@@ -1947,6 +1947,15 @@ async def finish_dictation(session_id: str, request: Request, db: Session = Depe
             logger.warning("Dictée %s : audio non conservé — %s", session_id, exc)
 
     dictation.delete_session(session)
+    # Les autres onglets/appareils qui suivaient (ou hébergeaient l'invitation
+    # « Suivre » de) cette dictée rafraîchissent leur bandeau : la session a
+    # disparu, « Suivre » n'a plus d'objet. delete_session n'efface que les
+    # fichiers — l'objet reste lisible pour le payload.
+    live.publish(user.owner_key, "dictation_stopped", {
+        "consultation_id": session.consultation_id,
+        "session_id": session.id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     logger.info(
         "Dictée %s conclue pour %s : %d tranche(s), %s s d'audio",
         session_id, user.username, len(session.parts), result["transcribed_seconds"],
@@ -1960,6 +1969,12 @@ def cancel_dictation(session_id: str, request: Request):
     user = current_user(request)
     session = _dictation_session(session_id, user)
     dictation.delete_session(session)
+    # Même raison que finish_dictation : prévenir les autres écrans.
+    live.publish(user.owner_key, "dictation_stopped", {
+        "consultation_id": session.consultation_id,
+        "session_id": session.id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     logger.info("Dictée %s abandonnée par %s", session_id, user.username)
     return None
 

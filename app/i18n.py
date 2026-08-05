@@ -1106,6 +1106,17 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "automatic detection: Soniox is multilingual by design, which suits a "
         "consultation that alternates between two languages.",
     ),
+    "set.soniox_send_context.label": (
+        "Contexte de transcription Soniox",
+        "Soniox transcription context",
+    ),
+    "set.soniox_send_context.help": (
+        "Envoie le vocabulaire médical et le contexte de domaine à Soniox "
+        "pour améliorer la précision de la transcription. Désactiver réduit "
+        "les tokens texte facturés.",
+        "Sends medical vocabulary and domain context to Soniox to improve "
+        "transcription accuracy. Disabling reduces billed text tokens.",
+    ),
     "set.cohere_api_key.label": ("Clé API Cohere", "Cohere API key"),
     "set.cohere_api_key.help": (
         "dashboard.cohere.com → API Keys. Une clé d'ESSAI est limitée à "

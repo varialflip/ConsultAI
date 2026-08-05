@@ -1103,12 +1103,14 @@ def _transcribe_soniox(payload: AudioPayload, extra_phrase_hints: Optional[str] 
 
     model = runtime_config.value("soniox_model") or "stt-async-v5"
     langue = runtime_config.stt_language("soniox")
-    termes = _termes_prioritaires(extra_phrase_hints, _SONIOX_MAX_TERMS)
+    envoyer_contexte = runtime_config.value("soniox_send_context") != "false"
+    termes = _termes_prioritaires(extra_phrase_hints, _SONIOX_MAX_TERMS) if envoyer_contexte else []
 
     logger.info(
-        "Envoi à Soniox : %.2f Mo, %s s facturées, modèle %s, %d termes de contexte",
+        "Envoi à Soniox : %.2f Mo, %s s facturées, modèle %s, %d termes de contexte%s",
         len(payload.content) / 1048576, round(payload.effective_seconds, 1) or "?",
         model, len(termes),
+        " (contexte désactivé)" if not envoyer_contexte else "",
     )
 
     corps, ctype = _multipart_body("file", "dictee.ogg", payload.content)
@@ -1118,14 +1120,15 @@ def _transcribe_soniox(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         raise TranscriptionError("Soniox n'a pas retourné d'identifiant de fichier.")
 
     try:
-        requete = {
+        requete: dict = {
             "model": model,
             "file_id": file_id,
-            "context": {
+        }
+        if envoyer_contexte:
+            requete["context"] = {
                 "text": _SONIOX_CONTEXTES[i18n.normalize(preferences.document_language())],
                 "terms": termes,
-            },
-        }
+            }
         if langue:
             requete["language_hints"] = [langue]
         else:

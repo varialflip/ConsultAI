@@ -3404,6 +3404,7 @@
     soniox_api_key: { key: 'stt_provider', value: 'soniox' },
     soniox_model: { key: 'stt_provider', value: 'soniox' },
     soniox_language: { key: 'stt_provider', value: 'soniox' },
+    soniox_send_context: { key: 'stt_provider', value: 'soniox' },
     cohere_api_key: { key: 'stt_provider', value: 'cohere' },
     cohere_model: { key: 'stt_provider', value: 'cohere' },
     cohere_language: { key: 'stt_provider', value: 'cohere' },

@@ -180,6 +180,11 @@ SETTINGS: Tuple[Setting, ...] = (
         "soniox_language", "text", "group.stt",
         default=lambda: "", placeholder="fr / en / auto",
     ),
+    Setting(
+        "soniox_send_context", "choice", "group.stt",
+        default=lambda: "true" if settings.soniox_send_context else "false",
+        choices=ON_OFF,
+    ),
 
     Setting(
         "cohere_api_key", "secret", "group.stt",

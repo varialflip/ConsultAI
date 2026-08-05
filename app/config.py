@@ -190,6 +190,7 @@ class Settings:
     # --- Soniox (quatrième service de reconnaissance vocale) ---
     soniox_api_key: str = ""
     soniox_model: str = "stt-async-v5"
+    soniox_send_context: bool = True
 
     # --- Cohere Transcribe (cinquième) ---
     # ⚠️ 5 requêtes/minute sur une clé d'essai : voir stt._transcribe_cohere.
@@ -375,6 +376,7 @@ class Settings:
             assemblyai_model=_env("ASSEMBLYAI_MODEL", "universal-3-5-pro"),
             soniox_api_key=_env("SONIOX_API_KEY"),
             soniox_model=_env("SONIOX_MODEL", "stt-async-v5"),
+            soniox_send_context=_env_bool("SONIOX_SEND_CONTEXT", True),
             cohere_api_key=_env("COHERE_API_KEY"),
             cohere_model=_env("COHERE_MODEL", "cohere-transcribe-03-2026"),
             mistral_api_key=_env("MISTRAL_API_KEY"),

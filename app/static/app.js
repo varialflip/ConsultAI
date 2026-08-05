@@ -2375,29 +2375,9 @@
     if (!pied) return;
     const moteur = $('transcriptEngine');
     const etat = $('saveStatusDictee');
-    const avis = $('transcriptBypassNotice');
     const visible = (moteur && !moteur.classList.contains('hidden') && moteur.textContent.trim())
-                 || (etat && etat.textContent.trim())
-                 || (avis && !avis.classList.contains('hidden'));
+                 || (etat && etat.textContent.trim());
     pied.classList.toggle('hidden', !visible);
-  }
-
-  /**
-   * Rappelle, dans le pied de la dictée, que le texte affiché ne sert PAS à
-   * la génération quand le STT tourne pour l'affichage seul (contournement
-   * actif ET transcription conservée — voir refreshClientConfig()). Sans ce
-   * rappel, rien ne distingue ce texte-ci d'une transcription qui, elle,
-   * alimente réellement la note — visible dès le début de la dictée, pas
-   * seulement une fois celle-ci terminée.
-   */
-  function updateBypassSttNotice() {
-    const el = $('transcriptBypassNotice');
-    if (!el) return;
-    const show = state.llmBypassStt && state.llmBypassSttKeepTranscript;
-    el.textContent = show ? T('transcript.bypass_notice') : '';
-    el.title = show ? T('transcript.bypass_notice_title') : '';
-    el.classList.toggle('hidden', !show);
-    refreshTranscriptFooter();
   }
 
   /**
@@ -4557,7 +4537,6 @@
     state.llmBypassStt = Boolean(config.llm_bypass_stt);
     state.llmBypassSttKeepTranscript = Boolean(config.llm_bypass_stt_keep_transcript);
     updateActionButtons();
-    updateBypassSttNotice();
     renderLanguageChoices(config.languages, config.language || LANG);
 
     if (config.theme) applyTheme(config.theme);
@@ -4575,12 +4554,14 @@
       const stt = config.stt_provider === 'custom' && config.stt_model
         ? config.stt_model
         : config.stt_provider;
-      // Contournement du STT actif : même s'il tourne encore pour
-      // l'affichage pendant la dictée (voir llmBypassSttKeepTranscript), son
-      // résultat n'entre JAMAIS dans la génération — la flèche « → »
-      // suggérerait à tort qu'il fait partie de la chaîne qui produit la
-      // note, entre parenthèses ça ne dit plus que « pour information ».
-      label.textContent = state.llmBypassStt
+      // Contournement du STT actif ET transcription non conservée : c'est
+      // le SEUL cas où le STT ne participe jamais à la génération, l'audio
+      // devient l'unique source (voir llm.generate_note, audio_only). Avec
+      // la transcription conservée, elle reste au contraire la source
+      // PRINCIPALE — l'audio ne sert plus qu'à trancher un doute sur un
+      // terme mal transcrit — la flèche reste donc de mise dans ce cas.
+      const sttOutOfPipeline = state.llmBypassStt && !state.llmBypassSttKeepTranscript;
+      label.textContent = sttOutOfPipeline
         ? `(${stt}) - ${config.llm_provider} · ${config.llm_model}`
         : `${stt} → ${config.llm_provider} · ${config.llm_model}`;
     }

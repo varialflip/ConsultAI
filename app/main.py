@@ -1857,6 +1857,7 @@ async def api_generate(
     consultation.model_used = result["model"]
     consultation.llm_provider = result["provider"]
     consultation.audio_used = result["audio_used"]
+    consultation.transcript_used = result["transcript_used"]
     consultation.usage_prompt_tokens = result["usage"].get("prompt_tokens")
     consultation.usage_output_tokens = result["usage"].get("output_tokens")
     consultation.generation_seconds = result["elapsed_seconds"]
@@ -1881,7 +1882,7 @@ async def api_generate(
         "provider": result["provider"],
         "stt_used": " / ".join(
             p for p in (consultation.stt_provider, consultation.stt_model) if p
-        ),
+        ) if result["transcript_used"] else "",
         "llm_used": " / ".join(p for p in (result["provider"], result["model"]) if p),
         "audio_used": result["audio_used"],
         "truncated": result["truncated"],

@@ -235,6 +235,15 @@ class Consultation(Base):
     # ci-dessus : un brouillon rouvert doit refléter ce qui l'a produit, pas
     # le réglage courant du panneau admin.
     audio_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # La transcription a-t-elle vraiment nourri la DERNIÈRE génération, ou le
+    # STT n'a-t-il tourné que pour l'affichage pendant que l'audio seul
+    # alimentait le modèle (contournement du STT, transcription vide) ? Sans
+    # ce champ, stt_provider/stt_model — qui suivent le dernier PASSAGE DE
+    # DICTÉE, pas la dernière génération — continueraient de s'afficher même
+    # quand ils n'ont eu aucune part dans la note. Vrai par défaut : toute
+    # consultation antérieure à ce réglage a été générée à partir de sa
+    # transcription, sans exception.
+    transcript_used: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Jetons et durée RÉELS de la dernière génération, tels que renvoyés par
     # le fournisseur — jamais un nombre que le modèle prétendrait donner dans
     # le corps de la note, qui serait inventé (aucun modèle n'a accès à son
@@ -273,8 +282,12 @@ class Consultation(Base):
             "audio_seconds": self.audio_seconds,
             "model_used": self.model_used,
             # Chaînes déjà composées : l'interface n'a pas à connaître la
-            # façon dont on stocke fournisseur et modèle séparément.
-            "stt_used": " / ".join(p for p in (self.stt_provider, self.stt_model) if p),
+            # façon dont on stocke fournisseur et modèle séparément. Vide si
+            # la dernière génération n'a pas consommé la transcription (voir
+            # transcript_used) : stt_provider/stt_model datent alors d'un
+            # passage de dictée qui n'a eu aucune part dans la note actuelle.
+            "stt_used": " / ".join(p for p in (self.stt_provider, self.stt_model) if p)
+                if self.transcript_used else "",
             # Brute, celle-ci : l'interface la compare à la langue du gabarit
             # choisi pour décider s'il y a lieu de proposer une retranscription.
             "stt_language": self.stt_language,
@@ -1163,6 +1176,7 @@ _ADDED_COLUMNS = {
         ("usage_prompt_tokens", "INTEGER"),
         ("usage_output_tokens", "INTEGER"),
         ("generation_seconds", "FLOAT"),
+        ("transcript_used", "BOOLEAN NOT NULL DEFAULT 1"),
     ],
 }
 

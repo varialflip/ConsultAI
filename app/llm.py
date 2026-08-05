@@ -1091,6 +1091,11 @@ def generate_note(
         "truncated": result.truncated,
         "usage": result.usage,
         "audio_used": audio_to_send is not None,
+        # Faux uniquement en audio seul (STT contourné, transcription vide) :
+        # dans tous les autres cas — y compris le contournement avec
+        # transcription conservée — le texte reste la source PRINCIPALE,
+        # l'audio ne sert qu'à trancher un doute (_AUDIO_CROSSCHECK_NOTE).
+        "transcript_used": not audio_only,
         "elapsed_seconds": round(elapsed_seconds, 2),
     }
 

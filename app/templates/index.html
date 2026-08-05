@@ -398,6 +398,13 @@
             <div id="themeChoices" class="flex items-center gap-1.5 py-1"></div>
           </div>
 
+          <!-- Usage personnel, 30 derniers jours : chargé à l'ouverture du
+               menu depuis /api/me/usage, jamais celui d'un autre usager. -->
+          <div class="px-3 py-2 border-b border-slate-100">
+            <p class="text-[11px] text-slate-500 mb-1">{{ t('identity.usage') }}</p>
+            <div id="myUsage" class="text-xs text-slate-600"></div>
+          </div>
+
           <button id="btnLogout" type="button" role="menuitem"
                   class="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-50
                          active:bg-slate-100 transition">
@@ -1037,12 +1044,15 @@
                              lg:p-6 overflow-hidden">
   <div class="bg-white lg:rounded-xl shadow-2xl max-w-3xl mx-auto flex flex-col h-full lg:max-h-[88vh]"
        style="padding-top: env(safe-area-inset-top)">
-    <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 shrink-0">
-      <h2 class="font-semibold text-slate-800">{{ t('drafts.title') }}</h2>
-      <button id="btnCloseDrafts" type="button"
-              class="ml-auto w-9 h-9 grid place-items-center rounded-lg hover:bg-slate-100 text-slate-500 text-2xl leading-none">
-        &times;
-      </button>
+    <div class="flex flex-col gap-0.5 px-4 py-3 border-b border-slate-200 shrink-0">
+      <div class="flex items-center gap-3">
+        <h2 class="font-semibold text-slate-800">{{ t('drafts.title') }}</h2>
+        <button id="btnCloseDrafts" type="button"
+                class="ml-auto w-9 h-9 grid place-items-center rounded-lg hover:bg-slate-100 text-slate-500 text-2xl leading-none">
+          &times;
+        </button>
+      </div>
+      <div id="draftsRetentionNotice" class="hidden text-xs text-slate-400"></div>
     </div>
     <!-- Les séparateurs sont portés par chaque ligne et non par une classe
          divide-y : les en-têtes de date insérés dans la même liste ont leur
@@ -1109,6 +1119,11 @@
       </div>
       <!-- Comptes et groupes : construit par app.js depuis /api/admin/users. -->
       <div id="adminPeople" class="hidden px-4 pb-4 space-y-6"></div>
+      <!-- Sauvegarde : construit par app.js depuis /api/admin/backup. -->
+      <div id="adminBackup" class="hidden px-4 pb-4 space-y-6"></div>
+      <!-- Statistiques d'usage : construit par app.js depuis /api/admin/usage
+           et /api/admin/pricing. -->
+      <div id="adminStats" class="hidden px-4 pb-4 space-y-6"></div>
     </form>
 
     <!-- Pied contextuel : « Enregistrer » n'apparaît que sur un onglet qui

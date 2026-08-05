@@ -53,7 +53,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from app import live, llm
+from app import live, llm, usage
 from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
 from app.stt import (
@@ -442,7 +442,10 @@ def _bind_template_language(template_id: Optional[int]) -> None:
         preferences.bind_document_language(row.language if row else None)
 
 
-def _store_part(session: DictationSession, text: str, moteur: tuple = ("", "")) -> None:
+def _store_part(
+    session: DictationSession, text: str, moteur: tuple = ("", ""),
+    duration_seconds: float = 0.0,
+) -> None:
     """
     Reporte la tranche dans le brouillon — c'est lui, la copie durable. Le
     texte y est écrit dès qu'il existe, sans attendre la fin de la dictée :
@@ -469,6 +472,12 @@ def _store_part(session: DictationSession, text: str, moteur: tuple = ("", "")) 
         # veut voir — pas celui de la première tranche.
         if moteur[0]:
             consultation.stt_provider, consultation.stt_model = moteur[0], moteur[1]
+            if duration_seconds > 0:
+                usage.log_stt_usage(
+                    db, owner=consultation.owner, consultation_id=consultation.id,
+                    provider=moteur[0], model=moteur[1],
+                    audio_seconds=int(round(duration_seconds)),
+                )
         # Langue réellement employée pour CETTE tranche. Comme le moteur, la
         # dernière gagne : c'est celle du gabarit lié à la session, et si le
         # gabarit a changé en cours de dictée, c'est la plus récente qui décrit
@@ -520,7 +529,8 @@ def _transcribe_one(session: DictationSession, hints: str, final: bool) -> Optio
         logger.info("Dictée %s : tranche de %.1f s sans parole",
                     session.id, payload.duration_seconds)
     _store_part(session, text,
-                (result.get("provider") or "", result.get("model") or ""))
+                (result.get("provider") or "", result.get("model") or ""),
+                duration_seconds=payload.duration_seconds)
 
     session.save()
     logger.info(
@@ -603,6 +613,7 @@ def _finalise(session: DictationSession) -> None:
     text = (result.get("transcript") or "").strip()
     if text:
         _store_part(session, text,
-                    (result.get("provider") or "", result.get("model") or ""))
+                    (result.get("provider") or "", result.get("model") or ""),
+                    duration_seconds=session.offset_seconds)
     session.status = "finished"
     session.save()

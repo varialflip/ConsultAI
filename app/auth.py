@@ -41,7 +41,7 @@ import logging
 import posixpath
 import re
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Iterable, Optional, Tuple
 
 from fastapi import HTTPException, Request, status
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse

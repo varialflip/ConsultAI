@@ -43,7 +43,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import runtime_config
-from app.config import settings
 from app.database import (
     ADMIN_GROUP,
     DEFAULT_GROUP,

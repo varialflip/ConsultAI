@@ -53,8 +53,9 @@ import logging
 import os
 import re
 import threading
+import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -71,7 +72,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
 from app import __version__
-from app import dictation, i18n, live, llm, oidc, preferences, recordings, runtime_config, stt
+from app import backup, dictation, i18n, live, llm, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
 from app import users as users_service
 from app.auth import (
     AuthMiddleware,
@@ -85,11 +86,11 @@ from app.auth import (
 from app.config import configure_logging, settings
 from app.database import (
     Consultation,
-    Group,
+    PricingRate,
+    SchedulerState,
     SessionLocal,
     Recording,
     Template as TemplateModel,
-    User,
     get_db,
     init_db,
     utcnow,
@@ -117,7 +118,21 @@ _MAX_SESSION_ID_TOKEN = 2800
 async def lifespan(app: FastAPI):
     logger.info("Démarrage de ConsultAI v%s", __version__)
     init_db()
+
+    # Un sentinel encore présent ici signifie que CE démarrage est le
+    # redémarrage demandé après une restauration (voir app/backup.py et le
+    # middleware _block_writes_after_restore ci-dessous) : le processus qui a
+    # remplacé les fichiers est mort, un nouveau vient de prendre le relais
+    # avec un moteur SQLAlchemy neuf sur les données restaurées. Le blocage a
+    # rempli son rôle, il doit disparaître — sinon plus aucune écriture ne
+    # serait jamais possible après la toute première restauration.
+    cleared = backup.clear_restart_sentinel()
+    if cleared:
+        logger.info("Redémarrage post-restauration détecté (sauvegarde du %s) — écritures débloquées", cleared)
+
     dictation.purge_expired()
+    with SessionLocal() as _purge_db:
+        purge_expired_consultations(_purge_db)
     # Capturée une fois : c'est elle que live.publish() utilise pour remettre
     # un évènement en main propre depuis n'importe quel fil d'exécution
     # (threadpool inclus — voir app/live.py).
@@ -165,7 +180,14 @@ async def lifespan(app: FastAPI):
         runtime_config.language(),
     )
     os.makedirs(settings.audio_dir, exist_ok=True)
+
+    scheduler.register_daily_job("backup", backup.run_scheduled_backup)
+    scheduler.register_daily_job("usage_compaction", usage.compact_old_events)
+    _scheduler_task = asyncio.create_task(scheduler.run_daily_loop())
+
     yield
+
+    _scheduler_task.cancel()
     logger.info("Arrêt de ConsultAI")
 
 
@@ -234,6 +256,26 @@ app.add_middleware(
     same_site="lax",
     https_only=settings.session_https_only,
 )
+
+
+@app.middleware("http")
+async def _block_writes_after_restore(request: Request, call_next):
+    """
+    Après une restauration (voir app/backup.py:restore_backup), le fichier
+    SQLite sur disque a été remplacé sous les pieds du moteur SQLAlchemy en
+    cours d'exécution — un redémarrage manuel du conteneur est requis avant
+    toute nouvelle écriture. Ajoutée en dernier (donc exécutée en premier,
+    avant même la session/l'authentification) : aucune requête d'écriture ne
+    doit atteindre une route le temps que ce sentinel existe.
+    """
+    if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
+        pending = backup.restore_required()
+        if pending is not None:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": _t("err.restart_required"), "restore": pending},
+            )
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
@@ -940,6 +982,18 @@ def put_my_theme(payload: ThemeIn, request: Request):
     }
 
 
+@app.get("/api/me/usage")
+def get_my_usage(request: Request, db: Session = Depends(get_db)):
+    """
+    Récapitulatif d'usage des 30 derniers jours de l'usager courant — jamais
+    celui d'un autre, ``owner`` vient toujours de l'identité authentifiée,
+    jamais d'un paramètre.
+    """
+    user = current_user(request)
+    since = utcnow() - timedelta(days=30)
+    return usage.summary_for_owner(db, user.owner_key, since)
+
+
 @app.get("/api/config")
 async def api_config(request: Request):
     """Configuration non sensible, consommée par le frontend."""
@@ -1081,6 +1135,172 @@ def put_admin_settings(
         ],
         "language": langue,
     }
+
+
+# ===========================================================================
+# Statistiques d'usage et tarifs (administrateur)
+# ===========================================================================
+# require_template_admin, comme le reste du panneau de réglages — consulter
+# des statistiques n'a pas le même poids que gérer comptes/groupes.
+@app.get("/api/admin/usage")
+def get_admin_usage(
+    request: Request,
+    date_from: str,
+    date_to: str,
+    owner: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: Principal = Depends(require_template_admin),
+):
+    return usage.admin_breakdown(db, date_from, date_to, owner)
+
+
+class PricingRateIn(BaseModel):
+    provider: str = Field(..., max_length=40)
+    model: str = Field("", max_length=120)
+    kind: str = Field(..., pattern="^(llm|stt)$")
+    unit: str = Field(..., max_length=20)
+    rate: float
+    currency: str = Field("USD", max_length=8)
+
+
+@app.get("/api/admin/pricing")
+def list_admin_pricing(request: Request, db: Session = Depends(get_db), admin: Principal = Depends(require_template_admin)):
+    rows = db.scalars(select(PricingRate).order_by(PricingRate.provider, PricingRate.model, PricingRate.kind)).all()
+    return {"rates": [
+        {"id": r.id, "provider": r.provider, "model": r.model, "kind": r.kind,
+         "unit": r.unit, "rate": r.rate, "currency": r.currency}
+        for r in rows
+    ]}
+
+
+@app.post("/api/admin/pricing", status_code=status.HTTP_201_CREATED)
+def create_admin_pricing(
+    payload: PricingRateIn, request: Request,
+    db: Session = Depends(get_db), admin: Principal = Depends(require_template_admin),
+):
+    row = PricingRate(**payload.model_dump())
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=_t("err.pricing_duplicate")) from exc
+    return {"id": row.id}
+
+
+@app.put("/api/admin/pricing/{rate_id}")
+def update_admin_pricing(
+    rate_id: int, payload: PricingRateIn, request: Request,
+    db: Session = Depends(get_db), admin: Principal = Depends(require_template_admin),
+):
+    row = db.get(PricingRate, rate_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=_t("err.pricing_not_found"))
+    for field, value in payload.model_dump().items():
+        setattr(row, field, value)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=_t("err.pricing_duplicate")) from exc
+    return {"id": row.id}
+
+
+@app.delete("/api/admin/pricing/{rate_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_admin_pricing(
+    rate_id: int, request: Request,
+    db: Session = Depends(get_db), admin: Principal = Depends(require_template_admin),
+):
+    row = db.get(PricingRate, rate_id)
+    if row is not None:
+        db.delete(row)
+        db.commit()
+    return None
+
+
+# ===========================================================================
+# Sauvegarde / restauration (administrateur)
+# ===========================================================================
+# require_admin, et non require_template_admin : action destructive à large
+# rayon d'action (remplace TOUTES les données patient), même bar que la
+# gestion des comptes/groupes.
+@app.get("/api/admin/backup")
+def list_admin_backups(request: Request, db: Session = Depends(get_db), admin: Principal = Depends(require_admin)):
+    state = db.get(SchedulerState, "backup")
+    return {
+        "backups": [b.to_dict() for b in backup.list_backups()],
+        "retention_count": int(runtime_config.value_float("backup_retention_count", 7.0)),
+        "last_run": {
+            "at": state.last_run_at.isoformat() if state and state.last_run_at else None,
+            "status": state.last_status if state else "",
+            "error": state.last_error if state else "",
+        },
+        "restore_pending": backup.restore_required(),
+    }
+
+
+@app.post("/api/admin/backup", status_code=status.HTTP_201_CREATED)
+async def create_admin_backup(request: Request, admin: Principal = Depends(require_admin)):
+    info = await run_in_threadpool(backup.create_backup, "manual")
+    logger.info("Sauvegarde manuelle créée par %s : %s", admin.username, info.filename)
+    return info.to_dict()
+
+
+@app.get("/api/admin/backup/{filename}")
+def download_admin_backup(filename: str, request: Request, admin: Principal = Depends(require_admin)):
+    try:
+        path = backup.get_backup_path(filename)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=_t("err.backup_not_found")) from exc
+    return FileResponse(path, media_type="application/zip",
+                         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.delete("/api/admin/backup/{filename}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_admin_backup(filename: str, request: Request, admin: Principal = Depends(require_admin)):
+    try:
+        backup.delete_backup(filename)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=_t("err.backup_not_found")) from exc
+    logger.warning("Sauvegarde supprimée par %s : %s", admin.username, filename)
+    return None
+
+
+@app.post("/api/admin/backup/restore/{filename}")
+async def restore_admin_backup_existing(filename: str, request: Request, admin: Principal = Depends(require_admin)):
+    try:
+        source_path = backup.get_backup_path(filename)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=_t("err.backup_not_found")) from exc
+    try:
+        await run_in_threadpool(backup.restore_backup, source_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    logger.warning("Restauration déclenchée par %s depuis %s", admin.username, filename)
+    return {"restart_required": True, "restore": backup.restore_required()}
+
+
+@app.post("/api/admin/backup/restore")
+async def restore_admin_backup_upload(
+    request: Request, file: UploadFile = File(...), admin: Principal = Depends(require_admin),
+):
+    raw = await file.read()
+    os.makedirs(settings.backup_dir, exist_ok=True)
+    # Nom aléatoire, jamais dérivé d'une donnée fournie par la requête
+    # (nom d'usager ou de fichier) : un composant de chemin construit à partir
+    # d'une valeur externe n'a pas sa place, même quand la source est admin.
+    temp_path = os.path.join(settings.backup_dir, f"_upload-{uuid.uuid4().hex}.zip.tmp")
+    with open(temp_path, "wb") as handle:
+        handle.write(raw)
+    try:
+        await run_in_threadpool(backup.restore_backup, temp_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+    logger.warning("Restauration déclenchée par %s depuis un fichier téléversé", admin.username)
+    return {"restart_required": True, "restore": backup.restore_required()}
 
 
 # ===========================================================================
@@ -1494,6 +1714,11 @@ async def api_transcribe(
             if result.get("provider"):
                 consultation.stt_provider = result["provider"]
                 consultation.stt_model = result.get("model") or ""
+                usage.log_stt_usage(
+                    db, owner=user.owner_key, consultation_id=consultation.id,
+                    provider=result["provider"], model=result.get("model") or "",
+                    audio_seconds=int(result["duration_seconds"]),
+                )
             consultation.stt_language = preferences.document_language()
             consultation.updated_at = utcnow()
             db.commit()
@@ -1863,6 +2088,12 @@ async def api_generate(
     consultation.generation_seconds = result["elapsed_seconds"]
     consultation.status = "genere"
     consultation.updated_at = utcnow()
+    usage.log_llm_usage(
+        db, owner=user.owner_key, consultation_id=consultation.id,
+        provider=result["provider"], model=result["model"],
+        prompt_tokens=result["usage"].get("prompt_tokens"),
+        output_tokens=result["usage"].get("output_tokens"),
+    )
     db.commit()
     db.refresh(consultation)
     live.publish(user.owner_key, "generated", {
@@ -1959,13 +2190,18 @@ def list_consultations(
     """
     user = current_user(request)
     limit = max(1, min(limit, 200))
+    purge_expired_consultations(db)
     rows = db.scalars(
         select(Consultation)
         .where(Consultation.owner == user.owner_key)
         .order_by(Consultation.created_at.desc())
         .limit(limit)
     ).all()
-    return {"consultations": [row.to_dict(include_body=False) for row in rows]}
+    retention_days = int(runtime_config.value_float("consultation_retention_days", 0.0))
+    return {
+        "consultations": [row.to_dict(include_body=False) for row in rows],
+        "retention_days": retention_days,
+    }
 
 
 @app.post("/api/consultations", status_code=status.HTTP_201_CREATED)
@@ -2038,6 +2274,30 @@ def patch_consultation(
         "origin_tab": request.headers.get("x-consultai-tab", ""),
     })
     return consultation.to_dict(include_body=False)
+
+
+def purge_expired_consultations(db: Session) -> int:
+    """
+    Supprime les dossiers dont la dernière modification dépasse le délai de
+    rétention réglé dans le panneau admin (0 = purge désactivée). Toutes les
+    consultations sont concernées, tous propriétaires confondus — c'est une
+    politique de conservation des données patient, pas un filtre par usager.
+    """
+    days = int(runtime_config.value_float("consultation_retention_days", 0.0))
+    if days <= 0:
+        return 0
+    cutoff = utcnow() - timedelta(days=days)
+    rows = db.scalars(select(Consultation).where(Consultation.updated_at < cutoff)).all()
+    for consultation in rows:
+        recordings.delete_for_consultation(db, consultation.id)
+        db.delete(consultation)
+    if rows:
+        db.commit()
+        logger.info(
+            "Purge des dossiers : %d consultation(s) de plus de %d jour(s) supprimée(s)",
+            len(rows), days,
+        )
+    return len(rows)
 
 
 @app.delete("/api/consultations/{consultation_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -2203,6 +2463,10 @@ async def retranscribe_consultation(
     consultation.status = "transcrit"
     if moteur[0]:
         consultation.stt_provider, consultation.stt_model = moteur
+        usage.log_stt_usage(
+            db, owner=user.owner_key, consultation_id=consultation.id,
+            provider=moteur[0], model=moteur[1], audio_seconds=int(round(secondes)),
+        )
     consultation.stt_language = preferences.document_language()
     consultation.updated_at = utcnow()
     db.commit()

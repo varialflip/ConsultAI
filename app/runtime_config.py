@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
@@ -119,6 +119,10 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting(
         "allow_signup", "choice", "group.system",
         default=lambda: "true" if settings.allow_signup else "false", choices=ON_OFF,
+    ),
+    Setting(
+        "consultation_retention_days", "number", "group.system",
+        default=lambda: "0",
     ),
 
     # --- Reconnaissance vocale ---------------------------------------------
@@ -423,11 +427,18 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: default_prompts.GENERAL_PROMPT_EN,
         placeholder="set.general_prompt.placeholder",
     ),
+
+    # --- Sauvegarde -----------------------------------------------------------
+    Setting(
+        "backup_retention_count", "number", "group.backup",
+        default=lambda: "7",
+    ),
 )
 
 #: Ordre d'affichage des groupes dans le panneau.
 GROUPS: Tuple[str, ...] = (
     "group.system", "group.stt", "group.llm", "group.prompts", "group.users",
+    "group.backup", "group.stats",
 )
 
 BY_KEY: Dict[str, Setting] = {item.key: item for item in SETTINGS}

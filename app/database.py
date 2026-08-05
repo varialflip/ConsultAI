@@ -25,6 +25,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     event,
     select,
@@ -373,6 +374,112 @@ class AppSetting(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
     updated_by: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+
+
+class SchedulerState(Base):
+    """
+    Dernière exécution de chaque tâche planifiée (sauvegarde quotidienne,
+    compactage de l'usage…). Sert à la fois de mémoire pour ``scheduler.py``
+    (« la tâche du jour a-t-elle déjà tourné ? ») et d'affichage côté panneau
+    admin (« dernière sauvegarde : ... »).
+    """
+
+    __tablename__ = "scheduler_state"
+
+    job_name: Mapped[str] = mapped_column(String(80), primary_key=True)
+    last_run_date: Mapped[str] = mapped_column(String(10), default="", nullable=False)  # YYYY-MM-DD, fuseau local
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status: Mapped[str] = mapped_column(String(10), default="", nullable=False)  # ok | error
+    last_error: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
+class PricingRate(Base):
+    """
+    Tarif d'un fournisseur/modèle, modifiable depuis le panneau admin.
+
+    ``unit`` fixe l'échelle du tarif pour rester lisible et copiable depuis
+    une page de tarifs fournisseur : ``token_input_1m``/``token_output_1m``
+    (prix pour 1 million de jetons) ou ``audio_minute`` (prix pour 1 minute
+    d'audio) — jamais un prix par jeton unique, dont la précision décimale
+    (ex. 0,0000003 $) est source d'erreur de saisie.
+
+    ``model = ""`` sert de tarif par défaut pour tout le fournisseur, utilisé
+    quand aucune ligne ne correspond exactement au modèle (les champs modèle
+    de ``runtime_config.py`` sont du texte libre, ex. ``gemini_model``).
+    """
+
+    __tablename__ = "pricing_rates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    model: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)  # llm | stt
+    unit: Mapped[str] = mapped_column(String(20), nullable=False)  # token_input_1m | token_output_1m | audio_minute
+    rate: Mapped[float] = mapped_column(Float, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("provider", "model", "kind", "unit", name="uq_pricing_rate"),
+    )
+
+
+class UsageEvent(Base):
+    """
+    Un appel facturé (génération LLM ou transcription STT), au jeton/à la
+    seconde près. Conservé ``USAGE_RAW_RETENTION_DAYS`` jours (voir
+    ``app/usage.py``) puis compacté dans ``UsageDaily`` et effacé — sert au
+    détail récent (« pourquoi cette consultation a coûté cher »), pas à
+    l'historique long terme.
+
+    Le coût est calculé et figé à l'écriture (jamais recalculé depuis
+    ``PricingRate`` a posteriori) : corriger un tarif placeholder le mois
+    prochain ne doit pas réécrire silencieusement la dépense déjà déclarée le
+    mois dernier.
+    """
+
+    __tablename__ = "usage_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    consultation_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)  # llm | stt
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    model: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    audio_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class UsageDaily(Base):
+    """
+    Cumul quotidien produit par le compactage de ``UsageEvent``. Une ligne
+    par (jour, usager, type, fournisseur, modèle) — jamais purgée : c'est la
+    base des tableaux de l'onglet admin « Statistiques », et son volume reste
+    négligeable (une ligne par combinaison-jour, pas par appel).
+    """
+
+    __tablename__ = "usage_daily"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD
+    owner: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    model: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    audio_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cost: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("date", "owner", "kind", "provider", "model", name="uq_usage_daily"),
+    )
 
 
 class Group(Base):
@@ -1213,6 +1320,9 @@ def init_db() -> None:
         seed_editable_templates(db)
         migrate_general_prompt(db)
         seed_groups(db)
+        # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
+        from app.pricing import seed_default_rates
+        seed_default_rates(db)
         # L'ordre compte : les propriétaires existants d'abord, pour que le
         # compte porteur des données soit celui qui devient administrateur.
         _adopt_legacy_owners(db)

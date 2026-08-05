@@ -769,6 +769,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 
     # --- Brouillons ---------------------------------------------------------
     "drafts.title": ("Mes brouillons", "My drafts"),
+    "drafts.retention_notice": (
+        "Les dossiers de plus de {days} jour(s) sans modification sont supprimés automatiquement.",
+        "Records unmodified for more than {days} day(s) are deleted automatically.",
+    ),
     "drafts.loading": ("Chargement…", "Loading…"),
     "drafts.none": ("Aucun brouillon enregistré.", "No saved draft."),
     "drafts.unnamed_patient": ("Patient non identifié", "Unidentified patient"),
@@ -865,6 +869,17 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "fournisseur d'identité sont lues.",
         "Who may sign in, with which rights, and which identity-provider "
         "properties are read.",
+    ),
+    "admin.intro.group.backup": (
+        "Export/import complet de l'application, avec sauvegarde quotidienne "
+        "automatique.",
+        "Full application export/import, with an automatic daily backup.",
+    ),
+    "admin.intro.group.stats": (
+        "Jetons et minutes d'audio consommés par usager, par modèle et par "
+        "période, avec le coût estimé.",
+        "Tokens and audio minutes consumed per user, model and time period, "
+        "with the estimated cost.",
     ),
     "admin.env_note": (
         "Ces réglages sont enregistrés en base et surchargent le fichier "
@@ -993,6 +1008,95 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Formatting will fail.",
     ),
 
+    # --- Panneau d'administration : onglet Sauvegarde -----------------------
+    "admin.backup.loading": ("Chargement…", "Loading…"),
+    "admin.backup.empty": ("Aucune sauvegarde pour l'instant.", "No backup yet."),
+    "admin.backup.now": ("Sauvegarder maintenant", "Backup now"),
+    "admin.backup.creating": ("Sauvegarde en cours…", "Backing up…"),
+    "admin.backup.download": ("Télécharger", "Download"),
+    "admin.backup.delete": ("Supprimer", "Delete"),
+    "admin.backup.delete_confirm": (
+        "Supprimer définitivement cette sauvegarde ?",
+        "Permanently delete this backup?",
+    ),
+    "admin.backup.restore": ("Restaurer", "Restore"),
+    "admin.backup.restore_confirm": (
+        "Restaurer cette sauvegarde va REMPLACER toutes les consultations et "
+        "tous les enregistrements audio actuels par leur contenu. Une "
+        "sauvegarde de l'état actuel sera prise avant, mais cette action reste "
+        "lourde de conséquences. Continuer ?",
+        "Restoring this backup will REPLACE all current consultations and "
+        "audio recordings with its content. A safety snapshot of the current "
+        "state will be taken first, but this remains a serious action. "
+        "Continue?",
+    ),
+    "admin.backup.upload_restore": (
+        "Restaurer depuis un fichier…",
+        "Restore from a file…",
+    ),
+    "admin.backup.kind.scheduled": ("automatique", "automatic"),
+    "admin.backup.kind.manual": ("manuelle", "manual"),
+    "admin.backup.kind.pre_restore": ("sécurité pré-restauration", "pre-restore safety"),
+    "admin.backup.last_run": (
+        "Dernière sauvegarde automatique : {at}",
+        "Last automatic backup: {at}",
+    ),
+    "admin.backup.last_run_never": (
+        "Aucune sauvegarde automatique n'a encore tourné.",
+        "The automatic backup hasn't run yet.",
+    ),
+    "admin.backup.last_run_error": (
+        "La dernière sauvegarde automatique a échoué : {error}",
+        "The last automatic backup failed: {error}",
+    ),
+    "admin.backup.restart_required": (
+        "Restauration terminée. Redémarrez le conteneur ConsultAI maintenant "
+        "pour continuer — jusque-là, toute écriture est bloquée.",
+        "Restore complete. Restart the ConsultAI container now to continue — "
+        "until then, all writes are blocked.",
+    ),
+    "admin.backup.retention_help_count": (
+        "{count} sauvegarde(s) conservée(s) actuellement.",
+        "{count} backup(s) currently kept.",
+    ),
+
+    # --- Panneau d'administration : onglet Statistiques ---------------------
+    "admin.stats.loading": ("Chargement…", "Loading…"),
+    "admin.stats.empty": ("Aucune donnée sur cette période.", "No data for this period."),
+    "admin.stats.date_from": ("Du", "From"),
+    "admin.stats.date_to": ("Au", "To"),
+    "admin.stats.total_cost": ("Coût total estimé", "Estimated total cost"),
+    "admin.stats.col_owner": ("Usager", "User"),
+    "admin.stats.col_provider": ("Fournisseur", "Provider"),
+    "admin.stats.col_model": ("Modèle", "Model"),
+    "admin.stats.col_kind": ("Type", "Kind"),
+    "admin.stats.col_tokens": ("Jetons (entrée/sortie)", "Tokens (input/output)"),
+    "admin.stats.col_audio": ("Audio", "Audio"),
+    "admin.stats.col_cost": ("Coût", "Cost"),
+    "admin.stats.kind.llm": ("Modèle de langage", "Language model"),
+    "admin.stats.kind.stt": ("Reconnaissance vocale", "Speech recognition"),
+    "admin.stats.pricing_title": ("Tarifs", "Rates"),
+    "admin.stats.pricing_add": ("Ajouter un tarif", "Add a rate"),
+    "admin.stats.pricing_provider": ("Fournisseur", "Provider"),
+    "admin.stats.pricing_model": ("Modèle (vide = défaut du fournisseur)", "Model (empty = provider default)"),
+    "admin.stats.pricing_unit": ("Unité", "Unit"),
+    "admin.stats.pricing_rate": ("Tarif (USD)", "Rate (USD)"),
+    "admin.stats.pricing_delete_confirm": (
+        "Supprimer ce tarif ?",
+        "Delete this rate?",
+    ),
+    "admin.stats.unit.token_input_1m": ("$ / 1M jetons entrée", "$ / 1M input tokens"),
+    "admin.stats.unit.token_output_1m": ("$ / 1M jetons sortie", "$ / 1M output tokens"),
+    "admin.stats.unit.audio_minute": ("$ / minute d'audio", "$ / audio minute"),
+
+    # --- Menu identité : usage personnel -------------------------------------
+    "identity.usage": ("Mon usage (30 derniers jours)", "My usage (last 30 days)"),
+    "identity.usage.loading": ("Chargement…", "Loading…"),
+    "identity.usage.empty": ("Aucune activité récente.", "No recent activity."),
+    "identity.usage.tokens": ("{count} jetons", "{count} tokens"),
+    "identity.usage.audio_minutes": ("{count} min d'audio", "{count} audio min"),
+    "identity.usage.cost": ("≈ {amount} $ estimé", "≈ US${amount} estimated"),
+
     # --- Panneau d'administration : groupes de réglages --------------------
     "group.interface": ("Interface", "Interface"),
     "group.system": ("Système", "System"),
@@ -1000,6 +1104,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "group.users": ("Comptes et groupes", "Users and groups"),
     "group.llm": ("Modèle de langage", "Language model"),
     "group.prompts": ("Consignes", "Instructions"),
+    "group.backup": ("Sauvegarde", "Backup"),
+    "group.stats": ("Statistiques", "Statistics"),
 
     # --- Panneau d'administration : réglages -------------------------------
     "set.allow_signup.label": (
@@ -1017,6 +1123,33 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "may enter, others are refused. Leave this enabled only if sign-up is "
         "closed at the provider — otherwise anyone who can register there gets "
         "in here.",
+    ),
+    "set.backup_retention_count.label": (
+        "Sauvegardes conservées",
+        "Backups kept",
+    ),
+    "set.backup_retention_count.help": (
+        "Nombre de sauvegardes gardées avant que les plus anciennes ne soient "
+        "supprimées automatiquement — sauvegardes quotidiennes, exports manuels "
+        "et sauvegardes de sécurité pré-restauration confondus. 0 désactive la "
+        "rotation : tout s'accumule.",
+        "Number of backups kept before the oldest are automatically deleted — "
+        "daily backups, manual exports and pre-restore safety snapshots all "
+        "counted together. 0 disables rotation: everything accumulates.",
+    ),
+    "set.consultation_retention_days.label": (
+        "Purger les dossiers après (jours)",
+        "Purge records after (days)",
+    ),
+    "set.consultation_retention_days.help": (
+        "Un dossier (brouillon, transcription, note et audio) dont la dernière "
+        "modification dépasse ce délai est supprimé définitivement, sans "
+        "récupération possible. Le compte repart à zéro à chaque ouverture ou "
+        "modification. Laisser à 0 pour désactiver la purge.",
+        "A record (draft, transcript, note and audio) whose last modification "
+        "exceeds this delay is permanently deleted, with no recovery possible. "
+        "The countdown restarts each time it is opened or edited. Leave at 0 "
+        "to disable the purge.",
     ),
     "set.oidc_name_claim.label": (
         "Revendication du nom affiché",
@@ -1764,6 +1897,18 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "err.group_name_required": ("Le nom est obligatoire.", "The name is required."),
     "err.group_not_found": ("Groupe introuvable.", "Group not found."),
     "err.user_not_found": ("Compte introuvable.", "Account not found."),
+    "err.pricing_duplicate": (
+        "Un tarif existe déjà pour ce fournisseur/modèle/type/unité.",
+        "A rate already exists for this provider/model/kind/unit.",
+    ),
+    "err.pricing_not_found": ("Tarif introuvable.", "Rate not found."),
+    "err.backup_not_found": ("Sauvegarde introuvable.", "Backup not found."),
+    "err.restart_required": (
+        "Une restauration vient d'avoir lieu : redémarrez le conteneur "
+        "ConsultAI avant de continuer.",
+        "A restore just took place: restart the ConsultAI container before "
+        "continuing.",
+    ),
     "err.unknown_language": (
         "Langue inconnue : {language}",
         "Unknown language: {language}",

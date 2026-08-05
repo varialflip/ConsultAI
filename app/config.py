@@ -15,7 +15,7 @@ import ipaddress
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +232,12 @@ class Settings:
     # --- Enregistrements conservés avec les brouillons ---
     audio_dir: str = "/data/audio"
 
+    # --- Sauvegardes (export/import complet de l'application) ---
+    # Sous-dossier de /data à dessein : aucun nouveau montage docker-compose,
+    # la sauvegarde vit sur le même volume que ce qu'elle protège (contre
+    # l'erreur humaine, pas contre la perte du volume lui-même).
+    backup_dir: str = "/data/backups"
+
     # -- Propriétés dérivées -------------------------------------------------
     @property
     def allow_all_users(self) -> bool:
@@ -383,6 +389,7 @@ class Settings:
             mistral_model=_env("MISTRAL_MODEL", "voxtral-mini-latest"),
 
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
+            backup_dir=_env("BACKUP_DIR", "/data/backups"),
             dictation_dir=_env("DICTATION_DIR", "/data/dictations"),
             dictation_chunk_seconds=_env_int("DICTATION_CHUNK_SECONDS", 5),
             dictation_segment_seconds=_env_int("DICTATION_SEGMENT_SECONDS", 10),

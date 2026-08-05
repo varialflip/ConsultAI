@@ -3077,6 +3077,14 @@
       const data = await api('/api/consultations');
       const drafts = data.consultations || [];
 
+      const notice = $('draftsRetentionNotice');
+      if (data.retention_days > 0) {
+        notice.textContent = T('drafts.retention_notice', { days: data.retention_days });
+        notice.classList.remove('hidden');
+      } else {
+        notice.classList.add('hidden');
+      }
+
       if (!drafts.length) {
         list.innerHTML = `<li class="px-5 py-8 text-sm text-slate-400 text-center">${esc(T('drafts.none'))}</li>`;
         return;
@@ -3459,6 +3467,10 @@
     //: Sous-onglet visible, par groupe : { 'group.stt': 'soniox', … }
     subTab: {},
     people: null,       // réponse de /api/admin/users, chargée à la demande
+    backups: null,      // réponse de /api/admin/backup, chargée à la demande
+    stats: null,        // réponse de /api/admin/usage, chargée à la demande
+    pricing: null,       // réponse de /api/admin/pricing, chargée à la demande
+    statsRange: null,   // { from, to } — filtre courant de l'onglet Statistiques
   };
 
   /**
@@ -3472,6 +3484,11 @@
     * On compare des CLÉS et jamais des libellés : ceux-ci sont traduits.
     */
   const PEOPLE_GROUP = 'group.users';
+  //: Mêmes principes que PEOPLE_GROUP ci-dessus : un onglet à écran entièrement
+  //: personnalisé plutôt que des champs génériques, pour les mêmes raisons
+  //: (listes, actions, pas de simple clé/valeur).
+  const BACKUP_GROUP = 'group.backup';
+  const STATS_GROUP = 'group.stats';
 
   /**
    * Champs « modèle » (principal et rapide) de chaque fournisseur de modèle
@@ -4002,12 +4019,16 @@
 
   function showAdminTab(tab) {
     const comptes = tab === PEOPLE_GROUP;
+    const sauvegarde = tab === BACKUP_GROUP;
+    const stats = tab === STATS_GROUP;
 
     // L'onglet des comptes affiche ses propres réglages EN PLUS des comptes :
     // #adminFields reste donc visible, seule la section correspondante étant
     // dévoilée. « Modèles disponibles » n'a en revanche rien à y faire.
     $('adminFields').classList.remove('hidden');
     $('adminPeople').classList.toggle('hidden', !comptes);
+    $('adminBackup').classList.toggle('hidden', !sauvegarde);
+    $('adminStats').classList.toggle('hidden', !stats);
 
     renderAdminIntro(tab);
 
@@ -4027,6 +4048,8 @@
     });
 
     if (comptes && !adminState.people) loadPeople();
+    if (sauvegarde && !adminState.backups) loadBackups();
+    if (stats && !adminState.stats) loadStats();
   }
 
   /* -------------------------------------------------------------------------
@@ -4301,11 +4324,344 @@
     await loadPeople();
   }
 
+  /* -------------------------------------------------------------------------
+   * Sauvegarde / restauration
+   * -------------------------------------------------------------------------
+   * Une restauration réussie bloque l'écriture côté serveur (voir le
+   * middleware dans app/main.py) jusqu'au redémarrage manuel du conteneur :
+   * dès que la réponse le signale, l'écran bascule sur un avis permanent,
+   * non refermable — un toast serait trop facile à manquer pour une action
+   * de cette gravité.
+   * ---------------------------------------------------------------------- */
+  function formatBytes(n) {
+    if (!n) return '0 Ko';
+    const units = ['o', 'Ko', 'Mo', 'Go'];
+    let value = n;
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) { value /= 1024; i += 1; }
+    return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+
+  function showRestartRequiredNotice(pending) {
+    const boite = $('adminBackup');
+    boite.innerHTML = `
+      <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+        <p class="text-sm font-medium text-amber-900">${esc(T('admin.backup.restart_required'))}</p>
+      </div>`;
+    $('btnSaveAdmin').classList.add('hidden');
+    $('btnCloseAdmin').setAttribute('disabled', 'disabled');
+  }
+
+  async function loadBackups() {
+    const boite = $('adminBackup');
+    boite.innerHTML = `<p class="text-sm text-slate-500">${esc(T('admin.backup.loading'))}</p>`;
+    try {
+      adminState.backups = await api('/api/admin/backup');
+      if (adminState.backups.restore_pending) {
+        showRestartRequiredNotice(adminState.backups.restore_pending);
+        return;
+      }
+      renderBackups();
+    } catch (err) {
+      boite.innerHTML = `<p class="text-sm text-red-600">${esc(err.message)}</p>`;
+    }
+  }
+
+  function renderBackups() {
+    const data = adminState.backups || { backups: [], retention_count: 0, last_run: {} };
+    const boite = $('adminBackup');
+
+    const dernier = data.last_run || {};
+    let statutHtml;
+    if (!dernier.at) {
+      statutHtml = esc(T('admin.backup.last_run_never'));
+    } else if (dernier.status === 'error') {
+      statutHtml = esc(T('admin.backup.last_run_error', { error: dernier.error || '' }));
+    } else {
+      statutHtml = esc(T('admin.backup.last_run', { at: formatTime(dernier.at) }));
+    }
+
+    const lignes = (data.backups || []).map((b) => `
+      <li class="flex items-center gap-3 px-3 py-2 border-b border-slate-100 text-sm">
+        <span class="flex-1 min-w-0 truncate">${esc(formatTime(b.created_at))}
+          <span class="text-slate-400">· ${esc(T(`admin.backup.kind.${b.kind}`))} · ${esc(formatBytes(b.size_bytes))}</span>
+        </span>
+        <a href="/api/admin/backup/${encodeURIComponent(b.filename)}"
+           class="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-50">${esc(T('admin.backup.download'))}</a>
+        <button type="button" data-restore="${esc(b.filename)}"
+                class="text-xs px-2 py-1 rounded border border-amber-300 text-amber-700 hover:bg-amber-50">${esc(T('admin.backup.restore'))}</button>
+        <button type="button" data-delete-backup="${esc(b.filename)}"
+                class="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">${esc(T('admin.backup.delete'))}</button>
+      </li>`).join('');
+
+    boite.innerHTML = `
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" id="btnBackupNow"
+                class="accent-btn px-3 py-2 rounded-lg text-sm font-medium">${esc(T('admin.backup.now'))}</button>
+        <label class="text-xs px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 cursor-pointer">
+          ${esc(T('admin.backup.upload_restore'))}
+          <input type="file" id="inputRestoreUpload" accept=".zip" class="hidden">
+        </label>
+        <span class="text-xs text-slate-500">${esc(T('admin.backup.retention_help_count', { count: data.retention_count }))}</span>
+      </div>
+      <p class="text-xs text-slate-500">${statutHtml}</p>
+      <ul class="rounded-lg border border-slate-200 overflow-hidden">
+        ${lignes || `<li class="px-3 py-6 text-sm text-slate-400 text-center">${esc(T('admin.backup.empty'))}</li>`}
+      </ul>`;
+
+    $('btnBackupNow').addEventListener('click', async (event) => {
+      event.target.disabled = true;
+      event.target.textContent = T('admin.backup.creating');
+      try {
+        await api('/api/admin/backup', { method: 'POST' });
+        toast(T('admin.backup.now'), 'success');
+        await loadBackups();
+      } catch (err) {
+        toast(err.message, 'error', 9000);
+        event.target.disabled = false;
+        event.target.textContent = T('admin.backup.now');
+      }
+    });
+
+    boite.querySelectorAll('[data-delete-backup]').forEach((bouton) => {
+      bouton.addEventListener('click', async () => {
+        if (!window.confirm(T('admin.backup.delete_confirm'))) return;
+        try {
+          await api(`/api/admin/backup/${encodeURIComponent(bouton.dataset.deleteBackup)}`, { method: 'DELETE' });
+          await loadBackups();
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+        }
+      });
+    });
+
+    boite.querySelectorAll('[data-restore]').forEach((bouton) => {
+      bouton.addEventListener('click', async () => {
+        if (!window.confirm(T('admin.backup.restore_confirm'))) return;
+        try {
+          const result = await api(
+            `/api/admin/backup/restore/${encodeURIComponent(bouton.dataset.restore)}`,
+            { method: 'POST' },
+          );
+          showRestartRequiredNotice(result.restore);
+        } catch (err) {
+          toast(err.message, 'error', 12000);
+        }
+      });
+    });
+
+    const inputUpload = $('inputRestoreUpload');
+    if (inputUpload) {
+      inputUpload.addEventListener('change', async () => {
+        const fichier = inputUpload.files && inputUpload.files[0];
+        if (!fichier) return;
+        if (!window.confirm(T('admin.backup.restore_confirm'))) { inputUpload.value = ''; return; }
+        const form = new FormData();
+        form.append('file', fichier);
+        try {
+          const result = await api('/api/admin/backup/restore', { method: 'POST', body: form });
+          showRestartRequiredNotice(result.restore);
+        } catch (err) {
+          toast(err.message, 'error', 12000);
+        }
+      });
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+   * Statistiques d'usage et tarifs
+   * ---------------------------------------------------------------------- */
+  function defaultStatsRange() {
+    const to = new Date();
+    const from = new Date(to.getTime() - 29 * 86400000);
+    const iso = (d) => d.toISOString().slice(0, 10);
+    return { from: iso(from), to: iso(to) };
+  }
+
+  async function loadStats() {
+    const boite = $('adminStats');
+    boite.innerHTML = `<p class="text-sm text-slate-500">${esc(T('admin.stats.loading'))}</p>`;
+    if (!adminState.statsRange) adminState.statsRange = defaultStatsRange();
+    try {
+      const range = adminState.statsRange;
+      const [usageData, pricingData] = await Promise.all([
+        api(`/api/admin/usage?date_from=${range.from}&date_to=${range.to}`),
+        api('/api/admin/pricing'),
+      ]);
+      adminState.stats = usageData;
+      adminState.pricing = pricingData.rates || [];
+      renderStats();
+    } catch (err) {
+      boite.innerHTML = `<p class="text-sm text-red-600">${esc(err.message)}</p>`;
+    }
+  }
+
+  function renderStatsTable() {
+    const data = adminState.stats || { rows: [], total_cost: 0, currency: 'USD' };
+    const lignes = data.rows.map((r) => `
+      <tr class="border-b border-slate-100">
+        <td class="px-2 py-1.5">${esc(r.owner)}</td>
+        <td class="px-2 py-1.5">${esc(r.provider)}</td>
+        <td class="px-2 py-1.5 text-slate-500">${esc(r.model || '—')}</td>
+        <td class="px-2 py-1.5">${esc(T(`admin.stats.kind.${r.kind}`))}</td>
+        <td class="px-2 py-1.5 tabular-nums">${(r.prompt_tokens + r.output_tokens) ? `${r.prompt_tokens}/${r.output_tokens}` : '—'}</td>
+        <td class="px-2 py-1.5 tabular-nums">${r.audio_seconds ? (r.audio_seconds / 60).toFixed(1) : '—'}</td>
+        <td class="px-2 py-1.5 tabular-nums">${r.cost.toFixed(4)} ${esc(r.currency || data.currency)}</td>
+      </tr>`).join('');
+
+    return `
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="text-xs text-slate-600">${esc(T('admin.stats.date_from'))}
+          <input type="date" id="statsFrom" value="${esc(adminState.statsRange.from)}"
+                 class="block border border-slate-300 rounded px-2 py-1 text-sm">
+        </label>
+        <label class="text-xs text-slate-600">${esc(T('admin.stats.date_to'))}
+          <input type="date" id="statsTo" value="${esc(adminState.statsRange.to)}"
+                 class="block border border-slate-300 rounded px-2 py-1 text-sm">
+        </label>
+        <span class="ml-auto text-sm font-medium">${esc(T('admin.stats.total_cost'))} :
+          ${data.total_cost.toFixed(2)} ${esc(data.currency)}</span>
+      </div>
+      <div class="overflow-auto rounded-lg border border-slate-200">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-xs text-slate-500">
+            <tr>
+              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
+              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_provider'))}</th>
+              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_model'))}</th>
+              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_kind'))}</th>
+              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_tokens'))}</th>
+              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_audio'))}</th>
+              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_cost'))}</th>
+            </tr>
+          </thead>
+          <tbody>${lignes || `<tr><td colspan="7" class="px-2 py-6 text-center text-slate-400">${esc(T('admin.stats.empty'))}</td></tr>`}</tbody>
+        </table>
+      </div>`;
+  }
+
+  const PRICING_UNITS = ['token_input_1m', 'token_output_1m', 'audio_minute'];
+
+  function renderPricingTable() {
+    const rates = adminState.pricing || [];
+    const lignes = rates.map((r) => `
+      <tr class="border-b border-slate-100" data-pricing-row="${r.id}">
+        <td class="px-2 py-1.5">${esc(r.provider)}</td>
+        <td class="px-2 py-1.5 text-slate-500">${esc(r.model || '—')}</td>
+        <td class="px-2 py-1.5">${esc(T(`admin.stats.kind.${r.kind}`))}</td>
+        <td class="px-2 py-1.5">${esc(T(`admin.stats.unit.${r.unit}`))}</td>
+        <td class="px-2 py-1.5">
+          <input type="number" step="0.0001" value="${r.rate}" data-pricing-rate
+                 class="w-24 border border-slate-300 rounded px-1.5 py-0.5 text-sm">
+        </td>
+        <td class="px-2 py-1.5">
+          <button type="button" data-save-pricing="${r.id}"
+                  class="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-50">${esc(T('admin.save'))}</button>
+          <button type="button" data-delete-pricing="${r.id}"
+                  class="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">${esc(T('admin.backup.delete'))}</button>
+        </td>
+      </tr>`).join('');
+
+    return `
+      <h3 class="text-sm font-semibold text-slate-700">${esc(T('admin.stats.pricing_title'))}</h3>
+      <div class="overflow-auto rounded-lg border border-slate-200">
+        <table class="w-full text-sm">
+          <tbody>${lignes}</tbody>
+        </table>
+      </div>
+      <form id="formAddPricing" class="flex flex-wrap items-end gap-2">
+        <input name="provider" required placeholder="${esc(T('admin.stats.pricing_provider'))}"
+               class="border border-slate-300 rounded px-2 py-1 text-sm w-32">
+        <input name="model" placeholder="${esc(T('admin.stats.pricing_model'))}"
+               class="border border-slate-300 rounded px-2 py-1 text-sm w-40">
+        <select name="kind" class="border border-slate-300 rounded px-2 py-1 text-sm">
+          <option value="llm">${esc(T('admin.stats.kind.llm'))}</option>
+          <option value="stt">${esc(T('admin.stats.kind.stt'))}</option>
+        </select>
+        <select name="unit" class="border border-slate-300 rounded px-2 py-1 text-sm">
+          ${PRICING_UNITS.map((u) => `<option value="${u}">${esc(T(`admin.stats.unit.${u}`))}</option>`).join('')}
+        </select>
+        <input name="rate" type="number" step="0.0001" required placeholder="${esc(T('admin.stats.pricing_rate'))}"
+               class="border border-slate-300 rounded px-2 py-1 text-sm w-24">
+        <button type="submit" class="accent-btn px-3 py-1.5 rounded-lg text-sm font-medium">${esc(T('admin.stats.pricing_add'))}</button>
+      </form>`;
+  }
+
+  function renderStats() {
+    const boite = $('adminStats');
+    boite.innerHTML = renderStatsTable() + renderPricingTable();
+
+    ['statsFrom', 'statsTo'].forEach((id) => {
+      $(id).addEventListener('change', () => {
+        adminState.statsRange = { from: $('statsFrom').value, to: $('statsTo').value };
+        loadStats();
+      });
+    });
+
+    boite.querySelectorAll('[data-save-pricing]').forEach((bouton) => {
+      bouton.addEventListener('click', async () => {
+        const id = bouton.dataset.savePricing;
+        const row = adminState.pricing.find((r) => String(r.id) === id);
+        if (!row) return;
+        const rateInput = boite.querySelector(`tr[data-pricing-row="${id}"] [data-pricing-rate]`);
+        try {
+          await api(`/api/admin/pricing/${id}`, {
+            method: 'PUT',
+            body: { ...row, rate: Number(rateInput.value) },
+          });
+          toast(T('admin.save'), 'success');
+          await loadStats();
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+        }
+      });
+    });
+
+    boite.querySelectorAll('[data-delete-pricing]').forEach((bouton) => {
+      bouton.addEventListener('click', async () => {
+        if (!window.confirm(T('admin.stats.pricing_delete_confirm'))) return;
+        try {
+          await api(`/api/admin/pricing/${bouton.dataset.deletePricing}`, { method: 'DELETE' });
+          await loadStats();
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+        }
+      });
+    });
+
+    const formAjout = $('formAddPricing');
+    if (formAjout) {
+      formAjout.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const data = new FormData(formAjout);
+        try {
+          await api('/api/admin/pricing', {
+            method: 'POST',
+            body: {
+              provider: data.get('provider').trim(),
+              model: data.get('model').trim(),
+              kind: data.get('kind'),
+              unit: data.get('unit'),
+              rate: Number(data.get('rate')),
+              currency: 'USD',
+            },
+          });
+          await loadStats();
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+        }
+      });
+    }
+  }
+
   async function openAdminModal() {
     $('adminModal').classList.remove('hidden');
     $('adminStatus').textContent = '';
     // Rechargé à chaque ouverture : les comptes peuvent avoir changé ailleurs.
     adminState.people = null;
+    adminState.backups = null;
+    adminState.stats = null;
+    adminState.pricing = null;
     adminState.dirty = new Set();
     adminState.values = {};
     adminState.subTab = {};
@@ -4402,6 +4758,35 @@
     menu.classList.toggle('hidden', !ouvrir);
     $('btnIdentity').setAttribute('aria-expanded', ouvrir ? 'true' : 'false');
     if (!ouvrir) $('logoutHint').classList.add('hidden');
+    if (ouvrir) loadMyUsage();
+  }
+
+  /**
+   * Récapitulatif d'usage personnel, 30 derniers jours — rechargé à chaque
+   * ouverture du menu plutôt que mis en cache : c'est un coup d'œil
+   * occasionnel, pas un écran qu'on garde ouvert, autant refléter l'instant.
+   */
+  async function loadMyUsage() {
+    const boite = $('myUsage');
+    if (!boite) return;
+    boite.textContent = T('identity.usage.loading');
+    try {
+      const data = await api('/api/me/usage');
+      if (!data.prompt_tokens && !data.output_tokens && !data.audio_seconds) {
+        boite.textContent = T('identity.usage.empty');
+        return;
+      }
+      const morceaux = [];
+      const tokens = (data.prompt_tokens || 0) + (data.output_tokens || 0);
+      if (tokens) morceaux.push(T('identity.usage.tokens', { count: tokens.toLocaleString() }));
+      if (data.audio_seconds) {
+        morceaux.push(T('identity.usage.audio_minutes', { count: (data.audio_seconds / 60).toFixed(1) }));
+      }
+      boite.innerHTML = `<p>${esc(morceaux.join(' · '))}</p>` +
+        (data.cost ? `<p class="mt-0.5 text-slate-500">${esc(T('identity.usage.cost', { amount: data.cost.toFixed(2) }))}</p>` : '');
+    } catch (err) {
+      boite.textContent = '';
+    }
   }
 
   function showLogoutHint(message, ton) {

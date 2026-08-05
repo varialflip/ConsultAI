@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple
 from urllib.parse import urlencode, urlparse
 
 from app.config import settings

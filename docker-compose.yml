@@ -65,7 +65,6 @@ services:
       # `:ro` = lecture seule. Le conteneur n'a aucune raison d'écrire ici :
       # gardez-le. Omettez cette ligne entière si vous n'utilisez pas Google.
       - ./secrets:/secrets:ro  # clé de service Google Cloud, si utilisée
-      - ./app:/app/app         # DEV : code source local (retirer en prod)
 
     mem_limit: 1g
 

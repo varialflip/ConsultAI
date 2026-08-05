@@ -172,6 +172,11 @@ class DictationSession:
             "received_seconds": int(round(self.received_seconds)),
             "bytes_received": self.bytes_received,
             "created_at": self.created_at,
+            # Dernière écriture (dernier fragment reçu) : c'est ce qui permet
+            # au navigateur de distinguer une session vraiment abandonnée
+            # d'une autre encore active sur un autre appareil (voir
+            # refreshRecoveryBanner côté JS, et list_sessions ci-dessous).
+            "updated_at": self.updated_at,
             "last_error": self.last_error,
         }
 

@@ -1620,6 +1620,30 @@
     list.innerHTML = entries.map((entry, index) => {
       const when = formatDateTime(new Date(entry.createdAt).toISOString());
       const seconds = entry.server ? entry.server.received_seconds : 0;
+
+      // Une session inconnue de CET onglet (pas de copie locale), encore au
+      // statut « recording » et dont le dernier fragment date de moins d'une
+      // minute : très probablement une dictée qui tourne VRAIMENT ailleurs en
+      // ce moment (un autre appareil, un autre onglet), pas une dictée
+      // abandonnée. « Reprendre et transcrire » y appellerait /finish et
+      // tronquerait cette dictée en cours — on propose de la suivre à la
+      // place (voir onSyncTranscript, qui prend le relais une fois
+      // l'onglet ouvert sur la même consultation).
+      const liveElsewhere = !entry.localId && entry.server && entry.server.status === 'recording'
+        && (Date.now() / 1000 - entry.server.updated_at) < 60;
+
+      if (liveElsewhere) {
+        return `<li class="text-sm" data-index="${index}">
+          <p class="text-slate-600">${esc([entry.label || T('recovery.unnamed'), T('recovery.live_elsewhere')]
+            .filter(Boolean).join(' · '))}</p>
+          <div class="flex flex-wrap gap-2 mt-1">
+            <button type="button" data-act="follow" data-index="${index}"
+                    class="accent-btn px-2.5 py-1 rounded-md text-xs font-medium">
+              ${esc(T('sync.follow'))}</button>
+          </div>
+        </li>`;
+      }
+
       const detail = [
         entry.label || T('recovery.unnamed'),
         when,
@@ -1631,9 +1655,20 @@
       return `<li class="text-sm" data-index="${index}">
         <p class="text-amber-900">${esc(detail)}</p>
         <div class="flex flex-wrap gap-2 mt-1">
-          <button type="button" data-act="resume" data-index="${index}"
+          <!-- « Reprendre » ouvre sans conclure (peekStoredSession) — n'a de
+               sens que si le serveur a déjà une session à rouvrir. Conclure
+               (audio archivé, reliquat transcrit) reste un geste à part, le
+               même mot que pour la dictée en cours (rec.finish_title) ;
+               seul bouton PLEIN quand « Reprendre » ne peut pas s'afficher
+               (dictée jamais parvenue au serveur). -->
+          ${entry.server ? `<button type="button" data-act="resume" data-index="${index}"
                   class="px-2.5 py-1 rounded-md bg-amber-600 text-white text-xs font-medium
-                         hover:bg-amber-700">${esc(T('recovery.resume'))}</button>
+                         hover:bg-amber-700">${esc(T('recovery.resume'))}</button>` : ''}
+          <button type="button" data-act="finish" data-index="${index}"
+                  class="px-2.5 py-1 rounded-md text-xs font-medium ${entry.server
+                    ? 'border border-amber-400 text-amber-800 hover:bg-amber-100'
+                    : 'bg-amber-600 text-white hover:bg-amber-700'}">
+            ${esc(T('rec.finish_title'))}</button>
           ${entry.localId ? `<button type="button" data-act="download" data-index="${index}"
                   class="px-2.5 py-1 rounded-md border border-amber-400 text-amber-800 text-xs
                          hover:bg-amber-100">${esc(T('recovery.download'))}</button>` : ''}
@@ -1647,7 +1682,9 @@
     list.querySelectorAll('button[data-act]').forEach((button) => {
       button.addEventListener('click', () => {
         const entry = entries[Number(button.dataset.index)];
-        if (button.dataset.act === 'resume') resumeStoredSession(entry);
+        if (button.dataset.act === 'follow') loadDraft(entry.consultationId);
+        else if (button.dataset.act === 'resume') peekStoredSession(entry);
+        else if (button.dataset.act === 'finish') finishStoredSession(entry);
         else if (button.dataset.act === 'download') downloadStoredSession(entry);
         else discardStoredSession(entry);
       });
@@ -1694,10 +1731,42 @@
   }
 
   /**
-   * Reprend une dictée interrompue : complète ce qui manque au serveur, puis
-   * conclut. Le texte retourne dans la consultation d'origine.
+   * Envoie ce qui manque au serveur pour cette session, sans rien conclure :
+   * la consultation s'ouvre sur ce qui est déjà transcrit (traité au fil de
+   * la dictée d'origine), la session reste ouverte côté serveur pour un
+   * « Terminer et transcrire » explicite, plus tard — voir finishStoredSession.
+   * N'a de sens que si le serveur connaît déjà cette session (voir le rendu
+   * du bouton, absent sinon) : une dictée qui n'a jamais atteint le serveur
+   * n'a rien à montrer avant d'être intégralement envoyée.
    */
-  async function resumeStoredSession(entry) {
+  async function peekStoredSession(entry) {
+    if (!entry.server) return;
+    setBusy(true, T('recovery.peeking'));
+    try {
+      if (entry.localId) {
+        const chunks = await audioStore.chunks(entry.localId);
+        for (const row of chunks) {
+          if (row.seq < entry.server.next_seq) continue;
+          await postChunk(entry.server.session_id, row.seq, row.blob, dictationConfig.chunkSeconds * 1000);
+        }
+      }
+      const current = await api(`/api/dictation/${entry.server.session_id}`);
+      await loadDraft(current.consultation_id);
+      toast(T('recovery.peeked'), 'info', 8000);
+    } catch (err) {
+      toast(T('recovery.resume_failed', { error: err.message }), 'error', 12000);
+    } finally {
+      setBusy(false);
+      refreshRecoveryBanner();
+    }
+  }
+
+  /**
+   * Reprend une dictée interrompue et la CONCLUT : complète ce qui manque au
+   * serveur, transcrit le reliquat, archive l'audio. Le texte retourne dans
+   * la consultation d'origine.
+   */
+  async function finishStoredSession(entry) {
     setBusy(true, T('recovery.resuming'));
     try {
       if (entry.server) {

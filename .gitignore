@@ -28,6 +28,14 @@ __pycache__/
 .venv/
 venv/
 
+# Dépendances Tailwind (voir package.json, Dockerfile) : reconstruites à
+# chaque build, jamais commitées — seul package-lock.json fixe les versions.
+node_modules/
+# Sortie du build local (voir Dockerfile) : app/static/tailwind.css n'existe
+# que dans l'image, jamais dans le dépôt — sans quoi une copie périmée
+# survivrait au prochain « npm run build » oublié.
+app/static/tailwind.css
+
 # Synology (index de la Recherche universelle) et macOS
 @eaDir/
 .DS_Store

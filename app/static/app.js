@@ -75,6 +75,41 @@
     return div.innerHTML;
   }
 
+  /**
+   * Titres et abréviations françaises courantes en consultation, à ne pas
+   * confondre avec une fin de phrase — « Dr. » suivi d'un nom propre est le
+   * cas le plus fréquent, de loin, dans une dictée médicale. Liste courte et
+   * volontairement incomplète : le but est de couvrir le cas courant, pas de
+   * remplacer un véritable découpeur de phrases.
+   */
+  const SENTENCE_ABBREVIATIONS = '(?:Dr|Dre|Drs|M|Mr|Mme|Mlle|Me|Pr|St|Ste)';
+  const SENTENCE_SPLIT_RE = new RegExp(
+    `(?<!\\b${SENTENCE_ABBREVIATIONS}\\.)(?<=[.!?])\\s+`,
+  );
+
+  /**
+   * Une phrase par ligne : plus facile à relire pendant une dictée longue
+   * qu'un seul bloc continu. Découpe après un signe de fin de phrase suivi
+   * d'une espace, sauf immédiatement après un titre courant (voir
+   * SENTENCE_ABBREVIATIONS) — imparfait sur les abréviations qui n'y figurent
+   * pas, mais une dictée médicale ponctue rarement au milieu d'une autre
+   * abréviation de façon à tromper cette heuristique.
+   *
+   * Reformate le texte ENTIER à chaque appel plutôt que la seule tranche
+   * fraîche : les fragments transcrits n'ont aucune raison de tomber sur une
+   * frontière de phrase (une phrase peut s'étaler sur deux tranches), seul
+   * le texte au complet permet de retrouver les vraies frontières.
+   * Idempotent : reformater un texte déjà mis en forme ne change rien
+   * d'autre que la normalisation des espaces entre phrases.
+   */
+  function formatSentences(text) {
+    return (text || '')
+      .split(SENTENCE_SPLIT_RE)
+      .map((phrase) => phrase.trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+
   /** Notification éphémère en bas à droite. */
   /**
    * Retourne un ``{ dismiss }`` : nécessaire pour un toast « en cours »
@@ -168,6 +203,47 @@
       el.style.opacity = '';
     });
     return { dismiss: () => dismiss() };
+  }
+
+  /**
+   * Variante de toast() porteuse d'un bouton d'action, pour une notification
+   * qui propose de FAIRE quelque chose plutôt que de seulement informer (par
+   * exemple : suivre une dictée commencée sur un autre appareil). Volontairement
+   * plus simple que toast() — pas de glissé pour fermer, une croix suffit —
+   * pour ne pas risquer de régression sur le toast partout ailleurs utilisé.
+   */
+  function toastWithAction(message, actionLabel, onAction, durationMs = 12000) {
+    const el = document.createElement('div');
+    el.className = 'bg-slate-800 text-white text-sm pl-4 pr-2 py-2 rounded-lg shadow-lg max-w-md '
+      + 'transition-opacity duration-300 flex items-center gap-2';
+    const text = document.createElement('span');
+    text.className = 'flex-1';
+    text.textContent = message;
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'shrink-0 px-2.5 py-1 rounded bg-white/15 hover:bg-white/25 text-xs font-medium';
+    action.textContent = actionLabel;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'shrink-0 -mr-1 p-1 rounded text-white/70 hover:text-white';
+    close.setAttribute('aria-label', T('toast.dismiss'));
+    close.innerHTML = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    el.append(text, action, close);
+    $('toastZone').appendChild(el);
+
+    let dismissed = false;
+    let timer;
+    const dismiss = () => {
+      if (dismissed) return;
+      dismissed = true;
+      clearTimeout(timer);
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 320);
+    };
+    timer = setTimeout(dismiss, durationMs);
+    close.addEventListener('click', dismiss);
+    action.addEventListener('click', () => { dismiss(); onAction(); });
   }
 
   /** Voile bloquant pendant les traitements longs (STT, Gemini). */
@@ -514,7 +590,7 @@
       // serveur) : ce texte n'a jamais été écrit en base, on ne l'affiche
       // donc pas non plus — silencieusement, ce n'est pas un échec.
       if (data.superseded) return;
-      $('transcript').value = data.transcript || '';
+      $('transcript').value = formatSentences(data.transcript);
       state.transcriptLanguage = data.stt_language || (tpl ? tpl.language : '');
       // Le serveur a déjà écrit ce texte en base. On force malgré tout une
       // sauvegarde : elle emporte aussi le gabarit qui vient de changer, et
@@ -728,7 +804,7 @@
 
     const box = $('transcript');
     const existing = box.value.replace(/\s+$/, '');
-    box.value = existing ? `${existing} ${fresh.join(' ')}` : fresh.join(' ');
+    box.value = formatSentences(existing ? `${existing} ${fresh.join(' ')}` : fresh.join(' '));
     box.scrollTop = box.scrollHeight;
     updateTranscriptMeta({ duration_seconds: session.transcribed_seconds });
     updateActionButtons();
@@ -1419,11 +1495,24 @@
         scheduleSave();
         flashElement('transcriptFooter');
         toast(T('dictation.finished', { count: transcript.length }), 'success');
-      } else {
-        toast(T('dictation.no_speech'), 'warning', 8000);
       }
-      // L'audio vient d'être rattaché au brouillon par le serveur.
-      loadRecordings();
+      // L'audio vient d'être rattaché au brouillon par le serveur : à
+      // rafraîchir AVANT de décider ci-dessous, recordingsCount doit déjà
+      // compter ce nouvel enregistrement.
+      await loadRecordings();
+
+      if (!transcript) {
+        // Contournement du STT actif (Gemini / Qwen Omni en audio direct) :
+        // c'est le fonctionnement NORMAL de ce réglage, pas un échec — il n'y
+        // a jamais de transcription à attendre, l'audio suffit. « Aucune
+        // parole détectée » alarmerait pour rien ; on enchaîne directement
+        // sur la mise en forme, comme si le médecin avait cliqué lui-même.
+        if (audioOnlyReady()) {
+          await generateNote();
+        } else {
+          toast(T('dictation.no_speech'), 'warning', 8000);
+        }
+      }
       resetDictationState();
     } catch (err) {
       toast(err.message, 'error', 12000);
@@ -1808,9 +1897,9 @@
       }
 
       const existing = $('transcript').value.trim();
-      $('transcript').value = existing
-        ? `${existing}\n\n${result.transcript}`
-        : result.transcript;
+      $('transcript').value = formatSentences(
+        existing ? `${existing}\n\n${result.transcript}` : result.transcript,
+      );
 
       if (result.stt_language) state.transcriptLanguage = result.stt_language;
       updateTranscriptMeta(result);
@@ -1847,12 +1936,8 @@
   async function generateNote() {
     const transcript = $('transcript').value.trim();
     const tpl = currentTemplate();
-    // Même condition que updateActionButtons() : contournement du STT actif
-    // et un enregistrement existe déjà, l'audio suffit sans transcription.
-    const hasAudio = Boolean(state.consultationId) && state.recordingsCount > 0;
-    const audioOnlyReady = state.llmBypassStt && !state.llmBypassSttKeepTranscript && hasAudio;
 
-    if (!transcript && !audioOnlyReady) {
+    if (!transcript && !audioOnlyReady()) {
       toast(T('generate.empty'), 'warning');
       return;
     }
@@ -2106,6 +2191,18 @@
   }
 
   /**
+   * STT contourné (audio envoyé seul au modèle, Gemini ou Qwen Omni) : dans
+   * ce mode il n'y a JAMAIS de transcription à attendre, l'audio conservé
+   * suffit à lui seul à activer « Générer » — voir refreshClientConfig(),
+   * qui alimente les deux réglages, et les trois appelants ci-dessous
+   * (bouton, garde-fou de generateNote(), fin de dictée automatique).
+   */
+  function audioOnlyReady() {
+    const hasAudio = Boolean(state.consultationId) && state.recordingsCount > 0;
+    return state.llmBypassStt && !state.llmBypassSttKeepTranscript && hasAudio;
+  }
+
+  /**
    * Grise (plutôt que masque) « Retranscrire » et « Mettre en forme » quand
    * l'action n'a rien à faire — pas de transcription, pas de gabarit choisi,
    * pas d'audio conservé. Appelée à chaque événement qui peut changer l'une
@@ -2117,13 +2214,9 @@
     const hasTranscript = Boolean($('transcript').value.trim());
     const hasTemplate = Boolean(currentTemplate());
     const hasAudio = Boolean(state.consultationId) && state.recordingsCount > 0;
-    // STT contourné (audio envoyé seul) : l'audio à lui seul suffit à
-    // activer « Générer », sans attendre de transcription — voir
-    // refreshClientConfig() et generateNote().
-    const audioOnlyReady = state.llmBypassStt && !state.llmBypassSttKeepTranscript && hasAudio;
 
     [$('btnGenerate'), $('btnGenerateMobile')].forEach((el) => {
-      if (el) el.disabled = !((hasTranscript || audioOnlyReady) && hasTemplate);
+      if (el) el.disabled = !((hasTranscript || audioOnlyReady()) && hasTemplate);
     });
     [$('btnRetranscribe'), $('btnRetranscribeMobile')].forEach((el) => {
       if (el) el.disabled = !hasAudio;
@@ -2207,9 +2300,29 @@
     if (!pied) return;
     const moteur = $('transcriptEngine');
     const etat = $('saveStatusDictee');
+    const avis = $('transcriptBypassNotice');
     const visible = (moteur && !moteur.classList.contains('hidden') && moteur.textContent.trim())
-                 || (etat && etat.textContent.trim());
+                 || (etat && etat.textContent.trim())
+                 || (avis && !avis.classList.contains('hidden'));
     pied.classList.toggle('hidden', !visible);
+  }
+
+  /**
+   * Rappelle, dans le pied de la dictée, que le texte affiché ne sert PAS à
+   * la génération quand le STT tourne pour l'affichage seul (contournement
+   * actif ET transcription conservée — voir refreshClientConfig()). Sans ce
+   * rappel, rien ne distingue ce texte-ci d'une transcription qui, elle,
+   * alimente réellement la note — visible dès le début de la dictée, pas
+   * seulement une fois celle-ci terminée.
+   */
+  function updateBypassSttNotice() {
+    const el = $('transcriptBypassNotice');
+    if (!el) return;
+    const show = state.llmBypassStt && state.llmBypassSttKeepTranscript;
+    el.textContent = show ? T('transcript.bypass_notice') : '';
+    el.title = show ? T('transcript.bypass_notice_title') : '';
+    el.classList.toggle('hidden', !show);
+    refreshTranscriptFooter();
   }
 
   /**
@@ -2358,7 +2471,7 @@
       return;
     }
 
-    const html = `<div style="font-family:Georgia,'Times New Roman',serif;font-size:12pt;line-height:1.5">
+    const html = `<div style="font-family:Georgia,'Times New Roman',serif;font-size:11pt;line-height:1.5">
                     ${markdownToHtml(markdown)}
                   </div>`;
 
@@ -2927,7 +3040,7 @@
       state.consultationId = draft.id;
       state.recordedSeconds = draft.audio_seconds || 0;
 
-      $('transcript').value = draft.raw_transcript || '';
+      $('transcript').value = formatSentences(draft.raw_transcript);
       // Toujours la dernière note GÉNÉRÉE, jamais une version éditée : une
       // régénération remplace désormais ``edited_markdown`` sans condition
       // (voir api_generate), donc les deux ne divergent plus qu'en cours de
@@ -4369,6 +4482,7 @@
     state.llmBypassStt = Boolean(config.llm_bypass_stt);
     state.llmBypassSttKeepTranscript = Boolean(config.llm_bypass_stt_keep_transcript);
     updateActionButtons();
+    updateBypassSttNotice();
     renderLanguageChoices(config.languages, config.language || LANG);
 
     if (config.theme) applyTheme(config.theme);
@@ -4386,7 +4500,14 @@
       const stt = config.stt_provider === 'custom' && config.stt_model
         ? config.stt_model
         : config.stt_provider;
-      label.textContent = `${stt} → ${config.llm_provider} · ${config.llm_model}`;
+      // Contournement du STT actif : même s'il tourne encore pour
+      // l'affichage pendant la dictée (voir llmBypassSttKeepTranscript), son
+      // résultat n'entre JAMAIS dans la génération — la flèche « → »
+      // suggérerait à tort qu'il fait partie de la chaîne qui produit la
+      // note, entre parenthèses ça ne dit plus que « pour information ».
+      label.textContent = state.llmBypassStt
+        ? `(${stt}) - ${config.llm_provider} · ${config.llm_model}`
+        : `${stt} → ${config.llm_provider} · ${config.llm_model}`;
     }
     return config;
   }
@@ -4442,7 +4563,7 @@
     }
     const box = $('transcript');
     const existing = box.value.replace(/\s+$/, '');
-    box.value = existing ? `${existing} ${payload.text}` : payload.text;
+    box.value = formatSentences(existing ? `${existing} ${payload.text}` : payload.text);
     box.scrollTop = box.scrollHeight;
     updateTranscriptMeta({ duration_seconds: payload.audio_seconds });
     updateActionButtons();
@@ -4479,6 +4600,24 @@
     if (!$('draftsModal').classList.contains('hidden')) openDraftsModal();
   }
 
+  /**
+   * Une dictée démarre ailleurs (autre onglet, autre appareil) sur une
+   * consultation qu'on ne regarde pas déjà : proposer d'y basculer pour la
+   * suivre en direct, plutôt que de laisser le médecin la découvrir plus
+   * tard dans « Mes brouillons ». Celle qu'on regarde déjà se met à jour
+   * toute seule (voir onSyncTranscript) — rien à proposer dans ce cas.
+   */
+  function onSyncDictationStarted(evt) {
+    const payload = JSON.parse(evt.data);
+    if (payload.origin_tab === state.tabId) return;
+    if (String(payload.consultation_id) === String(state.consultationId)) return;
+    toastWithAction(
+      T('sync.dictation_started', { title: payload.title }),
+      T('sync.follow'),
+      () => loadDraft(payload.consultation_id),
+    );
+  }
+
   function onSyncConsultationDeleted(evt) {
     const payload = JSON.parse(evt.data);
     if (payload.origin_tab === state.tabId) return;
@@ -4494,6 +4633,7 @@
     if (liveSource) liveSource.close();
     liveSource = new EventSource('/api/events');
     liveSource.addEventListener('transcript', onSyncTranscript);
+    liveSource.addEventListener('dictation_started', onSyncDictationStarted);
     liveSource.addEventListener('recording_added', onSyncRecording);
     liveSource.addEventListener('recording_deleted', onSyncRecording);
     liveSource.addEventListener('generated', onSyncGeneratedOrPatched);

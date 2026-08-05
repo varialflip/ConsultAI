@@ -1590,6 +1590,12 @@ def start_dictation(payload: DictationStartIn, request: Request, db: Session = D
         template_id=payload.template_id,
         mime_type=payload.mime_type,
     )
+    live.publish(user.owner_key, "dictation_started", {
+        "consultation_id": consultation.id,
+        "session_id": session.id,
+        "title": consultation.title,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     return session.to_public()
 
 

@@ -13,6 +13,10 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+# L'étape « tailwind-builder » du Dockerfile fait son propre npm install :
+# envoyer celui de l'hôte au démon Docker ne servirait qu'à alourdir le
+# contexte de construction pour rien.
+node_modules/
 README.md
 *.md
 !app/**/*.md

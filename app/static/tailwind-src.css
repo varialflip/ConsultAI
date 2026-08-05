@@ -1,0 +1,7 @@
+/* Source du build Tailwind (voir Dockerfile et tailwind.config.js).
+   Le CSS écrit à la main de ConsultAI reste dans <style> au sein
+   d'index.html : seules les classes utilitaires générées par Tailwind
+   viennent d'ici, sous app/static/tailwind.css une fois construit. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

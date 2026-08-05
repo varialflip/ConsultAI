@@ -8,6 +8,27 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
+# ÉTAPE 0 — Feuille de style Tailwind, construite plutôt que servie par CDN
+# -----------------------------------------------------------------------------
+# cdn.tailwindcss.com compile en JIT dans le navigateur de CHAQUE médecin à
+# CHAQUE chargement — une dépendance réseau externe que Tailwind lui-même
+# déconseille en production (voir sa documentation). Cette étape la remplace
+# par un fichier déjà construit, copié dans l'image finale.
+#
+# --platform=$BUILDPLATFORM : cette étape ne produit que du texte (CSS), son
+# résultat ne dépend pas de l'architecture cible (amd64/arm64). L'exécuter
+# nativement sur la machine qui construit plutôt que sous émulation QEMU pour
+# arm64 est nettement plus rapide, sans rien changer au résultat.
+FROM --platform=$BUILDPLATFORM node:20-slim AS tailwind-builder
+WORKDIR /build
+COPY package.json package-lock.json tailwind.config.js ./
+RUN npm ci
+COPY app/templates/ ./app/templates/
+COPY app/static/app.js app/static/tailwind-src.css ./app/static/
+RUN node_modules/.bin/tailwindcss -i app/static/tailwind-src.css -o app/static/tailwind.css --minify
+
+
+# -----------------------------------------------------------------------------
 # ÉTAPE 1 — Construction des dépendances
 # -----------------------------------------------------------------------------
 FROM python:3.12-slim AS builder
@@ -73,6 +94,7 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 COPY app/ /app/app/
+COPY --from=tailwind-builder /build/app/static/tailwind.css /app/app/static/tailwind.css
 
 # /data = volume persistant (base SQLite), monté par-dessus au lancement : ce
 # chown ne sert qu'en dehors de tout montage (ex. test de l'image seule).

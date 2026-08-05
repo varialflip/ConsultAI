@@ -307,6 +307,16 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "note.engine_stt_title": ("Transcription : {engine}", "Transcription: {engine}"),
     "note.engine_llm_title": ("Mise en forme : {engine}", "Formatting: {engine}"),
     "note.engine_audio": ("+ audio", "+ audio"),
+    "transcript.bypass_notice": (
+        "Non utilisé pour la génération — l'audio suffit",
+        "Not used for generation — audio alone is enough",
+    ),
+    "transcript.bypass_notice_title": (
+        "Le STT continue de tourner pour l'affichage, mais la note se génère "
+        "directement à partir de l'audio : ce texte n'y entre pour rien.",
+        "Speech recognition keeps running for display, but the note is "
+        "generated directly from the audio: this text plays no part in it.",
+    ),
     "note.engine_audio_title": (
         "Un extrait audio de la dictée a été joint à la transcription pour "
         "cette mise en forme.",
@@ -795,6 +805,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Cette consultation a été supprimée depuis un autre appareil.",
         "This consultation was deleted from another device.",
     ),
+    "sync.dictation_started": (
+        "Dictée commencée sur « {title} » depuis un autre appareil.",
+        "Dictation started on “{title}” from another device.",
+    ),
+    "sync.follow": ("Suivre", "Follow"),
 
     # --- Panneau d'administration : chrome ---------------------------------
     "admin.title": ("Réglages", "Settings"),

@@ -1,0 +1,10 @@
+{
+  "name": "consultai-assets",
+  "private": true,
+  "description": "Construction de la feuille de style Tailwind — voir Dockerfile, étape « tailwind-builder ». Aucun autre usage : le reste de l'interface est du JavaScript natif, sans étape de compilation.",
+  "devDependencies": {
+    "tailwindcss": "3.4.19",
+    "@tailwindcss/forms": "0.5.11",
+    "@tailwindcss/typography": "0.5.20"
+  }
+}

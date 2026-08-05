@@ -33,7 +33,11 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
 
-  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <!-- Construite à l'image (voir Dockerfile, étape « tailwind-builder » et
+       tailwind.config.js) plutôt que compilée en JIT dans le navigateur par
+       cdn.tailwindcss.com — Tailwind lui-même déconseille cette voie CDN en
+       production. -->
+  <link rel="stylesheet" href="/static/tailwind.css">
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
@@ -244,8 +248,12 @@
     .toast-success { background-color: var(--color-accent); }
     /* Le texte d'aide (placeholder) de la transcription adopte la même
        apparence que le message « La note structurée apparaît ici… » du
-       panneau de droite — couleur, italique. */
-    #transcript::placeholder { color: #94a3b8; font-style: italic; }
+       panneau de droite — couleur, italique, ET taille : le textarea fixe
+       son propre texte à 13px (voir sa classe), mais ce message-jumeau vit
+       dans #previewPane, sous « prose prose-sm » (Tailwind Typography), dont
+       le corps de texte vaut 14px / interligne 24px. Sans le préciser ici,
+       les deux messages jumeaux s'affichaient à une taille différente. */
+    #transcript::placeholder { color: #94a3b8; font-style: italic; font-size: 0.875rem; line-height: 1.7142857; }
   </style>
 </head>
 
@@ -639,6 +647,10 @@
                 class="hidden shrink-0 items-center gap-3 border-t border-slate-200
                        px-4 sm:px-6 py-1.5 text-[11px] text-slate-400">
           <span id="transcriptEngine" class="hidden truncate"></span>
+          <!-- Rempli par updateBypassSttNotice() : visible seulement quand le
+               STT tourne pour l'affichage sans jamais nourrir la génération
+               (contournement actif ET transcription conservée). -->
+          <span id="transcriptBypassNotice" class="hidden truncate text-amber-700"></span>
           <span id="saveStatusDictee" class="ml-auto shrink-0"></span>
         </footer>
       </div>

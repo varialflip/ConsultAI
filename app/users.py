@@ -42,14 +42,17 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import runtime_config
+from app import dictation, recordings, runtime_config
 from app.database import (
     ADMIN_GROUP,
     DEFAULT_GROUP,
     Consultation,
     Group,
+    UsageDaily,
+    UsageEvent,
     User,
     UserGroup,
+    UserPreference,
     utcnow,
 )
 
@@ -352,6 +355,63 @@ def update_user(
     db.refresh(user)
     logger.info("Compte « %s » modifié", user.username)
     return user.to_dict(groups_of(db, user.id))
+
+
+def delete_user(db: Session, user_id: int) -> None:
+    """
+    Supprime un compte et TOUT ce qu'il porte — irréversible.
+
+    Contrairement à la désactivation (``is_active=False``), qui conserve les
+    consultations « au cas où », cette opération efface jusqu'aux fichiers :
+    brouillons, transcriptions, notes, enregistrements audio, historiques
+    d'usage et dictées encore en cours. C'est le pendant humain de l'audio :
+    une voix de patient ne doit pas pouvoir survivre au retrait du compte qui
+    l'a produite.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise ValueError("compte introuvable")
+
+    # Même garde-fou que la désactivation : ne jamais pouvoir laisser
+    # l'installation sans administrateur actif.
+    if permissions_of(groups_of(db, user.id))["is_admin"] \
+            and _admin_count(db, exclude_user_id=user.id) == 0:
+        raise ValueError("dernier administrateur")
+
+    username = user.username
+
+    # Consultations et leurs enregistrements audio (fichiers compris) :
+    # delete_for_consultation efface l'audio sur le disque puis la ligne.
+    consultations = list(
+        db.scalars(select(Consultation).where(Consultation.owner == username))
+    )
+    for consultation in consultations:
+        recordings.delete_for_consultation(db, consultation.id)
+        db.delete(consultation)
+
+    # Historique d'usage : événements bruts et cumuls quotidiens.
+    db.query(UsageEvent).filter(UsageEvent.owner == username).delete(
+        synchronize_session=False
+    )
+    db.query(UsageDaily).filter(UsageDaily.owner == username).delete(
+        synchronize_session=False
+    )
+
+    # Préférences de l'usager (langue, thème de couleur).
+    db.query(UserPreference).filter(UserPreference.username == username).delete(
+        synchronize_session=False
+    )
+
+    # Dictées encore en cours sur le disque.
+    dictation.purge_for_user(username)
+
+    # Appartenances aux groupes, puis le compte lui-même.
+    db.query(UserGroup).filter(UserGroup.user_id == user.id).delete(
+        synchronize_session=False
+    )
+    db.delete(user)
+    db.commit()
+    logger.info("Compte « %s » supprimé avec toutes ses données", username)
 
 
 def create_group(db: Session, name: str, description: str = "",

@@ -4191,6 +4191,10 @@
                       ? 'border-red-200 text-red-600 hover:bg-red-50'
                       : 'accent-btn-ghost hover:accent-bg-subtle'}">
             ${esc(user.is_active ? T('people.deactivate') : T('people.reactivate'))}</button>
+          ${moi ? '' : `<button type="button" data-delete-user="${user.id}"
+                  data-name="${esc(user.display_name || user.username)}"
+                  class="ml-2 text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">
+            ${esc(T('people.delete_user'))}</button>`}
         </div>
         <p class="text-[11px] text-slate-500">${esc(details)}</p>
         <div>${cases}</div>
@@ -4289,6 +4293,20 @@
         const userId = Number(bouton.dataset.toggleActive);
         const user = (adminState.people.users || []).find((u) => u.id === userId);
         await savePerson(userId, { is_active: !(user && user.is_active) });
+      });
+    });
+
+    boite.querySelectorAll('button[data-delete-user]').forEach((bouton) => {
+      bouton.addEventListener('click', async () => {
+        const nom = bouton.dataset.name;
+        if (!window.confirm(T('people.confirm_delete_user', { name: nom }))) return;
+        try {
+          await api(`/api/admin/users/${bouton.dataset.deleteUser}`, { method: 'DELETE' });
+          toast(T('people.user_deleted'), 'success');
+        } catch (err) {
+          toast(err.message, 'error', 9000);
+        }
+        await loadPeople();
       });
     });
 

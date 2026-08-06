@@ -332,6 +332,35 @@ def delete_session(session: DictationSession) -> None:
     logger.info("Dictée %s supprimée", session.id)
 
 
+def purge_for_user(username: str) -> int:
+    """Supprime les dictées encore en cours d'un usager, fichiers compris.
+
+    Appelée à la suppression du compte (``users.delete_user``) : l'audio brut
+    d'une dictée est aussi sensible qu'un enregistrement conservé, il ne doit
+    rien survivre d'un compte effacé.
+    """
+    removed = 0
+    try:
+        entries = os.listdir(_root())
+    except OSError:
+        return 0
+    for entry in entries:
+        directory = os.path.join(settings.dictation_dir, entry)
+        state_path = os.path.join(directory, "state.json")
+        try:
+            with open(state_path, encoding="utf-8") as fichier:
+                data = json.load(fichier)
+        except (OSError, ValueError, KeyError):
+            continue
+        if data.get("username") == username:
+            shutil.rmtree(directory, ignore_errors=True)
+            _forget_lock(entry)
+            removed += 1
+    if removed:
+        logger.info("Dictées de %s : %d session(s) supprimée(s)", username, removed)
+    return removed
+
+
 def purge_expired() -> int:
     """Supprime les dictées abandonnées. Appelée au démarrage."""
     limit = settings.dictation_retention_hours * 3600

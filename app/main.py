@@ -1386,6 +1386,21 @@ def api_update_user(
         raise HTTPException(status_code=422, detail=_translate_user_error(exc)) from exc
 
 
+@app.delete("/api/admin/users/{user_id}", status_code=204)
+def api_delete_user(
+    user_id: int,
+    request: Request,
+    admin: Principal = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Supprime le compte et TOUTES ses données (consultations, audio, usage)."""
+    try:
+        users_service.delete_user(db, user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=_translate_user_error(exc)) from exc
+    return JSONResponse(status_code=204, content=None)
+
+
 @app.get("/api/admin/groups")
 def api_list_groups(
     request: Request,

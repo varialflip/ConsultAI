@@ -903,6 +903,16 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "people.disabled": ("Désactivé", "Disabled"),
     "people.deactivate": ("Désactiver", "Deactivate"),
     "people.reactivate": ("Réactiver", "Reactivate"),
+    "people.delete_user": ("Supprimer", "Delete"),
+    "people.user_deleted": ("Compte et toutes ses données supprimés.", "Account and all its data deleted."),
+    "people.confirm_delete_user": (
+        "Supprimer définitivement « {name} » ? Toutes ses consultations, "
+        "transcriptions, notes, enregistrements audio et son historique "
+        "d'usage seront effacés. Action irréversible.",
+        "Permanently delete “{name}”? All their consultations, transcripts, "
+        "notes, audio recordings and usage history will be erased. This "
+        "cannot be undone.",
+    ),
     "people.saved": ("Compte mis à jour.", "Account updated."),
     "people.no_users": (
         "Aucun compte. Le premier usager qui se connectera deviendra "

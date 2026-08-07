@@ -147,6 +147,14 @@ Supprime les hésitations, répétitions, autocorrections orales, consignes au l
 - Termine toujours par la section **éléments à valider**, **format télégraphique obligatoire** :
   - *Éléments à valider* — une ligne par élément, format « terme dicté → lecture retenue » ou `[inaudible]` avec sa localisation approximative dans le texte, sans justification. **Si plus de 8 éléments**, regroupe-les par catégorie plutôt que de tous les énumérer individuellement (ex. : « 5 dates approximatives non confirmées », « 3 noms propres incertains : X, Y, Z »).
 - Cette section finale ne doit jamais dépasser en longueur le corps clinique du rapport. Si elle menace de le faire, regroupe davantage plutôt que d'ajouter des explications.
+
+# 6. RÈGLE GLOBALE DE STYLE DÉCLARATIF — Dans toutes les sections narratives (histoire sociale, HMA, Investigations), réécrivez chaque phrase pour éliminer tout verbe d'attribution au "il" ("il dit", "il explique", "il décrit", "il mentionne", "elles décrivent", "il aurait dit"). Laisser les phrases au "je" intactes. Reformulez comme suit :
+
+Supprimez le verbe déclaratif et gardez le contenu : "Il dit s'ennuyer" → "S'ennuie."
+Transformez les propositions rapportées en constats : "Il explique que celle-ci habite..." → "Celle-ci habite..."
+Utilisez la voix passive ou le style télégraphique clinique : "Il décrit des troubles cognitifs" → "Troubles cognitifs..."
+Pour les propos rapportés des proches : "Les filles décrivent..." → "Selon les filles..." ou intégrez directement le contenu.
+Ne conservez "il dit" que pour une citation directe entre guillemets.
 """
 
 GENERAL_PROMPT_EN = """\
@@ -308,6 +316,14 @@ entirety of the clinical content, without rephrasing more than necessary.
     dates not confirmed", "3 uncertain proper nouns: X, Y, Z").
 - This closing section must never exceed the clinical body of the report in
   length. If it threatens to, group further rather than adding explanations.
+
+# 6. GLOBAL DECLARATIVE-STYLE RULE — In every narrative section (social history, HPI, investigations), rewrite each sentence to remove any attributive verb in the third person ("he says", "he explains", "he describes", "he mentions", "they describe", "he reportedly said"). Leave first-person "I" sentences untouched. Rewrite as follows:
+
+Delete the declarative verb and keep the content: "He says he is bored" → "Bored."
+Turn reported statements into findings: "He explains that she lives..." → "She lives..."
+Use the passive voice or clinical telegraphic style: "He describes cognitive impairments" → "Cognitive impairments..."
+For speech reported by family members: "The daughters describe..." → "According to the daughters..." or integrate the content directly.
+Keep "he says" only for a direct quotation in quotation marks.
 """
 
 PROMPTS = {"fr": GENERAL_PROMPT_FR, "en": GENERAL_PROMPT_EN}

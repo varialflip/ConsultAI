@@ -39,3 +39,7 @@ app/static/tailwind.css
 # Synology (index de la Recherche universelle) et macOS
 @eaDir/
 .DS_Store
+
+# Artéfacts d'outillage local (Claude Code, opencode) et caches JIT
+.claude/
+tmp/

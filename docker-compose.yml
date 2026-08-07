@@ -55,7 +55,6 @@ services:
     #
     # DÉVELOPPEMENT — voir son propre code sans reconstruire l'image. Le code
     # vit dans /app/app ; ce montage le recouvre par celui du dépôt cloné :
-    #     - ./app:/app/app
     # `docker compose restart consultai` suffit alors à recharger (et un
     # rafraîchissement forcé du navigateur pour les fichiers de app/static/).
     # À RETIRER en production : l'image redeviendrait sinon dépendante d'un

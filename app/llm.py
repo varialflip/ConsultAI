@@ -693,12 +693,13 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
         max_output_tokens=max_tokens,
         safety_settings=_safety_settings(),
     )
+    # Le raisonnement (thinking) est inutile pour une tache de mise en forme
+    # qui ne demande ni diagnostic ni inference : le couper rend la reponse
+    # plus rapide, evite de consommer la limite de jetons en pensee, et
+    # protege contre les notes et les JSON tronques.
+    config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
     if json_mode:
         config_kwargs["response_mime_type"] = "application/json"
-        # Rien à raisonner sur une tâche de recopie : couper le raisonnement
-        # rend la réponse plus rapide, et surtout empêche qu'il consomme la
-        # limite de jetons et laisse sortir un JSON tronqué.
-        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
     else:
         config_kwargs["top_p"] = 0.95
 

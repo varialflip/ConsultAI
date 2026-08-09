@@ -57,6 +57,9 @@
       padding-right: env(safe-area-inset-right);
     }
 
+    /* « AI » du titre en italique */
+    h1 .ai { font-style: italic; }
+
     .app-shell { height: 100dvh; }
     @supports not (height: 100dvh) { .app-shell { height: 100vh; } }
 
@@ -280,7 +283,7 @@
       </div>
 
       <div class="leading-tight mr-auto min-w-0">
-        <h1 class="font-semibold text-slate-900 text-sm sm:text-[15px] truncate">{{ app_title }}</h1>
+        <h1 class="font-semibold text-slate-900 text-sm sm:text-[15px] truncate">{{ app_title|ai_italic }}</h1>
         <!-- Quels moteurs travaillent réellement. La question se pose dès
              qu'une note sort différente de d'habitude, et la réponse n'est
              visible nulle part ailleurs. -->

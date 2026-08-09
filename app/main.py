@@ -65,6 +65,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
+from markupsafe import Markup
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -371,6 +372,14 @@ async def web_manifest() -> JSONResponse:
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 jinja_templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _title_ai_italic(title: str) -> Markup:
+    """Met « AI » du titre en italique : Dict<span class="ai">AI</span>.ca."""
+    return Markup("<span class=\"ai\">AI</span>".join(esc_html(p) for p in title.split("AI")))
+
+
+jinja_templates.env.filters["ai_italic"] = _title_ai_italic
 
 
 # ---------------------------------------------------------------------------

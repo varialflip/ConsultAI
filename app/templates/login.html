@@ -12,6 +12,7 @@
         padding:30px 28px 24px}
   img{width:52px;height:52px;border-radius:13px;display:block;margin:0 auto}
   h1{font-size:20px;font-weight:800;text-align:center;margin:18px 0 6px;letter-spacing:-.01em}
+  h1 .ai{font-style:italic}
   .sub{font-size:13px;color:#64748b;text-align:center;line-height:1.55;margin-bottom:22px}
   .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media (max-width:440px){.choices{grid-template-columns:1fr}}
@@ -35,7 +36,7 @@
   <form class="card" method="post" action="/auth/login">
     <input type="hidden" name="next" value="{{ next }}">
     <img src="/static/icons/icon-512.png" alt="{{ t('auth.welcome_title') }}">
-    <h1>{{ t('auth.welcome_title') }}</h1>
+    <h1>Consult<span class="ai">AI</span></h1>
     <p class="sub">{{ t('auth.welcome_subtitle') }}</p>
 
     <div class="choices">

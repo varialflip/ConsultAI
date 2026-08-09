@@ -5,39 +5,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ t('auth.welcome_title') }}</title>
 <style>
- body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#0f172a;color:#e2e8f0;
-      display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1.5rem}
- .card{max-width:26rem;width:100%;background:#1e293b;border:1px solid #334155;border-radius:.75rem;padding:2rem}
- h1{margin:0 0 .5rem;font-size:1.35rem;color:#f1f5f9;text-align:center}
- p.sub{margin:0 0 1.5rem;text-align:center;font-size:.85rem;color:#94a3b8;line-height:1.5}
- label.stay{display:flex;gap:.7rem;align-items:flex-start;padding:.9rem;border:1px solid #334155;
-            border-radius:.5rem;background:#0f172a;cursor:pointer;margin-bottom:1.25rem}
- label.stay:hover{border-color:#475569}
- label.stay input{margin-top:.15rem;width:1.1rem;height:1.1rem;accent-color:#5eead4;cursor:pointer}
- label.stay .txt b{display:block;font-size:.92rem;color:#e2e8f0}
- label.stay .txt span{display:block;font-size:.78rem;color:#94a3b8;margin-top:.2rem;line-height:1.4}
- button{width:100%;border:0;border-radius:.5rem;padding:.85rem 1rem;background:#5eead4;color:#0f172a;
-        font-weight:700;font-size:.95rem;cursor:pointer}
- button:hover{background:#99f6e4}
- p.note{margin:1rem 0 0;text-align:center;font-size:.75rem;color:#64748b;line-height:1.5}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh;display:flex;align-items:center;
+       justify-content:center;padding:24px;background:#f1f5f9;color:#0f172a}
+  .card{width:100%;max-width:480px;background:#fff;border-radius:20px;box-shadow:0 18px 50px rgba(15,23,42,.12);
+        padding:30px 28px 24px}
+  img{width:52px;height:52px;border-radius:13px;display:block;margin:0 auto}
+  h1{font-size:20px;font-weight:800;text-align:center;margin:18px 0 6px;letter-spacing:-.01em}
+  .sub{font-size:13px;color:#64748b;text-align:center;line-height:1.55;margin-bottom:22px}
+  .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:440px){.choices{grid-template-columns:1fr}}
+  .choice{position:relative;border:2px solid #e2e8f0;border-radius:14px;padding:16px 14px;cursor:pointer;transition:.15s;background:#fff}
+  .choice:hover{border-color:#99f6e4}
+  .choice.sel{border-color:#0d9488;background:#f0fdfa;box-shadow:0 4px 14px rgba(13,148,136,.18)}
+  .choice .ico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;margin-bottom:10px;
+               background:#f1f5f9;color:#475569}
+  .choice.sel .ico{background:#0d9488;color:#fff}
+  .choice .ico svg{width:18px;height:18px}
+  .choice b{display:block;font-size:14px}
+  .choice span{display:block;font-size:11.5px;color:#64748b;margin-top:3px;line-height:1.45}
+  .choice input{position:absolute;opacity:0;pointer-events:none}
+  button{margin-top:22px;width:100%;border:0;border-radius:12px;padding:14px;background:linear-gradient(90deg,#0d9488,#115e59);
+         color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:.15s}
+  button:hover{filter:brightness(1.08)}
+  .foot{margin-top:14px;font-size:11px;color:#94a3b8;text-align:center;line-height:1.5}
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>{{ t('auth.welcome_title') }}</h1>
-  <p class="sub">{{ t('auth.welcome_subtitle', sso=sso_name) }}</p>
-  <form method="post" action="/auth/login">
+  <form class="card" method="post" action="/auth/login">
     <input type="hidden" name="next" value="{{ next }}">
-    <label class="stay">
-      <input type="checkbox" name="stay_logged_in" value="true">
-      <span class="txt">
+    <img src="/static/icons/icon-512.png" alt="{{ t('auth.welcome_title') }}">
+    <h1>{{ t('auth.welcome_title') }}</h1>
+    <p class="sub">{{ t('auth.welcome_subtitle') }}</p>
+
+    <div class="choices">
+      <label class="choice sel">
+        <input type="radio" name="stay_logged_in" value="" checked>
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        </span>
+        <b>{{ t('auth.option_short_title') }}</b>
+        <span>{{ t('auth.option_short_desc', heures=default_hours) }}</span>
+      </label>
+
+      <label class="choice">
+        <input type="radio" name="stay_logged_in" value="true">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        </span>
         <b>{{ t('auth.stay_logged_in', jours=stay_days) }}</b>
-        <span>{{ t('auth.stay_logged_in_hint') }}</span>
-      </span>
-    </label>
+        <span>{{ t('auth.option_long_desc', jours=stay_days) }}</span>
+      </label>
+    </div>
+
     <button type="submit">{{ t('auth.sign_in_with', sso=sso_name) }}</button>
+    <p class="foot">{{ t('auth.session_note') }}</p>
   </form>
-  <p class="note">{{ t('auth.session_note', heures=default_hours) }}</p>
-</div>
+
+<script>
+  document.querySelectorAll('.choice input').forEach(function(input){
+    input.addEventListener('change', function(){
+      document.querySelectorAll('.choice').forEach(function(c){c.classList.remove('sel');});
+      this.closest('.choice').classList.add('sel');
+    });
+  });
+</script>
 </body>
 </html>

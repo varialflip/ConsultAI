@@ -1974,23 +1974,26 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     # --- Page de connexion (rendue par /auth/login) -------------------------
     "auth.welcome_title": ("Connexion", "Sign in"),
     "auth.welcome_subtitle": (
-        "Cette application est protégée par {sso}. Vous allez être redirigé "
-        "vers lui pour vous identifier.",
-        "This application is protected by {sso}. You will be redirected to it "
-        "to sign in.",
+        "Choisissez la durée de session pour cet appareil.",
+        "Choose how long to stay signed in on this device.",
+    ),
+    "auth.option_short_title": ("Usage ponctuel", "Temporary use"),
+    "auth.option_short_desc": (
+        "Session de {heures} h d'inactivité. Pour un poste partagé ou public.",
+        "Expires after {heures} h of inactivity. For a shared or public computer.",
     ),
     "auth.stay_logged_in": (
         "Rester connecté {jours} jours",
         "Keep me signed in for {jours} days",
     ),
-    "auth.stay_logged_in_hint": (
-        "Recommandé uniquement sur un appareil personnel.",
-        "Recommended only on a personal device.",
+    "auth.option_long_desc": (
+        "Session de {jours} jours. Sur votre appareil personnel.",
+        "Lasts {jours} days. On your personal device.",
     ),
     "auth.sign_in_with": ("Continuer avec {sso}", "Continue with {sso}"),
     "auth.session_note": (
-        "Sans cocher la case, la session expire après {heures} h d'inactivité.",
-        "Without the box, the session expires after {heures} h of inactivity.",
+        "La session expire après la durée choisie sans activité.",
+        "The session expires after the chosen period of inactivity.",
     ),
 
     # --- Page 403 (rendue par le middleware) --------------------------------

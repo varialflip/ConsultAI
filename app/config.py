@@ -132,7 +132,12 @@ class Settings:
     #: une clé aléatoire est tirée au démarrage et tout le monde est déconnecté
     #: à chaque redémarrage du conteneur.
     session_secret: str = ""
-    session_max_age_seconds: int = 60 * 60 * 12
+    session_max_age_seconds: int = 60 * 60 * 4
+    #: Durée « Rester connecté » de la page de connexion : le témoin est émis
+    #: pour cette durée — 30 jours par défaut — lorsque la case est cochée.
+    #: Le « reste connecté » glisse : chaque requête authentifiée repousse
+    #: l'expiration, comme pour la durée normale.
+    session_stay_max_age_seconds: int = 60 * 60 * 24 * 30
     #: Le témoin n'est émis qu'en HTTPS. À ne passer à false que pour un essai
     #: local en http://localhost, jamais en production.
     session_https_only: bool = True
@@ -349,7 +354,8 @@ class Settings:
             sso_display_name=_env("SSO_DISPLAY_NAME"),
 
             session_secret=_env("SESSION_SECRET"),
-            session_max_age_seconds=_env_int("SESSION_MAX_AGE_SECONDS", 60 * 60 * 12),
+            session_max_age_seconds=_env_int("SESSION_MAX_AGE_SECONDS", 60 * 60 * 4),
+            session_stay_max_age_seconds=_env_int("SESSION_STAY_MAX_AGE_SECONDS", 60 * 60 * 24 * 30),
             session_https_only=_env_bool("SESSION_HTTPS_ONLY", True),
 
             allow_signup=_env_bool("ALLOW_SIGNUP", False),

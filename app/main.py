@@ -53,6 +53,7 @@ import logging
 import os
 import re
 import threading
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -249,7 +250,16 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=_session_secret,
     session_cookie="consultai_session",
-    max_age=settings.session_max_age_seconds,
+    # Le témoin signé doit rester valide le temps de la PLUS LONGUE des deux
+    # durées (« Rester connecté ») : la signature ne doit pas expirer avant la
+    # session qu'elle garantit. La durée réelle, elle, est appliquée côté
+    # serveur par l'échéance portée dans la session (auth.session_identity) —
+    # sans cela, un témoin de session « normale » resterait rejouable pendant
+    # la durée étendue.
+    max_age=max(
+        settings.session_max_age_seconds,
+        settings.session_stay_max_age_seconds,
+    ),
     # « lax » et non « strict » : le fournisseur d'identité nous renvoie par une
     # navigation venue d'un autre site, et « strict » ferait perdre le témoin
     # portant l'état du flux — la connexion échouerait systématiquement.
@@ -710,9 +720,17 @@ async def service_worker() -> Response:
 # Voir app/oidc.py pour ce que la bibliothèque prend en charge (state, nonce,
 # PKCE, validation de signature) et ce qui reste à notre charge.
 # ===========================================================================
-@app.get("/auth/login", include_in_schema=False)
+@app.api_route("/auth/login", methods=["GET", "POST"], include_in_schema=False)
 async def auth_login(request: Request):
-    """Amorce le flux, ou renvoie à l'accueil si la session est déjà ouverte."""
+    """
+    Page de connexion, puis amorce du flux OIDC.
+
+    Un seul chemin porte les deux rôles. La page (GET) affiche la case
+    « Rester connecté » — l'application n'a pas d'autre page de connexion qui
+    lui appartienne, le middleware renvoie d'ailleurs ici toutes les
+    navigations non authentifiées. Sa soumission (POST) range la préférence
+    dans la session avant de rediriger vers le fournisseur d'identité.
+    """
     from app.auth import session_identity
 
     suite = oidc.safe_next_path(request.query_params.get("next", "/"))
@@ -726,14 +744,34 @@ async def auth_login(request: Request):
             status_code=503,
         )
 
-    # Mémorisé côté session plutôt que passé au fournisseur : ce dernier ne
-    # renvoie que « state » et « code », et un paramètre supplémentaire dans
-    # l'adresse de retour serait refusé pour non-concordance.
-    request.session["consultai_next"] = suite
-    try:
-        return await oidc.authorization_redirect(request)
-    except oidc.OidcError as exc:
-        return _auth_error_page(str(exc), status_code=503)
+    if request.method == "POST":
+        form = await request.form()
+        suite = oidc.safe_next_path(str(form.get("next") or suite))
+        rester_connecte = str(form.get("stay_logged_in") or "") in ("true", "on", "1")
+
+        # Mémorisé côté session plutôt que passé au fournisseur : ce dernier ne
+        # renvoie que « state » et « code », et un paramètre supplémentaire dans
+        # l'adresse de retour serait refusé pour non-concordance.
+        request.session["consultai_next"] = suite
+        request.session["consultai_stay_logged_in"] = rester_connecte
+        try:
+            return await oidc.authorization_redirect(request)
+        except oidc.OidcError as exc:
+            return _auth_error_page(str(exc), status_code=503)
+
+    langue = i18n.normalize(settings.app_language)
+    return jinja_templates.TemplateResponse(
+        request,
+        "login.html",
+        {
+            "t": _template_translator(langue),
+            "lang": langue,
+            "next": suite,
+            "sso_name": settings.sso_label,
+            "default_hours": max(1, settings.session_max_age_seconds // 3600),
+            "stay_days": max(1, settings.session_stay_max_age_seconds // 86400),
+        },
+    )
 
 
 @app.get("/auth/callback", include_in_schema=False)
@@ -785,7 +823,24 @@ async def auth_callback(request: Request):
 
     # La session ne porte que l'identité. Les droits sont relus en base à chaque
     # requête — voir auth._principal_from_db.
-    store_identity(request, {"sub": user.subject, "username": user.username})
+    #
+    # La durée du témoin est décidée ICI : la case « Rester connecté » cochée
+    # sur la page de connexion donne 30 jours (ou la valeur configurée),
+    # sinon la durée normale. Elle est portée PAR le témoin (max_age_seconds
+    # et expires_at) et repoussée à chaque requête authentifiée — voir
+    # auth.authenticate — de sorte que la session glisse tant qu'on s'en sert.
+    rester_connecte = bool(request.session.pop("consultai_stay_logged_in", False))
+    duree = (
+        settings.session_stay_max_age_seconds
+        if rester_connecte
+        else settings.session_max_age_seconds
+    )
+    store_identity(request, {
+        "sub": user.subject,
+        "username": user.username,
+        "max_age_seconds": duree,
+        "expires_at": int(time.time()) + duree,
+    })
     # Conservé pour « id_token_hint » à la déconnexion. Sans lui, le
     # fournisseur ignore notre adresse de retour et l'usager reste sur sa page.
     #

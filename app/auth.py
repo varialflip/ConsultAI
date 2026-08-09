@@ -40,6 +40,7 @@ from __future__ import annotations
 import logging
 import posixpath
 import re
+import time
 from dataclasses import dataclass
 from typing import Iterable, Optional, Tuple
 
@@ -182,14 +183,30 @@ SESSION_KEY = "consultai_user"
 
 
 def session_identity(request: Request) -> dict:
-    """Contenu de la session, ou dictionnaire vide si aucune."""
+    """
+    Contenu de la session, ou dictionnaire vide si aucune.
+
+    Un témoin arrivé à échéance (expires_at passé) est traité comme une
+    absence de session : la session entière est fermée — identité, jeton
+    d'identité, état du flux — et le middleware de session enverra un témoin
+    de suppression au navigateur. La durée est donc contrôlée ici, côté
+    serveur, et pas seulement par l'expiration du témoin : un témoin volé ne
+    rejoue pas plus longtemps que la session qu'il représente.
+    """
     try:
-        return dict(request.session.get(SESSION_KEY) or {})
+        identite = dict(request.session.get(SESSION_KEY) or {})
     except AssertionError:
         # SessionMiddleware absent : ne devrait pas arriver, mais mieux vaut
         # une absence d'identité qu'une exception au milieu du middleware.
         logger.error("SessionMiddleware non installé : aucune session lisible")
         return {}
+
+    if identite:
+        expiration = identite.get("expires_at")
+        if isinstance(expiration, (int, float)) and expiration <= time.time():
+            request.session.clear()
+            return {}
+    return identite
 
 
 def store_identity(request: Request, payload: dict) -> None:
@@ -280,6 +297,15 @@ def authenticate(request: Request) -> Principal:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_denied("denied.account_disabled"),
         )
+
+    # Session glissante : chaque requête authentifiée repousse l'échéance.
+    # L'échéance vit DANS le témoin signé — la durée choisie à la connexion
+    # (« Rester connecté » ou non) est portée par max_age_seconds — donc
+    # un témoin volé ne survit pas plus longtemps que la session qu'il vole.
+    identity["expires_at"] = int(time.time()) + int(
+        identity.get("max_age_seconds") or settings.session_max_age_seconds
+    )
+    store_identity(request, identity)
     return principal
 
 

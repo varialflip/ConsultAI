@@ -160,6 +160,29 @@
       this.closest('.choice').classList.add('sel');
     });
   });
+
+  // Si l'application est installée (PWA, plein écran) sur un appareil mobile,
+  // on saute le choix de durée de session : on reste connecté 30 jours et on
+  // enchaîne directement vers le fournisseur d'identité.
+  (function(){
+    var isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                       window.navigator.standalone === true;
+    var isMobile = window.matchMedia('(max-width: 1023px)').matches;
+    if (!(isStandalone && isMobile)) { return; }
+
+    var forms = document.querySelectorAll('form[action="/auth/login"]');
+    forms.forEach(function(form){
+      var champ = document.createElement('input');
+      champ.type = 'hidden';
+      champ.name = 'stay_logged_in';
+      champ.value = 'true';
+      form.appendChild(champ);
+    });
+    // Mobile : seule la carte .login-mobile est visible.
+    var visible = document.querySelector('.login-mobile form[action="/auth/login"]') ||
+                  document.querySelector('form[action="/auth/login"]');
+    var enchaine = window.setTimeout(function(){ visible.submit(); }, 50);
+  })();
 </script>
 </body>
 </html>

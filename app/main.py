@@ -330,7 +330,7 @@ async def web_manifest() -> JSONResponse:
     return JSONResponse(
         {
             "name": settings.app_title,
-            "short_name": "ConsultAI",
+            "short_name": settings.app_title,
             "description": i18n.t("app.description", langue),
             "lang": i18n.stt_language_code(langue, "google"),
             "dir": "ltr",
@@ -776,6 +776,7 @@ async def auth_login(request: Request):
             "t": _template_translator(langue),
             "lang": langue,
             "next": suite,
+            "logged_out": request.query_params.get("logged_out") == "1",
             "sso_name": settings.sso_label,
             "default_hours": max(1, settings.session_max_age_seconds // 3600),
             "stay_days": max(1, settings.session_stay_max_age_seconds // 86400),
@@ -909,14 +910,23 @@ async def auth_logout(request: Request):
     clear_identity(request)
     request.session.clear()
 
+    # Retour sur la page de connexion de l'application, qui affichera
+    # l'annonce de déconnexion. Le fournisseur doit l'avoir déclarée comme
+    # adresse de retour de déconnexion (Pocket ID : champs « logout
+    # callback URLs » du client OIDC).
+    retour = f"{settings.base_url or ''}/auth/login?logged_out=1"
+
     cible = ""
     if settings.oidc_configured:
         try:
-            cible = await oidc.end_session_url(id_token)
+            cible = await oidc.end_session_url(id_token, retour=retour)
         except Exception as exc:  # la déconnexion locale a déjà eu lieu
             logger.info("Déconnexion du fournisseur impossible : %s", exc)
 
-    return RedirectResponse(cible or (settings.base_url or "/"), status_code=302)
+    # Même si le fournisseur est injoignable ou n'annonce pas de point de
+    # terminaison, l'usager doit revenir sur notre page de connexion, pas
+    # rester sur un écran du fournisseur.
+    return RedirectResponse(cible or retour, status_code=302)
 
 
 def _auth_error_page(message: str, status_code: int = 400) -> HTMLResponse:

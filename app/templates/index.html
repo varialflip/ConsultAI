@@ -27,7 +27,7 @@
        tout le manifeste pour l'ajout à l'écran d'accueil. -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="ConsultAI">
+  <meta name="apple-mobile-web-app-title" content="{{ app_title }}">
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
@@ -55,6 +55,11 @@
       /* Marges de sécurité iPhone (encoche, barre d'accueil) */
       padding-left: env(safe-area-inset-left);
       padding-right: env(safe-area-inset-right);
+    }
+
+    @font-face {
+      font-family: 'Gloock';
+      src: url('/static/icons/Gloock-Regular.woff') format('woff');
     }
 
     /* « AI » du titre en italique */
@@ -283,7 +288,7 @@
       </div>
 
       <div class="leading-tight mr-auto min-w-0">
-        <h1 class="font-semibold text-slate-900 text-sm sm:text-[15px] truncate">{{ app_title|ai_italic }}</h1>
+        <h1 class="font-semibold text-slate-900 text-sm sm:text-[15px] truncate" style="font-family:'Gloock',Georgia,serif">{{ app_title|ai_italic }}</h1>
         <!-- Quels moteurs travaillent réellement. La question se pose dès
              qu'une note sort différente de d'habitude, et la réponse n'est
              visible nulle part ailleurs. -->

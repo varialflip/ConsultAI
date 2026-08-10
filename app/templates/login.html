@@ -6,38 +6,125 @@
 <title>{{ t('auth.welcome_title') }}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh;display:flex;align-items:center;
-       justify-content:center;padding:24px;background:#f1f5f9;color:#0f172a}
-  .card{width:100%;max-width:480px;background:#fff;border-radius:20px;box-shadow:0 18px 50px rgba(15,23,42,.12);
-        padding:30px 28px 24px}
-  img{width:52px;height:52px;border-radius:13px;display:block;margin:0 auto}
-  h1{font-size:20px;font-weight:800;text-align:center;margin:18px 0 6px;letter-spacing:-.01em}
+  @font-face{font-family:'Gloock';src:url('/static/icons/Gloock-Regular.woff') format('woff')}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+       color:#0f172a;-webkit-font-smoothing:antialiased}
+  h1{font-family:'Gloock','Times New Roman',Georgia,serif}
+
+  /* ===== Desktop: Pocket ID split layout (>=1024px) ===== */
+  .login{position:relative;display:flex;height:100vh;width:100%;align-items:center;
+         overflow:hidden;text-align:center}
+  .login-panel{position:relative;z-index:10;display:flex;height:100%;width:100%;
+               max-width:650px;padding:64px}
+  .login-panel-inner{display:flex;height:100%;width:100%;flex-direction:column;
+                     justify-content:center;align-items:center;overflow:auto;padding:4px}
+  .login-bg{position:absolute;top:0;right:0;bottom:0;left:650px;z-index:0;
+            margin:24px;overflow:hidden;border-radius:40px}
+  .login-bg img{display:block;height:100vh;width:calc(100vw - 650px);object-fit:cover}
+  @media (min-width:1536px){
+    .login-panel{max-width:800px}
+    .login-bg{left:800px}
+    .login-bg img{width:calc(100vw - 800px)}
+  }
+
+  /* ===== Mobile: Pocket ID centered card over background cover (<1024px) ===== */
+  .login-mobile{display:none}
+  @media (max-width:1023px){
+    .login{display:none}
+    .login-mobile{display:flex;min-height:100dvh;align-items:center;justify-content:center;
+                  background-size:cover;background-position:center;text-align:center;padding:12px}
+    .login-card{width:100%;max-width:448px;background:#fff;border-radius:26px;
+                box-shadow:0 18px 50px rgba(15,23,42,.14);padding:24px 20px 32px}
+  }
+
+  .logo{width:64px;height:64px;border-radius:18px;display:block;margin:0 auto}
+  .login-mobile .logo{width:52px;height:52px;border-radius:18px}
+  h1{font-size:36px;font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:20px 0 8px}
+  .login-mobile h1{font-size:24px;margin:16px 0 6px}
   h1 .ai{font-style:italic}
-  .sub{font-size:13px;color:#64748b;text-align:center;line-height:1.55;margin-bottom:22px}
-  .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .sub{font-size:16px;color:#64748b;line-height:1.55;max-width:420px;margin:0 auto}
+  .sub-title{font-size:15px;color:#0f766e;font-weight:600;letter-spacing:.01em;margin:6px auto 0}
+  .login-mobile .sub-title{font-size:13.5px;margin:4px auto 0}
+  .login-mobile .sub{font-size:13.5px}
+  .notice{margin:36px auto 0;max-width:420px;background:#f0fdf4;border:1px solid #bbf7d0;
+          color:#166534;border-radius:26px;padding:10px 14px;font-size:13.5px}
+  .login-mobile .notice{margin:0 auto 24px}
+
+  .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:450px;margin:10px auto 0}
+  .pick-sub{font-size:13.5px;color:#64748b;margin:24px auto 0;max-width:420px}
   @media (max-width:440px){.choices{grid-template-columns:1fr}}
-  .choice{position:relative;border:2px solid #e2e8f0;border-radius:14px;padding:16px 14px;cursor:pointer;transition:.15s;background:#fff}
+  .choice{position:relative;border:2px solid #e2e8f0;border-radius:26px;padding:16px 14px;cursor:pointer;transition:.15s;background:#fff}
   .choice:hover{border-color:#99f6e4}
   .choice.sel{border-color:#0d9488;background:#f0fdfa;box-shadow:0 4px 14px rgba(13,148,136,.18)}
-  .choice .ico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;margin-bottom:10px;
+  .choice .ico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;margin:0 auto 10px;
                background:#f1f5f9;color:#475569}
   .choice.sel .ico{background:#0d9488;color:#fff}
   .choice .ico svg{width:18px;height:18px}
   .choice b{display:block;font-size:14px}
   .choice span{display:block;font-size:11.5px;color:#64748b;margin-top:3px;line-height:1.45}
   .choice input{position:absolute;opacity:0;pointer-events:none}
-  button{margin-top:22px;width:100%;border:0;border-radius:12px;padding:14px;background:linear-gradient(90deg,#0d9488,#115e59);
-         color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:.15s}
+
+  button{margin-top:40px;width:100%;max-width:450px;border:0;border-radius:26px;padding:14px;
+         background:#0d9488;color:#fff;font-size:15px;font-weight:700;
+         cursor:pointer;transition:.15s}
+  .login-mobile button{margin-top:22px;max-width:none}
   button:hover{filter:brightness(1.08)}
   .foot{margin-top:14px;font-size:11px;color:#94a3b8;text-align:center;line-height:1.5}
 </style>
 </head>
 <body>
-  <form class="card" method="post" action="/auth/login">
+
+<!-- Desktop split layout -->
+<div class="login">
+  <div class="login-panel">
+    <div class="login-panel-inner">
+      <img class="logo" src="/static/icons/icon-512.png" alt="{{ t('auth.welcome_title') }}">
+      {% if logged_out %}<p class="notice">{% if lang == 'fr' %}Vous êtes déconnecté.{% else %}You have been signed out.{% endif %}</p>{% endif %}
+      <h1>Dict<span class="ai">AI</span>.ca</h1>
+      <p class="sub-title">Dictée clinique assistée</p>
+
+      <form method="post" action="/auth/login" style="width:100%;max-width:450px">
+        <input type="hidden" name="next" value="{{ next }}">
+        <p class="sub pick-sub">{{ t('auth.welcome_subtitle') }}</p>
+        <div class="choices">
+          <label class="choice sel">
+            <input type="radio" name="stay_logged_in" value="" checked>
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            </span>
+            <b>{{ t('auth.option_short_title') }}</b>
+            <span>{{ t('auth.option_short_desc', heures=default_hours) }}</span>
+          </label>
+
+          <label class="choice">
+            <input type="radio" name="stay_logged_in" value="true">
+            <span class="ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            </span>
+            <b>{{ t('auth.stay_logged_in', jours=stay_days) }}</b>
+            <span>{{ t('auth.option_long_desc', jours=stay_days) }}</span>
+          </label>
+        </div>
+
+        <button type="submit">{% if lang == 'fr' %}Continuer{% else %}Continue{% endif %}</button>
+        <p class="foot">{{ t('auth.session_note') }}</p>
+      </form>
+    </div>
+  </div>
+  <div class="login-bg"><img src="/static/icons/login-bg.png" alt=""></div>
+</div>
+
+<!-- Mobile centered card over background -->
+<div class="login-mobile" style="background-image:url('/static/icons/login-bg.png')">
+  <form class="login-card" method="post" action="/auth/login">
+    {% if logged_out %}<p class="notice">{% if lang == 'fr' %}Vous êtes déconnecté.{% else %}You have been signed out.{% endif %}</p>{% endif %}
     <input type="hidden" name="next" value="{{ next }}">
-    <img src="/static/icons/icon-512.png" alt="{{ t('auth.welcome_title') }}">
+    <img class="logo" src="/static/icons/icon-512.png" alt="{{ t('auth.welcome_title') }}">
     <h1>Dict<span class="ai">AI</span>.ca</h1>
-    <p class="sub">{{ t('auth.welcome_subtitle') }}</p>
+    <p class="sub-title">Dictée clinique assistée</p>
+    <p class="sub pick-sub">{{ t('auth.welcome_subtitle') }}</p>
 
     <div class="choices">
       <label class="choice sel">
@@ -61,9 +148,10 @@
       </label>
     </div>
 
-    <button type="submit">{{ t('auth.sign_in_with', sso=sso_name) }}</button>
+    <button type="submit">{% if lang == 'fr' %}Continuer{% else %}Continue{% endif %}</button>
     <p class="foot">{{ t('auth.session_note') }}</p>
   </form>
+</div>
 
 <script>
   document.querySelectorAll('.choice input').forEach(function(input){

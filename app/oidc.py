@@ -326,7 +326,7 @@ def groups_from(claims: Dict[str, Any]) -> List[str]:
 # ---------------------------------------------------------------------------
 # Déconnexion
 # ---------------------------------------------------------------------------
-async def end_session_url(id_token: str = "") -> str:
+async def end_session_url(id_token: str = "", retour: str = "") -> str:
     """
     Adresse de déconnexion du fournisseur (« RP-initiated logout »).
 
@@ -334,7 +334,7 @@ async def end_session_url(id_token: str = "") -> str:
     terminaison : la session locale est alors la seule qu'on puisse clore, et
     l'appelant se contente de rediriger vers l'accueil.
     """
-    retour = settings.base_url or ""
+    retour = retour or settings.base_url or ""
     try:
         client = _client()
         metadata = await client.load_server_metadata()

@@ -52,6 +52,9 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -507,19 +510,131 @@ def _build_context_lines(payload: GenerateIn) -> List[str]:
     return lines
 
 
+def _concat_audio(chemins: List[str]) -> Optional[Tuple[bytes, float]]:
+    """
+    Fusionne plusieurs enregistrements en un seul OGG/Opus, dans l'ordre.
+
+    Une consultation dictée en plusieurs parties garde un enregistrement par
+    partie. Sans fusion, seul le dernier atteindrait le modèle et le début de
+    la consultation serait perdu. Le réencodage est volontaire : les parties
+    peuvent venir de navigateurs différents (WebM/Opus de Chrome, MP4/AAC de
+    Safari) et le concaténateur brut d'ffmpeg exigerait des codecs identiques.
+
+    Retourne ``(contenu, durée)``, ou ``None`` si la fusion échoue — l'appelant
+    renonce alors à l'audio, comme s'il n'y avait aucun enregistrement.
+    """
+    if not chemins:
+        return None
+    workdir = tempfile.mkdtemp(prefix="consultai-concat-")
+    try:
+        liste = os.path.join(workdir, "liste.txt")
+        with open(liste, "w", encoding="utf-8") as handle:
+            for chemin in chemins:
+                # Échappement pour le format « file '…' » du démosélecteur.
+                handle.write(f"file '{chemin.replace(chr(39), chr(92) + chr(39))}'\n")
+        sortie = os.path.join(workdir, "concat.ogg")
+        result = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+                "-f", "concat", "-safe", "0", "-i", liste,
+                "-vn", "-map_metadata", "-1",
+                "-ac", "1", "-ar", "48000",
+                "-c:a", "libopus", "-b:a", "24k", "-application", "voip",
+                "-f", "ogg", "-y", sortie,
+            ],
+            capture_output=True, timeout=300, check=False,
+        )
+        if result.returncode != 0:
+            stderr = (result.stderr or b"").decode("utf-8", "replace")
+            logger.warning("Fusion des enregistrements impossible : %s", stderr[-400:])
+            return None
+        with open(sortie, "rb") as handle:
+            contenu = handle.read()
+        duree = stt.probe_duration(sortie)
+        if not contenu or duree <= 0:
+            logger.warning(
+                "Fusion des enregistrements : sortie vide (%d octets, %.1f s)",
+                len(contenu), duree,
+            )
+            return None
+        logger.info(
+            "Enregistrements fusionnés : %d piste(s), %.1f s", len(chemins), duree,
+        )
+        return contenu, duree
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Fusion des enregistrements impossible : %s", exc)
+        return None
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 def _prepare_audio_for_generation(
     db: Session, consultation_id: int, max_minutes: float = 20.0
 ) -> Optional[Tuple[bytes, str]]:
     """
     Extrait audio (silences plafonnés) à joindre à la génération, ou ``None``.
 
-    Best-effort à dessein : aucun enregistrement, ffmpeg indisponible, ou
-    dictée trop longue (``<fournisseur>_send_audio_max_minutes``) retombent
-    tous sur ``None`` — la note se génère alors comme avant, sur la seule
+    Toutes les pistes conservées sont envoyées : lorsqu'une consultation est
+    dictée en plusieurs parties, chaque partie a produit son propre
+    enregistrement, et toutes doivent atteindre le modèle — pas seulement la
+    dernière.
+
+    Best-effort à dessein : aucun enregistrement, fusion ou rognage impossible,
+    ou dictée trop longue (``<fournisseur>_send_audio_max_minutes``)
+    retombent sur ``None`` — la note se génère alors comme avant, sur la seule
     transcription. Ce n'est jamais une raison de faire échouer la génération,
     mais chaque repli est journalisé : silencieux pour l'usager, visible dans
     les journaux, sinon un audio manquant est indiscernable d'un bogue.
     """
+
+    def _traiter(source: str, provenance: str) -> Optional[Tuple[bytes, str]]:
+        """Rogne les silences, applique le plafond, retourne l'audio OGG."""
+        try:
+            trimmed = stt.compress_silence(source)
+        except OSError as exc:
+            logger.warning(
+                "Audio non joint (consultation %s, %s) : %s",
+                consultation_id, provenance, exc,
+            )
+            return None
+        if trimmed is None:
+            # Rognage désactivé ou en échec : envoyer l'audio tel quel vaut
+            # mieux que rien — avec le contournement du STT, c'est la seule
+            # source du modèle (voir llm.generate_note).
+            try:
+                with open(source, "rb") as handle:
+                    contenu = handle.read()
+                duree = stt.probe_duration(source)
+            except OSError as exc:
+                logger.warning(
+                    "Audio non joint (consultation %s, %s) : %s",
+                    consultation_id, provenance, exc,
+                )
+                return None
+            if not contenu or duree <= 0:
+                logger.info(
+                    "Audio non joint (consultation %s, %s) : fichier illisible",
+                    consultation_id, provenance,
+                )
+                return None
+            provenance = f"{provenance}, audio non rogné"
+        else:
+            contenu, duree = trimmed
+
+        plafond = max_minutes * 60
+        if duree <= 0 or duree > plafond:
+            logger.info(
+                "Audio non joint (consultation %s, %s) : %.1f s hors bornes "
+                "(plafond %.0f s)",
+                consultation_id, provenance, duree, plafond,
+            )
+            return None
+        logger.info(
+            "Audio joint (consultation %s, %s) : %.1f s",
+            consultation_id, provenance, duree,
+        )
+        return contenu, "audio/ogg"
+
     pistes = recordings.for_consultation(db, consultation_id)
     if not pistes:
         logger.info(
@@ -527,38 +642,39 @@ def _prepare_audio_for_generation(
             consultation_id,
         )
         return None
-    piste = pistes[-1]  # le plus récent : celui de la dictée en cours
+
+    if len(pistes) == 1:
+        return _traiter(
+            recordings.absolute_path(pistes[0]),
+            f"enregistrement {pistes[0].id}",
+        )
+
     try:
-        chemin = recordings.absolute_path(piste)
-        trimmed = stt.compress_silence(chemin)
+        fusion = _concat_audio([recordings.absolute_path(p) for p in pistes])
     except OSError as exc:
         logger.warning(
-            "Audio non joint (consultation %s, enregistrement %s) : %s",
-            consultation_id, piste.id, exc,
+            "Audio non joint (consultation %s) : %s", consultation_id, exc,
         )
         return None
-    if trimmed is None:
-        logger.info(
-            "Audio non joint (consultation %s, enregistrement %s) : "
-            "retrait des silences indisponible ou désactivé",
-            consultation_id, piste.id,
+    if fusion is None:
+        logger.warning(
+            "Audio non joint (consultation %s) : fusion des %d enregistrements impossible",
+            consultation_id, len(pistes),
         )
         return None
-    content, duree = trimmed
-    plafond = max_minutes * 60
-    if duree <= 0 or duree > plafond:
-        logger.info(
-            "Audio non joint (consultation %s, enregistrement %s) : "
-            "%.1f s après retrait des silences, hors bornes (plafond %.0f s)",
-            consultation_id, piste.id, duree, plafond,
+
+    contenu, _ = fusion
+    workdir = tempfile.mkdtemp(prefix="consultai-gen-audio-")
+    chemin = os.path.join(workdir, "fusion.ogg")
+    try:
+        with open(chemin, "wb") as handle:
+            handle.write(contenu)
+        provenance = "fusion des " + " + ".join(
+            f"enregistrement {p.id}" for p in pistes
         )
-        return None
-    logger.info(
-        "Audio joint (consultation %s, enregistrement %s) : %.1f s après "
-        "retrait des silences",
-        consultation_id, piste.id, duree,
-    )
-    return content, "audio/ogg"
+        return _traiter(chemin, provenance)
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

@@ -4085,6 +4085,12 @@
     $('adminBackup').classList.toggle('hidden', !sauvegarde);
     $('adminStats').classList.toggle('hidden', !stats);
 
+    // L'onglet Statistiques porte des tableaux larges (journal des
+    // générations, détail agrégé, tarifs) : le panneau passe en max-w-6xl
+    // pour éviter le défilement horizontal, et revient à max-w-3xl ailleurs.
+    const boite = $('adminModalBox');
+    if (boite) boite.classList.toggle('max-w-6xl', stats);
+
     renderAdminIntro(tab);
 
     // « Modèles disponibles » n'a de sens que sur l'onglet du modèle de langage ;

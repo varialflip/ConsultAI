@@ -1356,13 +1356,30 @@ def get_admin_usage(
 ):
     return {
         **usage.admin_breakdown(db, date_from, date_to, owner),
-        # Journal des générations (STT consolidé par dictée) sur la même
-        # plage — les entrées brutes n'existent que sur ~45 jours.
-        "log": usage.admin_log(db, date_from, date_to, owner),
         # Tableau récapitulatif en tête d'onglet : périodes calendaires fixes,
         # indépendantes de la plage date_from/date_to choisie pour le détail.
         "overview": usage.admin_cost_overview(db),
     }
+
+
+@app.get("/api/admin/usage/log")
+def get_admin_usage_log(
+    request: Request,
+    date_from: str,
+    date_to: str,
+    owner: Optional[str] = None,
+    offset: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    admin: Principal = Depends(require_template_admin),
+):
+    """Une page du journal des générations (STT consolidé par dictée).
+    Paginé côté serveur : le journal complet peut être long, le navigateur
+    n'en charge qu'une page à la fois (``offset``/``limit``)."""
+    return usage.admin_log(
+        db, date_from, date_to, owner,
+        offset=max(0, offset), limit=max(1, min(limit, 200)),
+    )
 
 
 class PricingRateIn(BaseModel):

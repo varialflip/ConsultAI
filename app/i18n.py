@@ -1083,9 +1083,15 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "admin.stats.owner_all": ("Tous les usagers", "All users"),
     "admin.stats.total_cost": ("Coût total estimé", "Estimated total cost"),
     "admin.stats.log_title": ("Journal des générations", "Generation log"),
-    "admin.stats.log_truncated": (
-        "{total} entrée(s) sur la période, {shown} affichées (détail par génération limité aux 45 derniers jours).",
-        "{total} entries for the period, {shown} shown (per-generation detail limited to the last 45 days).",
+    "admin.stats.log_prev": ("Précédent", "Previous"),
+    "admin.stats.log_next": ("Suivant", "Next"),
+    "admin.stats.log_page": (
+        "Page {page} / {pages} · {total} entrée(s)",
+        "Page {page} / {pages} · {total} entries",
+    ),
+    "admin.stats.log_retention_note": (
+        "Le détail par génération ne couvre que les 45 derniers jours ; au-delà, seuls les totaux quotidiens subsistent.",
+        "Per-generation detail only covers the last 45 days; beyond that, only daily totals remain.",
     ),
     "admin.stats.breakdown_title": (
         "Détail par fournisseur / modèle",
@@ -1110,7 +1116,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "admin.stats.pricing_provider": ("Fournisseur", "Provider"),
     "admin.stats.pricing_model": ("Modèle (vide = défaut du fournisseur)", "Model (empty = provider default)"),
     "admin.stats.pricing_unit": ("Unité", "Unit"),
-    "admin.stats.pricing_rate": ("Tarif (USD)", "Rate (USD)"),
+    "admin.stats.pricing_rate": ("Tarif ($)", "Rate ($)"),
     "admin.stats.pricing_delete_confirm": (
         "Supprimer ce tarif ?",
         "Delete this rate?",

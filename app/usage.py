@@ -306,7 +306,7 @@ def admin_breakdown(
 
 def admin_log(
     db: Session, date_from: str, date_to: str,
-    owner: Optional[str] = None, limit: int = 300,
+    owner: Optional[str] = None, offset: int = 0, limit: int = 50,
 ) -> dict:
     """Journal des générations de l'onglet admin « Statistiques ».
 
@@ -314,7 +314,8 @@ def admin_log(
     résumée par dictée pour le STT : les segments d'une même consultation
     sont regroupés (durée et coût sommés, fournisseur/modèle du dernier
     segment, nombre de segments). Le tout est trié du plus récent au plus
-    ancien et plafonné à ``limit`` entrées.
+    ancien puis paginé (``offset``/``limit``) — ``total`` donne la taille
+    complète du journal pour la plage.
 
     La résolution par génération n'existe que sur la fenêtre des événements
     bruts (``RAW_RETENTION_DAYS`` jours) : au-delà, seul l'agrégat quotidien
@@ -385,4 +386,8 @@ def admin_log(
         ))
 
     entrees.sort(key=lambda item: item["created_at"], reverse=True)
-    return {"entries": entrees[:limit], "total": len(entrees), "limit": limit}
+    total = len(entrees)
+    return {
+        "entries": entrees[offset:offset + limit],
+        "total": total, "offset": offset, "limit": limit,
+    }

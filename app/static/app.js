@@ -3502,6 +3502,7 @@
     pricing: null,       // réponse de /api/admin/pricing, chargée à la demande
     statsRange: null,   // { from, to } — filtre courant de l'onglet Statistiques
     statsOwner: '',     // filtre d'usager de l'onglet Statistiques ('' = tous)
+    logPage: 0,         // page courante du journal des générations
   };
 
   /**
@@ -4520,6 +4521,9 @@
   /* -------------------------------------------------------------------------
    * Statistiques d'usage
    * ---------------------------------------------------------------------- */
+  //: Taille d'une page du journal des générations.
+  const LOG_PAGE_SIZE = 50;
+
   function defaultStatsRange() {
     const to = new Date();
     const from = new Date(to.getTime() - 29 * 86400000);
@@ -4535,16 +4539,59 @@
       const range = adminState.statsRange;
       const qs = new URLSearchParams({ date_from: range.from, date_to: range.to });
       if (adminState.statsOwner) qs.set('owner', adminState.statsOwner);
-      const [usageData, pricingData] = await Promise.all([
+      // Le journal est paginé : on n'en charge que la première page ici,
+      // les suivantes arrivent par /api/admin/usage/log (voir loadLog).
+      const logQs = new URLSearchParams(qs);
+      logQs.set('offset', '0');
+      logQs.set('limit', String(LOG_PAGE_SIZE));
+      const [usageData, pricingData, logData] = await Promise.all([
         api(`/api/admin/usage?${qs}`),
         api('/api/admin/pricing'),
+        api(`/api/admin/usage/log?${logQs}`),
       ]);
-      adminState.stats = usageData;
+      adminState.stats = { ...usageData, log: logData };
       adminState.pricing = pricingData.rates || [];
+      adminState.logPage = 0;
       renderStats();
     } catch (err) {
       boite.innerHTML = `<p class="text-sm text-red-600">${esc(err.message)}</p>`;
     }
+  }
+
+  /** Recharge UNE page du journal sans reconstruire tout l'onglet. */
+  async function loadLog() {
+    const range = adminState.statsRange;
+    const qs = new URLSearchParams({ date_from: range.from, date_to: range.to });
+    if (adminState.statsOwner) qs.set('owner', adminState.statsOwner);
+    qs.set('offset', String(adminState.logPage * LOG_PAGE_SIZE));
+    qs.set('limit', String(LOG_PAGE_SIZE));
+    try {
+      const data = await api(`/api/admin/usage/log?${qs}`);
+      if (!adminState.stats) adminState.stats = {};
+      adminState.stats.log = data;
+      const zone = $('logSection');
+      if (zone) {
+        zone.innerHTML = renderLog();
+        bindLogPager();
+      }
+    } catch (err) {
+      const zone = $('logSection');
+      if (zone) zone.innerHTML = `<p class="text-sm text-red-600">${esc(err.message)}</p>`;
+    }
+  }
+
+  function changeLogPage(delta) {
+    const log = (adminState.stats && adminState.stats.log) || null;
+    const totalPages = log ? Math.max(1, Math.ceil(log.total / (log.limit || LOG_PAGE_SIZE))) : 1;
+    adminState.logPage = Math.min(Math.max(0, adminState.logPage + delta), totalPages - 1);
+    loadLog();
+  }
+
+  function bindLogPager() {
+    const prev = $('logPrev');
+    const next = $('logNext');
+    if (prev) prev.addEventListener('click', () => changeLogPage(-1));
+    if (next) next.addEventListener('click', () => changeLogPage(1));
   }
 
   /** Filtre de période + usager, commun au journal et au détail agrégé. */
@@ -4570,7 +4617,7 @@
             ${options}
           </select></label>` : ''}
         <span class="ml-auto text-sm font-medium">${esc(T('admin.stats.total_cost'))} :
-          ${data.total_cost.toFixed(2)} ${esc(data.currency)}</span>
+          ${data.total_cost.toFixed(2)} $</span>
       </div>`;
   }
 
@@ -4587,14 +4634,14 @@
     const cellule = (notes, cout) => `
       <td class="px-2 py-1.5 text-right tabular-nums">${notes}
         <span class="text-[11px] text-slate-400">${esc(T('admin.stats.notes_short'))}</span><br>
-        <span class="text-[11px] text-slate-500">${cout ? cout.toFixed(2) : '—'} ${esc(overview.currency)}</span></td>`;
+        <span class="text-[11px] text-slate-500">${cout ? cout.toFixed(2) : '—'} $</span></td>`;
     const periode = (label, notes, cout) => `
       <div class="flex items-baseline justify-between gap-2 text-sm">
         <span class="text-slate-500">${label}</span>
         <span class="tabular-nums">${notes}
           <span class="text-[11px] text-slate-400">${esc(T('admin.stats.notes_short'))}</span>
           · ${cout ? cout.toFixed(2) : '—'}
-          <span class="text-[11px] text-slate-400">${esc(overview.currency)}</span></span>
+          <span class="text-[11px] text-slate-400">$</span></span>
       </div>`;
 
     const lignesTable = overview.rows.map((r) => `
@@ -4631,7 +4678,8 @@
 
   /**
    * Journal des générations : une ligne par appel LLM, une ligne résumée par
-   * dictée pour le STT. Respecte la plage de dates et le filtre d'usager.
+   * dictée pour le STT. Respecte la plage de dates et le filtre d'usager, et
+   * n'affiche qu'une page à la fois (pagination serveur via loadLog).
    */
   function renderLog() {
     const log = (adminState.stats && adminState.stats.log) || null;
@@ -4654,7 +4702,7 @@
       const nom = e.consultation_title ? ` — ${esc(e.consultation_title)}` : '';
       return `#${e.consultation_id}${nom}`;
     };
-    const cout = (e) => (e.cost != null ? `${e.cost.toFixed(4)} ${esc(e.currency || 'USD')}` : '—');
+    const cout = (e) => (e.cost != null ? `${e.cost.toFixed(4)} $` : '—');
 
     const lignesTable = entries.map((e) => `
       <tr class="border-b border-slate-100">
@@ -4679,31 +4727,47 @@
       </div>`).join('');
 
     const vide = `<tr><td colspan="7" class="px-2 py-6 text-center text-slate-400">${esc(T('admin.stats.empty'))}</td></tr>`;
-    const noteRetention = log && log.total > log.limit
-      ? `<p class="text-[11px] text-slate-400">${esc(T('admin.stats.log_truncated', { shown: log.limit, total: log.total }))}</p>` : '';
 
     return `
       <section class="space-y-2">
         <h3 class="text-sm font-semibold text-slate-700">${esc(T('admin.stats.log_title'))}</h3>
-        <div class="hidden sm:block overflow-auto rounded-lg border border-slate-200">
-          <table class="w-full text-sm">
-            <thead class="bg-slate-50 text-xs text-slate-500">
-              <tr>
-                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_date'))}</th>
-                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
-                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_kind'))}</th>
-                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_consultation'))}</th>
-                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_model'))}</th>
-                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_usage'))}</th>
-                <th class="px-2 py-1.5 text-right">${esc(T('admin.stats.col_cost'))}</th>
-              </tr>
-            </thead>
-            <tbody>${entries.length ? lignesTable : vide}</tbody>
-          </table>
+        <div id="logSection" class="space-y-2">
+          <div class="hidden sm:block overflow-auto rounded-lg border border-slate-200">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50 text-xs text-slate-500">
+                <tr>
+                  <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_date'))}</th>
+                  <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
+                  <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_kind'))}</th>
+                  <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_consultation'))}</th>
+                  <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_model'))}</th>
+                  <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_usage'))}</th>
+                  <th class="px-2 py-1.5 text-right">${esc(T('admin.stats.col_cost'))}</th>
+                </tr>
+              </thead>
+              <tbody>${entries.length ? lignesTable : vide}</tbody>
+            </table>
+          </div>
+          <div class="sm:hidden space-y-3">${entries.length ? cartesMobile : `<p class="text-sm text-center text-slate-400 py-6">${esc(T('admin.stats.empty'))}</p>`}</div>
+          ${renderLogPager()}
+          <p class="text-[11px] text-slate-400">${esc(T('admin.stats.log_retention_note'))}</p>
         </div>
-        <div class="sm:hidden space-y-3">${entries.length ? cartesMobile : `<p class="text-sm text-center text-slate-400 py-6">${esc(T('admin.stats.empty'))}</p>`}</div>
-        ${noteRetention}
       </section>`;
+  }
+
+  /** Pagination du journal : Précédent / page / Suivant, désactivés aux bornes. */
+  function renderLogPager() {
+    const log = (adminState.stats && adminState.stats.log) || null;
+    if (!log || !log.total) return '';
+    const totalPages = Math.max(1, Math.ceil(log.total / (log.limit || LOG_PAGE_SIZE)));
+    const page = Math.min(adminState.logPage, totalPages - 1);
+    const desactive = 'disabled opacity-40 cursor-default';
+    return `
+      <nav class="flex items-center justify-between gap-3 pt-1 text-sm">
+        <button type="button" id="logPrev" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 ${page === 0 ? desactive : ''}">${esc(T('admin.stats.log_prev'))}</button>
+        <span class="text-xs text-slate-500 tabular-nums">${esc(T('admin.stats.log_page', { page: page + 1, pages: totalPages, total: log.total }))}</span>
+        <button type="button" id="logNext" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 ${page >= totalPages - 1 ? desactive : ''}">${esc(T('admin.stats.log_next'))}</button>
+      </nav>`;
   }
 
   /** Détail agrégé coût/jetons par usager × fournisseur × modèle, replié. */
@@ -4718,7 +4782,7 @@
         <td class="px-2 py-1.5 tabular-nums">${r.event_count || 0}</td>
         <td class="px-2 py-1.5 tabular-nums">${(r.prompt_tokens + r.output_tokens + (r.audio_prompt_tokens || 0)) ? `${r.prompt_tokens}${r.audio_prompt_tokens ? `+${r.audio_prompt_tokens}♪` : ''}/${r.output_tokens}` : '—'}</td>
         <td class="px-2 py-1.5 tabular-nums">${r.audio_seconds ? (r.audio_seconds / 60).toFixed(1) : '—'}</td>
-        <td class="px-2 py-1.5 tabular-nums">${r.cost.toFixed(4)} ${esc(r.currency || data.currency)}</td>
+        <td class="px-2 py-1.5 tabular-nums">${r.cost.toFixed(4)} $</td>
       </tr>`).join('');
     return `
       <details class="rounded-lg border border-slate-200">
@@ -4826,6 +4890,7 @@
         loadStats();
       });
     }
+    bindLogPager();
 
     // Tarifs : sauvegarde/suppression/ajout — la section vit dans un
     // <details>, les écouteurs parcourent tout le conteneur comme avant.

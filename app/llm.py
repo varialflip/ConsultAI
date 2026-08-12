@@ -921,6 +921,11 @@ def _complete_qwen_omni(system, user, model, temperature, max_tokens, json_mode,
     }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
+        # L'extraction de métadonnées (seul appel en mode JSON) est une tâche
+        # mécanique : le raisonnement de Qwen y gaspille des centaines de
+        # jetons et peut faire déborder ``max_tokens``, renvoyant une réponse
+        # vide. On le coupe, comme le ``thinking_budget=0`` côté Gemini.
+        kwargs["enable_thinking"] = False
 
     try:
         response = _call_tolerant(client.chat.completions.create, kwargs)
@@ -981,6 +986,22 @@ def _strip_code_fence(text: str) -> str:
     cleaned = text.strip()
     match = re.match(r"^```[a-zA-Z]*\s*\n(.*?)\n?```$", cleaned, flags=re.DOTALL)
     return match.group(1).strip() if match else cleaned
+
+
+#: Marqueurs de structure que ``build_user_prompt`` et l'extraction de
+#: métadonnées placent autour de leurs blocs (<<<MISE_EN_PAGE…>>>,
+#: <<<DICTEE…>>>…). Certains modèles — Qwen en particulier — les recopient
+#: tels quels dans leur réponse : on les retire systématiquement avant
+#: d'enregistrer, en plus du bloc de code.
+_PROMPT_MARKER_RE = re.compile(
+    r"^[ \t]*<{3}[A-Z_]+[ \t]*$|^[ \t]*[A-Z_]+>{3}[ \t]*$",
+    flags=re.MULTILINE,
+)
+
+
+def _strip_prompt_markers(text: str) -> str:
+    """Retire les lignes de délimiteurs ``<<<…>>>`` du prompt utilisateur."""
+    return _PROMPT_MARKER_RE.sub("", text or "")
 
 
 #: Ajouté au message utilisateur quand un extrait audio est joint EN PLUS
@@ -1121,7 +1142,7 @@ def generate_note(
         logger.warning("Réponse tronquée (limite de jetons atteinte, modèle %s)", model_name)
 
     return {
-        "markdown": _strip_code_fence(result.text),
+        "markdown": _strip_prompt_markers(_strip_code_fence(result.text)),
         "model": model_name,
         "provider": provider,
         "truncated": result.truncated,
@@ -1223,7 +1244,7 @@ def _parse_metadata_json(result: Completion) -> object:
     motif d'arrêt — sans quoi l'échec se présente comme une obscure erreur de
     syntaxe à la ligne 2.
     """
-    text = _strip_code_fence(result.text or "")
+    text = _strip_prompt_markers(_strip_code_fence(result.text or ""))
     try:
         return json.loads(text)
     except json.JSONDecodeError:

@@ -159,11 +159,13 @@ async def lifespan(app: FastAPI):
             _comptes = users_service.count_users(_db)
         logger.info(
             "Authentification : OIDC chez %s | retour %s | %d compte(s) connu(s) | "
-            "inscription automatique : %s",
+            "inscription automatique : %s%s",
             settings.oidc_provider_url or "(non configuré)",
             settings.effective_redirect_uri or "(non configurée)",
             _comptes,
             "oui" if users_service.allow_signup() else "non",
+            f" | second fournisseur : {settings.oidc_alt_provider_url}"
+            if settings.oidc_alt_provider_url else "",
         )
         if _comptes == 0:
             logger.warning(
@@ -1029,13 +1031,16 @@ async def auth_logout(request: Request):
     # Retour sur la page de connexion de l'application, qui affichera
     # l'annonce de déconnexion. Le fournisseur doit l'avoir déclarée comme
     # adresse de retour de déconnexion (Pocket ID : champs « logout
-    # callback URLs » du client OIDC).
-    retour = f"{settings.base_url or ''}/auth/login?logged_out=1"
+    # callback URLs » du client OIDC). La base dépend du domaine d'accès :
+    # app.loki.casa revient vers son propre login, dictai.ca vers le sien.
+    retour = f"{oidc.base_url_for(request.url.hostname) or ''}/auth/login?logged_out=1"
 
     cible = ""
     if settings.oidc_configured:
         try:
-            cible = await oidc.end_session_url(id_token, retour=retour)
+            cible = await oidc.end_session_url(
+                id_token, retour=retour, host=request.url.hostname
+            )
         except Exception as exc:  # la déconnexion locale a déjà eu lieu
             logger.info("Déconnexion du fournisseur impossible : %s", exc)
 

@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any, Dict, List, NamedTuple
+from typing import Any, Dict, List, NamedTuple, Tuple
 from urllib.parse import urlencode, urlparse
 
 from app.config import settings
@@ -57,19 +57,20 @@ class OidcError(RuntimeError):
 # Client
 # ---------------------------------------------------------------------------
 _oauth = None
-_registered = False
 
 
-def _client():
+def _client(provider_url: str, client_id: str, client_secret: str):
     """
-    Client authlib, construit à la première utilisation.
+    Client authlib du fournisseur demandé.
 
-    Construit tardivement et non au chargement du module : l'import de ce
-    dernier ne doit pas échouer sur une installation qui n'a pas encore
-    renseigné sa configuration OIDC — sinon l'application ne démarre plus et
-    même ``/healthz``, qui sert à diagnostiquer cela, devient inatteignable.
+    Un client par fournisseur : « consultai » (fournisseur historique) et
+    « consultai_alt » (domaine d'accès alternatif) le cas échéant. Construit
+    tardivement et non au chargement du module : l'import de ce dernier ne doit
+    pas échouer sur une installation qui n'a pas encore renseigné sa
+    configuration OIDC — sinon l'application ne démarre plus et même
+    ``/healthz``, qui sert à diagnostiquer cela, devient inatteignable.
     """
-    global _oauth, _registered
+    global _oauth
 
     if not settings.oidc_configured:
         raise OidcError(
@@ -77,31 +78,76 @@ def _client():
             "OIDC_CLIENT_ID et OIDC_CLIENT_SECRET."
         )
 
-    if _registered:
-        return _oauth.consultai
+    if _oauth is None:
+        from authlib.integrations.starlette_client import OAuth
 
-    from authlib.integrations.starlette_client import OAuth
+        _oauth = OAuth()
 
-    _oauth = OAuth()
-    _oauth.register(
-        name="consultai",
-        server_metadata_url=f"{settings.oidc_provider_url}/.well-known/openid-configuration",
-        client_id=settings.oidc_client_id,
-        client_secret=settings.oidc_client_secret,
-        client_kwargs={
-            "scope": " ".join(settings.oidc_scopes_effective),
-            # PKCE : gratuit, et referme l'interception du code.
-            "code_challenge_method": "S256",
-        },
-    )
-    _registered = True
-    return _oauth.consultai
+    name = "consultai_alt" if provider_url != settings.oidc_provider_url else "consultai"
+    client = _oauth.create_client(name)
+    if client is None:
+        _oauth.register(
+            name=name,
+            server_metadata_url=f"{provider_url}/.well-known/openid-configuration",
+            client_id=client_id,
+            client_secret=client_secret,
+            client_kwargs={
+                "scope": " ".join(settings.oidc_scopes_effective),
+                # PKCE : gratuit, et referme l'interception du code.
+                "code_challenge_method": "S256",
+            },
+        )
+        client = _oauth.create_client(name)
+    return client
 
 
 def reset_client() -> None:
-    """Oublie le client mémorisé (après un changement de configuration)."""
-    global _oauth, _registered
-    _oauth, _registered = None, False
+    """Oublie les clients mémorisés (après un changement de configuration)."""
+    global _oauth
+    _oauth = None
+
+
+def _host_of(url: str) -> str:
+    """Nom d'hôte (minuscules) d'une URL, ou chaîne vide."""
+    if not url:
+        return ""
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+def _endpoints_for(host: str) -> Tuple[str, str, str, str, str]:
+    """
+    (provider_url, client_id, client_secret, redirect_uri, base_url) pour
+    l'hôte demandé.
+
+    Le fournisseur alternatif (OIDC_ALT_*) n'est choisi que lorsqu'il est
+    configuré ET que l'hôte correspond à son adresse de retour ; sinon on
+    retombe sur le fournisseur unique historique — c'est le comportement
+    strict de l'application avant l'introduction du second domaine.
+    """
+    alt_host = _host_of(settings.oidc_alt_redirect_uri)
+    if alt_host and host and host.lower() == alt_host:
+        return (
+            settings.oidc_alt_provider_url,
+            settings.oidc_alt_client_id,
+            settings.oidc_alt_client_secret,
+            settings.oidc_alt_redirect_uri,
+            settings.alt_base_url,
+        )
+    return (
+        settings.oidc_provider_url,
+        settings.oidc_client_id,
+        settings.oidc_client_secret,
+        settings.effective_redirect_uri,
+        settings.base_url,
+    )
+
+
+def base_url_for(host: str) -> str:
+    """Base de l'application pour l'hôte demandé (fournisseur alternatif ou non)."""
+    return _endpoints_for(host)[4]
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +155,8 @@ def reset_client() -> None:
 # ---------------------------------------------------------------------------
 async def authorization_redirect(request):
     """Réponse de redirection vers la page de connexion du fournisseur."""
-    client = _client()
-    redirect_uri = settings.effective_redirect_uri
+    provider, cid, secret, redirect_uri, _ = _endpoints_for(request.url.hostname)
+    client = _client(provider, cid, secret)
     if not redirect_uri:
         raise OidcError(
             "Aucune adresse de retour : renseignez BASE_URL ou OIDC_REDIRECT_URI."
@@ -142,14 +188,15 @@ async def fetch_identity(request) -> Identity:
     retour de navigateur, l'usager doit lire quelque chose d'utile plutôt qu'une
     trace d'exception.
     """
-    client = _client()
+    provider, cid, secret, redirect_uri, _ = _endpoints_for(request.url.hostname)
+    client = _client(provider, cid, secret)
     try:
         token = await client.authorize_access_token(request)
     except Exception as exc:
         # Cas courants : « state » absent (témoin perdu, donc session vide),
         # code expiré, ou secret client erroné.
         logger.warning("Échange du code OIDC refusé : %s", exc)
-        raise OidcError(_diagnose(exc)) from exc
+        raise OidcError(_diagnose(exc, redirect_uri)) from exc
 
     claims: Dict[str, Any] = dict(token.get("userinfo") or {})
 
@@ -182,7 +229,7 @@ async def fetch_identity(request) -> Identity:
     return Identity(claims, id_token)
 
 
-def _diagnose(exc: Exception) -> str:
+def _diagnose(exc: Exception, redirect_uri: str = "") -> str:
     """Traduit les échecs les plus fréquents en indication actionnable."""
     texte = str(exc).lower()
     if "state" in texte:
@@ -194,7 +241,8 @@ def _diagnose(exc: Exception) -> str:
     if "redirect_uri" in texte or "redirect uri" in texte:
         return (
             "Adresse de retour refusée par le fournisseur. Elle doit être "
-            f"déclarée à l'identique chez lui : {settings.effective_redirect_uri}"
+            "déclarée à l'identique chez lui : "
+            f"{redirect_uri or settings.effective_redirect_uri}"
         )
     if "client" in texte and ("secret" in texte or "auth" in texte):
         return "Identifiant ou secret client refusé par le fournisseur."
@@ -326,7 +374,7 @@ def groups_from(claims: Dict[str, Any]) -> List[str]:
 # ---------------------------------------------------------------------------
 # Déconnexion
 # ---------------------------------------------------------------------------
-async def end_session_url(id_token: str = "", retour: str = "") -> str:
+async def end_session_url(id_token: str = "", retour: str = "", host: str = "") -> str:
     """
     Adresse de déconnexion du fournisseur (« RP-initiated logout »).
 
@@ -334,9 +382,10 @@ async def end_session_url(id_token: str = "", retour: str = "") -> str:
     terminaison : la session locale est alors la seule qu'on puisse clore, et
     l'appelant se contente de rediriger vers l'accueil.
     """
-    retour = retour or settings.base_url or ""
+    provider, cid, secret, _, base = _endpoints_for(host)
+    retour = retour or base or ""
     try:
-        client = _client()
+        client = _client(provider, cid, secret)
         metadata = await client.load_server_metadata()
     except Exception as exc:
         logger.info("Métadonnées du fournisseur illisibles à la déconnexion : %s", exc)
@@ -362,7 +411,7 @@ async def end_session_url(id_token: str = "", retour: str = "") -> str:
         params["post_logout_redirect_uri"] = retour
         # Alternative à id_token_hint prévue par la spécification, et
         # inoffensive lorsque les deux sont présents.
-        params["client_id"] = settings.oidc_client_id
+        params["client_id"] = cid
 
     if not params:
         return point

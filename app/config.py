@@ -109,6 +109,13 @@ class Settings:
     oidc_client_id: str = ""
     oidc_client_secret: str = ""
     oidc_redirect_uri: str = ""
+    #: Second fournisseur d'identité, pour un domaine d'accès alternatif
+    #: (ex. app/login.<autre-domaine>). Vides par défaut : l'application se
+    #: comporte exactement comme avant, avec le fournisseur unique.
+    oidc_alt_provider_url: str = ""
+    oidc_alt_client_id: str = ""
+    oidc_alt_client_secret: str = ""
+    oidc_alt_redirect_uri: str = ""
     base_url: str = ""
     oidc_scopes: List[str] = field(default_factory=list)
     #: Nom de la revendication portant les groupes. Aucune norme ne l'impose :
@@ -317,6 +324,17 @@ class Settings:
         return ""
 
     @property
+    def alt_base_url(self) -> str:
+        """Base (origin) du second domaine, déduite de son adresse de retour."""
+        from urllib.parse import urlsplit
+
+        retour = self.oidc_alt_redirect_uri.rstrip("/")
+        partie = urlsplit(retour)
+        if partie.netloc:
+            return f"{partie.scheme}://{partie.netloc}"
+        return retour
+
+    @property
     def gemini_use_vertex(self) -> bool:
         """
         Mode Vertex AI si aucune clé API n'est fournie mais qu'un projet GCP
@@ -346,6 +364,10 @@ class Settings:
             oidc_client_id=_env("OIDC_CLIENT_ID"),
             oidc_client_secret=_env("OIDC_CLIENT_SECRET"),
             oidc_redirect_uri=_env("OIDC_REDIRECT_URI"),
+            oidc_alt_provider_url=_env("OIDC_ALT_PROVIDER_URL").rstrip("/"),
+            oidc_alt_client_id=_env("OIDC_ALT_CLIENT_ID"),
+            oidc_alt_client_secret=_env("OIDC_ALT_CLIENT_SECRET"),
+            oidc_alt_redirect_uri=_env("OIDC_ALT_REDIRECT_URI"),
             base_url=_env("BASE_URL").rstrip("/"),
             oidc_scopes=_env_list("OIDC_SCOPES", "openid,profile,email,groups"),
             oidc_groups_claim=_env("OIDC_GROUPS_CLAIM", "groups"),
@@ -450,6 +472,26 @@ class Settings:
                     "L'adresse de retour OIDC n'est pas en HTTPS "
                     f"({self.effective_redirect_uri}) — le fournisseur la refusera "
                     "et le témoin de session ne serait pas protégé."
+                )
+            _alt_parties = [
+                self.oidc_alt_provider_url,
+                self.oidc_alt_client_id,
+                self.oidc_alt_client_secret,
+                self.oidc_alt_redirect_uri,
+            ]
+            if any(_alt_parties) and not all(_alt_parties):
+                problems.append(
+                    "Fournisseur alternatif incomplet : OIDC_ALT_PROVIDER_URL, "
+                    "OIDC_ALT_CLIENT_ID, OIDC_ALT_CLIENT_SECRET et "
+                    "OIDC_ALT_REDIRECT_URI doivent être renseignées ensemble."
+                )
+            elif self.oidc_alt_redirect_uri \
+                    and not self.oidc_alt_redirect_uri.startswith("https://") \
+                    and "localhost" not in self.oidc_alt_redirect_uri \
+                    and "127.0.0.1" not in self.oidc_alt_redirect_uri:
+                problems.append(
+                    "L'adresse de retour du second fournisseur n'est pas en HTTPS "
+                    f"({self.oidc_alt_redirect_uri})."
                 )
             if not self.session_secret:
                 problems.append(

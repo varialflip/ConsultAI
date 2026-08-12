@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import pricing
-from app.database import SessionLocal, UsageDaily, UsageEvent, utcnow
+from app.database import Consultation, SessionLocal, UsageDaily, UsageEvent, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +208,7 @@ def admin_cost_overview(db: Session) -> dict:
 
     par_usager: dict[str, dict] = defaultdict(lambda: {
         "month_costs": [0.0, 0.0, 0.0], "year_costs": [0.0, 0.0],
+        "month_notes": [0, 0, 0], "year_notes": [0, 0],
     })
 
     def cumule(owner: str, cout: Optional[float], annee: int, mois_num: int) -> None:
@@ -221,17 +222,31 @@ def admin_cost_overview(db: Session) -> dict:
             if a == annee:
                 agregat["year_costs"][i] += cout
 
+    def cumule_note(owner: str, annee: int, mois_num: int) -> None:
+        agregat = par_usager[owner]
+        for i, (a, mm) in enumerate(mois):
+            if (a, mm) == (annee, mois_num):
+                agregat["month_notes"][i] += 1
+        for i, a in enumerate(annees):
+            if a == annee:
+                agregat["year_notes"][i] += 1
+
     for row in db.scalars(select(UsageEvent)):
         cumule(row.owner, row.cost, row.created_at.year, row.created_at.month)
     for row in db.scalars(select(UsageDaily)):
         # date = « YYYY-MM-DD » : le découpage de chaîne évite toute
         # conversion de fuseau.
         cumule(row.owner, row.cost, int(row.date[:4]), int(row.date[5:7]))
+    # Notes réellement produites : consultations passées au statut
+    # « généré » ou « finalisé ». Un brouillon jamais généré ne compte pas.
+    for row in db.scalars(select(Consultation).where(Consultation.status.in_(("genere", "finalise")))):
+        cumule_note(row.owner, row.created_at.year, row.created_at.month)
 
     rows = [
         {"owner": owner, **agregat}
         for owner, agregat in par_usager.items()
         if any(agregat["month_costs"]) or any(agregat["year_costs"])
+        or any(agregat["month_notes"]) or any(agregat["year_notes"])
     ]
     rows.sort(key=lambda item: item["month_costs"][0], reverse=True)
     return {
@@ -253,7 +268,7 @@ def admin_breakdown(
 
     totals: dict[tuple, dict] = defaultdict(lambda: {
         "prompt_tokens": 0, "output_tokens": 0, "audio_seconds": 0,
-        "audio_prompt_tokens": 0, "cost": 0.0,
+        "audio_prompt_tokens": 0, "cost": 0.0, "event_count": 0,
     })
 
     event_query = select(UsageEvent).where(UsageEvent.created_at >= from_dt, UsageEvent.created_at < to_dt)
@@ -261,6 +276,7 @@ def admin_breakdown(
         event_query = event_query.where(UsageEvent.owner == owner)
     for row in db.scalars(event_query):
         key = (row.owner, row.kind, row.provider, row.model)
+        totals[key]["event_count"] += 1
         totals[key]["prompt_tokens"] += row.prompt_tokens or 0
         totals[key]["output_tokens"] += row.output_tokens or 0
         totals[key]["audio_prompt_tokens"] += row.audio_prompt_tokens or 0
@@ -272,6 +288,7 @@ def admin_breakdown(
         daily_query = daily_query.where(UsageDaily.owner == owner)
     for row in db.scalars(daily_query):
         key = (row.owner, row.kind, row.provider, row.model)
+        totals[key]["event_count"] += row.event_count
         totals[key]["prompt_tokens"] += row.prompt_tokens
         totals[key]["output_tokens"] += row.output_tokens
         totals[key]["audio_prompt_tokens"] += row.audio_prompt_tokens
@@ -285,3 +302,87 @@ def admin_breakdown(
         rows_out.append({"owner": owner_key, "kind": kind, "provider": provider, "model": model, **agg})
     rows_out.sort(key=lambda item: item["cost"], reverse=True)
     return {"rows": rows_out, "total_cost": grand_total_cost, "currency": "USD"}
+
+
+def admin_log(
+    db: Session, date_from: str, date_to: str,
+    owner: Optional[str] = None, limit: int = 300,
+) -> dict:
+    """Journal des générations de l'onglet admin « Statistiques ».
+
+    Une entrée par appel LLM (chaque génération de note) et UNE entrée
+    résumée par dictée pour le STT : les segments d'une même consultation
+    sont regroupés (durée et coût sommés, fournisseur/modèle du dernier
+    segment, nombre de segments). Le tout est trié du plus récent au plus
+    ancien et plafonné à ``limit`` entrées.
+
+    La résolution par génération n'existe que sur la fenêtre des événements
+    bruts (``RAW_RETENTION_DAYS`` jours) : au-delà, seul l'agrégat quotidien
+    survit et le journal ne peut plus les détailler.
+    """
+    from_dt = datetime.fromisoformat(date_from)
+    to_dt = datetime.fromisoformat(date_to) + timedelta(days=1)  # borne haute incluse
+
+    # Titres des consultations, pour afficher un libellé lisible à côté de
+    # l'identifiant sans charger les corps de documents.
+    titres = {row.id: row.title for row in db.scalars(select(Consultation))}
+
+    def rend(created_at, kind, owner_key, consultation_id, provider, model,
+             prompt_tokens, output_tokens, audio_prompt_tokens, audio_seconds,
+             cost, currency, segments):
+        return {
+            "created_at": created_at.isoformat(),
+            "kind": kind, "owner": owner_key,
+            "consultation_id": consultation_id,
+            "consultation_title": titres.get(consultation_id) if consultation_id else "",
+            "provider": provider, "model": model,
+            "prompt_tokens": prompt_tokens, "output_tokens": output_tokens,
+            "audio_prompt_tokens": audio_prompt_tokens,
+            "audio_seconds": audio_seconds,
+            "cost": cost, "currency": currency or "USD",
+            "segments": segments,
+        }
+
+    stt_buckets: dict[tuple, dict] = defaultdict(lambda: {
+        "created_at": None, "owner": "", "consultation_id": None,
+        "provider": "", "model": "",
+        "audio_seconds": 0, "cost": 0.0, "currency": "USD", "segments": 0,
+    })
+
+    entrees: list[dict] = []
+    event_query = select(UsageEvent).where(UsageEvent.created_at >= from_dt, UsageEvent.created_at < to_dt)
+    if owner:
+        event_query = event_query.where(UsageEvent.owner == owner)
+    for row in db.scalars(event_query):
+        if row.kind == "stt":
+            bucket = stt_buckets[(row.owner, row.consultation_id)]
+            bucket["audio_seconds"] += row.audio_seconds or 0
+            bucket["cost"] += row.cost or 0.0
+            bucket["currency"] = row.currency or "USD"
+            bucket["segments"] += 1
+            # « Dernier segment gagnant » : fournisseur/modèle et date de la
+            # tranche la plus récente de la dictée.
+            if bucket["created_at"] is None or row.created_at > bucket["created_at"]:
+                bucket["created_at"] = row.created_at
+                bucket["owner"] = row.owner
+                bucket["consultation_id"] = row.consultation_id
+                bucket["provider"] = row.provider
+                bucket["model"] = row.model
+        else:
+            entrees.append(rend(
+                row.created_at, row.kind, row.owner, row.consultation_id,
+                row.provider, row.model,
+                row.prompt_tokens, row.output_tokens, row.audio_prompt_tokens,
+                row.audio_seconds, row.cost, row.currency, None,
+            ))
+
+    for (owner_key, cid), bucket in stt_buckets.items():
+        entrees.append(rend(
+            bucket["created_at"], "stt", bucket["owner"], bucket["consultation_id"],
+            bucket["provider"], bucket["model"],
+            None, None, None, bucket["audio_seconds"],
+            bucket["cost"], bucket["currency"], bucket["segments"],
+        ))
+
+    entrees.sort(key=lambda item: item["created_at"], reverse=True)
+    return {"entries": entrees[:limit], "total": len(entrees), "limit": limit}

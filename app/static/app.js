@@ -3501,6 +3501,7 @@
     stats: null,        // réponse de /api/admin/usage, chargée à la demande
     pricing: null,       // réponse de /api/admin/pricing, chargée à la demande
     statsRange: null,   // { from, to } — filtre courant de l'onglet Statistiques
+    statsOwner: '',     // filtre d'usager de l'onglet Statistiques ('' = tous)
   };
 
   /**
@@ -4517,7 +4518,7 @@
   }
 
   /* -------------------------------------------------------------------------
-   * Statistiques d'usage et tarifs
+   * Statistiques d'usage
    * ---------------------------------------------------------------------- */
   function defaultStatsRange() {
     const to = new Date();
@@ -4532,8 +4533,10 @@
     if (!adminState.statsRange) adminState.statsRange = defaultStatsRange();
     try {
       const range = adminState.statsRange;
+      const qs = new URLSearchParams({ date_from: range.from, date_to: range.to });
+      if (adminState.statsOwner) qs.set('owner', adminState.statsOwner);
       const [usageData, pricingData] = await Promise.all([
-        api(`/api/admin/usage?date_from=${range.from}&date_to=${range.to}`),
+        api(`/api/admin/usage?${qs}`),
         api('/api/admin/pricing'),
       ]);
       adminState.stats = usageData;
@@ -4544,52 +4547,13 @@
     }
   }
 
-  /**
-   * Tableau récapitulatif en tête d'onglet : une rangée par usager (trié par
-   * coût du mois en cours décroissant), en colonnes les trois derniers mois
-   * calendaires, l'année en cours et l'année précédente. Contrairement au
-   * tableau de détail plus bas, il ne dépend pas de la plage de dates
-   * choisie — c'est le coup d'œil « qui dépense quoi ».
-   */
-  function renderCostOverview() {
-    const overview = (adminState.stats && adminState.stats.overview) || null;
-    if (!overview || !overview.rows.length) return '';
-    const cellule = (v) => `<td class="px-2 py-1.5 text-right tabular-nums">${v ? v.toFixed(2) : '—'}</td>`;
-    const lignes = overview.rows.map((r) => `
-      <tr class="border-b border-slate-100">
-        <td class="px-2 py-1.5">${esc(r.owner)}</td>
-        ${r.month_costs.map(cellule).join('')}
-        ${r.year_costs.map(cellule).join('')}
-      </tr>`).join('');
-    return `
-      <h3 class="text-sm font-semibold text-slate-700">${esc(T('admin.stats.overview_title'))}</h3>
-      <div class="overflow-auto rounded-lg border border-slate-200">
-        <table class="w-full text-sm">
-          <thead class="bg-slate-50 text-xs text-slate-500">
-            <tr>
-              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
-              ${overview.months.map((m) => `<th class="px-2 py-1.5 text-right">${esc(monthName(m.year, m.month))}</th>`).join('')}
-              ${overview.years.map((a) => `<th class="px-2 py-1.5 text-right">${a}</th>`).join('')}
-            </tr>
-          </thead>
-          <tbody>${lignes}</tbody>
-        </table>
-      </div>`;
-  }
-
-  function renderStatsTable() {
-    const data = adminState.stats || { rows: [], total_cost: 0, currency: 'USD' };
-    const lignes = data.rows.map((r) => `
-      <tr class="border-b border-slate-100">
-        <td class="px-2 py-1.5">${esc(r.owner)}</td>
-        <td class="px-2 py-1.5">${esc(r.provider)}</td>
-        <td class="px-2 py-1.5 text-slate-500">${esc(r.model || '—')}</td>
-        <td class="px-2 py-1.5">${esc(T(`admin.stats.kind.${r.kind}`))}</td>
-        <td class="px-2 py-1.5 tabular-nums">${(r.prompt_tokens + r.output_tokens + (r.audio_prompt_tokens || 0)) ? `${r.prompt_tokens}${r.audio_prompt_tokens ? `+${r.audio_prompt_tokens}♪` : ''}/${r.output_tokens}` : '—'}</td>
-        <td class="px-2 py-1.5 tabular-nums">${r.audio_seconds ? (r.audio_seconds / 60).toFixed(1) : '—'}</td>
-        <td class="px-2 py-1.5 tabular-nums">${r.cost.toFixed(4)} ${esc(r.currency || data.currency)}</td>
-      </tr>`).join('');
-
+  /** Filtre de période + usager, commun au journal et au détail agrégé. */
+  function renderStatsFilter() {
+    const data = adminState.stats || { total_cost: 0, currency: 'USD' };
+    const owners = [...new Set((adminState.stats && adminState.stats.overview
+      ? adminState.stats.overview.rows : []).map((r) => r.owner))].sort();
+    const options = owners.map((o) =>
+      `<option value="${esc(o)}" ${o === adminState.statsOwner ? 'selected' : ''}>${esc(o)}</option>`).join('');
     return `
       <div class="flex flex-wrap items-end gap-3">
         <label class="text-xs text-slate-600">${esc(T('admin.stats.date_from'))}
@@ -4600,29 +4564,188 @@
           <input type="date" id="statsTo" value="${esc(adminState.statsRange.to)}"
                  class="block border border-slate-300 rounded px-2 py-1 text-sm">
         </label>
+        ${options ? `<label class="text-xs text-slate-600">${esc(T('admin.stats.col_owner'))}
+          <select id="statsOwner" class="block border border-slate-300 rounded px-2 py-1 text-sm">
+            <option value="">${esc(T('admin.stats.owner_all'))}</option>
+            ${options}
+          </select></label>` : ''}
         <span class="ml-auto text-sm font-medium">${esc(T('admin.stats.total_cost'))} :
           ${data.total_cost.toFixed(2)} ${esc(data.currency)}</span>
-      </div>
-      <div class="overflow-auto rounded-lg border border-slate-200">
-        <table class="w-full text-sm">
-          <thead class="bg-slate-50 text-xs text-slate-500">
-            <tr>
-              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
-              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_provider'))}</th>
-              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_model'))}</th>
-              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_kind'))}</th>
-              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_tokens'))}</th>
-              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_audio'))}</th>
-              <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_cost'))}</th>
-            </tr>
-          </thead>
-          <tbody>${lignes || `<tr><td colspan="7" class="px-2 py-6 text-center text-slate-400">${esc(T('admin.stats.empty'))}</td></tr>`}</tbody>
-        </table>
       </div>`;
+  }
+
+  /**
+   * Récapitulatif par usager : notes générées ET coût, sur les trois derniers
+   * mois calendaires, l'année en cours et l'année précédente. Indépendant de
+   * la plage de dates choisie pour le journal. Tableau sur grand écran,
+   * cartes empilées sur mobile.
+   */
+  function renderNotesCostOverview() {
+    const overview = (adminState.stats && adminState.stats.overview) || null;
+    if (!overview || !overview.rows.length) return '';
+
+    const cellule = (notes, cout) => `
+      <td class="px-2 py-1.5 text-right tabular-nums">${notes}
+        <span class="text-[11px] text-slate-400">${esc(T('admin.stats.notes_short'))}</span><br>
+        <span class="text-[11px] text-slate-500">${cout ? cout.toFixed(2) : '—'} ${esc(overview.currency)}</span></td>`;
+    const periode = (label, notes, cout) => `
+      <div class="flex items-baseline justify-between gap-2 text-sm">
+        <span class="text-slate-500">${label}</span>
+        <span class="tabular-nums">${notes}
+          <span class="text-[11px] text-slate-400">${esc(T('admin.stats.notes_short'))}</span>
+          · ${cout ? cout.toFixed(2) : '—'}
+          <span class="text-[11px] text-slate-400">${esc(overview.currency)}</span></span>
+      </div>`;
+
+    const lignesTable = overview.rows.map((r) => `
+      <tr class="border-b border-slate-100">
+        <td class="px-2 py-1.5">${esc(r.owner)}</td>
+        ${r.month_notes.map((n, i) => cellule(n, r.month_costs[i])).join('')}
+        ${r.year_notes.map((n, i) => cellule(n, r.year_costs[i])).join('')}
+      </tr>`).join('');
+    const cartesMobile = overview.rows.map((r) => `
+      <div class="rounded-lg border border-slate-200 p-3 space-y-1.5">
+        <p class="text-sm font-medium text-slate-700">${esc(r.owner)}</p>
+        ${overview.months.map((m, i) => periode(monthName(m.year, m.month), r.month_notes[i], r.month_costs[i])).join('')}
+        ${overview.years.map((a, i) => periode(`${a}`, r.year_notes[i], r.year_costs[i])).join('')}
+      </div>`).join('');
+
+    return `
+      <section class="space-y-2">
+        <h3 class="text-sm font-semibold text-slate-700">${esc(T('admin.stats.overview_title'))}</h3>
+        <div class="hidden sm:block overflow-auto rounded-lg border border-slate-200">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500">
+              <tr>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
+                ${overview.months.map((m) => `<th class="px-2 py-1.5 text-right">${esc(monthName(m.year, m.month))}</th>`).join('')}
+                ${overview.years.map((a) => `<th class="px-2 py-1.5 text-right">${a}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>${lignesTable}</tbody>
+          </table>
+        </div>
+        <div class="sm:hidden space-y-3">${cartesMobile}</div>
+      </section>`;
+  }
+
+  /**
+   * Journal des générations : une ligne par appel LLM, une ligne résumée par
+   * dictée pour le STT. Respecte la plage de dates et le filtre d'usager.
+   */
+  function renderLog() {
+    const log = (adminState.stats && adminState.stats.log) || null;
+    const entries = (log && log.entries) || [];
+
+    const typeBadge = (kind) => kind === 'stt'
+      ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">${esc(T('admin.stats.kind.stt'))}</span>`
+      : `<span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">${esc(T('admin.stats.kind.llm'))}</span>`;
+
+    const usageText = (e) => {
+      if (e.kind === 'stt') {
+        const min = e.audio_seconds ? (e.audio_seconds / 60).toFixed(1) : '—';
+        return e.segments ? `${min} min · ${e.segments} ${esc(T('admin.stats.segments'))}` : `${min} min`;
+      }
+      const total = (e.prompt_tokens || 0) + (e.output_tokens || 0) + (e.audio_prompt_tokens || 0);
+      return total ? `${e.prompt_tokens}${e.audio_prompt_tokens ? `+${e.audio_prompt_tokens}♪` : ''}/${e.output_tokens}` : '—';
+    };
+    const consultation = (e) => {
+      if (!e.consultation_id) return '—';
+      const nom = e.consultation_title ? ` — ${esc(e.consultation_title)}` : '';
+      return `#${e.consultation_id}${nom}`;
+    };
+    const cout = (e) => (e.cost != null ? `${e.cost.toFixed(4)} ${esc(e.currency || 'USD')}` : '—');
+
+    const lignesTable = entries.map((e) => `
+      <tr class="border-b border-slate-100">
+        <td class="px-2 py-1.5 whitespace-nowrap tabular-nums">${esc(formatDateTime(e.created_at))}</td>
+        <td class="px-2 py-1.5">${esc(e.owner)}</td>
+        <td class="px-2 py-1.5">${typeBadge(e.kind)}</td>
+        <td class="px-2 py-1.5 text-slate-500">${consultation(e)}</td>
+        <td class="px-2 py-1.5">${esc(e.provider)}${e.model ? ` <span class="text-slate-500">/ ${esc(e.model)}</span>` : ''}</td>
+        <td class="px-2 py-1.5 tabular-nums">${usageText(e)}</td>
+        <td class="px-2 py-1.5 tabular-nums text-right">${cout(e)}</td>
+      </tr>`).join('');
+    const cartesMobile = entries.map((e) => `
+      <div class="rounded-lg border border-slate-200 p-3 space-y-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-medium text-slate-500 tabular-nums">${esc(formatDateTime(e.created_at))}</span>
+          <span class="flex items-center gap-2">${typeBadge(e.kind)}<span class="text-sm font-medium tabular-nums">${cout(e)}</span></span>
+        </div>
+        <p class="text-sm font-medium text-slate-700">${esc(e.owner)}</p>
+        <p class="text-xs text-slate-500">${consultation(e)}</p>
+        <p class="text-xs text-slate-600">${esc(e.provider)}${e.model ? ` / ${esc(e.model)}` : ''}</p>
+        <p class="text-xs text-slate-600 tabular-nums">${usageText(e)}</p>
+      </div>`).join('');
+
+    const vide = `<tr><td colspan="7" class="px-2 py-6 text-center text-slate-400">${esc(T('admin.stats.empty'))}</td></tr>`;
+    const noteRetention = log && log.total > log.limit
+      ? `<p class="text-[11px] text-slate-400">${esc(T('admin.stats.log_truncated', { shown: log.limit, total: log.total }))}</p>` : '';
+
+    return `
+      <section class="space-y-2">
+        <h3 class="text-sm font-semibold text-slate-700">${esc(T('admin.stats.log_title'))}</h3>
+        <div class="hidden sm:block overflow-auto rounded-lg border border-slate-200">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500">
+              <tr>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_date'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_kind'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_consultation'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_model'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_usage'))}</th>
+                <th class="px-2 py-1.5 text-right">${esc(T('admin.stats.col_cost'))}</th>
+              </tr>
+            </thead>
+            <tbody>${entries.length ? lignesTable : vide}</tbody>
+          </table>
+        </div>
+        <div class="sm:hidden space-y-3">${entries.length ? cartesMobile : `<p class="text-sm text-center text-slate-400 py-6">${esc(T('admin.stats.empty'))}</p>`}</div>
+        ${noteRetention}
+      </section>`;
+  }
+
+  /** Détail agrégé coût/jetons par usager × fournisseur × modèle, replié. */
+  function renderBreakdownDetails() {
+    const data = adminState.stats || { rows: [], total_cost: 0, currency: 'USD' };
+    const lignes = data.rows.map((r) => `
+      <tr class="border-b border-slate-100">
+        <td class="px-2 py-1.5">${esc(r.owner)}</td>
+        <td class="px-2 py-1.5">${esc(r.provider)}</td>
+        <td class="px-2 py-1.5 text-slate-500">${esc(r.model || '—')}</td>
+        <td class="px-2 py-1.5">${esc(T(`admin.stats.kind.${r.kind}`))}</td>
+        <td class="px-2 py-1.5 tabular-nums">${r.event_count || 0}</td>
+        <td class="px-2 py-1.5 tabular-nums">${(r.prompt_tokens + r.output_tokens + (r.audio_prompt_tokens || 0)) ? `${r.prompt_tokens}${r.audio_prompt_tokens ? `+${r.audio_prompt_tokens}♪` : ''}/${r.output_tokens}` : '—'}</td>
+        <td class="px-2 py-1.5 tabular-nums">${r.audio_seconds ? (r.audio_seconds / 60).toFixed(1) : '—'}</td>
+        <td class="px-2 py-1.5 tabular-nums">${r.cost.toFixed(4)} ${esc(r.currency || data.currency)}</td>
+      </tr>`).join('');
+    return `
+      <details class="rounded-lg border border-slate-200">
+        <summary class="px-3 py-2 text-sm font-semibold text-slate-700 cursor-pointer hover:bg-slate-50">${esc(T('admin.stats.breakdown_title'))}</summary>
+        <div class="overflow-auto border-t border-slate-100">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500">
+              <tr>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_owner'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_provider'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_model'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_kind'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_events'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_tokens'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_audio'))}</th>
+                <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_cost'))}</th>
+              </tr>
+            </thead>
+            <tbody>${lignes || `<tr><td colspan="8" class="px-2 py-6 text-center text-slate-400">${esc(T('admin.stats.empty'))}</td></tr>`}</tbody>
+          </table>
+        </div>
+      </details>`;
   }
 
   const PRICING_UNITS = ['token_input_1m', 'token_output_1m', 'token_audio_input_1m', 'audio_minute'];
 
+  /** Tableau des tarifs, sans son titre (porté par le <details> de l'onglet). */
   function renderPricingTable() {
     const rates = adminState.pricing || [];
     const lignes = rates.map((r) => `
@@ -4644,7 +4767,6 @@
       </tr>`).join('');
 
     return `
-      <h3 class="text-sm font-semibold text-slate-700">${esc(T('admin.stats.pricing_title'))}</h3>
       <div class="overflow-auto rounded-lg border border-slate-200">
         <table class="w-full text-sm">
           <tbody>${lignes}</tbody>
@@ -4673,9 +4795,23 @@
       </div>`;
   }
 
+  /** Les tarifs dans un <details> replié : la masse CRUD n'écrase plus l'onglet. */
+  function renderPricingDetails() {
+    return `
+      <details class="rounded-lg border border-slate-200">
+        <summary class="px-3 py-2 text-sm font-semibold text-slate-700 cursor-pointer hover:bg-slate-50">${esc(T('admin.stats.pricing_title'))}</summary>
+        <div class="p-3 space-y-3 border-t border-slate-100">${renderPricingTable()}</div>
+      </details>`;
+  }
+
   function renderStats() {
     const boite = $('adminStats');
-    boite.innerHTML = renderCostOverview() + renderStatsTable() + renderPricingTable();
+    boite.innerHTML =
+      renderStatsFilter() +
+      renderNotesCostOverview() +
+      renderLog() +
+      renderBreakdownDetails() +
+      renderPricingDetails();
 
     ['statsFrom', 'statsTo'].forEach((id) => {
       $(id).addEventListener('change', () => {
@@ -4683,7 +4819,16 @@
         loadStats();
       });
     });
+    const selectOwner = $('statsOwner');
+    if (selectOwner) {
+      selectOwner.addEventListener('change', () => {
+        adminState.statsOwner = selectOwner.value;
+        loadStats();
+      });
+    }
 
+    // Tarifs : sauvegarde/suppression/ajout — la section vit dans un
+    // <details>, les écouteurs parcourent tout le conteneur comme avant.
     boite.querySelectorAll('[data-save-pricing]').forEach((bouton) => {
       bouton.addEventListener('click', async () => {
         const id = bouton.dataset.savePricing;
@@ -4754,6 +4899,7 @@
     adminState.backups = null;
     adminState.stats = null;
     adminState.pricing = null;
+    adminState.statsOwner = '';
     adminState.dirty = new Set();
     adminState.values = {};
     adminState.subTab = {};

@@ -1356,6 +1356,9 @@ def get_admin_usage(
 ):
     return {
         **usage.admin_breakdown(db, date_from, date_to, owner),
+        # Journal des générations (STT consolidé par dictée) sur la même
+        # plage — les entrées brutes n'existent que sur ~45 jours.
+        "log": usage.admin_log(db, date_from, date_to, owner),
         # Tableau récapitulatif en tête d'onglet : périodes calendaires fixes,
         # indépendantes de la plage date_from/date_to choisie pour le détail.
         "overview": usage.admin_cost_overview(db),

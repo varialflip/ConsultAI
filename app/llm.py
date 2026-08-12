@@ -253,11 +253,13 @@ def active_provider() -> str:
 
 
 #: Fournisseurs sachant traiter l'audio directement (au-delà du simple
-#: texte) : Gemini et Qwen Omni sont tous deux multimodaux. C'est la seule
+#: texte) : Gemini, Qwen Omni et le point de terminaison personnalisé
+#: compatible OpenAI sont tous multimodaux (OpenRouter expose un modèle
+#: multimodal derrière un point de terminaison personnalisé). C'est la seule
 #: liste à tenir à jour pour étendre « Joindre l'audio » / « Contourner le
 #: STT » à un futur fournisseur — ``audio_settings`` s'en sert pour tout le
 #: reste (panneau, dictée, génération).
-_AUDIO_CAPABLE_PROVIDERS = ("gemini", "qwen_omni")
+_AUDIO_CAPABLE_PROVIDERS = ("gemini", "qwen_omni", "custom")
 
 
 def audio_settings(provider: Optional[str] = None) -> Dict[str, object]:
@@ -632,9 +634,9 @@ def complete(
     un réglage dédié ; Anthropic n'en a pas, la consigne y est portée par le
     prompt et la réponse passe de toute façon par ``_strip_code_fence``.
 
-    ``audio`` — ``(octets, type_mime)`` — n'est utilisé QUE par Gemini et Qwen
-    Omni, les deux seuls fournisseurs ici à savoir construire un message
-    multimodal (voir ``_AUDIO_CAPABLE_PROVIDERS``). Les autres l'ignorent
+    ``audio`` — ``(octets, type_mime)`` — n'est utilisé QUE par les
+    fournisseurs multimodaux (voir ``_AUDIO_CAPABLE_PROVIDERS`` : Gemini, Qwen
+    Omni, point de terminaison personnalisé). Les autres l'ignorent
     silencieusement plutôt que d'échouer : c'est à l'appelant
     (``generate_note``) de ne le fournir que si le fournisseur actif le gère.
     """
@@ -653,7 +655,7 @@ def complete(
     if provider == "qwen_omni":
         return _complete_qwen_omni(system, user, model, temperature, max_tokens, json_mode, audio=audio)
     if provider == "custom":
-        return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="custom")
+        return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio)
     raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
 
 
@@ -833,17 +835,27 @@ def _complete_anthropic(system, user, model, temperature, max_tokens, json_mode)
     )
 
 
-def _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="openai") -> Completion:
+def _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=None) -> Completion:
     """
     Appel via le SDK OpenAI.
 
     Sert aussi « custom » : un point de terminaison personnalisé compatible
     OpenAI n'est rien d'autre que ce même client pointé vers une autre
-    adresse (voir ``get_client``) — inutile de dupliquer l'appel.
+    adresse (voir ``get_client``) — inutile de dupliquer l'appel. Quand ce
+    point de terminaison est multimodal (OpenRouter), ``audio`` — ``(octets,
+    type_mime)`` — est joint au message sous la forme « input_audio ».
     """
     client = get_client(provider)
     label = "OpenAI" if provider == "openai" else "Point de terminaison personnalisé"
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    if audio is not None:
+        audio_bytes, mime_type = audio
+        user_content = [
+            {"type": "text", "text": user},
+            _openai_audio_part(audio_bytes, mime_type),
+        ]
+    else:
+        user_content = user
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
     kwargs = {
         "model": model,
         "messages": messages,
@@ -892,6 +904,22 @@ def _qwen_audio_part(audio_bytes: bytes, mime_type: str) -> dict:
             "data": f"data:{mime_type};base64,{b64}",
             "format": fmt,
         },
+    }
+
+
+def _openai_audio_part(audio_bytes: bytes, mime_type: str) -> dict:
+    """
+    Contenu audio au schéma OpenAI/OpenRouter strict : base64 BRUT, sans
+    préfixe ``data:…;base64,``. C'est la forme documentée par OpenRouter
+    pour un modèle multimodal exposé via son point de terminaison
+    personnalisé — Qwen DashScope, lui, attend le préfixe (voir
+    ``_qwen_audio_part``).
+    """
+    fmt = (mime_type.split("/", 1)[-1] or "wav").split(";")[0].strip()
+    b64 = base64.b64encode(audio_bytes).decode("ascii")
+    return {
+        "type": "input_audio",
+        "input_audio": {"data": b64, "format": fmt},
     }
 
 
@@ -1062,7 +1090,7 @@ def generate_note(
     ``{"markdown", "model", "provider", "truncated", "usage"}``.
 
     ``audio`` — ``(octets, type_mime)`` — n'est envoyé que si le fournisseur
-    actif gère l'audio (Gemini, Qwen Omni — voir ``_AUDIO_CAPABLE_PROVIDERS``) ;
+    actif gère l'audio (voir ``_AUDIO_CAPABLE_PROVIDERS``) ;
     avec tout autre fournisseur il est silencieusement ignoré (voir
     ``complete``). Dès que ce même fournisseur a activé le contournement du
     STT (``<fournisseur>_bypass_stt``) ET qu'un audio est fourni, l'audio

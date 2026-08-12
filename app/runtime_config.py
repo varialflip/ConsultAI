@@ -398,6 +398,22 @@ SETTINGS: Tuple[Setting, ...] = (
         "custom_llm_temperature", "number", "group.llm",
         default=lambda: str(settings.gemini_temperature),
     ),
+    Setting(
+        "custom_send_audio", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+    Setting(
+        "custom_send_audio_max_minutes", "number", "group.llm",
+        default=lambda: "20",
+    ),
+    Setting(
+        "custom_bypass_stt", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+    Setting(
+        "custom_bypass_stt_keep_transcript", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
 
     # --- Identité affichée ---------------------------------------------------
     # Quelle revendication du fournisseur porte le nom et l'avatar. Rangées

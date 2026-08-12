@@ -3671,6 +3671,12 @@
     custom_llm_model: { key: 'llm_provider', value: 'custom' },
     custom_llm_model_fast: { key: 'llm_provider', value: 'custom' },
     custom_llm_temperature: { key: 'llm_provider', value: 'custom' },
+    // Options audio : le point de terminaison personnalisé peut être
+    // multimodal (OpenRouter) — mêmes réglages que Gemini/Qwen Omni.
+    custom_send_audio: { key: 'llm_provider', value: 'custom' },
+    custom_send_audio_max_minutes: { key: 'llm_provider', value: 'custom' },
+    custom_bypass_stt: { key: 'llm_provider', value: 'custom' },
+    custom_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'custom' },
     // Réglages propres à chaque service vocal
     deepgram_api_key: { key: 'stt_provider', value: 'deepgram' },
     deepgram_model: { key: 'stt_provider', value: 'deepgram' },

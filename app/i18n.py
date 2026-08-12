@@ -1812,6 +1812,66 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "has no place in a clinical note. Some endpoints ignore this setting: "
         "the note is produced anyway.",
     ),
+    "set.custom_send_audio.label": (
+        "Joindre aussi l'audio (silences plafonnés)",
+        "Also attach audio (pauses capped)",
+    ),
+    "set.custom_send_audio.help": (
+        "Envoie l'extrait audio en plus de la transcription : utile si le "
+        "point de terminaison (ex. OpenRouter) expose un modèle multimodal — "
+        "le modèle peut trancher un terme mal reconnu (nom propre, terme "
+        "médical) en l'écoutant. Sans effet si le modèle ne gère pas l'audio : "
+        "la note se génère alors comme avant. Ajoute un coût et quelques "
+        "secondes par note.",
+        "Sends the audio clip alongside the transcript: useful if the "
+        "endpoint (e.g. OpenRouter) exposes a multimodal model — the model "
+        "can resolve a poorly recognized term (proper noun, medical term) by "
+        "listening to it. No effect if the model does not handle audio: the "
+        "note is generated as before. Adds cost and a few seconds per note.",
+    ),
+    "set.custom_send_audio_max_minutes.label": (
+        "Durée maximale envoyée (minutes)",
+        "Maximum duration sent (minutes)",
+    ),
+    "set.custom_send_audio_max_minutes.help": (
+        "Au-delà de cette durée d'audio (après retrait des silences), rien "
+        "n'est joint — la note se génère comme avant, sur la seule "
+        "transcription. Protège la latence et le coût sur une très longue "
+        "dictée.",
+        "Beyond this much audio (after silence trimming), nothing is "
+        "attached — the note is generated as before, from the transcript "
+        "alone. Protects latency and cost on a very long dictation.",
+    ),
+    "set.custom_bypass_stt.label": (
+        "Ignorer la reconnaissance vocale (audio direct)",
+        "Skip speech recognition (direct audio)",
+    ),
+    "set.custom_bypass_stt.help": (
+        "L'audio part directement au modèle multimodal, sans passer par le "
+        "service de reconnaissance vocale — économise son coût et sa "
+        "latence. La note peut alors se générer sans transcription, dès "
+        "qu'un enregistrement existe. Sans effet si le point de terminaison "
+        "n'accepte pas l'audio.",
+        "Audio goes straight to the multimodal model, without passing "
+        "through speech recognition — saves its cost and latency. The note "
+        "can then be generated without a transcript, as soon as a recording "
+        "exists. No effect if the endpoint does not accept audio.",
+    ),
+    "set.custom_bypass_stt_keep_transcript.label": (
+        "Conserver une transcription pendant l'enregistrement",
+        "Keep a transcript during recording",
+    ),
+    "set.custom_bypass_stt_keep_transcript.help": (
+        "Sans effet si l'option ci-dessus est désactivée. Activée : la "
+        "reconnaissance vocale continue de tourner pendant la dictée (texte "
+        "visible et modifiable), mais la note se génère quand même à partir "
+        "de l'audio. Désactivée (par défaut) : aucun appel au service vocal "
+        "pendant l'enregistrement, économie maximale.",
+        "No effect if the option above is off. On: speech recognition keeps "
+        "running during dictation (visible, editable text), but the note is "
+        "still generated from the audio. Off (default): no call to the "
+        "speech service during recording, maximum savings.",
+    ),
 
     "provider.custom_endpoint": (
         "Point de terminaison personnalisé",

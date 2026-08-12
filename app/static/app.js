@@ -1489,16 +1489,27 @@
     });
   }
 
-  /** « Terminer » : conclut la dictée et rapatrie le texte restant. */
-  async function finishRecording() {
-    if (!state.recording && !dictation.active) return;
+  /**
+   * Conclut proprement la dictée encore active et rapatrie la transcription
+   * COMPLÈTE.
+   *
+   * Arrêter le micro est ce qui vide le tampon du MediaRecorder : les
+   * dernières secondes — celles dites juste avant une pause — y attendent
+   * encore, hors de la transcription. « Terminer » et « Mettre en forme »
+   * doivent tous deux vider ce tampon avant de continuer.
+   *
+   * Renvoie false si la dictée était trop courte pour mériter une session,
+   * ou si la finalisation a échoué (la bannière de récupération reprend
+   * alors le relais).
+   */
+  async function completeDictation() {
     await stopMicrophone();
 
     if (!dictation.seq) {
       toast(T('dictation.too_short'), 'warning');
       await bestEffort(() => audioStore.remove(dictation.localId), 'nettoyage');
       resetDictationState();
-      return;
+      return false;
     }
 
     setBusy(true, T('dictation.finishing'));
@@ -1515,43 +1526,46 @@
         showTranscriptEngine(result.stt_used);
         await bestEffort(() => audioStore.remove(dictation.localId), 'nettoyage');
       }
-
-      const transcript = $('transcript').value.trim();
-      if (transcript) {
-        // La transcription vient du serveur : la marquer comme sauvegardée
-        // évite une réécriture inutile, mais on force un enregistrement pour
-        // que le titre et les métadonnées suivent.
-        state.lastSavedSnapshot = '';
-        scheduleSave();
-        flashElement('transcriptFooter');
-        toast(T('dictation.finished', { count: transcript.length }), 'success');
-      }
       // L'audio vient d'être rattaché au brouillon par le serveur : à
-      // rafraîchir AVANT de décider ci-dessous, recordingsCount doit déjà
-      // compter ce nouvel enregistrement.
+      // rafraîchir AVANT de décider si on peut générer (audio-only).
       await loadRecordings();
-
-      if (!transcript) {
-        // Contournement du STT actif (Gemini / Qwen Omni en audio direct) :
-        // c'est le fonctionnement NORMAL de ce réglage, pas un échec — il n'y
-        // a jamais de transcription à attendre, l'audio suffit. « Aucune
-        // parole détectée » alarmerait pour rien ; on enchaîne directement
-        // sur la mise en forme, comme si le médecin avait cliqué lui-même.
-        if (audioOnlyReady()) {
-          await generateNote();
-        } else {
-          toast(T('dictation.no_speech'), 'warning', 8000);
-        }
-      }
-      resetDictationState();
+      return true;
     } catch (err) {
       toast(err.message, 'error', 12000);
       // L'audio reste sur le serveur et dans le navigateur : la bannière
       // permet de reprendre là où l'on s'est arrêté.
       resetDictationState();
       refreshRecoveryBanner();
+      return false;
     } finally {
       setBusy(false);
+      resetDictationState();
+    }
+  }
+
+  /** « Terminer » : conclut la dictée et rapatrie le texte restant. */
+  async function finishRecording() {
+    if (!state.recording && !dictation.active) return;
+    if (!(await completeDictation())) return;
+
+    const transcript = $('transcript').value.trim();
+    if (transcript) {
+      // La transcription vient du serveur : la marquer comme sauvegardée
+      // évite une réécriture inutile, mais on force un enregistrement pour
+      // que le titre et les métadonnées suivent.
+      state.lastSavedSnapshot = '';
+      scheduleSave();
+      flashElement('transcriptFooter');
+      toast(T('dictation.finished', { count: transcript.length }), 'success');
+    } else if (audioOnlyReady()) {
+      // Contournement du STT actif (Gemini / Qwen Omni en audio direct) :
+      // c'est le fonctionnement NORMAL de ce réglage, pas un échec — il n'y
+      // a jamais de transcription à attendre, l'audio suffit. On enchaîne
+      // directement sur la mise en forme, comme si le médecin avait cliqué
+      // lui-même.
+      await generateNote();
+    } else {
+      toast(T('dictation.no_speech'), 'warning', 8000);
     }
   }
 
@@ -2039,6 +2053,15 @@
   }
 
   async function generateNote() {
+    // Une dictée encore active (enregistrement ou pause) doit d'abord être
+    // conclue : les dernières secondes — celles dites juste avant une pause —
+    // attendent encore dans le tampon du MediaRecorder et manquent à la
+    // transcription. Conclure d'abord, générer ensuite, comme si le médecin
+    // avait appuyé sur « Terminer » avant « Mettre en forme ».
+    if (state.recording || dictation.active) {
+      if (!(await completeDictation())) return;
+    }
+
     const transcript = $('transcript').value.trim();
     const tpl = currentTemplate();
 

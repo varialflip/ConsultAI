@@ -1852,9 +1852,10 @@ def delete_template(
     Les gabarits VERROUILLÉS sont refusés : ce sont les points de départ
     garantis de l'installation, et on les duplique pour les adapter.
 
-    Les deux gabarits modifiables livrés (« Consultation - Gériatrie »,
-    « Suivi ») se suppriment normalement et ne reviennent PAS : ils ne sont
-    amorcés qu'une fois, voir database.seed_editable_templates.
+    Les quatre gabarits livrés sont verrouillés (voir
+    ``database.LOCKED_TEMPLATES``) : aucun ne se supprime. Seuls les gabarits
+    créés par le médecin — notamment les copies de gabarits verrouillés —
+    se suppriment normalement.
     """
     row = db.get(TemplateModel, template_id)
     if row is None:

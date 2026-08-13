@@ -210,6 +210,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Retournez le téléphone pour quitter ce mode",
         "Flip the phone back to leave this mode",
     ),
+    "dictaphone.permission": (
+        "Mode téléphone retourné désactivé : autorisez « Mouvement et "
+        "orientation » dans Réglages → Safari → Confidentialité et sécurité.",
+        "Upside-down dictation mode disabled: allow \"Motion & Orientation\" "
+        "in Settings → Safari → Privacy & Security.",
+    ),
 
     # --- Détails ------------------------------------------------------------
     "details.summary": ("Détails", "Details"),

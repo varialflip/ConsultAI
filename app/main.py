@@ -348,7 +348,7 @@ async def web_manifest() -> JSONResponse:
             "id": "/",
             "display": "standalone",
             "display_override": ["standalone", "minimal-ui"],
-            "orientation": "any",
+            "orientation": "portrait",
             "background_color": "#f1f5f9",
             "theme_color": "#ffffff",
             "categories": ["medical", "health", "productivity"],

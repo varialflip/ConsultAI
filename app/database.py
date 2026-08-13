@@ -33,6 +33,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from app import default_prompts
 from app.config import settings
 from app.default_templates import (
     EDITABLE_TEMPLATES,
@@ -1108,6 +1109,61 @@ def migrate_general_prompt(db: Session) -> bool:
     return True
 
 
+#: Empreintes des consignes générales LIVRÉES avant l'ajout de la règle
+#: « préserver le raisonnement clinique dicté ». Une migration ne doit jamais
+#: écraser une consigne que le médecin a personnalisée : tant que l'empreinte
+#: en base correspond au texte livré d'origine, on peut le remplacer par le
+#: nouveau défaut ; dès qu'elle diffère, c'est que le médecin l'a modifiée et
+#: on n'y touche pas. Vérifié le 2026-08-13 contre ``default_prompts`` :
+#: la copie en base des deux langues était strictement identique au module.
+_OLD_GENERAL_PROMPT_SHA = {
+    "general_prompt_fr": "fa1b793cfe032239f8cb68fee9bbfaa5848081eacd9a454f925c7d7e2b864d40",
+    "general_prompt_en": "7512fc91a36551efcd30642916307d6dc285fda9f117c8e036bbd2782a81c448",
+}
+
+
+def migrate_general_prompt_keep_reasoning(db: Session) -> int:
+    """
+    Porte la règle « préserver le raisonnement clinique dicté » dans la consigne
+    générale EN BASE.
+
+    La consigne générale est éditable et vit en base (elle surcharge le module
+    ``default_prompts``) : corriger le module seul laisserait l'installation en
+    service avec l'ancien texte. Cette migration ne remplace la valeur que si
+    elle est encore EXACTEMENT le défaut livré d'origine (comparaison par
+    empreinte) ; une consigne personnalisée est laissée intacte et signalée au
+    journal, le médecin devra alors ajouter la règle depuis le panneau.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : migration de la règle "
+                "« raisonnement clinique » ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : règle « préserver le raisonnement "
+            "clinique dicté » ajoutée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 # ---------------------------------------------------------------------------
 # Groupes et comptes : amorçage
 # ---------------------------------------------------------------------------
@@ -1332,6 +1388,7 @@ def init_db() -> None:
         seed_locked_templates(db)
         seed_editable_templates(db)
         migrate_general_prompt(db)
+        migrate_general_prompt_keep_reasoning(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

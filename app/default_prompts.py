@@ -62,6 +62,8 @@ Le rapport final doit rester proportionnel à la dictée, jamais à son degré d
 - En cas de doute entre deux formulations, choisis la plus courte qui reste fidèle au sens.
 - Si tu sens que tu es en train d'expliquer, de justifier ou de lister une hésitation en détail : arrête-toi et résume.
 
+Ce principe ne s'applique qu'à TON raisonnement d'édition : comment tu as corrigé, hésité, choisi une formulation. Il ne s'applique JAMAIS au raisonnement clinique du médecin. Le raisonnement clinique dicté est une donnée clinique comme une autre — la revue des effets secondaires d'un traitement, pourquoi telle cause est écartée ou retenue, une hypothèse et ce qui l'appuie. Tu le conserves tel quel, même s'il ressemble à une justification, même s'il est long : condenser ne signifie jamais supprimer un élément du raisonnement clinique dicté.
+
 ---
 
 # 1. RÈGLE ABSOLUE — AUCUNE INVENTION
@@ -133,7 +135,7 @@ Supprime les hésitations, répétitions, autocorrections orales, consignes au l
 
 - Transforme le style télégraphique de la dictée en phrases cliniques courtes, sobres et professionnelles, **sans ajouter d'information** et sans délayer ce qui tient en une phrase.
 
-- **Impression** : liste numérotée. Si dicté à la première personne du singulier, transcrire idem — ne jamais convertir à la troisième personne, même si le reste du rapport y est. Par exemple, « Je crois qu'il s'agit d'une maladie d'Alzheimer » reste « Je crois qu'il s'agit d'une maladie d'Alzheimer », jamais « Maladie d'Alzheimer » ni « Le médecin croit… ». Ne pas mettre de résumés par section (par exemple, ne pas écrire « Sur le plan cognitif : »). Ne pas mentionner les conditions médicales chroniques sauf si c'est dicté.
+- **Impression** : liste numérotée. Si dicté à la première personne du singulier, transcrire idem — ne jamais convertir à la troisième personne, même si le reste du rapport y est. Par exemple, « Je crois qu'il s'agit d'une maladie d'Alzheimer » reste « Je crois qu'il s'agit d'une maladie d'Alzheimer », jamais « Maladie d'Alzheimer » ni « Le médecin croit… ». Ne pas mettre de résumés par section (par exemple, ne pas écrire « Sur le plan cognitif : »). Ne pas mentionner les conditions médicales chroniques sauf si c'est dicté. Conserve **intégralement** le raisonnement clinique dicté — par exemple la revue des effets secondaires d'une médication et l'écart ou la rétention d'une cause (voir § 0) : ne le résume pas, ne le supprime pas, c'est une donnée clinique au même titre qu'un diagnostic.
 - **Plan** : liste numérotée d'actions concrètes. Si dicté à la première personne du singulier, transcrire idem — ne jamais convertir à la troisième personne. Par exemple, « Je lui donne congé de la clinique » reste « Je lui donne congé de la clinique », jamais « Congé de la clinique » ni « Il lui donne congé ». Cette règle prévaut sur la consigne de rédaction à la troisième personne du § 4 : Impression et Plan ne sont pas des sections narratives.
 
 ---
@@ -204,6 +206,14 @@ was. A poorly captured, ambiguous transcript riddled with mishearings does
   faithful to the meaning.
 - If you feel you are explaining, justifying or listing a hesitation in detail:
   stop and summarize.
+
+This principle applies only to YOUR editing reasoning: how you corrected,
+hesitated or chose a phrasing. It NEVER applies to the physician's clinical
+reasoning. Clinical reasoning dictated by the physician is clinical data like
+any other — the review of a treatment's side effects, why a given cause is
+excluded or retained, a hypothesis and what supports it. Preserve it as-is,
+even if it reads like a justification, even if it is long: condensing never
+means dropping an element of the dictated clinical reasoning.
 
 ---
 
@@ -305,7 +315,10 @@ entirety of the clinical content, without rephrasing more than necessary.
   stays "I believe this is Alzheimer's disease", never "Alzheimer's disease"
   nor "The physician believes…". Do not add per-section summaries (for
   example, do not write "On the cognitive side:"). Do not mention chronic
-  medical conditions unless they were dictated.
+  medical conditions unless they were dictated. Preserve **in full** the
+  dictated clinical reasoning — for example the review of a medication's side
+  effects and the exclusion or retention of a cause (see § 0): do not
+  summarize it, do not drop it, it is clinical data just like a diagnosis.
 - **Plan**: numbered list of concrete actions. If dictated in the first person
   singular, transcribe it as-is — never convert it to the third person. For
   example, "I am discharging her from the clinic" stays "I am discharging her

@@ -345,6 +345,32 @@
     }
   }
 
+  /** Abréviations de mois courtes, alignées sur l'usage français (« 8 aoû. »,
+   * « 11 déc. 2025 ») et anglais (« 8 Aug. », « 11 Dec. 2025 »). */
+  const MONTH_SHORT = LANG === 'en'
+    ? ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'June', 'July', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.']
+    : ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'aoû.', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+  /** Date courte de la liste des sauvegardes : heure seule si aujourd'hui,
+   * « 8 aoû. » sinon, et « 11 déc. 2025 » si l'année n'est pas celle en cours. */
+  function formatBackupDate(iso) {
+    if (!iso) return '';
+    try {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return iso;
+      if (localDayKey(iso) === localDayKey(new Date().toISOString())) {
+        return formatTime(iso);
+      }
+      let out = `${date.getDate()} ${MONTH_SHORT[date.getMonth()]}`;
+      if (date.getFullYear() !== new Date().getFullYear()) {
+        out += ` ${date.getFullYear()}`;
+      }
+      return out;
+    } catch (_) {
+      return iso;
+    }
+  }
+
   /** Clé de regroupement AAAA-MM-JJ dans le fuseau local, et non en UTC. */
   function localDayKey(iso) {
     const date = new Date(iso);
@@ -4462,11 +4488,7 @@
 
     const lignes = (data.backups || []).map((b) => `
       <li class="flex items-center gap-3 px-3 py-2 border-b border-slate-100 text-sm">
-        <span class="flex-1 min-w-0 truncate">${esc(
-          localDayKey(b.created_at) === localDayKey(new Date().toISOString())
-            ? formatTime(b.created_at)
-            : formatDateTime(b.created_at)
-        )}
+        <span class="flex-1 min-w-0 truncate">${esc(formatBackupDate(b.created_at))}
           <span class="text-slate-400">· ${esc(T(`admin.backup.kind.${b.kind}`))} · ${esc(formatBytes(b.size_bytes))}</span>
         </span>
         <a href="/api/admin/backup/${encodeURIComponent(b.filename)}"

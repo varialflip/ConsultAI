@@ -4462,7 +4462,11 @@
 
     const lignes = (data.backups || []).map((b) => `
       <li class="flex items-center gap-3 px-3 py-2 border-b border-slate-100 text-sm">
-        <span class="flex-1 min-w-0 truncate">${esc(formatTime(b.created_at))}
+        <span class="flex-1 min-w-0 truncate">${esc(
+          localDayKey(b.created_at) === localDayKey(new Date().toISOString())
+            ? formatTime(b.created_at)
+            : formatDateTime(b.created_at)
+        )}
           <span class="text-slate-400">· ${esc(T(`admin.backup.kind.${b.kind}`))} · ${esc(formatBytes(b.size_bytes))}</span>
         </span>
         <a href="/api/admin/backup/${encodeURIComponent(b.filename)}"

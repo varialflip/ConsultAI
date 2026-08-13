@@ -1169,13 +1169,17 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Backups kept",
     ),
     "set.backup_retention_count.help": (
-        "Nombre de sauvegardes gardées avant que les plus anciennes ne soient "
-        "supprimées automatiquement — sauvegardes quotidiennes, exports manuels "
-        "et sauvegardes de sécurité pré-restauration confondus. 0 désactive la "
-        "rotation : tout s'accumule.",
+        "Nombre de sauvegardes gardées avant suppression automatique des plus "
+        "anciennes — sauvegardes quotidiennes, exports manuels et sauvegardes "
+        "de sécurité pré-restauration confondus. La rotation privilégie la "
+        "couverture temporelle : ~50 % d'instantanés quotidiens (un par jour), "
+        "~25 % hebdomadaires (un par semaine) et ~25 % mensuels (un par mois). "
+        "0 désactive la rotation : tout s'accumule.",
         "Number of backups kept before the oldest are automatically deleted — "
         "daily backups, manual exports and pre-restore safety snapshots all "
-        "counted together. 0 disables rotation: everything accumulates.",
+        "counted together. Rotation favors time coverage: ~50% daily snapshots "
+        "(one per day), ~25% weekly (one per week) and ~25% monthly (one per "
+        "month). 0 disables rotation: everything accumulates.",
     ),
     "set.consultation_retention_days.label": (
         "Purger les dossiers après (jours)",

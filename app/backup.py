@@ -166,14 +166,58 @@ def delete_backup(filename: str) -> None:
     logger.info("Sauvegarde supprimée : %s", filename)
 
 
+def _bucket_keys(item: BackupInfo) -> tuple:
+    """Clés de regroupement d'une sauvegarde dans le fuseau local du conteneur
+    (le même que celui du planificateur quotidien) : jour civil, semaine ISO et
+    mois civil. ``created_at`` du manifeste est en UTC (aware)."""
+    local = item.created_at.astimezone()
+    iso = local.date().isocalendar()
+    return local.date(), (iso[0], iso[1]), (local.year, local.month)
+
+
 def rotate_backups(keep: int) -> int:
-    """Garde les ``keep`` sauvegardes les plus récentes, tous types confondus
-    (choix confirmé : pas de quota séparé pour les exports manuels/de
-    sécurité). ``keep &lt;= 0`` désactive la rotation."""
+    """Rotation « intelligente » par couverture temporelle, tous types
+    confondus (choix confirmé : pas de quota séparé pour les exports manuels/de
+    sécurité). ``keep &lt;= 0`` désactive la rotation.
+
+    Des ``keep`` sauvegardes cibles, ~50 % sont des instantanés quotidiens (au
+    plus un par jour civil, les plus récents d'abord), ~25 % des instantanés
+    hebdomadaires (au plus un par semaine ISO) et ~25 % des instantanés mensuels
+    (au plus un par mois civil). La même sauvegarde peut combler plusieurs
+    échelons à la fois (la plus récente est à la fois le dernier jour, la
+    dernière semaine et le dernier mois) ; les sauvegardes restantes sont
+    supprimées. La couverture prime sur le nombre : s'il y a moins d'échelons
+    distincts que de quotas (ex. deux sauvegardes le même jour), on conserve
+    moins de ``keep`` archives."""
     if keep <= 0:
         return 0
     items = list_backups()
-    to_delete = items[keep:]
+
+    daily = max(1, round(keep * 0.5))
+    weekly = min(max(1, round(keep * 0.25)), keep - daily)
+    monthly = keep - daily - weekly
+
+    seen_days, seen_weeks, seen_months = set(), set(), set()
+    keep_filenames = set()
+    for item in items:
+        day, week, month = _bucket_keys(item)
+        if daily > 0 and day not in seen_days:
+            daily -= 1
+            seen_days.add(day)
+            seen_weeks.add(week)
+            seen_months.add(month)
+            keep_filenames.add(item.filename)
+        elif weekly > 0 and week not in seen_weeks:
+            weekly -= 1
+            seen_weeks.add(week)
+            seen_months.add(month)
+            keep_filenames.add(item.filename)
+        elif monthly > 0 and month not in seen_months:
+            monthly -= 1
+            seen_months.add(month)
+            keep_filenames.add(item.filename)
+
+    to_delete = [item for item in items if item.filename not in keep_filenames]
     for item in to_delete:
         try:
             delete_backup(item.filename)

@@ -37,7 +37,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from app.config import settings
-from app.database import utcnow
+from app.database import _iso, utcnow
 from app import runtime_config
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class BackupInfo:
             "filename": self.filename,
             "kind": self.kind,
             "size_bytes": self.size_bytes,
-            "created_at": self.created_at.isoformat(),
+            "created_at": _iso(self.created_at),
         }
 
 

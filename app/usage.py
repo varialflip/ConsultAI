@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import pricing
-from app.database import Consultation, SessionLocal, UsageDaily, UsageEvent, utcnow
+from app.database import Consultation, SessionLocal, UsageDaily, UsageEvent, _iso, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +332,7 @@ def admin_log(
              prompt_tokens, output_tokens, audio_prompt_tokens, audio_seconds,
              cost, currency, segments):
         return {
-            "created_at": created_at.isoformat(),
+            "created_at": _iso(created_at),
             "kind": kind, "owner": owner_key,
             "consultation_id": consultation_id,
             "consultation_title": titres.get(consultation_id) if consultation_id else "",

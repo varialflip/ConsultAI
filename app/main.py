@@ -96,6 +96,7 @@ from app.database import (
     SessionLocal,
     Recording,
     Template as TemplateModel,
+    _iso,
     get_db,
     init_db,
     utcnow,
@@ -1464,7 +1465,7 @@ def list_admin_backups(request: Request, db: Session = Depends(get_db), admin: P
         "backups": [b.to_dict() for b in backup.list_backups()],
         "retention_count": int(runtime_config.value_float("backup_retention_count", 7.0)),
         "last_run": {
-            "at": state.last_run_at.isoformat() if state and state.last_run_at else None,
+            "at": _iso(state.last_run_at) if state and state.last_run_at else None,
             "status": state.last_status if state else "",
             "error": state.last_error if state else "",
         },
@@ -2362,7 +2363,7 @@ async def api_generate(
     db.refresh(consultation)
     live.publish(user.owner_key, "generated", {
         "consultation_id": consultation.id,
-        "updated_at": consultation.updated_at.isoformat(),
+        "updated_at": _iso(consultation.updated_at),
         "origin_tab": request.headers.get("x-consultai-tab", ""),
     })
 
@@ -2498,7 +2499,7 @@ def create_consultation(
     live.publish(user.owner_key, "consultation_created", {
         "consultation_id": consultation.id,
         "title": consultation.title,
-        "created_at": consultation.created_at.isoformat(),
+        "created_at": _iso(consultation.created_at),
         "origin_tab": request.headers.get("x-consultai-tab", ""),
     })
     return consultation.to_dict()
@@ -2533,7 +2534,7 @@ def patch_consultation(
     db.refresh(consultation)
     live.publish(user.owner_key, "consultation_patched", {
         "consultation_id": consultation.id,
-        "updated_at": consultation.updated_at.isoformat(),
+        "updated_at": _iso(consultation.updated_at),
         "fields": list(updates.keys()),
         "origin_tab": request.headers.get("x-consultai-tab", ""),
     })
@@ -2736,7 +2737,7 @@ async def retranscribe_consultation(
     db.commit()
     live.publish(user.owner_key, "consultation_patched", {
         "consultation_id": consultation.id,
-        "updated_at": consultation.updated_at.isoformat(),
+        "updated_at": _iso(consultation.updated_at),
         "fields": ["raw_transcript", "status", "stt_language"],
         "origin_tab": request.headers.get("x-consultai-tab", ""),
     })

@@ -419,6 +419,9 @@
   const state = {
     templates: [],
     isTemplateAdmin: true,
+    //: Nom d'utilisateur courant, lu dans /api/config — sert à reconnaître
+    //: ses gabarits personnels (``owner``) parmi la liste des gabarits.
+    username: '',
     // Identifiant propre à CET onglet, régénéré à chaque chargement — sert
     // uniquement à reconnaître ses propres écritures dans le flux SSE
     // (voir connectLiveEvents) pour ne pas se les appliquer à soi-même.
@@ -3001,6 +3004,9 @@
         <div class="text-xs text-slate-500 mt-0.5 line-clamp-2">${esc(tpl.description || T('tpl.no_description'))}</div>
         <div class="mt-1.5 flex items-center gap-1 flex-wrap">
           <span class="text-[10px] px-1.5 py-0.5 rounded accent-badge font-medium">${esc(langue)}</span>
+          ${tpl.owner === state.username
+            ? `<span class="text-[10px] px-1.5 py-0.5 rounded accent-badge">${esc(T('tpl.personal_badge'))}</span>`
+            : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">${esc(T('tpl.shared_badge'))}</span>`}
           ${tpl.is_locked ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">${esc(T('tpl.locked_badge'))}</span>` : ''}
           ${tpl.is_default && !tpl.is_locked ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">${esc(T('tpl.preloaded'))}</span>` : ''}
         </div>
@@ -3019,25 +3025,30 @@
   }
 
   /**
-   * Rend le formulaire inerte pour un gabarit protégé.
+   * Rend le formulaire inerte pour le gabarit ouvert.
    *
-   * Les champs restent LISIBLES — on veut pouvoir consulter le gabarit avant de
-   * décider de le dupliquer — mais ne s'enregistrent pas. Le serveur refuse de
-   * toute façon : ceci n'est que la politesse qui évite de saisir pour rien.
+   * Un gabarit n'est éditable que s'il n'est pas protégé ET que l'utilisateur
+   * a le droit de le réécrire : administrateur pour un gabarit partagé,
+   * propriétaire pour un gabarit personnel. Dans le cas contraire les champs
+   * restent LISIBLES — on veut pouvoir consulter le gabarit avant de décider
+   * de le dupliquer — mais ne s'enregistrent pas. Le serveur refuse de toute
+   * façon : ceci n'est que la politesse qui évite de saisir pour rien.
    */
-  function applyTemplateLock(locked) {
+  function applyTemplateLock(locked, editable) {
+    const readOnly = Boolean(locked) || !editable;
     const champs = ['tplName', 'tplDescription', 'tplInstructions', 'tplLayout',
                     'tplHints', 'tplOrder', 'tplLanguage'];
     champs.forEach((id) => {
       const el = $(id);
-      if (el) el.disabled = Boolean(locked);
+      if (el) el.disabled = readOnly;
     });
     $('tplLockedBanner').classList.toggle('hidden', !locked);
+    $('tplReadonlyBanner').classList.toggle('hidden', locked || editable);
     // « Enregistrer » et « Supprimer » n'ont pas de sens ici ; « Dupliquer »
     // est au contraire l'action à mettre en avant.
     const submit = $('templateForm').querySelector('button[type="submit"]');
-    if (submit) submit.classList.toggle('hidden', Boolean(locked));
-    $('btnDeleteTemplate').classList.toggle('hidden', Boolean(locked));
+    if (submit) submit.classList.toggle('hidden', readOnly);
+    $('btnDeleteTemplate').classList.toggle('hidden', readOnly);
   }
 
   function fillTemplateForm(tpl) {
@@ -3052,8 +3063,11 @@
     $('tplLanguage').value = tpl.language || 'fr';
     // Supprimer et dupliquer n'ont de sens que sur un gabarit déjà en base.
     $('btnDeleteTemplate').classList.remove('hidden');
-    $('btnDuplicateTemplate').classList.toggle('hidden', !state.isTemplateAdmin);
-    applyTemplateLock(tpl.is_locked);
+    $('btnDuplicateTemplate').classList.remove('hidden');
+    // Un gabarit personnel ne se réécrit que par son propriétaire ; un gabarit
+    // partagé n'est réécrit que par un administrateur de gabarits.
+    const isOwn = Boolean(tpl.owner) && tpl.owner === state.username;
+    applyTemplateLock(tpl.is_locked, state.isTemplateAdmin || isOwn);
     $('templateFormStatus').textContent = '';
   }
 
@@ -3069,7 +3083,8 @@
     // Nouveau gabarit : la langue de l'interface est le point de départ le plus
     // probable, sans être imposée.
     $('tplLanguage').value = LANG;
-    applyTemplateLock(false);
+    // Tout gabarit créé ici est personnel : son auteur en garde la main.
+    applyTemplateLock(false, true);
     $('btnDeleteTemplate').classList.add('hidden');
     $('btnDuplicateTemplate').classList.add('hidden');
     $('templateFormStatus').textContent = '';
@@ -5394,6 +5409,7 @@
   async function refreshClientConfig() {
     const config = await api('/api/config');
     state.isTemplateAdmin = config.is_template_admin;
+    state.username = config.username || '';
 
     if (config.dictation_chunk_seconds) {
       dictationConfig.chunkSeconds = config.dictation_chunk_seconds;
@@ -5402,8 +5418,7 @@
       dictationConfig.segmentSeconds = config.dictation_segment_seconds;
     }
 
-    $('templateAdminBadge').classList.toggle('hidden', state.isTemplateAdmin);
-    $('btnNewTemplate').classList.toggle('hidden', !state.isTemplateAdmin);
+    $('btnNewTemplate').classList.toggle('hidden', false);
     state.logoutUrl = config.logout_url || '/auth/logout';
     state.isAdmin = Boolean(config.is_admin);
     state.llmBypassStt = Boolean(config.llm_bypass_stt);
@@ -5655,8 +5670,10 @@
 
     $('templateForm').addEventListener('submit', submitTemplateForm);
     $('btnDuplicateTemplate').addEventListener('click', duplicateTemplate);
-    // Le bandeau des gabarits protégés propose la même action, mise en avant.
+    // Les bandeaux des gabarits protégés et des gabarits partagés en lecture
+    // seule proposent la même action, mise en avant.
     $('btnDuplicateLocked').addEventListener('click', duplicateTemplate);
+    $('btnDuplicateReadonly').addEventListener('click', duplicateTemplate);
     $('btnDeleteTemplate').addEventListener('click', deleteTemplate);
 
     // --- Brouillons ---

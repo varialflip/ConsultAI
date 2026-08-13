@@ -886,9 +886,6 @@
 
     <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 shrink-0">
       <h2 class="font-semibold text-slate-800">{{ t('tpl.modal_title') }}</h2>
-      <span id="templateAdminBadge" class="hidden text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-        {{ t('tpl.readonly') }}
-      </span>
       <button id="btnNewTemplate" type="button"
               class="accent-btn px-3 py-2 text-sm rounded-lg transition">
         {{ t('tpl.new') }}
@@ -936,6 +933,25 @@
             <button type="button" id="btnDuplicateLocked"
                     class="mt-2 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-medium
                            hover:bg-amber-700 transition">
+              {{ t('tpl.duplicate_to_edit') }}</button>
+          </div>
+        </div>
+
+        <!-- Gabarit partagé sans droit de gestion : les champs restent lisibles
+             mais inertes, et la duplication est le chemin vers une version
+             personnelle que le médecin peut, lui, réécrire. -->
+        <div id="tplReadonlyBanner"
+             class="hidden rounded-lg border border-slate-300 bg-slate-50 p-3 flex items-start gap-2">
+          <svg class="w-4 h-4 text-slate-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 8h.01"/><path d="M11 12h1v4h1"/></svg>
+          <div class="min-w-0">
+            <p class="text-xs font-medium text-slate-700">{{ t('tpl.readonly_title') }}</p>
+            <p class="text-[11px] text-slate-600 mt-0.5 leading-relaxed">{{ t('tpl.readonly_help') }}</p>
+            <button type="button" id="btnDuplicateReadonly"
+                    class="mt-2 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700
+                           text-xs font-medium hover:bg-white transition">
               {{ t('tpl.duplicate_to_edit') }}</button>
           </div>
         </div>

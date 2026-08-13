@@ -48,6 +48,7 @@ from app.database import (
     DEFAULT_GROUP,
     Consultation,
     Group,
+    NotesDaily,
     UsageDaily,
     UsageEvent,
     User,
@@ -389,11 +390,15 @@ def delete_user(db: Session, user_id: int) -> None:
         recordings.delete_for_consultation(db, consultation.id)
         db.delete(consultation)
 
-    # Historique d'usage : événements bruts et cumuls quotidiens.
+    # Historique d'usage : événements bruts, cumuls quotidiens et compteur de
+    # notes produites — rien ne doit survivre au retrait du compte.
     db.query(UsageEvent).filter(UsageEvent.owner == username).delete(
         synchronize_session=False
     )
     db.query(UsageDaily).filter(UsageDaily.owner == username).delete(
+        synchronize_session=False
+    )
+    db.query(NotesDaily).filter(NotesDaily.owner == username).delete(
         synchronize_session=False
     )
 

@@ -147,11 +147,13 @@ class Principal:
     @property
     def is_template_admin(self) -> bool:
         """
-        Droit de créer / modifier / supprimer des gabarits.
+        Droit de créer / modifier / supprimer les gabarits PARTAGÉS.
 
         Vient désormais des groupes et non plus de ``TEMPLATE_ADMINS`` : les
-        gabarits sont partagés, et le droit de les réécrire se donne compte par
-        compte depuis le panneau. Un administrateur l'a toujours.
+        gabarits partagés de l'équipe, et le droit de les réécrire se donne
+        compte par compte depuis le panneau. Les gabarits personnels (copies
+        et créations, ``Template.owner``) appartiennent à leur auteur, qui les
+        gère sans ce droit. Un administrateur a toujours ce pouvoir.
         """
         return self.is_admin or self.can_manage_templates
 

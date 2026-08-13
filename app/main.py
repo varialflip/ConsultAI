@@ -14,12 +14,12 @@ Routes
     GET    /api/config                   configuration visible côté client
     GET    /api/models                   modèles Gemini accessibles (diagnostic)
 
-    GET    /api/templates                liste des gabarits
-    POST   /api/templates                création          (administrateur)
+    GET    /api/templates                liste des gabarits (partagés + les miens)
+    POST   /api/templates                création d'un gabarit personnel
     GET    /api/templates/{id}           détail
-    PUT    /api/templates/{id}           modification      (administrateur)
-    POST   /api/templates/{id}/duplicate copie             (administrateur)
-    DELETE /api/templates/{id}           suppression       (administrateur)
+    PUT    /api/templates/{id}           modification (propriétaire / administrateur)
+    POST   /api/templates/{id}/duplicate copie personnelle (tout utilisateur)
+    DELETE /api/templates/{id}           suppression (propriétaire / administrateur)
 
     POST   /api/transcribe               audio → texte (Google STT), en un bloc
     POST   /api/generate                 texte + gabarit → note (Gemini)
@@ -69,7 +69,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
 from markupsafe import Markup
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -139,6 +139,10 @@ async def lifespan(app: FastAPI):
     dictation.purge_expired()
     with SessionLocal() as _purge_db:
         purge_expired_consultations(_purge_db)
+    # Amorce le compteur de notes produites (NotesDaily) depuis les dossiers
+    # encore en base — une seule fois, la table reste ensuite alimentée à la
+    # première génération de chaque consultation.
+    usage.backfill_notes_daily()
     # Capturée une fois : c'est elle que live.publish() utilise pour remettre
     # un évènement en main propre depuis n'importe quel fil d'exécution
     # (threadpool inclus — voir app/live.py).
@@ -1236,6 +1240,9 @@ async def api_config(request: Request):
         "gemini_backend": "vertex" if settings.gemini_use_vertex else "api_key",
         "max_audio_mb": settings.max_audio_mb,
         "is_template_admin": user.is_template_admin,
+        #: L'utilisateur courant : le client en a besoin pour reconnaître ses
+        #: gabarits personnels (``owner``) parmi la liste des gabarits.
+        "username": user.username,
         # Cadence de téléversement de la dictée : c'est le navigateur qui la
         # règle sur MediaRecorder, mais le serveur qui en décide.
         "dictation_chunk_seconds": settings.dictation_chunk_seconds,
@@ -1700,19 +1707,41 @@ def _translate_user_error(exc: ValueError) -> str:
 # ===========================================================================
 @app.get("/api/templates")
 def list_templates(request: Request, db: Session = Depends(get_db)):
-    """Liste complète (corps inclus : l'éditeur en a besoin immédiatement)."""
-    current_user(request)
+    """Liste des gabarits visibles : partagés (``owner`` nul) + les miens."""
+    user = current_user(request)
     rows = db.scalars(
-        select(TemplateModel).order_by(TemplateModel.sort_order, TemplateModel.name)
+        select(TemplateModel)
+        .where(or_(TemplateModel.owner.is_(None), TemplateModel.owner == user.username))
+        .order_by(TemplateModel.sort_order, TemplateModel.name)
     ).all()
     return {"templates": [row.to_dict() for row in rows]}
 
 
+def _template_visible(row: TemplateModel, user: Principal) -> bool:
+    """Un gabarit personnel n'est jamais visible hors de son propriétaire."""
+    return row.owner is None or row.owner == user.username
+
+
+def _can_manage_template(row: TemplateModel, user: Principal) -> bool:
+    """
+    Qui peut réécrire/supprimer un gabarit ?
+
+    Un gabarit partagé se gère avec le droit ``can_manage_templates`` ; un
+    gabarit personnel n'appartient qu'à son propriétaire. Un administrateur
+    garde la main sur tout. Le verrou est vérifié avant, par l'appelant.
+    """
+    if user.is_admin:
+        return True
+    if row.owner is None:
+        return user.is_template_admin
+    return row.owner == user.username
+
+
 @app.get("/api/templates/{template_id}")
 def get_template(template_id: int, request: Request, db: Session = Depends(get_db)):
-    current_user(request)
+    user = current_user(request)
     row = db.get(TemplateModel, template_id)
-    if row is None:
+    if row is None or not _template_visible(row, user):
         raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
     return row.to_dict()
 
@@ -1720,9 +1749,12 @@ def get_template(template_id: int, request: Request, db: Session = Depends(get_d
 @app.post("/api/templates", status_code=status.HTTP_201_CREATED)
 def create_template(
     payload: TemplateIn,
-    admin: Principal = Depends(require_template_admin),
+    user: Principal = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    # Toute création est personnelle : elle n'apparaît que dans le menu de son
+    # auteur. Les gabarits partagés de l'équipe restent ceux livrés, gérés par
+    # les administrateurs de gabarits.
     row = TemplateModel(
         name=payload.name,
         description=payload.description,
@@ -1732,6 +1764,7 @@ def create_template(
         sort_order=payload.sort_order,
         language=payload.language,
         is_default=False,
+        owner=user.username,
     )
     db.add(row)
     try:
@@ -1742,7 +1775,7 @@ def create_template(
             status_code=409, detail=_t("err.template_exists", name=payload.name)
         )
     db.refresh(row)
-    logger.info("Gabarit créé « %s » par %s", row.name, admin.username)
+    logger.info("Gabarit personnel créé « %s » par %s", row.name, user.username)
     return row.to_dict()
 
 
@@ -1750,17 +1783,16 @@ def create_template(
 def update_template(
     template_id: int,
     payload: TemplateIn,
-    admin: Principal = Depends(require_template_admin),
+    user: Principal = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     row = db.get(TemplateModel, template_id)
-    if row is None:
+    if row is None or not _template_visible(row, user):
         raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
-    # Le refus est ICI et pas seulement dans l'écran : masquer un bouton n'est
-    # pas un contrôle, et ces deux gabarits sont les points de départ garantis
-    # de l'installation.
     if row.is_locked:
         raise HTTPException(status_code=403, detail=_t("err.template_locked"))
+    if not _can_manage_template(row, user):
+        raise HTTPException(status_code=403, detail=_t("err.template_rights"))
 
     row.name = payload.name
     row.description = payload.description
@@ -1779,14 +1811,14 @@ def update_template(
             status_code=409, detail=_t("err.template_exists", name=payload.name)
         )
     db.refresh(row)
-    logger.info("Gabarit modifié « %s » par %s", row.name, admin.username)
+    logger.info("Gabarit modifié « %s » par %s", row.name, user.username)
     return row.to_dict()
 
 
 @app.post("/api/templates/{template_id}/duplicate", status_code=status.HTTP_201_CREATED)
 def duplicate_template(
     template_id: int,
-    admin: Principal = Depends(require_template_admin),
+    user: Principal = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -1800,11 +1832,15 @@ def duplicate_template(
     l'amorçage la considérerait comme un gabarit livré et pourrait la réécrire,
     et elle hériterait du verrou qu'on cherche précisément à quitter.
 
+    La copie est TOUJOURS personnelle (``owner`` = auteur) : elle n'apparaît
+    que dans son menu. Chaque médecin peut ainsi adapter un gabarit partagé
+    sans imposer sa variante à toute l'équipe.
+
     C'est le SEUL chemin pour adapter un gabarit verrouillé, et il fonctionne
     sur lui : la copie est une ligne neuve et indépendante, pas une référence.
     """
     source = db.get(TemplateModel, template_id)
-    if source is None:
+    if source is None or not _template_visible(source, user):
         raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
 
     # Le nom est unique en base : on cherche le premier suffixe disponible
@@ -1832,18 +1868,19 @@ def duplicate_template(
         is_default=False,
         is_locked=False,
         language=source.language or "fr",
+        owner=user.username,
     )
     db.add(copy)
     db.commit()
     db.refresh(copy)
-    logger.info("Gabarit dupliqué « %s » → « %s » par %s", source.name, copy.name, admin.username)
+    logger.info("Gabarit dupliqué « %s » → « %s » par %s", source.name, copy.name, user.username)
     return copy.to_dict()
 
 
 @app.delete("/api/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_template(
     template_id: int,
-    admin: Principal = Depends(require_template_admin),
+    user: Principal = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -1853,18 +1890,25 @@ def delete_template(
     garantis de l'installation, et on les duplique pour les adapter.
 
     Les quatre gabarits livrés sont verrouillés (voir
-    ``database.LOCKED_TEMPLATES``) : aucun ne se supprime. Seuls les gabarits
-    créés par le médecin — notamment les copies de gabarits verrouillés —
-    se suppriment normalement.
+    ``database.LOCKED_TEMPLATES``) : aucun ne se supprime. Les gabarits
+    partagés se suppriment avec le droit ``can_manage_templates`` ; un gabarit
+    personnel ne se supprime que par son propriétaire.
     """
     row = db.get(TemplateModel, template_id)
-    if row is None:
+    if row is None or not _template_visible(row, user):
         raise HTTPException(status_code=404, detail=_t("err.template_not_found"))
     # Contrôlé ICI et pas seulement masqué dans l'écran.
     if row.is_locked:
         raise HTTPException(status_code=403, detail=_t("err.template_locked"))
+    if not _can_manage_template(row, user):
+        raise HTTPException(status_code=403, detail=_t("err.template_rights"))
 
-    remaining = db.scalar(select(TemplateModel.id).where(TemplateModel.id != template_id))
+    remaining = db.scalar(
+        select(TemplateModel.id).where(
+            TemplateModel.id != template_id,
+            or_(TemplateModel.owner.is_(None), TemplateModel.owner == user.username),
+        )
+    )
     if remaining is None:
         raise HTTPException(
             status_code=409,
@@ -1874,7 +1918,7 @@ def delete_template(
     name = row.name
     db.delete(row)
     db.commit()
-    logger.info("Gabarit supprimé « %s » par %s", name, admin.username)
+    logger.info("Gabarit supprimé « %s » par %s", name, user.username)
     return None
 
 
@@ -2351,8 +2395,14 @@ async def api_generate(
     consultation.usage_prompt_tokens = result["usage"].get("prompt_tokens")
     consultation.usage_output_tokens = result["usage"].get("output_tokens")
     consultation.generation_seconds = result["elapsed_seconds"]
+    # Une note réellement produite : comptée UNE fois, à sa première
+    # génération — la régénération d'un brouillon déjà « genere » ne re-compte
+    # pas (le compteur NotesDaily survit à la purge des dossiers).
+    first_generation = consultation.status not in ("genere", "finalise")
     consultation.status = "genere"
     consultation.updated_at = utcnow()
+    if first_generation:
+        usage.count_note(db, owner=user.owner_key)
     usage.log_llm_usage(
         db, owner=user.owner_key, consultation_id=consultation.id,
         provider=result["provider"], model=result["model"],

@@ -152,6 +152,13 @@ class Template(Base):
     #: Le refus est appliqué côté serveur, pas seulement masqué dans l'écran.
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    #: Propriétaire d'un gabarit PERSONNEL — ``None`` = gabarit partagé de
+    #: l'équipe. Un gabarit partagé est visible de tous et ne se réécrit qu'avec
+    #: le droit ``can_manage_templates`` ; un gabarit personnel (copie ou
+    #: création) n'est visible que de son propriétaire, qui le gère seul. La
+    #: duplication produit toujours une copie personnelle.
+    owner: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -164,6 +171,7 @@ class Template(Base):
             "description": self.description,
             "is_default": self.is_default,
             "is_locked": self.is_locked,
+            "owner": self.owner,
             "language": self.language or "fr",
             "sort_order": self.sort_order,
             "created_at": _iso(self.created_at),
@@ -487,6 +495,28 @@ class UsageDaily(Base):
 
     __table_args__ = (
         UniqueConstraint("date", "owner", "kind", "provider", "model", name="uq_usage_daily"),
+    )
+
+
+class NotesDaily(Base):
+    """
+    Nombre de notes réellement produites (consultations passées au statut
+    « genere »/« finalise »), cumulé par (jour, usager). Jamais purgée : c'est
+    ce qui fait survivre le « nombre de dictées » du panneau admin à la purge
+    des dossiers de consultation (rétention). Incrémentée à la PREMIÈRE
+    génération d'une consultation — une régénération ne re-compte pas. La
+    suppression d'un compte efface ses lignes (voir ``users.delete_user``).
+    """
+
+    __tablename__ = "notes_daily"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD
+    owner: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    notes_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("date", "owner", name="uq_notes_daily"),
     )
 
 
@@ -1331,6 +1361,7 @@ _ADDED_COLUMNS = {
     "templates": [
         ("language", "VARCHAR(8) NOT NULL DEFAULT 'fr'"),
         ("is_locked", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("owner", "VARCHAR(255)"),
     ],
     "consultations": [
         ("patient_name", "VARCHAR(200) NOT NULL DEFAULT ''"),

@@ -660,7 +660,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 
     # --- Gabarits -----------------------------------------------------------
     "tpl.modal_title": ("Gabarits", "Templates"),
-    "tpl.readonly": ("Lecture seule", "Read-only"),
     "tpl.new": ("Nouveau", "New"),
     "tpl.back": ("Retour à la liste", "Back to the list"),
     "tpl.list_hint": (
@@ -692,6 +691,19 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Duplicate to customize",
     ),
     "tpl.locked_badge": ("protégé", "protected"),
+    "tpl.shared_badge": ("Partagé", "Shared"),
+    "tpl.personal_badge": ("Personnel", "Personal"),
+    "tpl.readonly_title": (
+        "Gabarit partagé — lecture seule",
+        "Shared template — read-only",
+    ),
+    "tpl.readonly_help": (
+        "Ce gabarit appartient à l'équipe : seuls les administrateurs peuvent "
+        "le réécrire. Dupliquez-le pour obtenir une copie personnelle que vous "
+        "pouvez modifier à votre façon.",
+        "This template belongs to the team: only administrators can edit it. "
+        "Duplicate it to get a personal copy you can adjust to your own style.",
+    ),
     "tpl.description": ("Description", "Description"),
     "tpl.description_ph": (
         "Affichée sous le menu de sélection",
@@ -1961,6 +1973,13 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Dupliquez-le pour en obtenir une copie modifiable.",
         "This template is protected: it cannot be edited or deleted. Duplicate "
         "it to obtain an editable copy.",
+    ),
+    "err.template_rights": (
+        "Vous n'avez pas le droit de modifier ce gabarit : un gabarit partagé "
+        "ne se réécrit que par un administrateur, un gabarit personnel que par "
+        "son propriétaire.",
+        "You do not have permission to modify this template: a shared template "
+        "is only editable by an administrator, a personal one only by its owner.",
     ),
     "err.template_last": (
         "Impossible de supprimer le dernier gabarit : l'application en exige "

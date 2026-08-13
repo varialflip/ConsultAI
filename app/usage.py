@@ -20,7 +20,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import pricing
-from app.database import Consultation, SessionLocal, UsageDaily, UsageEvent, _iso, utcnow
+from app.database import (
+    Consultation,
+    NotesDaily,
+    SessionLocal,
+    UsageDaily,
+    UsageEvent,
+    _iso,
+    utcnow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +82,54 @@ def log_stt_usage(
         audio_seconds=audio_seconds,
         cost=cost, currency=currency,
     ))
+
+
+def count_note(db: Session, owner: str) -> None:
+    """Compte UNE note produite pour le jour courant et ``owner``.
+
+    Appelé à la PREMIÈRE génération d'une consultation (statut qui passe à
+    « genere »). La régénération n'incrémente pas : c'est le nombre de
+    consultations réellement produites qui nous intéresse, pas le nombre
+    d'appels. Ligne créée au besoin, jamais purgée — c'est elle qui fait
+    survivre le compteur à la purge des dossiers de consultation.
+    """
+    day = utcnow().date().isoformat()
+    daily = db.scalar(
+        select(NotesDaily).where(NotesDaily.date == day, NotesDaily.owner == owner)
+    )
+    if daily is None:
+        daily = NotesDaily(date=day, owner=owner, notes_count=0)
+        db.add(daily)
+    daily.notes_count += 1
+
+
+def backfill_notes_daily() -> None:
+    """Amorce ``NotesDaily`` depuis les consultations déjà générées.
+
+    Une seule fois : ne tourne que si la table est vide. Regroupe les
+    consultations restantes de statut « genere »/« finalise » par jour de
+    création — c'est le décalage historique qui rattrape les notes produites
+    avant l'apparition de ce compteur (les dossiers purgés avant le
+    déploiement restent perdus, rien ne peut les recréer).
+    """
+    with SessionLocal() as db:
+        already = db.scalar(select(NotesDaily.id).limit(1))
+        if already is not None:
+            return
+        buckets: dict[tuple[str, str], int] = defaultdict(int)
+        for row in db.scalars(
+            select(Consultation).where(Consultation.status.in_(("genere", "finalise")))
+        ):
+            buckets[(row.created_at.date().isoformat(), row.owner)] += 1
+        for (day, owner), count in buckets.items():
+            db.add(NotesDaily(date=day, owner=owner, notes_count=count))
+        if buckets:
+            db.commit()
+            logger.info(
+                "Amorçage des statistiques de notes : %d ligne(s) créée(s) pour "
+                "%d note(s) déjà produite(s)",
+                len(buckets), sum(buckets.values()),
+            )
 
 
 def compact_old_events() -> None:
@@ -222,14 +278,14 @@ def admin_cost_overview(db: Session) -> dict:
             if a == annee:
                 agregat["year_costs"][i] += cout
 
-    def cumule_note(owner: str, annee: int, mois_num: int) -> None:
+    def cumule_note(owner: str, annee: int, mois_num: int, count: int) -> None:
         agregat = par_usager[owner]
         for i, (a, mm) in enumerate(mois):
             if (a, mm) == (annee, mois_num):
-                agregat["month_notes"][i] += 1
+                agregat["month_notes"][i] += count
         for i, a in enumerate(annees):
             if a == annee:
-                agregat["year_notes"][i] += 1
+                agregat["year_notes"][i] += count
 
     for row in db.scalars(select(UsageEvent)):
         cumule(row.owner, row.cost, row.created_at.year, row.created_at.month)
@@ -237,10 +293,14 @@ def admin_cost_overview(db: Session) -> dict:
         # date = « YYYY-MM-DD » : le découpage de chaîne évite toute
         # conversion de fuseau.
         cumule(row.owner, row.cost, int(row.date[:4]), int(row.date[5:7]))
-    # Notes réellement produites : consultations passées au statut
-    # « généré » ou « finalisé ». Un brouillon jamais généré ne compte pas.
-    for row in db.scalars(select(Consultation).where(Consultation.status.in_(("genere", "finalise")))):
-        cumule_note(row.owner, row.created_at.year, row.created_at.month)
+    # Notes réellement produites, lues dans le compteur persistant
+    # ``NotesDaily`` (jamais purgé) plutôt que dans les consultations : la
+    # purge des dossiers (rétention) ne doit pas effacer les statistiques.
+    # Un brouillon jamais généré ne compte toujours pas.
+    for row in db.scalars(select(NotesDaily)):
+        cumule_note(
+            row.owner, int(row.date[:4]), int(row.date[5:7]), row.notes_count
+        )
 
     rows = [
         {"owner": owner, **agregat}

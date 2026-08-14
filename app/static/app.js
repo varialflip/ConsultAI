@@ -1234,7 +1234,7 @@
   /** iOS : détection automatique désactivée, bouton manuel seul. */
   const isIOSDevice = /iPhone|iPad|iPod/.test(navigator.userAgent)
     || (/Macintosh/.test(navigator.userAgent) && 'ontouchstart' in window);
-  const dphone = { active: false, rotation: 0, candidate: null, since: 0, userDisabled: false };
+  const dphone = { active: false, rotation: 0, candidate: null, since: 0, userDisabled: false, manual: false };
 
   const ICON_MIC_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
     + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
@@ -1304,6 +1304,14 @@
     // Revenu à l'endroit : une éventuelle sortie manuelle cesse de bloquer
     // l'auto-détection.
     if (!flipped) dphone.userDisabled = false;
+    if (dphone.manual) {
+      // Mode manuel : le calque reste tant que l'usager n'est pas sorti
+      // (bouton ou ✕) ; seule la rotation suit le retournement pour que le
+      // contenu reste lisible.
+      const rot = flipped ? (180 - uiAngle() + 360) % 360 : 0;
+      if (dphone.active && rot !== dphone.rotation) setDictaphone(true, rot);
+      return;
+    }
     const c = flipped && !dphone.userDisabled
       // Rotation CSS pour que le calque reste lisible : 180° par rapport à
       // l'angle d'affichage courant (180−0 → 180 en portrait, 180−180 → 0
@@ -5706,16 +5714,26 @@
     });
     $('btnDictaphoneFinish').addEventListener('click', finishRecording);
     $('btnDictaphoneAbort').addEventListener('click', abortRecording);
-    // Bascule manuelle : iOS n'a pas de détection automatique ; le calque
-    // s'ouvre TOURNÉ de 180° (usage portrait tête en bas) pour qu'il se lise
-    // à l'endroit une fois le téléphone retourné.
+    // Bascule manuelle. Sur iOS (pas de détection automatique), le calque
+    // s'ouvre TOURNÉ de 180° (usage portrait tête en bas) pour se lire à
+    // l'endroit une fois le téléphone retourné. Sur les autres plateformes,
+    // l'auto-détection garde la main sur la rotation : le calque s'ouvre à
+    // l'endroit et reste ouvert jusqu'à la sortie explicite.
     $('btnFlipMode').addEventListener('click', () => {
+      if (dphone.manual) {
+        dphone.manual = false;
+        dphone.userDisabled = true;
+        setDictaphone(false, 0);
+        return;
+      }
+      dphone.manual = true;
       dphone.userDisabled = false;
-      setDictaphone(!dphone.active, (180 - uiAngle() + 360) % 360);
+      setDictaphone(true, isIOSDevice ? (180 - uiAngle() + 360) % 360 : 0);
     });
     // Sortie explicite du mode : tant que le téléphone reste retourné, elle
     // suspend l'auto-détection jusqu'au retour à l'endroit.
     $('btnDictaphoneExit').addEventListener('click', () => {
+      dphone.manual = false;
       dphone.userDisabled = true;
       setDictaphone(false, 0);
     });

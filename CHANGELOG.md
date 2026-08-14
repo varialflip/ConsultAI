@@ -3,6 +3,14 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.32
+
+- Mode retourné manuel corrigé sur Android : la rotation de 180° à l'ouverture
+  n'est plus appliquée que sur iOS. Ailleurs, le bouton « Mode retourné »
+  ouvre le calque à l'endroit et celui-ci reste ouvert jusqu'à la sortie
+  explicite (il n'est plus refermé par l'auto-détection) ; la rotation suit
+  le retournement, et le retour à l'écran normal fonctionne comme avant.
+
 ## 2026-08-14 — v2.0.0-beta.31
 
 - iOS : détection automatique du retournement retirée (l'accès aux capteurs y

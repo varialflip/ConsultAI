@@ -461,14 +461,17 @@
 
   // État du rendu en continu de la génération (hors ``state`` : ce n'est pas
   // une donnée du brouillon, seulement l'accumulation des morceaux du flux
-  // pour l'affichage). ``genText`` est le texte brut accumulé, ``genSeq`` le
-  // numéro du dernier morceau appliqué (détection des trous), et la minuterie
-  // cadence le rendu pour rester lisse même quand les évènements arrivent en
-  // rafale (voir onGenerationChunk/applyGenText).
+  // pour l'affichage). ``genText`` est le texte brut reçu (cible), ``genShown``
+  // le texte actuellement affiché, qui LE SUIT avec un léger retard : une
+  // boucle requestAnimationFrame le dévoile par petits incréments, ce qui
+  // reproduit visuellement un flux « token par token » quelle que soit la
+  // taille des morceaux émis par le modèle (voir genRevealFrame/applyGenShown).
+  // ``genSeq`` numérote les morceaux (détection des trous).
   let genText = '';
   let genSeq = 0;
-  let genDirty = false;
-  let genRenderTimer = null;
+  let genShown = '';
+  let genRaf = null;
+  let lastGenRender = 0;
 
   const state = {
     templates: [],
@@ -2202,10 +2205,11 @@
     // présente est effacée pour laisser place à la nouvelle, qui arrivera en
     // streaming (et l'ancienne est restituée si la génération échoue). Un
     // clic de régénération repart aussi d'un flux de rendu vierge.
-    if (genRenderTimer) { clearTimeout(genRenderTimer); genRenderTimer = null; }
+    if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
     genText = '';
     genSeq = 0;
-    genDirty = false;
+    genShown = '';
+    lastGenRender = 0;
     setGenerating(true);
     $('markdownEditor').value = '';
     showPreview();
@@ -2287,9 +2291,9 @@
         pendingGenerate = null;
         state.generationToken = null;
         // La génération est finie (succès, échec ou annulation) : plus aucun
-        // rendu en continu à appliquer ni minuteur en attente.
-        if (genRenderTimer) { clearTimeout(genRenderTimer); genRenderTimer = null; }
-        genDirty = false;
+        // rendu en continu à appliquer ni animation en attente.
+        if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
+        genShown = '';
         setGenerating(false);
       }
     }
@@ -5574,24 +5578,51 @@
       genSeq = payload.seq || genSeq;
     }
 
-    genDirty = true;
-    if (!genRenderTimer) {
-      genRenderTimer = setTimeout(applyGenText, 120);
-    }
+    startGenReveal();
+  }
+
+  /** Démarre (ou relance) la boucle d'animation qui dévoile le texte. */
+  function startGenReveal() {
+    if (genRaf) return;
+    genRaf = requestAnimationFrame(genRevealFrame);
   }
 
   /**
-   * Applique le dernier texte accumulé à cadence fixe (~120 ms). Les
-   * évènements peuvent arriver en rafale (les deltas se succèdent vite) ; ce
-   * minuteur coalesce le rendu du markdown et le défilement pour rester
-   * lisse, tout en suivant toujours la fin du texte en cours de génération.
+   * Avance ``genShown`` vers ``genText`` à chaque frame, par petits pas
+   * proportionnels au retard restant : le texte s'écoule en continu — effet
+   * « token par token » — quelle que soit la taille des morceaux du modèle.
+   * Le rendu markdown, lui, reste borné à ~50 ms pour ne pas peser sur le
+   * CPU (la frame finale se rend toujours, sans attendre).
    */
-  function applyGenText() {
-    genRenderTimer = null;
-    if (!genDirty) return;
-    genDirty = false;
-    $('markdownEditor').value = genText;
+  function genRevealFrame(now) {
+    genRaf = null;
+    if (genShown.length < genText.length) {
+      // Rattrapage proportionnel : gros retard → grandes enjambées ; en fin
+      // de course, pas minuscules (finition lissée).
+      const remaining = genText.length - genShown.length;
+      const step = Math.max(2, Math.round(remaining * 0.15));
+      genShown = genText.slice(0, genShown.length + Math.min(step, remaining));
+    } else {
+      // À jour — ou snapshot qui a rembobiné (trou réparé) : on recale.
+      genShown = genText;
+    }
+
+    if (genShown.length >= genText.length || now - lastGenRender >= 50) {
+      lastGenRender = now;
+      applyGenShown();
+    }
+
+    if (genShown.length < genText.length) {
+      genRaf = requestAnimationFrame(genRevealFrame);
+    }
+  }
+
+  /** Applique le texte dévoilé : éditeur, rendu markdown et défilement. */
+  function applyGenShown() {
+    $('markdownEditor').value = genShown;
     renderMarkdown();
+    // On suit toujours la fin du texte en cours de génération, quelle que
+    // soit la vue active (Aperçu ou Éditer).
     if (state.editingMarkdown) {
       $('markdownEditor').scrollTop = $('markdownEditor').scrollHeight;
     } else {

@@ -799,12 +799,15 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     usage_metadata = None
     try:
         for chunk in stream:
-            # ``chunk.text`` est None quand le morceau ne porte que des parties
-            # non textuelles (ou rien) : on l'ignore silencieusement.
-            part = getattr(chunk, "text", None) or ""
-            if part:
-                full.append(part)
-                yield part
+            # On diffuse chaque PARTIE séparément (et non ``chunk.text``,
+            # qui les concatène) : plus fin quand le SDK groupe plusieurs
+            # fragments dans un même morceau — de quoi rapprocher l'affichage
+            # d'un flux continu.
+            for piece in (getattr(chunk, "parts", None) or []):
+                part = getattr(piece, "text", None) or ""
+                if part:
+                    full.append(part)
+                    yield part
             if getattr(chunk, "candidates", None):
                 candidates = chunk.candidates
             if getattr(chunk, "usage_metadata", None) is not None:

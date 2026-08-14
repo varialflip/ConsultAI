@@ -3,6 +3,16 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.42
+
+- Génération en continu **lissée « token par token »** : le texte se dévoile
+  par petits incréments continus au rythme du modèle, quelle que soit la taille
+  des morceaux émis par le fournisseur — l'affichage coule au lieu de sauter.
+- Le flux Gemini diffuse chaque partie séparément (granularité plus fine), et
+  le proxy relâche les évènements immédiatement (flush SSE sans tampon).
+- Fiabilité inchangée : la note finale reste celle renvoyée par le serveur ;
+  l'affichage reste auto-réparé par les points de référence complets.
+
 ## 2026-08-14 — v2.0.0-beta.41
 
 - Génération en continu plus fluide : les fragments du modèle sont diffusés au

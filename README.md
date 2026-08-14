@@ -5,9 +5,11 @@ médecin dicte, l'application transcrit, un modèle de langage met en forme selo
 un gabarit, le médecin relit et exporte.
 
 * Interface **française ou anglaise**, au choix de chaque usager.
-* **Cinq** services de reconnaissance vocale et **quatre** fournisseurs de
+* **Huit** services de reconnaissance vocale et **sept** fournisseurs de
   modèle de langage, commutables depuis le panneau d'administration sans
-  reconstruire l'image.
+  reconstruire l'image. Plusieurs modèles (Gemini, Qwen Omni, point de
+  terminaison personnalisé) peuvent aussi recevoir **l'audio directement**,
+  sans transcription séparée.
 * Authentification **OpenID Connect**, assurée par l'application elle-même.
 * Aucune spécialité imposée : ce qui est propre à une pratique vit dans les
   gabarits et dans la consigne générale.
@@ -51,8 +53,8 @@ un point signalé comme tel.
 | Docker + Compose v2 | Fournis par DSM sur Synology ; sinon [docs.docker.com](https://docs.docker.com/engine/install/) |
 | Un fournisseur OIDC | Pocket ID, Authentik, Keycloak, Entra ID… |
 | Un proxy inverse en HTTPS | Obligatoire : le micro et l'installation PWA l'exigent |
-| Une clé de modèle de langage | Gemini, Anthropic, OpenAI, Cohere ou Mistral — au moins une (peut attendre le premier démarrage, voir §2) |
-| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox, Cohere ou Mistral — au moins une (idem) |
+| Une clé de modèle de langage | Gemini, Anthropic, OpenAI, Cohere, Mistral ou Qwen Omni — au moins une (peut attendre le premier démarrage, voir §2) |
+| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox, Cohere, Mistral ou OpenAI (Whisper) — au moins une (idem) |
 | ~1 Go de RAM | Limite fixée dans `docker-compose.yml` |
 
 L'image contient `ffmpeg` : rien à installer sur l'hôte.
@@ -197,14 +199,22 @@ MISTRAL_API_KEY=
 GEMINI_API_KEY=                # ou GOOGLE_CLOUD_PROJECT pour Vertex AI
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
+QWEN_OMNI_API_KEY=
+QWEN_OMNI_BASE_URL=            # documentation DashScope
 # Cohere et Mistral : pas de variable propre, COHERE_API_KEY / MISTRAL_API_KEY
 # ci-dessus servent aux deux usages
 ```
 
-> **Cohere et Mistral n'ont qu'une clé pour deux usages chacun** :
-> `COHERE_API_KEY` / `MISTRAL_API_KEY` alimentent le service vocal *et* le
-> modèle de langage. Le champ n'apparaît donc qu'une fois dans le panneau,
-> sous Reconnaissance vocale, et le panneau du modèle y renvoie.
+> **Cohere, Mistral et OpenAI n'ont qu'une clé pour deux usages** :
+> `COHERE_API_KEY`, `MISTRAL_API_KEY` et `OPENAI_API_KEY` alimentent chacun le
+> service vocal *et* le modèle de langage (OpenAI Whisper d'un côté, les
+> modèles gpt-4o de l'autre). Le champ n'apparaît donc qu'une fois dans le
+> panneau, sous Reconnaissance vocale, et le panneau du modèle y renvoie.
+>
+> Un **point de terminaison personnalisé** (ex. Whisper auto-hébergé,
+> compatible API OpenAI) se configure uniquement depuis le panneau, sans
+> variable de clé propre : `custom_stt_base_url`, `custom_stt_model` et une clé
+> éventuelle. L'audio y reste sur votre machine (§ 7.2, § 11.2).
 
 ---
 
@@ -338,23 +348,26 @@ Modèle : gemini / gemini-2.5-flash | Reconnaissance vocale : soniox (fr-CA) | L
 
 ### 7.1 Panneau d'administration
 
-**Réglages**, visible des seuls administrateurs. Cinq onglets :
+**Réglages**, visible des seuls administrateurs. Sept onglets :
 
 | Onglet | Contenu |
 |---|---|
-| Système | Inscription automatique |
+| Système | Inscription automatique, rétention des consultations |
 | Reconnaissance vocale | Service, clés, modèles, retrait des longues pauses |
 | Modèle de langage | Fournisseur, modèle, modèle rapide, température, clés |
 | Consignes | Consigne générale, en français et en anglais |
 | Comptes et groupes | Revendications d'identité, comptes, groupes, permissions |
+| Sauvegarde | Sauvegardes manuelles, rotation, restauration (§ 9) |
+| Statistiques | Usage et coûts par fournisseur |
 
 Ces valeurs sont stockées en base et **surchargent le `.env`** : effet immédiat,
 sans reconstruction. Vider un champ le remet à la valeur du `.env`. Chaque champ
 indique sa provenance (`panneau` ou `.env`).
 
-Les champs d'un fournisseur non sélectionné sont masqués. Pour **saisir** une clé
-avant de basculer, cochez *Afficher les champs des fournisseurs non
-sélectionnés*.
+Dans Reconnaissance vocale et Modèle de langage, un **sous-menu** ouvre les
+réglages de chaque service, actif ou non : on peut y coller une clé ou un
+modèle sans mettre le service en production — il n'y a plus de case à cocher
+pour dévoiler les fournisseurs non sélectionnés.
 
 Dans l'onglet Comptes, l'appartenance se règle en cliquant les pastilles de
 groupe, et chaque changement s'applique immédiatement — il n'y a rien à
@@ -373,6 +386,12 @@ enregistrer.
 | **Deepgram** | mots-clés, **nova-2 seulement** | `nova-3` ignore les mots-clés hors anglais |
 | **Cohere** | **aucune** | ⚠️ voir ci-dessous |
 | **Mistral Voxtral** | **aucune connue** | Clé partagée avec le modèle de langage Mistral |
+| **OpenAI (Whisper)** | **aucune** | Clé partagée avec le modèle de langage OpenAI |
+| **Personnalisé** | **aucune** | Endpoint compatible API OpenAI (ex. Whisper auto-hébergé) ; l'audio reste sur votre machine |
+
+> Un point de terminaison personnalisé est tout indiqué pour un **Whisper
+> local** (ce déploiement s'appuie sur `speaches`/faster-whisper, interne au
+> réseau Docker) : aucun envoi de l'audio hors de la machine (§ 11.2).
 
 > ⚠️ **Cohere est déconseillé pour la dictée clinique.** Plafonné à 5
 > requêtes/minute sur une clé d'essai — la dictée envoie une tranche toutes les
@@ -399,30 +418,31 @@ pauses pour placer la ponctuation.
 
 ### 7.4 Gabarits
 
-Quatre sont livrés :
+Quatre sont livrés, tous verrouillés :
 
 | Gabarit | Langue | |
 |---|---|---|
 | Consultation Médicale Générale | fr | 🔒 protégé |
 | General Medical Consultation | en | 🔒 protégé |
-| Consultation - Gériatrie | fr | modifiable |
-| Suivi | fr | modifiable |
+| Consultation - Gériatrie | fr | 🔒 protégé |
+| Suivi - Gériatrie | fr | 🔒 protégé |
 
-Les deux **protégés** ne sont ni modifiables ni supprimables — le refus est
-appliqué côté serveur. **Dupliquez-les** pour obtenir une copie indépendante et
-entièrement modifiable ; c'est le chemin prévu, et un bouton du formulaire le
-propose.
-
-Les deux autres sont amorcés une seule fois et se comportent comme vos propres
-gabarits : modifiables, supprimables, jamais recréés.
+Les quatre sont ni modifiables ni supprimables — le refus est appliqué côté
+serveur. **Dupliquez-les** pour obtenir une copie indépendante et entièrement
+modifiable ; c'est le chemin prévu, et un bouton du formulaire le propose.
+Étant verrouillés, ils sont rafraîchis à chaque démarrage : une amélioration
+livrée avec l'application profite aux installations existantes.
 
 Chaque gabarit comporte : **Instructions cliniques** (ce sur quoi le modèle se
 concentre), **Mise en page** (le squelette Markdown, qui fixe la structure
 exacte), **Vocabulaire additionnel** et **Langue**.
 
-Champs de substitution disponibles dans la mise en page : `{{PATIENT}}`,
-`{{DOSSIER}}`, `{{DATE}}`, `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. Une ligne dont
-le champ reste inconnu est retirée du document.
+Champs de substitution disponibles dans la mise en page : `{{DATE}}`,
+`{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. (`{{PATIENT}}` et `{{DOSSIER}}` sont
+conservés pour la compatibilité des gabarits existants, mais ne sont **plus
+alimentés** : la ligne qui les porte est retirée de la note — l'identité du
+patient n'est pas collectée, voir § 11.) Une ligne dont le champ reste inconnu
+est retirée du document.
 
 ### 7.5 La langue du gabarit pilote la chaîne
 
@@ -471,9 +491,10 @@ par défaut (§ 11).
 Ouvrez `BASE_URL` puis **Partager → Sur l'écran d'accueil** (iOS, Safari
 exclusivement) ou **Installer** (Android/Chrome). Exige HTTPS.
 
-Après toute modification d'un fichier de `app/static/`, **incrémentez `VERSION`
-dans `app/static/sw.js`** : sans cela, les appareils ayant installé
-l'application continuent de servir l'ancienne version depuis leur cache.
+La version du service worker **suit celle de l'application**, substituée
+automatiquement au service (`/sw.js`) : la purge du cache des appareils
+installés est déclenchée par chaque nouvelle version publiée, sans étape
+manuelle.
 
 Le service worker ne met en cache que des ressources statiques et anonymes. Ni la
 page `/`, ni les appels `/api/` — ils contiennent des renseignements de santé.
@@ -501,7 +522,17 @@ l'indiquent ligne par ligne.
 
 ## 9. Sauvegarde
 
-Tout tient dans `./data` : base SQLite, audio conservé, dictées en cours.
+Deux niveaux se complètent :
+
+**1. Sauvegarde intégrée, depuis le panneau (onglet Sauvegarde).** Exports
+à la demande, rotation automatique (`backup_retention_count`, défaut 7) et
+restauration. Les archives sont **sanitisées** : ni audio, ni données cliniques
+(config, comptes, gabarits et statistiques seulement). Conséquence assumée :
+une restauration ne ramène pas les données patient — l'audio existant est
+laissé intact (voir § 11.2).
+
+**2. Sauvegarde à chaud de la base, côté serveur.** Tout tient dans `./data` :
+base SQLite, audio conservé, dictées en cours.
 
 ```bash
 # Sauvegarde à chaud, sûre pendant l'utilisation (mode WAL)
@@ -546,11 +577,11 @@ Incluez `/volume1/docker/ConsultAI/data` dans Hyper Backup.
 | Le bouton micro ne fait rien | `getUserMedia` exige HTTPS. Passez par l'adresse publique. |
 | Micro refusé dans l'app installée sur iPhone | Bogue de certaines versions d'iOS en mode écran d'accueil. Dictez depuis Safari. |
 | « Installer » n'apparaît pas | Exige HTTPS et, sur iOS, Safari. Vérifiez que `/static/manifest.webmanifest` et `/sw.js` répondent 200 sans authentification. |
-| L'interface ne se met pas à jour sur mobile | Service worker en cache : incrémentez `VERSION` dans `app/static/sw.js`. |
+| L'interface ne se met pas à jour sur mobile | Service worker en cache : la version suit celle de l'application (§ 7.6), elle se purge au redéploiement. |
 | L'enregistrement s'arrête écran éteint | Verrou d'écran non supporté. Gardez l'application au premier plan. |
 | Erreur 413 sur un long enregistrement | Augmentez la taille de corps autorisée au proxy. |
 | « Enregistrement trop long pour un envoi direct » | Au-delà de ~55 min. Configurez `STT_GCS_BUCKET` ou dictez en plusieurs parties. |
-| La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS` ; l'interface le signale. Malgré son nom, ce plafond vaut pour les cinq fournisseurs, et chacun a sa propre limite — l'application ramène la valeur sous celle du fournisseur retenu. |
+| La note est coupée à la fin | Augmentez `GEMINI_MAX_OUTPUT_TOKENS` ; l'interface le signale. Malgré son nom, ce plafond vaut pour les sept fournisseurs, et chacun a sa propre limite — l'application ramène la valeur sous celle du fournisseur retenu. |
 | Acronymes mal transcrits | Ajoutez-les au **Vocabulaire additionnel** du gabarit. |
 | Dictée transcrite dans la mauvaise langue | Choisissez le gabarit de la bonne langue : l'application propose de retranscrire l'enregistrement (§ 7.5). Sans enregistrement conservé, elle refuse — il n'y a plus de source. |
 | Tranches retardées avec Cohere | Limite de 5 req/min atteinte. Changez de service (§ 7.2). |
@@ -630,6 +661,13 @@ L'audio brut est la plus identifiante des deux : la voix elle-même, les personn
 présentes dans la pièce, les propos incidents qui n'atteignent jamais la
 transcription.
 
+Un trajet supplémentaire évite la transcription séparée : les modèles
+**multimodaux** (Gemini, Qwen Omni, point de terminaison personnalisé) peuvent
+recevoir **l'audio directement** (option propre à chaque fournisseur dans le
+panneau). Dans ce cas le service vocal n'est pas appelé (`stt_provider` inactif)
+et toute la résidence se décide du côté du fournisseur de modèle — ce qui peut
+ramener le trajet audio au même endroit que le texte.
+
 Vérification en une commande — ce qui est **réellement** en service, et non ce que
 dit le `.env` (le panneau le surcharge) :
 
@@ -642,14 +680,16 @@ print('vertex:', settings.gemini_use_vertex, '| llm:', llm.active_provider(), '|
 > `GOOGLE_CLOUD_PROJECT` renseignée. Une clé oubliée fait retomber silencieusement
 > sur l'API grand public, hors région — sans aucun message.
 
-**Décision de ce déploiement (2026-07-31)** : modèle de langage sur Vertex AI à
-Montréal ; reconnaissance vocale maintenue chez **AssemblyAI (États-Unis)**, en
-connaissance de cause. Le module `medical-v1` est le seul de la liste à couvrir la
-terminologie clinique **en français**, et l'écart de justesse sur les noms de
-molécules et les acronymes du réseau québécois a été jugé plus déterminant pour la
-sécurité du patient que la résidence de l'audio. À réévaluer si AssemblyAI ouvre
-une région canadienne, ou si un service hébergé au Canada atteint une justesse
-comparable en français clinique.
+**Décision de ce déploiement (2026-08-14)** : modèle de langage sur Vertex AI à
+Montréal, et **audio envoyé directement à Gemini** (Vertex AI, `northamerica-northeast1`)
+— le seul choix qui garde **les deux trajets** au Québec, couvert par l'addendum
+de politique cloud de Google consenti pour les renseignements de santé. Le
+service de transcription par défaut est un **Whisper local** (`speaches`,
+faster-whisper, interne au réseau Docker) : l'audio n'y quitte jamais la
+machine. Aucun envoi vers un service STT hébergé hors de la VM. À réévaluer à
+chaque bascule de fournisseur (la précédente décision, du 2026-07-31, misait sur
+AssemblyAI aux États-Unis et a été abandonnée au profit du trajet local +
+Vertex).
 
 ### Fonctionnement sans CDN (facultatif)
 
@@ -664,7 +704,8 @@ curl -Lo tailwind.js "https://cdn.tailwindcss.com?plugins=forms,typography"
 ```
 
 Remplacez les trois `<script src="https://…">` d'`app/templates/index.html` par
-`/static/vendor/…`, incrémentez `VERSION` dans `sw.js`, reconstruisez.
+`/static/vendor/…`, reconstruisez. Le service worker purge alors son cache à la
+prochaine version (la sienne suit celle de l'application, § 7.6).
 
 ---
 
@@ -697,19 +738,26 @@ soi-même l'image) est sur
 app/
 ├── main.py               API FastAPI et routes
 ├── auth.py               session, identité, permissions
-├── oidc.py               flux OpenID Connect
+├── oidc.py               flux OpenID Connect (mono ou double fournisseur)
 ├── users.py              comptes, groupes, règles d'entrée
 ├── preferences.py        préférences par usager (langue)
 ├── config.py             lecture et validation du .env
 ├── runtime_config.py     réglages du panneau (base de données)
 ├── database.py           schéma SQLite et migrations
-├── default_templates.py  les quatre gabarits livrés
+├── default_templates.py  les quatre gabarits livrés (verrouillés)
 ├── default_prompts.py    consignes générales fr / en
 ├── dictation.py          dictée par tranches
-├── stt.py                transcodage, découpage, cinq services vocaux
-├── llm.py                consignes et appel du modèle
+├── live.py               synchronisation en direct (SSE) entre appareils
+├── stt.py                transcodage, découpage, services vocaux
+├── llm.py                consignes et appel du modèle (audio direct possible)
 ├── recordings.py         audio attaché aux brouillons
+├── backup.py             sauvegardes sanitisées et rotation
+├── pricing.py            tarifs des fournisseurs
+├── usage.py              statistiques et coûts
+├── scheduler.py          tâches quotidiennes (purge, sauvegarde, statistiques)
+├── changelog.py          nouveautés des 7 derniers jours (page de connexion)
 ├── i18n.py               textes de l'interface (fr / en)
 ├── templates/index.html  interface et feuille de style d'impression
+├── templates/login.html  page de connexion (version + nouveautés)
 └── static/app.js         logique du navigateur
 ```

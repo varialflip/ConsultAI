@@ -1,7 +1,7 @@
 # Évaluation des facteurs relatifs à la vie privée (ÉFVP)
 
 **Système** : ConsultAI (DictAI.ca) — dictée et rédaction de notes de consultations cliniques
-**Version du document** : 1.1
+**Version du document** : 1.2
 **Date** : 2026-08-14
 **Base légale** : *Loi sur la protection des renseignements personnels dans le secteur privé* (RLRQ, c. P-39.1), notamment ses articles 3.1 à 3.5 (Loi 25).
 
@@ -33,11 +33,11 @@ Déploiement en production (2026-08-14) :
 | Élément | Valeur |
 |---|---|
 | Infrastructure | VM Oracle Cloud (OCI), hébergement auto-géré — **stockage chiffré au repos (OCI, clés contrôlées par le client)** |
-| Emplacement | /opt/dictai — pile Docker Compose (Caddy, consultai, pocket-id, pocket-id-loki, crowdsec, turnstile-gate) |
+| Emplacement | /opt/dictai — pile Docker Compose (Caddy, consultai, speaches, pocket-id, pocket-id-loki, crowdsec, turnstile-gate) |
 | Accès public | `app.dictai.ca` / `app.loki.casa` (HTTPS TLS) |
 | Fournisseur d'identité | Pocket ID, auto-hébergé : `login.dictai.ca` et `login.loki.casa` (2 instances) |
 | Modèle de langage | Gemini via Vertex AI — région `northamerica-northeast1` (Montréal, Québec) |
-| Reconnaissance vocale | Traitement direct de l'audio par le modèle (Vertex AI, Montréal) — aucun envoi à un service STT externe |
+| Reconnaissance vocale | Audio envoyé **directement** au modèle (Gemini, Vertex AI, Montréal) — aucun envoi à un service STT externe. En secours, un **Whisper local** (`speaches`, faster-whisper, interne au réseau Docker) : l'audio n'y quitte pas la machine |
 | Base de données | SQLite (`/data/consultai.db`), WAL |
 
 ### 2.2 Environnement technique
@@ -45,6 +45,9 @@ Déploiement en production (2026-08-14) :
 - Image conteneurisée `ghcr.io/varialflip/consultai`, UID/GID 1000, un seul worker uvicorn.
 - Volume de données persistantes `/opt/dictai/data/consultai` : base SQLite, audio,
   dictées en cours, sauvegardes.
+- **Whisper local** (`speaches`, faster-whisper, CPU, modèle int8 résident) :
+  point de terminaison STT personnalisé de ConsultAI, **interne au réseau Docker**
+  (aucun port publié). L'audio n'y quitte jamais la machine.
 - Reverse proxy Caddy avec TLS (Let's Encrypt), réponses **403** aux chemins de
   scan connus (`.env`, `.git`, `.aws`, `wp-*`, …).
 - CrowdSec (détection/bannissement d'IP), règles géographiques **fail-closed** :
@@ -136,6 +139,12 @@ Déploiement en production (2026-08-14) :
    (transcription + mise en forme, API Google Cloud)
 ```
 
+> ℹ️ **Le trajet STT séparé est inactif par défaut** : l'audio est envoyé
+> directement à Gemini (Vertex AI, Montréal). Si la transcription séparée est
+> réactivée (`stt_provider`), elle passe par le **Whisper local** (`speaches`,
+> interne au réseau Docker) : l'audio reste alors entièrement sur la machine,
+> aucun service STT hébergé n'est sollicité.
+
 > ℹ️ Les sauvegardes ZIP ne contiennent plus d'audio ni de données cliniques
 > (config, comptes, gabarits, statistiques) : une restauration ne ramène pas
 > les données patient — les fichiers audio existants sont laissés intacts.
@@ -145,6 +154,7 @@ Autres flux :
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
 | Audio + note → Vertex AI | Audio brut, transcription, note, gabarit | `northamerica-northeast1` (Montréal) | **Québec** |
+| STT séparé (secours) | Audio brut | Whisper local `speaches` (réseau Docker interne) | **Locale — jamais exporté** |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
 | Turnstile (captcha) | Données du navigateur, adresse IP | Cloudflare | Hors Canada (données non cliniques) |
@@ -260,6 +270,9 @@ Autres flux :
 ### 7.4 Traitement et résidence des données
 
 - LLM + audio sur **Vertex AI, région `northamerica-northeast1` (Montréal)**.
+- Le STT séparé, lorsqu'il est actif, passe par le **Whisper local** (`speaches`,
+  interne au réseau Docker) : l'audio n'est envoyé **ni** à un service STT
+  externe **ni** hors de la machine.
 - **Addendum de politique cloud de Google consenti le 2026-08-14** — le traitement
   des renseignements de santé par Google Cloud est couvert par l'entente.
 - `GOOGLE_CLOUD_LOCATION` explicite ; vérification que `GEMINI_API_KEY` est **vide**

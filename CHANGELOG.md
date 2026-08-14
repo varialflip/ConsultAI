@@ -8,6 +8,12 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 - Politique de confidentialité reformulée en constats factuels : les questions
   restent en titres, les corps énoncent des faits.
 
+## 2026-08-14 — v2.0.0-beta.37
+
+- Calque dictaphone : bouton « Arrêter sans envoyer » (delete) retiré, sur iOS
+  et Android. Seul le bouton « Terminer et transcrire » reste pendant la
+  dictée ; l'arrêt sans envoi reste disponible sur la barre d'outils.
+
 ## 2026-08-14 — v2.0.0-beta.36
 
 - Calque dictaphone : boutons stop/terminer rendus en ligne (`flex` rétabli sur

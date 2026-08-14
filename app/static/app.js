@@ -5576,7 +5576,6 @@
       else togglePause();
     });
     $('btnDictaphoneFinish').addEventListener('click', finishRecording);
-    $('btnDictaphoneAbort').addEventListener('click', abortRecording);
     // iOS : pas de détection automatique (aucune permission demandée). Un
     // bouton « Mode retourné » affiche le calque RENVERSÉ de 180° — à se
     // lire à l'endroit une fois le téléphone retourné — et un ✕ permet d'en

@@ -3,6 +3,19 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.27
+
+- Mode dictaphone (téléphone retourné) réparé sur iPhone : détection par
+  vecteur de gravité, indépendante des conventions de signe des capteurs
+  (`beta`/`gamma` s'inversent selon les versions d'iOS/WKWebKit) ; permission
+  explicite pour les capteurs de mouvement et d'orientation avec message
+  d'aide si refusée ; rotation du calque adaptée à l'orientation d'affichage
+  (y compris la bascule en paysage que produit parfois iOS).
+- Manifest PWA : orientation verrouillée portrait pour l'application installée
+  (s'applique aux installations existantes, sans réinstallation).
+- Diagnostic `?debug=sensors` : état de la permission, compteur et fraîcheur
+  des événements capteurs, composantes de gravité, état du mode dictaphone.
+
 ## 2026-08-14 — v2.0.0-beta.26
 
 - Pied de page sur toutes les pages avec politique de confidentialité (FAQ

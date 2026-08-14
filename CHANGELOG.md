@@ -3,6 +3,16 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.31
+
+- iOS : détection automatique du retournement retirée (l'accès aux capteurs y
+  est souvent refusé et sa fiabilité variable). Le mode retourné ne s'y
+  active plus que par le bouton « Mode retourné ».
+- Bouton « Mode retourné » : le calque s'ouvre désormais tourné de 180° (tête
+  en bas) pour se lire à l'endroit une fois le téléphone retourné ; rotation
+  re-réglée si iOS bascule l'interface en paysage. Aide « Bouton ✕ pour
+  quitter ».
+
 ## 2026-08-14 — v2.0.0-beta.30
 
 - Mode retourné en accès direct : bouton « Mode retourné » dans la barre

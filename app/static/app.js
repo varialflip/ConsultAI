@@ -1212,28 +1212,28 @@
    * Le micro du téléphone est en bas : retourné, il fait face à qui parle.
    * L'écran devient alors un unique gros bouton Enregistrer / Pause.
    *
-   * Deux chemins de détection, car les plateformes ne se comportent pas
-   * pareil :
+   * Sur les plateformes qui y autorisent les capteurs (Android, etc.), deux
+   * chemins de détection automatique :
    *
    * * rotation d'affichage à 180° — Android laisse (parfois) l'écran pivoter
    *   tête en bas ; l'affichage est alors DÉJÀ à l'endroit ;
-   * * vecteur de gravité (devicemotion) — iOS ne pivote jamais l'écran à
-   *   180°, mais les capteurs voient le téléphone physiquement retourné : la
-   *   gravité pointe alors vers le haut de l'appareil. Ce test ne dépend
-   *   d'aucune convention de signe (contrairement à beta/gamma, qui
-   *   s'inverse selon les versions d'iOS/WKWebKit) : retourné ⇔ gravité vers
-   *   le haut de l'appareil et appareil quasi vertical.
+   * * vecteur de gravité (devicemotion) — la gravité pointe vers le haut de
+   *   l'appareil quand il est physiquement retourné ; test sans convention
+   *   de signe (contrairement à beta/gamma).
    *
-   * iOS 13+ exige une permission pour ces événements, demandée sur un geste
-   * (voir maybeRequestOrientationPermission). Le calque est tourné en CSS
-   * pour rester lisible quelle que soit la rotation d'affichage :
-   * (180° − angle d'affichage) — 0° si l'OS a déjà pivoté à 180°, 180° quand
-   * iOS garde l'écran à l'endroit, 90° si iOS a basculé l'interface en
-   * paysage.
+   * iOS est EXCLU de la détection automatique : l'accès aux capteurs y exige
+   * la permission « Mouvement et orientation », souvent refusée (popup
+   * supprimée par « Empêcher le suivi intersites ») et d'une fiabilité
+   * variable. Sur iOS, le mode n'est activé que par le bouton « Mode
+   * retourné » de la barre d'enregistrement.
    *
-   * Anti-rebond : un état ne s'applique qu'après 400 ms stables, pour ne
-   * pas faire clignoter le calque pendant le mouvement de bascule.
+   * Le calque est tourné en CSS pour rester lisible quelle que soit la
+   * rotation d'affichage : (180° − angle d'affichage) — 0° si l'OS a déjà
+   * pivoté à 180°, 180° sinon (usage portrait tête en bas).
    * ---------------------------------------------------------------------- */
+  /** iOS : détection automatique désactivée, bouton manuel seul. */
+  const isIOSDevice = /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (/Macintosh/.test(navigator.userAgent) && 'ontouchstart' in window);
   const dphone = { active: false, rotation: 0, candidate: null, since: 0, userDisabled: false };
 
   const ICON_MIC_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
@@ -1297,6 +1297,8 @@
   }
 
   function applyDictaphoneCandidate() {
+    // iOS : détection automatique désactivée, le mode ne répond qu'au bouton.
+    if (isIOSDevice) return;
     const flipped = screenIsUpsideDown() || gravitySaysUpsideDown()
                  || orientationEventSaysUpsideDown();
     // Revenu à l'endroit : une éventuelle sortie manuelle cesse de bloquer
@@ -1305,7 +1307,7 @@
     const c = flipped && !dphone.userDisabled
       // Rotation CSS pour que le calque reste lisible : 180° par rapport à
       // l'angle d'affichage courant (180−0 → 180 en portrait, 180−180 → 0
-      // quand l'OS a pivoté, 180−90 → 90 si iOS a basculé en paysage).
+      // quand l'OS a pivoté, 180−90 → 90 si l'OS a basculé en paysage).
       ? { active: true, rotation: (180 - uiAngle() + 360) % 360 }
       : { active: false, rotation: 0 };
     const now = Date.now();
@@ -1321,17 +1323,19 @@
 
   let motionEvents = 0;      // nb de devicemotion reçus (0 = capteur muet)
   let motionLastAt = 0;      // ms de la dernière émission
-  window.addEventListener('devicemotion', (ev) => {
-    const a = ev.accelerationIncludingGravity;
-    if (a && (a.x || a.y || a.z)) lastGravity = { x: a.x, y: a.y, z: a.z };
-    motionEvents += 1;
-    motionLastAt = Date.now();
-    applyDictaphoneCandidate();
-  });
-  window.addEventListener('deviceorientation', (ev) => {
-    lastOrientationEv = ev;
-    applyDictaphoneCandidate();
-  });
+  if (!isIOSDevice) {
+    window.addEventListener('devicemotion', (ev) => {
+      const a = ev.accelerationIncludingGravity;
+      if (a && (a.x || a.y || a.z)) lastGravity = { x: a.x, y: a.y, z: a.z };
+      motionEvents += 1;
+      motionLastAt = Date.now();
+      applyDictaphoneCandidate();
+    });
+    window.addEventListener('deviceorientation', (ev) => {
+      lastOrientationEv = ev;
+      applyDictaphoneCandidate();
+    });
+  }
   if (screen.orientation && screen.orientation.addEventListener) {
     screen.orientation.addEventListener('change', applyDictaphoneCandidate);
   } else {
@@ -1339,19 +1343,31 @@
     window.addEventListener('orientationchange',
       () => setTimeout(applyDictaphoneCandidate, 100));
   }
+  // iOS : pas d'auto-détection, mais si le mode manuel est actif et que l'OS
+  // bascule l'interface (paysage), on re-règle la rotation pour que le calque
+  // reste lisible.
+  if (isIOSDevice) {
+    const retuneManualRotation = () => {
+      if (dphone.active) setDictaphone(true, (180 - uiAngle() + 360) % 360);
+    };
+    if (screen.orientation && screen.orientation.addEventListener) {
+      screen.orientation.addEventListener('change', retuneManualRotation);
+    } else {
+      window.addEventListener('orientationchange',
+        () => setTimeout(retuneManualRotation, 100));
+    }
+  }
 
   /** iOS 13+ n'émet devicemotion/deviceorientation qu'après une permission,
-   * demandée sur un geste. UNE SEULE demande suffit : sur iOS,
-   * DeviceMotionEvent.requestPermission() couvre les deux types d'événements.
-   * En demander deux simultanément peut laisser la seconde promesse en
-   * suspens (état « pending » permanent). Tant que la permission n'est pas
-   * tranchée, on retente à chaque geste : un premier appel resté bloqué se
-   * débloque une fois la réponse mémorisée par le système. Refus ou réglage
-   * iOS désactivé : on le dit une fois, le mode restant muet sans capteurs. */
+   * demandée sur un geste. UNE SEULE demande suffit : DeviceMotionEvent.
+   * requestPermission() couvre les deux types d'événements ; en demander deux
+   * simultanément peut laisser la seconde promesse en suspens. Sur iOS, la
+   * détection automatique est désactivée : pas de demande de permission. */
   let motionPermissionAsked = false;
   let motionPermissionState = 'pending'; // pending | granted | denied | na
   let motionPermissionNotified = false;
   async function maybeRequestOrientationPermission() {
+    if (isIOSDevice) return;
     if (motionPermissionAsked && motionPermissionState !== 'pending') return;
     motionPermissionAsked = true;
     const motionApi = (typeof DeviceMotionEvent !== 'undefined'
@@ -1385,25 +1401,29 @@
   function updateSensorDebug() {
     const el = $('sensorDebug');
     if (!el) return;
-    const g = lastGravity;
-    const ev = lastOrientationEv;
-    const age = motionLastAt ? Math.round((Date.now() - motionLastAt) / 1000) : null;
-    const deniedHint = motionPermissionState === 'denied'
-      ? '→ Safari : désactiver « Empêcher le suivi intersites »'
-      : '';
-    el.textContent = [
-      `perm: ${motionPermissionState}`,
-      `devmotion: ${motionEvents}${age !== null ? ` (${age}s)` : ''}`,
-      `ui: ${uiAngle()}°`,
-      `grav: ${g ? `x=${g.x.toFixed(1)} y=${g.y.toFixed(1)} z=${g.z.toFixed(1)}` : '—'}`,
-      `orient: ${ev && ev.beta !== null
+    const lines = [];
+    if (isIOSDevice) {
+      lines.push('auto: off (iOS, bouton manuel)');
+    } else {
+      const g = lastGravity;
+      const ev = lastOrientationEv;
+      const age = motionLastAt ? Math.round((Date.now() - motionLastAt) / 1000) : null;
+      const deniedHint = motionPermissionState === 'denied'
+        ? '→ Safari : désactiver « Empêcher le suivi intersites »'
+        : '';
+      lines.push(`perm: ${motionPermissionState}`);
+      lines.push(`devmotion: ${motionEvents}${age !== null ? ` (${age}s)` : ''}`);
+      lines.push(`grav: ${g ? `x=${g.x.toFixed(1)} y=${g.y.toFixed(1)} z=${g.z.toFixed(1)}` : '—'}`);
+      lines.push(`orient: ${ev && ev.beta !== null
         ? `a=${(ev.alpha || 0).toFixed(0)} b=${ev.beta.toFixed(0)} g=${(ev.gamma || 0).toFixed(0)}`
-        : '—'}`,
-      `flip: ${screenIsUpsideDown() || gravitySaysUpsideDown()
-        || orientationEventSaysUpsideDown()}`,
-      `dphone: active=${dphone.active} rot=${dphone.rotation}°`,
-      deniedHint,
-    ].filter(Boolean).join('\n');
+        : '—'}`);
+      lines.push(`flip: ${screenIsUpsideDown() || gravitySaysUpsideDown()
+        || orientationEventSaysUpsideDown()}`);
+      lines.push(deniedHint);
+    }
+    lines.push(`ui: ${uiAngle()}°`);
+    lines.push(`dphone: active=${dphone.active} rot=${dphone.rotation}°`);
+    el.textContent = lines.filter(Boolean).join('\n');
   }
   if (sensorDebugActive) {
     const el = $('sensorDebug');
@@ -5686,11 +5706,12 @@
     });
     $('btnDictaphoneFinish').addEventListener('click', finishRecording);
     $('btnDictaphoneAbort').addEventListener('click', abortRecording);
-    // Bascule manuelle : secours quand iOS refuse l'accès aux capteurs
-    // (permission « Mouvement et orientation » refusée ou indisponible).
+    // Bascule manuelle : iOS n'a pas de détection automatique ; le calque
+    // s'ouvre TOURNÉ de 180° (usage portrait tête en bas) pour qu'il se lise
+    // à l'endroit une fois le téléphone retourné.
     $('btnFlipMode').addEventListener('click', () => {
       dphone.userDisabled = false;
-      setDictaphone(!dphone.active, 0);
+      setDictaphone(!dphone.active, (180 - uiAngle() + 360) % 360);
     });
     // Sortie explicite du mode : tant que le téléphone reste retourné, elle
     // suspend l'auto-détection jusqu'au retour à l'endroit.

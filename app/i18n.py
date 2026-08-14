@@ -209,8 +209,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "rec.import_title": ("Importer un fichier audio", "Import an audio file"),
     "rec.level_aria": ("Niveau sonore du micro", "Microphone level"),
     "dictaphone.hint": (
-        "Retournez le téléphone pour quitter ce mode",
-        "Flip the phone back to leave this mode",
+        "Bouton ✕ pour quitter ce mode",
+        "Tap ✕ to leave this mode",
     ),
     "dictaphone.toggle_title": (
         "Mode retourné (grand bouton)",

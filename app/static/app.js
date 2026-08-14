@@ -1316,9 +1316,13 @@
     if (now - dphone.since >= 400) setDictaphone(c.active, c.rotation);
   }
 
+  let motionEvents = 0;      // nb de devicemotion reçus (0 = capteur muet)
+  let motionLastAt = 0;      // ms de la dernière émission
   window.addEventListener('devicemotion', (ev) => {
     const a = ev.accelerationIncludingGravity;
     if (a && (a.x || a.y || a.z)) lastGravity = { x: a.x, y: a.y, z: a.z };
+    motionEvents += 1;
+    motionLastAt = Date.now();
     applyDictaphoneCandidate();
   });
   window.addEventListener('deviceorientation', (ev) => {
@@ -1338,7 +1342,7 @@
    * deux requêtes partent donc dans le même geste. Refus ou réglage iOS
    * désactivé : on le dit une fois, le mode restant muet sans les capteurs. */
   let orientationPermissionAsked = false;
-  let motionPermissionDenied = false;
+  let motionPermissionState = 'pending'; // pending | granted | denied | na
   let motionPermissionNotified = false;
   async function maybeRequestOrientationPermission() {
     if (orientationPermissionAsked) return;
@@ -1352,15 +1356,20 @@
         && typeof DeviceMotionEvent.requestPermission === 'function') {
       requests.push(DeviceMotionEvent.requestPermission());
     }
-    if (!requests.length) return; // navigateur sans permission à demander
+    if (!requests.length) {
+      motionPermissionState = 'na'; // navigateur sans permission à demander
+      updateSensorDebug();
+      return;
+    }
     try {
       const results = await Promise.allSettled(requests);
-      motionPermissionDenied = results.some((r) =>
-        r.status === 'fulfilled' ? r.value !== 'granted' : true);
+      motionPermissionState = results.some((r) =>
+        r.status === 'fulfilled' ? r.value !== 'granted' : true)
+        ? 'denied' : 'granted';
     } catch (err) {
-      motionPermissionDenied = true;
+      motionPermissionState = 'denied';
     }
-    if (motionPermissionDenied && !motionPermissionNotified) {
+    if (motionPermissionState === 'denied' && !motionPermissionNotified) {
       motionPermissionNotified = true;
       toast(T('dictaphone.permission'), 'warning', 12000);
     }
@@ -1375,8 +1384,10 @@
     if (!el) return;
     const g = lastGravity;
     const ev = lastOrientationEv;
+    const age = motionLastAt ? Math.round((Date.now() - motionLastAt) / 1000) : null;
     el.textContent = [
-      `perm: ${motionPermissionDenied ? 'denied' : 'asked-or-n/a'}`,
+      `perm: ${motionPermissionState}`,
+      `devmotion: ${motionEvents}${age !== null ? ` (${age}s)` : ''}`,
       `ui: ${uiAngle()}°`,
       `grav: ${g ? `x=${g.x.toFixed(1)} y=${g.y.toFixed(1)} z=${g.z.toFixed(1)}` : '—'}`,
       `orient: ${ev && ev.beta !== null

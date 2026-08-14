@@ -3,6 +3,12 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.29
+
+- Aide permission des capteurs : le message de refus indique en premier le
+  réglage iOS 18 qui supprime la demande (« Empêcher le suivi intersites »),
+  et le panneau `?debug=sensors` affiche la même consigne en cas de refus.
+
 ## 2026-08-14 — v2.0.0-beta.28
 
 - Permission des capteurs : une seule demande (`DeviceMotionEvent.

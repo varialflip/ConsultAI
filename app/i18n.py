@@ -213,12 +213,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Flip the phone back to leave this mode",
     ),
     "dictaphone.permission": (
-        "Mode téléphone retourné désactivé : autorisez la demande « Mouvement "
-        "et orientation » d'iOS. Si elle a été refusée : Réglages → Apps → "
-        "Safari → Avancé → Données de site web → effacer ce site.",
-        "Upside-down dictation disabled: allow iOS's \"Motion & Orientation\" "
-        "request. If refused: Settings → Apps → Safari → Advanced → Website "
-        "Data → remove this site.",
+        "Mode téléphone retourné désactivé : iOS refuse l'accès aux capteurs. "
+        "Réglages → Apps → Safari → Confidentialité et sécurité → désactiver "
+        "« Empêcher le suivi intersites », puis rechargez la page.",
+        "Upside-down dictation disabled: iOS is denying sensor access. "
+        "Settings → Apps → Safari → Privacy & Security → turn off "
+        "\"Prevent Cross-Site Tracking\", then reload the page.",
     ),
 
     # --- Détails ------------------------------------------------------------

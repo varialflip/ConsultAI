@@ -1385,6 +1385,9 @@
     const g = lastGravity;
     const ev = lastOrientationEv;
     const age = motionLastAt ? Math.round((Date.now() - motionLastAt) / 1000) : null;
+    const deniedHint = motionPermissionState === 'denied'
+      ? '→ Safari : désactiver « Empêcher le suivi intersites »'
+      : '';
     el.textContent = [
       `perm: ${motionPermissionState}`,
       `devmotion: ${motionEvents}${age !== null ? ` (${age}s)` : ''}`,
@@ -1396,7 +1399,8 @@
       `flip: ${screenIsUpsideDown() || gravitySaysUpsideDown()
         || orientationEventSaysUpsideDown()}`,
       `dphone: active=${dphone.active} rot=${dphone.rotation}°`,
-    ].join('\n');
+      deniedHint,
+    ].filter(Boolean).join('\n');
   }
   if (sensorDebugActive) {
     const el = $('sensorDebug');

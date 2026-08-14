@@ -3,6 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.43
+
+- **Reprise automatique sur quota Gemini dépassé** : un refus 429
+  (RESOURCE_EXHAUSTED) de Vertex AI — plafond par minute ou capacité régionale —
+  est transitoire. La génération réessaie maintenant jusqu'à 3 fois, avec un
+  recul de 30 s puis 60 s, en respectant « Retry-After » quand le fournisseur le
+  fournit. Un retard d'une minute ne se transforme plus en erreur à l'écran.
+- La reprise s'applique aussi au flux de génération en continu, mais seulement
+  tant qu'aucun texte n'a encore été diffusé : reprendre après aurait dupliqué
+  la note. Coût et facturation inchangés (les tentatives refusées ne sont pas
+  facturées).
+
 ## 2026-08-14 — v2.0.0-beta.42
 
 - Génération en continu **lissée « token par token »** : le texte se dévoile

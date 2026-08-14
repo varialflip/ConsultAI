@@ -676,7 +676,7 @@ def _translate_error(provider: str, model: str, exc: Exception) -> GenerationErr
             f"Accès refusé par {provider}. Vérifiez la clé API dans le panneau "
             "d'administration."
         )
-    if "resource_exhausted" in lowered or "rate_limit" in lowered or "429" in message:
+    if _est_quota_gemini(exc):
         return GenerationError(
             f"Quota {provider} dépassé. Patientez quelques instants puis réessayez."
         )
@@ -714,6 +714,64 @@ def _gemini_usage(usage_metadata) -> Dict[str, Optional[int]]:
     return usage
 
 
+#: Essais au total pour un appel Gemini refusé par le quota (429
+#: RESOURCE_EXHAUSTED). Ces refus sont transitoires — plafond par minute ou
+#: capacité régionale — et une nouvelle tentative après quelques dizaines de
+#: secondes réussit presque toujours ; renoncer immédiatement transformerait un
+#: retard d'une minute en erreur visible.
+_GEMINI_TENTATIVES = 3
+
+
+def _est_quota_gemini(exc: Exception) -> bool:
+    """Vrai si l'erreur Gemini est un refus de quota transitoire (429)."""
+    if getattr(exc, "code", None) == 429:
+        return True
+    if str(getattr(exc, "status", "") or "").upper() == "RESOURCE_EXHAUSTED":
+        return True
+    lowered = str(exc).lower()
+    return "resource_exhausted" in lowered or "rate_limit" in lowered or "429" in lowered
+
+
+def _gemini_pause_retry(tentative: int, exc: Exception, etape: str) -> None:
+    """
+    Attend avant la prochaine tentative, en respectant « Retry-After » quand le
+    fournisseur le fournit, sinon un recul qui double : la fenêtre de quota est
+    glissante, réessayer trop tôt ne fait que consommer une tentative.
+    """
+    entete = None
+    reponse = getattr(exc, "response", None)
+    if reponse is not None and getattr(reponse, "headers", None):
+        entete = reponse.headers.get("Retry-After")
+    try:
+        pause = float(entete) if entete else 0.0
+    except (TypeError, ValueError):
+        pause = 0.0
+    pause = pause or min(60.0, 30.0 * (2 ** (tentative - 1)))
+    logger.warning(
+        "Gemini a refusé la %s (429, quota dépassé). Nouvelle tentative dans "
+        "%.0f s (%d/%d).",
+        etape, pause, tentative, _GEMINI_TENTATIVES,
+    )
+    time.sleep(pause)
+
+
+def _gemini_appel(client, model, contents, config) -> "object":
+    """Appel à ``generate_content`` avec reprise sur 429 (quota dépassé)."""
+    derniere_erreur = None
+    for tentative in range(1, _GEMINI_TENTATIVES + 1):
+        try:
+            return client.models.generate_content(
+                model=model, contents=contents, config=config
+            )
+        except Exception as exc:
+            if not _est_quota_gemini(exc) or tentative == _GEMINI_TENTATIVES:
+                raise
+            derniere_erreur = exc
+            _gemini_pause_retry(tentative, exc, "génération")
+    assert derniere_erreur is not None
+    raise derniere_erreur
+
+
 def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None) -> Completion:
     from google.genai import types
 
@@ -740,8 +798,8 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
         contents = [user, types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)]
 
     try:
-        response = client.models.generate_content(
-            model=model, contents=contents, config=types.GenerateContentConfig(**config_kwargs)
+        response = _gemini_appel(
+            client, model, contents, types.GenerateContentConfig(**config_kwargs)
         )
     except Exception as exc:
         logger.exception("Échec de l'appel Gemini")
@@ -786,42 +844,61 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
         audio_bytes, mime_type = audio
         contents = [user, types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)]
 
-    try:
-        stream = client.models.generate_content_stream(
-            model=model, contents=contents, config=types.GenerateContentConfig(**config_kwargs)
-        )
-    except Exception as exc:
-        logger.exception("Échec de l'appel Gemini (flux)")
-        raise _translate_error("Gemini", model, exc) from exc
+    config = types.GenerateContentConfig(**config_kwargs)
 
-    full: List[str] = []
-    candidates = None
-    usage_metadata = None
-    try:
-        for chunk in stream:
-            # On diffuse chaque PARTIE séparément (et non ``chunk.text``,
-            # qui les concatène) : plus fin quand le SDK groupe plusieurs
-            # fragments dans un même morceau — de quoi rapprocher l'affichage
-            # d'un flux continu.
-            for piece in (getattr(chunk, "parts", None) or []):
-                part = getattr(piece, "text", None) or ""
-                if part:
-                    full.append(part)
-                    yield part
-            if getattr(chunk, "candidates", None):
-                candidates = chunk.candidates
-            if getattr(chunk, "usage_metadata", None) is not None:
-                usage_metadata = chunk.usage_metadata
-    except Exception as exc:
-        logger.exception("Échec du flux Gemini")
-        raise _translate_error("Gemini", model, exc) from exc
-    finally:
-        fermeture = getattr(stream, "close", None)
-        if callable(fermeture):
-            try:
-                fermeture()
-            except Exception:
-                pass
+    # Le refus de quota (429) arrive souvent au premier morceau du flux plutôt
+    # qu'à sa création : on couvre les deux, tant qu'aucun texte n'a encore été
+    # diffusé — reprendre après une diffusion dupliquerait la note.
+    for tentative in range(1, _GEMINI_TENTATIVES + 1):
+        try:
+            stream = client.models.generate_content_stream(
+                model=model, contents=contents, config=config
+            )
+        except Exception as exc:
+            if not _est_quota_gemini(exc) or tentative == _GEMINI_TENTATIVES:
+                logger.exception("Échec de l'appel Gemini (flux)")
+                raise _translate_error("Gemini", model, exc) from exc
+            _gemini_pause_retry(tentative, exc, "génération en flux")
+            continue
+
+        full: List[str] = []
+        candidates = None
+        usage_metadata = None
+        deja_diffuse = False
+        try:
+            for chunk in stream:
+                # On diffuse chaque PARTIE séparément (et non ``chunk.text``,
+                # qui les concatène) : plus fin quand le SDK groupe plusieurs
+                # fragments dans un même morceau — de quoi rapprocher l'affichage
+                # d'un flux continu.
+                for piece in (getattr(chunk, "parts", None) or []):
+                    part = getattr(piece, "text", None) or ""
+                    if part:
+                        full.append(part)
+                        deja_diffuse = True
+                        yield part
+                if getattr(chunk, "candidates", None):
+                    candidates = chunk.candidates
+                if getattr(chunk, "usage_metadata", None) is not None:
+                    usage_metadata = chunk.usage_metadata
+        except Exception as exc:
+            if (
+                _est_quota_gemini(exc)
+                and not deja_diffuse
+                and tentative < _GEMINI_TENTATIVES
+            ):
+                _gemini_pause_retry(tentative, exc, "génération en flux")
+                continue
+            logger.exception("Échec du flux Gemini")
+            raise _translate_error("Gemini", model, exc) from exc
+        finally:
+            fermeture = getattr(stream, "close", None)
+            if callable(fermeture):
+                try:
+                    fermeture()
+                except Exception:
+                    pass
+        break
 
     finish_reason = str(getattr(candidates[0], "finish_reason", "") or "") if candidates else ""
     return Completion(

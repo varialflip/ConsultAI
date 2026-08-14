@@ -2016,19 +2016,17 @@
    * ====================================================================== */
 
   /* -------------------------------------------------------------------------
-   * Métadonnées d'identification
+   * Métadonnées de la consultation
    * ----------------------------------------------------------------------
-   * Le médecin dicte déjà le nom, le dossier et la raison de consultation au
-   * début de sa dictée : ces champs sont donc relus dans la transcription par
-   * le serveur après la mise en forme, et non saisis au clavier. Ils ne
-   * servent qu'à reconnaître la consultation dans la liste des brouillons.
+   * Le médecin dicte déjà la raison de consultation au début de sa dictée :
+   * ces champs sont donc relus dans la transcription par le serveur après la
+   * mise en forme, et non saisis au clavier. Ils ne servent qu'à reconnaître
+   * la consultation dans la liste des brouillons. L'identité du patient (nom,
+   * numéro de dossier) n'est volontairement ni saisie ni collectée.
    *
-   * Les clés sont celles de l'API ; « record_number » correspond à la colonne
-   * patient_ref en base.
+   * Les clés sont celles de l'API.
    * ---------------------------------------------------------------------- */
   const META_ELEMENTS = {
-    patient_name: 'metaName',
-    record_number: 'metaRecord',
     consultation_date: 'metaDate',
     reason: 'metaReason',
     requester: 'metaRequester',
@@ -2040,8 +2038,6 @@
   /** Métadonnées saisies, dans la forme attendue par /api/generate. */
   function readMetadata() {
     return {
-      patient_name: $('metaName').value.trim(),
-      patient_ref: $('metaRecord').value.trim(),
       consultation_date: $('metaDate').value.trim(),
       reason: $('metaReason').value.trim(),
       requester: $('metaRequester').value.trim(),
@@ -2086,8 +2082,6 @@
       method: 'POST',
       body: {
         title: buildTitle(),
-        patient_name: $('metaName').value.trim(),
-        patient_ref: $('metaRecord').value.trim(),
         reason: $('metaReason').value.trim(),
         template_id: tpl ? tpl.id : null,
         raw_transcript: $('transcript').value,
@@ -2098,12 +2092,10 @@
   }
 
   function buildTitle() {
-    const identity = [$('metaName').value.trim(), $('metaRecord').value.trim()]
-      .filter(Boolean).join(' · ');
     const tpl = currentTemplate();
     const label = $('metaReason').value.trim() || (tpl ? tpl.name : '');
-    return [identity || T('drafts.default_title'), label]
-      .filter(Boolean).join(' — ').slice(0, 300);
+    return [label || T('drafts.default_title')]
+      .join(' — ').slice(0, 300);
   }
 
   async function sendForTranscription(blob, filename) {
@@ -2614,11 +2606,67 @@
     refreshTranscriptFooter();
   }
 
+  /**
+   * Section informative du panneau de droite : version logicielle et
+   * changelogs des 7 derniers jours. Affiche uniquement quand aucune note
+   * n'est ouverte — c'est l'état de départ de l'application.
+   */
+  let changelogCache = null;
+  let changelogPending = null;
+  function renderChangelogPanel() {
+    const pane = $('previewPane');
+    if (!pane) return;
+
+    pane.innerHTML = `
+      <div class="space-y-4">
+        <div>
+          <h3 class="font-semibold text-slate-700">${esc(T('home.welcome'))}</h3>
+          <p class="text-slate-500 text-sm">${esc(T('home.intro'))}</p>
+          <p class="text-xs text-slate-400 mt-1">${esc(T('home.version', { version: window.CONSULTAI.version || '' }))}</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-slate-600 text-sm mb-1">${esc(T('home.changelog'))}</h4>
+          <div id="changelogBody" class="text-sm text-slate-500 space-y-3">
+            <p class="text-slate-400 italic">${esc(T('home.changelog_loading'))}</p>
+          </div>
+        </div>
+      </div>`;
+
+    const body = $('changelogBody');
+    if (!body) return;
+
+    const render = (entries) => {
+      if (!entries || !entries.length) {
+        body.innerHTML = `<p class="text-slate-400 italic">${esc(T('home.changelog_empty'))}</p>`;
+        return;
+      }
+      body.innerHTML = entries.map((entry) => `
+        <div>
+          <div class="font-medium text-slate-700 text-xs uppercase tracking-wide">${esc(entry.date)} — ${esc(entry.title)}</div>
+          ${entry.items && entry.items.length
+            ? `<ul class="list-disc pl-4 mt-0.5 space-y-0.5">${entry.items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`
+            : ''}
+        </div>`).join('');
+    };
+
+    if (changelogCache) {
+      render(changelogCache);
+      return;
+    }
+    if (!changelogPending) {
+      changelogPending = api('/api/changelog')
+        .then((data) => { changelogCache = (data && data.entries) || []; return changelogCache; })
+        .catch(() => { changelogCache = []; return changelogCache; })
+        .finally(() => { changelogPending = null; });
+    }
+    changelogPending.then(render);
+  }
+
   function renderMarkdown() {
     const markdown = $('markdownEditor').value;
     const pane = $('previewPane');
     if (!markdown.trim()) {
-      pane.innerHTML = `<p class="text-slate-400 italic">${esc(T('note.empty'))}</p>`;
+      renderChangelogPanel();
       return;
     }
     pane.innerHTML = markdownToHtml(markdown);
@@ -2936,12 +2984,10 @@
       return;
     }
 
-    const patient = [$('metaName').value.trim(), $('metaRecord').value.trim()]
-      .filter(Boolean).join(' · ');
     const printedOn = new Date().toLocaleString(LOCALE);
     const footer = `<div class="print-footer">
         ${esc(T('pdf.footer'))}
-        ${patient ? esc(T('pdf.footer_patient', { patient })) : ''}${esc(T('pdf.footer_printed', { date: printedOn }))}
+        ${esc(T('pdf.footer_printed', { date: printedOn }))}
       </div>`;
 
     $('printArea').innerHTML = markdownToHtml(markdown) + footer;
@@ -3189,20 +3235,17 @@
   /**
    * Un brouillon dans la liste.
    *
-   * On y met le strict nécessaire pour reconnaître la consultation : qui,
-   * quel dossier, pourquoi, à quelle heure. Volontairement pas d'extrait de
-   * la note — l'écran est souvent consulté en présence d'un patient, et un
-   * paragraphe de contenu clinique n'aide en rien à retrouver la bonne ligne.
+   * On y met le strict nécessaire pour reconnaître la consultation : la
+   * raison, à quelle heure. Volontairement pas d'extrait de la note — l'écran
+   * est souvent consulté en présence d'un patient, et un paragraphe de contenu
+   * clinique n'aide en rien à retrouver la bonne ligne.
    */
   function renderDraftItem(draft) {
     const item = document.createElement('li');
     item.className = 'px-5 py-3 border-b border-slate-100 hover:bg-slate-50 transition '
       + 'flex items-start gap-3';
 
-    const name = draft.patient_name || T('drafts.unnamed_patient');
-    const record = draft.patient_ref
-      ? `<span class="text-slate-500 font-normal">· ${esc(draft.patient_ref)}</span>`
-      : '';
+    const name = draft.reason || draft.title || T('drafts.unnamed_patient');
     const reason = draft.reason
       ? `<div class="text-xs text-slate-600 mt-0.5 truncate">${esc(draft.reason)}</div>`
       : `<div class="text-xs text-slate-400 italic mt-0.5">${esc(T('drafts.no_reason'))}</div>`;
@@ -3213,7 +3256,7 @@
       </span>
       <div class="flex-1 min-w-0 cursor-pointer" data-open="${draft.id}">
         <div class="font-medium text-sm text-slate-800 truncate">
-          ${esc(name)} ${record}
+          ${esc(name)}
         </div>
         ${reason}
         <div class="text-[11px] text-slate-400 mt-1">
@@ -3270,8 +3313,8 @@
       const drafts = data.consultations || [];
 
       const notice = $('draftsRetentionNotice');
-      if (data.retention_days > 0) {
-        notice.textContent = T('drafts.retention_notice', { days: data.retention_days });
+      if (data.retention_hours > 0) {
+        notice.textContent = T('drafts.retention_notice', { hours: data.retention_hours });
         notice.classList.remove('hidden');
       } else {
         notice.classList.add('hidden');
@@ -3330,8 +3373,6 @@
 
       clearMetadata();
       applyMetadata({
-        patient_name: draft.patient_name,
-        record_number: draft.patient_ref,
         consultation_date: draft.consultation_date,
         reason: draft.reason,
         requester: draft.requester,

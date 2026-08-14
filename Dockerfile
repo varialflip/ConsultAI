@@ -94,6 +94,7 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 COPY app/ /app/app/
+COPY CHANGELOG.md /app/CHANGELOG.md
 COPY --from=tailwind-builder /build/app/static/tailwind.css /app/app/static/tailwind.css
 
 # /data = volume persistant (base SQLite), monté par-dessus au lancement : ce

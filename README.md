@@ -572,10 +572,34 @@ PWA échoue.
 Cette application manipule des renseignements de santé. Les points suivants ne
 sont pas des recommandations de style.
 
+### 11.1 Chaque implantation exige une ÉFVP
+
+L'application traite des renseignements personnels et de santé au sens de la
+*Loi sur la protection des renseignements personnels dans le secteur privé*
+(RLRQ, c. P-39.1), modifiée par la **Loi 25** : l'article 3.3 impose de réaliser
+une **évaluation des facteurs relatifs à la vie privée (ÉFVP)** pour tout
+système d'information qui traite de tels renseignements. L'ÉFVP est propre à
+**chaque implantation** — responsable désigné, usagers, fournisseurs STT/LLM
+retenus, régions de traitement, mesures de sécurité — et ne se recopie pas d'un
+déploiement à l'autre. Elle doit être réévaluée à chaque changement de
+fournisseur, de plateforme ou d'usagers. Un modèle complet figure dans
+[`EFVP.md`](EFVP.md) ; servez-vous-en comme point de départ, puis adaptez-le à
+votre contexte avant toute utilisation clinique réelle.
+
+### 11.2 Données et fournisseurs
+
 * ⚠️ **Les enregistrements audio sont conservés** avec leur brouillon, sous
   `AUDIO_DIR`. C'est la donnée la plus sensible produite : la voix du patient,
   non anonymisable. Elle disparaît quand le brouillon est supprimé — fichier
-  compris — et de nulle autre façon. Purgez ce que vous n'avez plus à garder.
+  compris — et automatiquement au-delà de la rétention configurée
+  (`consultation_retention_hours`, défaut **12 h**, réglable au panneau).
+* 🆔 **L'identité du patient n'est pas collectée** : le nom et le numéro de
+  dossier ne sont ni saisis ni stockés (dénominalisation). Les notes générées
+  sont dénominalisées ; l'identification se rattache au versement au dossier,
+  hors de l'application.
+* 💾 **Les sauvegardes sont sanitisées** : les archives ZIP ne contiennent ni
+  audio ni données cliniques (config, comptes, gabarits, statistiques
+  seulement). Une restauration ne ramène donc pas les données patient.
 * Pendant la dictée, deux copies temporaires existent, effacées à la conclusion :
   sur le serveur sous `DICTATION_DIR` (purgée après
   `DICTATION_RETENTION_HOURS` si la dictée n'est jamais conclue), et dans le
@@ -588,8 +612,6 @@ sont pas des recommandations de style.
   fournisseurs, signez les ententes, et privilégiez Vertex AI en région
   `northamerica-northeast1` — le seul choix de la liste qui garde le traitement
   au Québec.
-* Préférez une identification indirecte du patient (initiales, numéro de dossier)
-  plutôt qu'un nom complet.
 * La note générée doit **toujours** être relue par le clinicien avant d'être
   versée au dossier.
 

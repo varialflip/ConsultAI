@@ -29,6 +29,7 @@ from sqlalchemy import (
     create_engine,
     event,
     select,
+    update,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -280,8 +281,6 @@ class Consultation(Base):
         data = {
             "id": self.id,
             "title": self.title,
-            "patient_name": self.patient_name,
-            "patient_ref": self.patient_ref,
             "reason": self.reason,
             "requester": self.requester,
             "accompanied_by": self.accompanied_by,
@@ -731,8 +730,6 @@ _STANDARD_LAYOUT = """\
 # CONSULTATION EN GÉRIATRIE
 
 **Date de l'évaluation :** {{DATE}}
-**Patient :** {{PATIENT}}
-**Numéro de dossier :** {{DOSSIER}}
 **Demande de :** {{DEMANDEUR}}
 
 ## MOTIF DE CONSULTATION
@@ -849,8 +846,6 @@ _COGNITIF_LAYOUT = """\
 # BILAN COGNITIF — CLINIQUE DE MÉMOIRE
 
 **Date de l'évaluation :** {{DATE}}
-**Patient :** {{PATIENT}}
-**Numéro de dossier :** {{DOSSIER}}
 **Demande de :** {{DEMANDEUR}}
 **Accompagné de :** {{ACCOMPAGNATEUR}}
 
@@ -954,8 +949,6 @@ _POLYPHARMACIE_LAYOUT = """\
 # RÉVISION DE LA PHARMACOTHÉRAPIE
 
 **Date de l'évaluation :** {{DATE}}
-**Patient :** {{PATIENT}}
-**Numéro de dossier :** {{DOSSIER}}
 **Demande de :** {{DEMANDEUR}}
 
 ## MOTIF DE LA RÉVISION
@@ -1408,6 +1401,44 @@ def _add_missing_columns() -> None:
                 logger.info("Migration : colonne %s.%s ajoutée", table, name)
 
 
+def migrate_denominalize(db: Session) -> int:
+    """
+    Dénominalisation (2026-08-14) : les champs ``patient_name`` et
+    ``patient_ref`` (n° de dossier) ne sont plus collectés ni stockés. Les
+    valeurs déjà présentes sont effacées ; les colonnes sont conservées (à
+    vide) pour ne pas reconstruire la table.
+    """
+    cleared = db.execute(
+        update(Consultation).values(patient_name="", patient_ref="")
+    ).rowcount
+    if cleared:
+        db.commit()
+        logger.info(
+            "Migration : dénominalisation — %d consultation(s) vidée(s) de "
+            "patient_name / patient_ref", cleared,
+        )
+    return cleared
+
+
+def migrate_retention_hours(db: Session) -> bool:
+    """
+    La rétention des dossiers est passée des jours aux heures (2026-08-14) :
+    l'ancienne clé ``consultation_retention_days`` n'existe plus dans
+    ``runtime_config.SETTINGS``. Sa valeur n'est pas reportée : la politique
+    passe volontairement à la nouvelle valeur par défaut (12 h). La ligne est
+    simplement retirée pour ne pas laisser de clé orpheline en base.
+    """
+    ancienne = db.get(AppSetting, "consultation_retention_days")
+    if ancienne is None:
+        return False
+    db.delete(ancienne)
+    db.commit()
+    logger.info(
+        "Migration : rétention passée aux heures — « consultation_retention_days » retiré, défaut 12 h appliqué"
+    )
+    return True
+
+
 def init_db() -> None:
     """Crée les tables si nécessaire puis amorce les gabarits. Appelé au démarrage."""
     Base.metadata.create_all(bind=engine)
@@ -1415,6 +1446,8 @@ def init_db() -> None:
     with SessionLocal() as db:
         # L'ordre compte : on purge les anciens défauts AVANT d'amorcer, pour
         # qu'un nom réutilisé ne fasse pas échouer la contrainte d'unicité.
+        migrate_retention_hours(db)
+        migrate_denominalize(db)
         purge_legacy_templates(db)
         seed_locked_templates(db)
         seed_editable_templates(db)

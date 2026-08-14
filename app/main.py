@@ -77,7 +77,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
 from app import __version__
-from app import backup, dictation, i18n, live, llm, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
+from app import backup, changelog, dictation, i18n, live, llm, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
 from app import users as users_service
 from app.auth import (
     AuthMiddleware,
@@ -430,8 +430,6 @@ class ConsultationIn(BaseModel):
     """Création d'un brouillon."""
 
     title: str = Field("Consultation sans titre", max_length=300)
-    patient_name: str = Field("", max_length=200)
-    patient_ref: str = Field("", max_length=120)
     reason: str = Field("", max_length=300)
     template_id: Optional[int] = None
     raw_transcript: str = ""
@@ -441,8 +439,6 @@ class ConsultationPatch(BaseModel):
     """Sauvegarde automatique : tous les champs sont optionnels."""
 
     title: Optional[str] = Field(None, max_length=300)
-    patient_name: Optional[str] = Field(None, max_length=200)
-    patient_ref: Optional[str] = Field(None, max_length=120)
     reason: Optional[str] = Field(None, max_length=300)
     requester: Optional[str] = Field(None, max_length=200)
     accompanied_by: Optional[str] = Field(None, max_length=200)
@@ -464,11 +460,10 @@ class GenerateIn(BaseModel):
     # ``generate_note`` qui tranche, seule source de vérité sur cette règle.
     transcript: str = ""
     consultation_id: Optional[int] = None
-    # Métadonnées d'identification. Le médecin peut les saisir avant la
-    # dictée, mais le cas normal est qu'elles restent vides ici et soient
-    # relues dans la dictée après la mise en forme (voir plus bas).
-    patient_name: str = Field("", max_length=200)
-    patient_ref: str = Field("", max_length=200)          # numéro de dossier
+    # Métadonnées de la consultation (hors identité du patient, volontairement
+    # non collectée). Le médecin peut les saisir avant la dictée, mais le cas
+    # normal est qu'elles restent vides ici et soient relues dans la dictée
+    # après la mise en forme (voir plus bas).
     reason: str = Field("", max_length=300)
     consultation_date: str = Field("", max_length=60)
     requester: str = Field("", max_length=200)
@@ -504,10 +499,6 @@ def _build_context_lines(payload: GenerateIn) -> List[str]:
     """
     date_value = payload.consultation_date.strip() or datetime.now().strftime("%Y-%m-%d")
     lines = [f"Date de la consultation : {date_value}"]
-    if payload.patient_name.strip():
-        lines.append(f"Patient : {payload.patient_name.strip()}")
-    if payload.patient_ref.strip():
-        lines.append(f"Numéro de dossier : {payload.patient_ref.strip()}")
     if payload.reason.strip():
         lines.append(f"Raison de consultation : {payload.reason.strip()}")
     if payload.requester.strip():
@@ -731,9 +722,9 @@ _transcribe_guard = _SequenceGuard()    # /api/transcribe (import de fichier)
 
 
 # Correspondance entre les champs renvoyés par l'extraction et les colonnes.
+# Volontairement sans « patient_name » ni « record_number » : l'identité du
+# patient (nom, numéro de dossier) n'est plus collectée ni stockée.
 _METADATA_TO_COLUMN = {
-    "patient_name": "patient_name",
-    "record_number": "patient_ref",
     "consultation_date": "consultation_date",
     "reason": "reason",
     "requester": "requester",
@@ -764,10 +755,7 @@ def _apply_metadata(consultation: Consultation, extracted: dict) -> dict:
 
 def _build_title(consultation: Consultation, template_name: str) -> str:
     """Libellé lisible du brouillon, reconstruit après extraction."""
-    identity = " · ".join(
-        part for part in (consultation.patient_name, consultation.patient_ref) if part
-    )
-    parts = [identity or "Consultation", consultation.reason or template_name]
+    parts = [consultation.reason or template_name]
     return " — ".join(part for part in parts if part)[:300]
 
 
@@ -1257,6 +1245,25 @@ async def api_config(request: Request):
         # source : ajouter une langue ne demande de toucher qu'à app/i18n.py.
         "languages": [
             {"value": code, "label": label} for code, label in i18n.LANGUAGES
+        ],
+    }
+
+
+@app.get("/api/changelog")
+async def api_changelog(request: Request):
+    """Changelogs des 7 derniers jours, pour la section informative du
+    panneau de droite. Aucune donnée clinique : uniquement des versions."""
+    current_user(request)
+    entries = changelog.recent_entries(days=7)
+    return {
+        "version": __version__,
+        "entries": [
+            {
+                "date": entry.date.isoformat(),
+                "title": entry.title,
+                "items": entry.items,
+            }
+            for entry in entries
         ],
     }
 
@@ -2368,8 +2375,6 @@ async def api_generate(
 
     # Ce que le médecin a saisi lui-même est repris tel quel et fait autorité.
     for field, column in (
-        ("patient_name", "patient_name"),
-        ("patient_ref", "patient_ref"),
         ("reason", "reason"),
         ("requester", "requester"),
         ("accompanied_by", "accompanied_by"),
@@ -2513,10 +2518,10 @@ def list_consultations(
         .order_by(Consultation.created_at.desc())
         .limit(limit)
     ).all()
-    retention_days = int(runtime_config.value_float("consultation_retention_days", 0.0))
+    retention_hours = int(runtime_config.value_float("consultation_retention_hours", 12.0))
     return {
         "consultations": [row.to_dict(include_body=False) for row in rows],
-        "retention_days": retention_days,
+        "retention_hours": retention_hours,
     }
 
 
@@ -2536,8 +2541,6 @@ def create_consultation(
     consultation = Consultation(
         owner=user.owner_key,
         title=payload.title.strip() or "Consultation sans titre",
-        patient_name=payload.patient_name.strip(),
-        patient_ref=payload.patient_ref.strip(),
         reason=payload.reason.strip(),
         template_id=payload.template_id,
         template_name=template_name,
@@ -2599,10 +2602,10 @@ def purge_expired_consultations(db: Session) -> int:
     consultations sont concernées, tous propriétaires confondus — c'est une
     politique de conservation des données patient, pas un filtre par usager.
     """
-    days = int(runtime_config.value_float("consultation_retention_days", 0.0))
-    if days <= 0:
+    hours = int(runtime_config.value_float("consultation_retention_hours", 12.0))
+    if hours <= 0:
         return 0
-    cutoff = utcnow() - timedelta(days=days)
+    cutoff = utcnow() - timedelta(hours=hours)
     rows = db.scalars(select(Consultation).where(Consultation.updated_at < cutoff)).all()
     for consultation in rows:
         recordings.delete_for_consultation(db, consultation.id)
@@ -2610,8 +2613,8 @@ def purge_expired_consultations(db: Session) -> int:
     if rows:
         db.commit()
         logger.info(
-            "Purge des dossiers : %d consultation(s) de plus de %d jour(s) supprimée(s)",
-            len(rows), days,
+            "Purge des dossiers : %d consultation(s) de plus de %d heure(s) supprimée(s)",
+            len(rows), hours,
         )
     return len(rows)
 

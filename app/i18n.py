@@ -23,9 +23,11 @@ Non traduit, volontairement :
 * **Les gabarits de note**, qui appartiennent au médecin. Ils vivent en base,
   dans la langue où il les a écrits. Changer la langue de l'interface ne
   réécrit pas ses gabarits — voir la remarque sur ``document_language``.
-* **Les champs de substitution** (``{{PATIENT}}``, ``{{DOSSIER}}``…), qui font
+* **Les champs de substitution** (``{{DATE}}``, ``{{DEMANDEUR}}``…), qui font
   partie du contrat des gabarits existants. Les traduire casserait les
-  gabarits déjà écrits.
+  gabarits déjà écrits. (``{{PATIENT}}`` et ``{{DOSSIER}}`` sont conservés par
+  compatibilité, mais ne sont plus alimentés : la ligne qui les porte est
+  retirée de la note — l'identité du patient n'est plus collectée.)
 * **Les noms propres** : ConsultAI, Deepgram, Soniox, Pangolin, Markdown, PDF.
 
 LA LANGUE N'EST PAS QU'UN HABILLAGE
@@ -245,13 +247,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "métadonnées, consigne ponctuelle, enregistrements",
         "metadata, one-off instruction, recordings",
     ),
-    "meta.name": ("Nom du patient", "Patient name"),
-    "meta.record": ("Numéro de dossier", "Record number"),
     "meta.date": ("Date de la consultation", "Consultation date"),
     "meta.reason": ("Raison de consultation", "Reason for consultation"),
     "meta.requester": ("Demande de", "Requested by"),
     "meta.accompanied": ("Accompagné de", "Accompanied by"),
-    "meta.recognized_ph": ("Reconnu dans la dictée", "Recognized from the dictation"),
     "meta.reason_ph": ("Ex. Douleur thoracique", "e.g. Chest pain"),
     "meta.requester_ph": ("Dr X, clinique, urgence…", "Dr. X, clinic, emergency…"),
     "meta.accompanied_ph": ("Conjointe, fille…", "Spouse, daughter…"),
@@ -307,6 +306,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "note.empty": (
         "La note structurée apparaîtra ici après la mise en forme.",
         "The structured note will appear here after formatting.",
+    ),
+    "home.welcome": ("ConsultAI", "ConsultAI"),
+    "home.intro": (
+        "Dictez une consultation : la transcription brute s'affiche à gauche, "
+        "la note structurée à droite après la mise en forme.",
+        "Dictate a consultation: the raw transcript shows on the left, the "
+        "structured note on the right after formatting.",
+    ),
+    "home.version": ("Version logicielle : {version}", "Software version: {version}"),
+    "home.changelog": ("Nouveautés (7 derniers jours)", "What's new (last 7 days)"),
+    "home.changelog_loading": ("Chargement…", "Loading…"),
+    "home.changelog_empty": (
+        "Aucune nouveauté cette semaine.",
+        "Nothing new this week.",
     ),
     "note.engine_dictation": ("dictée {engine}", "dictation {engine}"),
     "note.engine_note": ("note {engine}", "note {engine}"),
@@ -366,7 +379,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Document produit avec assistance à la dictée et relu par le clinicien.",
         "Document produced with dictation assistance and reviewed by the clinician.",
     ),
-    "pdf.footer_patient": ("Patient : {patient}. ", "Patient: {patient}. "),
     "pdf.footer_printed": ("Imprimé le {date}.", "Printed on {date}."),
 
     # --- Dictée : état du téléversement ------------------------------------
@@ -788,8 +800,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     # --- Brouillons ---------------------------------------------------------
     "drafts.title": ("Mes brouillons", "My drafts"),
     "drafts.retention_notice": (
-        "Les dossiers de plus de {days} jour(s) sans modification sont supprimés automatiquement.",
-        "Records unmodified for more than {days} day(s) are deleted automatically.",
+        "Les dossiers de plus de {hours} heure(s) sans modification sont supprimés automatiquement.",
+        "Records unmodified for more than {hours} hour(s) are deleted automatically.",
     ),
     "drafts.loading": ("Chargement…", "Loading…"),
     "drafts.none": ("Aucun brouillon enregistré.", "No saved draft."),
@@ -1199,11 +1211,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "(one per day), ~25% weekly (one per week) and ~25% monthly (one per "
         "month). 0 disables rotation: everything accumulates.",
     ),
-    "set.consultation_retention_days.label": (
-        "Purger les dossiers après (jours)",
-        "Purge records after (days)",
+    "set.consultation_retention_hours.label": (
+        "Purger les dossiers après (heures)",
+        "Purge records after (hours)",
     ),
-    "set.consultation_retention_days.help": (
+    "set.consultation_retention_hours.help": (
         "Un dossier (brouillon, transcription, note et audio) dont la dernière "
         "modification dépasse ce délai est supprimé définitivement, sans "
         "récupération possible. Le compte repart à zéro à chaque ouverture ou "

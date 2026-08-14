@@ -121,8 +121,8 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "true" if settings.allow_signup else "false", choices=ON_OFF,
     ),
     Setting(
-        "consultation_retention_days", "number", "group.system",
-        default=lambda: "0",
+        "consultation_retention_hours", "number", "group.system",
+        default=lambda: "12",
     ),
 
     # --- Reconnaissance vocale ---------------------------------------------

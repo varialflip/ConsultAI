@@ -1,8 +1,8 @@
 # Évaluation des facteurs relatifs à la vie privée (ÉFVP)
 
 **Système** : ConsultAI (DictAI.ca) — dictée et rédaction de notes de consultations cliniques
-**Version du document** : 1.0
-**Date** : 2026-08-13
+**Version du document** : 1.1
+**Date** : 2026-08-14
 **Base légale** : *Loi sur la protection des renseignements personnels dans le secteur privé* (RLRQ, c. P-39.1), notamment ses articles 3.1 à 3.5 (Loi 25).
 
 ---
@@ -28,7 +28,7 @@ une consultation à l'aide d'un microphone, d'en obtenir la transcription puis l
 en forme structurée en note clinique par un modèle de langage, de relire et de
 corriger la note, puis de l'exporter.
 
-Déploiement en production (2026-08-13) :
+Déploiement en production (2026-08-14) :
 
 | Élément | Valeur |
 |---|---|
@@ -60,20 +60,24 @@ Déploiement en production (2026-08-13) :
 | Catégorie | Nature | Sensibilité |
 |---|---|---|
 | **Renseignements de santé** | Contenu des consultations : anamnèse, motifs, examens, diagnostics, plans de traitement (champs `reason`, `raw_transcript`, `generated_markdown`, `edited_markdown`) | Très élevée |
-| **Identité des patients** | Nom (`patient_name`), numéro de dossier (`patient_ref`), date de consultation, demandeur (`requester`), accompagnateur (`accompanied_by`) | Très élevée |
+| **Identité des patients** | **Non collectée** : le nom (`patient_name`) et le numéro de dossier (`patient_ref`) ne sont plus saisis ni stockés (dénominalisation, § 7.7). Date de consultation, demandeur (`requester`) et accompagnateur (`accompanied_by`) restent conservés | Très élevée (ce qui reste) |
 | **Voix / enregistrements audio** | Enregistrement brut de la dictée (fichiers sous `/data/audio/<consultation_id>/`) | Très élevée — voix non anonymisable, inclut la voix du patient et toute personne présente dans la pièce |
 | **Identité des utilisateurs** | `username`, `email`, `display_name`, `avatar_url`, groupes, dates de connexion | Élevée (données d'identité de professionnels de la santé) |
 | **Données d'usage** | `usage_events` : durées audio, fournisseur/modèle utilisés, tokens, coûts, horodatages | Faible à moyenne (révèle l'activité clinique) |
 | **Données de facturation d'usage** | `pricing_rates`, `usage_daily` | Faible |
 | **Préférences** | Langue d'interface, gabarits personnels | Faible |
+| **Données de supervision** | Journaux réseau Caddy (adresse IP, hôte demandé, chemin URI, code), journaux CrowdSec (IP, ASN, scénarios déclenchés), rapports quotidiens/hebdo dans `/opt/dictai/threat_reports/` | Moyenne — les adresses IP des usagers légitimes apparaissent dans les journaux ; le contenu clinique en est exclu (voir § 3.3, finalité 7 et § 7.6) |
 
 ### 3.2 Sources
 
 - Collecte directe auprès des cliniciens : dictée orale (audio), saisie manuelle
-  des identifiants du patient dans l'interface.
+  des métadonnées non identifiantes (date, raison, demandeur, accompagnateur).
+  Le nom et le numéro de dossier du patient ne sont **pas** collectés.
 - Transmission par le fournisseur OIDC (Pocket ID) : identité (`openid`, `profile`,
   `email`, `groups`).
 - Données générées par le système : transcriptions, notes générées, journaux d'usage.
+- Données de supervision : journaux générés par Caddy et CrowdSec (adresses IP,
+  chemins demandés), agrégés par les scripts de `/opt/dictai/threat_tools/`.
 
 ### 3.3 Finalités
 
@@ -83,7 +87,9 @@ Déploiement en production (2026-08-13) :
 4. Synchroniser une dictée en cours entre plusieurs appareils du même clinicien.
 5. Authentifier les utilisateurs et contrôler les accès (OIDC).
 6. Facturer l'usage des fournisseurs et suivre les coûts.
-7. Assurer la sécurité et la supervision du système (journaux, CrowdSec).
+7. Assurer la sécurité et la supervision du système : détection et blocage des
+   menaces réseau (CrowdSec), supervision continue des accès et des tentatives
+   d'intrusion (voir § 7.6).
 
 ---
 
@@ -91,21 +97,23 @@ Déploiement en production (2026-08-13) :
 
 | Collecte | Justification | Nécessité | Proportionnalité |
 |---|---|---|---|
-| Enregistrement audio | La voix est l'entrée même du service : impossible de dicter sans capturer l'audio. | Oui | Le clinicien choisit le moment et le contexte de la dictée ; une identification **indirecte** du patient est encouragée (initiales / numéro de dossier) plutôt qu'un nom complet. |
-| Identité du patient | Nécessaire pour rattacher la note au bon patient dans le dossier. | Oui | Seuls les champs utiles à la note sont saisis ; le gabarit définit les champs requis. |
+| Enregistrement audio | La voix est l'entrée même du service : impossible de dicter sans capturer l'audio. | Oui | Le clinicien choisit le moment et le contexte de la dictée ; l'identification du patient est laissée à l'étape du versement au dossier, en dehors de l'application. |
+| Métadonnées de consultation | Date, raison, demandeur, accompagnateur — reconnaître la consultation dans la liste des brouillons. | Oui | L'identité du patient (nom, numéro de dossier) n'est **pas** collectée (dénominalisation) ; seules des métadonnées non identifiantes sont conservées. |
 | Transcription et note | Produit du service, conservé pour relecture/export. | Oui | La note doit toujours être relue par le clinicien avant versement au dossier (jamais versée automatiquement). |
 | Identité des utilisateurs | Contrôle d'accès et traçabilité. | Oui | Collecte minimale (`username`, courriel, nom, groupes) ; les revendications se limitent aux `scopes` déclarés. |
 | Données d'usage | Facturation des fournisseurs (coût par modèle/durée) et supervision. | Oui | Agrégeables ; conservées en base sans nom de patient (liées au propriétaire de la consultation). |
+| Données de supervision | Détection des menaces réseau, surveillance continue et traçabilité des accès (CrowdSec, journaux Caddy). | Oui | Minimisées : en-têtes Cookie/Authorization/Set-Cookie et valeurs OIDC (`code`/`state`/`nonce`/`token`) **jamais** transmises aux modèles d'analyse ; rapports agrégés et courts (~30 lignes). |
 
 **Conservation** :
 
 | Donnée | Durée | Mécanisme |
 |---|---|---|
-| Audio d'une consultation | **Tant que le brouillon existe** ; supprimé (fichier compris) à la suppression du brouillon | Aucune purge automatique par âge — purge manuelle recommandée |
-| Transcriptions et notes | Conservées tant que la consultation existe ; aucune rétention automatique configurée | Nettoyage manuel |
+| Audio, transcription et note d'une consultation | **12 h par défaut** sans modification (`consultation_retention_hours`, réglable au panneau en heures ; 0 = désactivé) | Purge automatique au démarrage et à l'ouverture de la liste des brouillons, basée sur `updated_at`. Suppression immédiate (fichier compris) à la suppression du brouillon |
 | Dictée en cours, jamais conclue | 72 h (`DICTATION_RETENTION_HOURS`) | Purge au démarrage |
 | Copies temporaires du navigateur (IndexedDB) | Jusqu'à l'envoi réussi, puis effacées | Automatique |
-| Sauvegardes | Selon la politique du volume `/opt/dictai/data/consultai/backups/` | À définir/formuler |
+| Sauvegardes | Rotation automatique quotidienne, `backup_retention_count` (défaut 7) — couverture quotidienne/hebdo/mensuelle | **Sanitisées** : les archives ne contiennent **ni audio, ni données patient** (config, comptes, gabarits et statistiques seulement) |
+| Journaux Caddy / CrowdSec | Fenêtre glissante couvrant les dernières 24 h pour l'analyse ; journaux bruts conservés selon le volume | Rotation des journaux |
+| Rapports de supervision (`threat_reports/`) | Rapports quotidiens : **7 jours** ; rapports hebdomadaires : conservés | Prune automatique (> 7 j) |
 
 ---
 
@@ -118,15 +126,19 @@ Déploiement en production (2026-08-13) :
 [Caddy (TLS) ─ CrowdSec / Turnstile]
         ▼
 [ConsultAI — conteneur]
-   ├─ SQLite  consultai.db   (transcriptions, notes, identité patients, usagers, usage)
-   ├─ /data/audio/           (enregistrements, fichier par consultation)
+   ├─ SQLite  consultai.db   (transcriptions, notes, métadonnées non identifiantes, usagers, usage)
+   ├─ /data/audio/           (enregistrements, fichier par consultation, purge 12 h par défaut)
    ├─ /data/dictations/      (dictées en cours, purge 72 h)
-   └─ /data/backups/         (sauvegardes)
+   └─ /data/backups/         (sauvegardes sanitisées : ni audio, ni données patient)
         │  audio + note (Vertex AI, région Montréal)         ← traitement hors périmètre local
         ▼
 [Vertex AI — Gemini — northamerica-northeast1]
    (transcription + mise en forme, API Google Cloud)
 ```
+
+> ℹ️ Les sauvegardes ZIP ne contiennent plus d'audio ni de données cliniques
+> (config, comptes, gabarits, statistiques) : une restauration ne ramène pas
+> les données patient — les fichiers audio existants sont laissés intacts.
 
 Autres flux :
 
@@ -137,6 +149,20 @@ Autres flux :
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
 | Turnstile (captcha) | Données du navigateur, adresse IP | Cloudflare | Hors Canada (données non cliniques) |
 | Image conteneur | — (aucune donnée) | GitHub Container Registry | — |
+
+**Supervision (flux séparé)** :
+
+```
+[Caddy / CrowdSec / journaux SSH]
+        │  journaux réseau (IP, hôtes, chemins — sans en-têtes d'authentification)
+        ▼
+[threat_tools/ — agrégation locale (geo.sh, web_window.sh, ssh_window.sh, cs.sh)]
+        │  agrégats compactés (~30 lignes), en-têtes masqués
+        ▼
+[OpenChamber — agent deepseek (API DeepSeek)   ← analyse cloud, données non cliniques]
+        ▼
+[threat_reports/ (7 j) + ajout ASN à ban-known-bad-asn-ssh.yaml]
+```
 
 > ⚠️ **Décision documentée (2026-07-31, confirmée au 2026-08-13)** : l'audio et le
 > texte sont envoyés au **modèle Gemini via Vertex AI en région Montréal** — le seul
@@ -184,7 +210,8 @@ Autres flux :
 - **R4 (erreur humaine)** — La transcription et la mise en forme sont imparfaites ;
   la note peut contenir des mots faux (molécules, acronymes) ou être coupée.
 - **R3 (surconservation)** — L'audio est la donnée la plus sensible (voix non
-  anonymisable) et ne disparaît que par suppression manuelle du brouillon.
+  anonymisable). Une rétention automatique de **12 h** par défaut la borne ;
+  une durée plus longue est un choix délibéré (réglage au panneau).
 
 ---
 
@@ -193,15 +220,17 @@ Autres flux :
 ### 7.1 Organisationnelles et de gouvernance
 
 - Responsable RPD nommé : Dr Frederick Duong.
-- Consigne explicite : **identification indirecte du patient** (initiales, numéro de
-  dossier) plutôt que le nom complet, chaque fois que la pratique le permet.
+- Consigne explicite : **l'identité du patient (nom, numéro de dossier) n'est pas
+  saisie dans l'application** — la note est produite dénominalisée et l'identification
+  est rattachée au moment du versement au dossier, hors de l'application (voir § 7.7).
 - Consigne explicite : **la note générée doit toujours être relue** avant versement au
   dossier (aucun versement automatique).
 - Les fournisseurs STT/LLM sont validés avant mise en service ; tout changement depuis
   le panneau est revalidé (cf. § 5).
-- Sauvegardes régulières de `/data` (mode WAL, sauvegarde à chaud) ; `.env` et
-  `secrets/` **exclus** des sauvegardes non chiffrées.
-- Purge périodique de l'audio et des consultations périmées.
+- Sauvegardes régulières **sanitisées** (ni audio, ni données patient — voir § 7.5) ;
+  `.env` et `secrets/` **exclus**.
+- Purge automatique de l'audio et des consultations au-delà de la rétention
+  (`consultation_retention_hours`, défaut **12 h**).
 
 ### 7.2 Techniques — accès et authentification
 
@@ -236,12 +265,57 @@ Autres flux :
   (`app_settings` → `stt_provider`, `llm_provider`) vérifie qu'aucun fournisseur non
   validé n'a été activé.
 
-### 7.5 Protection de la base
+### 7.5 Protection de la base et des sauvegardes
 
 - Fichier `consultai.db` propriétaire UID/GID 1000 ; volume monté sur la VM.
 - Transcriptions et notes stockées **en clair** dans SQLite (pas de chiffrement natif) :
   le volume n'est pas chiffré au repos actuellement — **action recommandée** : stocker
-  `/opt/dictai/data/consultai` sur un volume chiffré, et chiffrer les sauvegardes.
+  `/opt/dictai/data/consultai` sur un volume chiffré.
+- **Sauvegardes sanitisées (2026-08-14)** : les archives ZIP contiennent la base
+  **vidée de toute donnée clinique** (tables `consultations` et `recordings` purgées)
+  et **aucun fichier audio**. Elles ne renferment que la configuration, les comptes,
+  les gabarits et les statistiques d'usage. Conséquence assumée : une restauration ne
+  ramène pas les données patient ; l'audio existant est laissé intact. Les sauvegardes
+  ne sont donc **plus** des vecteurs de fuite de renseignements de santé — le
+  chiffrement des archives au repos reste recommandé (secrets d'API compris).
+
+### 7.6 Surveillance continue (supervision)
+
+La supervision constitue une **mesure d'atténuation active** des risques R1 (accès non
+autorisé) et R7 (compromission du serveur). Elle est distincte du traitement clinique
+et n'y accède jamais :
+
+- **Collecte** : journaux réseau de Caddy (les quatre hôtes : `app`/`login` sur
+  `dictai.ca` et `loki.casa`), CrowdSec (IP, ASN, scénarios), journaux SSH.
+- **Minimisation avant analyse cloud** : les scripts `web_window.sh` **n'émettent jamais**
+  les en-têtes `Cookie`/`Authorization`/`Set-Cookie` et **masquent** les valeurs
+  `code`/`state`/`nonce`/`token` des URIs OIDC. Les agrégats transmis sont courts
+  (~30 lignes) et **sans contenu clinique** (chemins et hôtes, jamais le corps des
+  requêtes, jamais les réponses).
+- **Traitement cloud** : l'analyse quotidienne est confiée à un agent DeepSeek
+  (API DeepSeek) via OpenChamber ; le modèle ne reçoit que les agrégats ci-dessus.
+  Les accès de l'agent sont limités à `/opt/dictai/**`, `/tmp/**`, `/var/log/**` —
+  `/etc` (secrets) est **entièrement interdit**.
+- **Réaction** : au verdict `ANOMALY`, un rapport détaillé est rédigé et, le cas échéant,
+  un ASN malveillant est ajouté à `ban-known-bad-asn-ssh.yaml` (durcissement CrowdSec).
+- **Rétention** : rapports quotidiens 7 jours, rapport hebdomadaire conservé (prune automatique).
+- **Confidentialité** : les adresses IP des usagers légitimes peuvent apparaître dans les
+  journaux — les rapports sont agrégés, conservés 7 jours et non partagés hors de la VM.
+
+### 7.7 Dénominalisation (2026-08-14)
+
+L'application ne collecte plus l'identité du patient :
+
+- Les champs `patient_name` (nom) et `patient_ref` (numéro de dossier) ont été retirés
+  de l'interface, de l'extraction automatique (métadonnées lues dans la dictée) et des
+  en-têtes de note. Les gabarits livrés ne contiennent plus les champs `{{PATIENT}}` /
+  `{{DOSSIER}}` (les gabarits personnels qui les gardent produisent une ligne retirée).
+- Les valeurs déjà stockées ont été **effacées** à la migration (les colonnes sont
+  conservées, vides).
+- Les notes générées sont donc dénominalisées à la source ; l'identification du patient
+  se fait au moment du versement au dossier médical, en dehors de l'application.
+- Les métadonnées restantes (`consultation_date`, `reason`, `requester`,
+  `accompanied_by`) ne permettent pas d'identifier un patient.
 
 ---
 
@@ -263,7 +337,15 @@ Le présent document est réévalué :
 - à chaque **changement de fournisseur** STT ou LLM (même de test) ;
 - à chaque **migration de plateforme** ou de région d'hébergement ;
 - lors de l'ajout **d'utilisateurs** ou de groupes ;
+- à chaque **changement du dispositif de supervision** (nouvel agent, nouveau
+  fournisseur d'analyse, élargissement des journaux collectés) ;
+- à tout changement de code touchant **aux données personnelles ou de santé** :
+  rétention, sauvegardes, dénominalisation, collecte de métadonnées (cf. § 7.7) ;
 - au moins **annuellement**, et à chaque révision majeure du code ou de la pile.
+
+Le suivi continu s'appuie sur la supervision quotidienne (§ 7.6) : un incident
+détecté alimente le registre des incidents (§ 8) et peut déclencher une
+réévaluation du présent document.
 
 ---
 
@@ -271,4 +353,4 @@ Le présent document est réévalué :
 
 | Rôle | Nom | Signature | Date |
 |---|---|---|---|
-| Responsable de la protection des renseignements personnels | Dr Frederick Duong | | 2026-08-13 |
+| Responsable de la protection des renseignements personnels | Dr Frederick Duong | | 2026-08-14 |

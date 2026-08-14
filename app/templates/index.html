@@ -520,14 +520,6 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
           <div>
-            <label for="metaName" class="block text-[11px] text-slate-500 mb-0.5">{{ t('meta.name') }}</label>
-            <input id="metaName" type="text" placeholder="{{ t('meta.recognized_ph') }}" class="w-full rounded-lg border-slate-300 text-sm accent-ring">
-          </div>
-          <div>
-            <label for="metaRecord" class="block text-[11px] text-slate-500 mb-0.5">{{ t('meta.record') }}</label>
-            <input id="metaRecord" type="text" inputmode="text" placeholder="{{ t('meta.recognized_ph') }}" class="w-full rounded-lg border-slate-300 text-sm accent-ring">
-          </div>
-          <div>
             <label for="metaDate" class="block text-[11px] text-slate-500 mb-0.5">{{ t('meta.date') }}</label>
             <input id="metaDate" type="date" class="w-full rounded-lg border-slate-300 text-sm accent-ring">
           </div>
@@ -1019,8 +1011,6 @@
                gabarits déjà écrits s'en servent, les renommer les casserait
                silencieusement. #}
             {% raw %}
-            <code class="bg-slate-100 px-1 rounded">{{PATIENT}}</code>,
-            <code class="bg-slate-100 px-1 rounded">{{DOSSIER}}</code>,
             <code class="bg-slate-100 px-1 rounded">{{DATE}}</code>,
             <code class="bg-slate-100 px-1 rounded">{{DEMANDEUR}}</code>,
             <code class="bg-slate-100 px-1 rounded">{{ACCOMPAGNATEUR}}</code>.

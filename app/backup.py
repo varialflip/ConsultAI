@@ -8,11 +8,15 @@ panneau admin — les deux chemins doivent rester identiques, sans quoi l'un
 des deux finit par dériver sans qu'on s'en aperçoive.
 
 Contenu d'une archive : ``consultai.db`` (photo cohérente, voir
-``_snapshot_db``) + l'arborescence ``audio/``. ``dictations/`` (tranches de
-dictée en cours, éphémères, déjà purgées séparément — voir
-``dictation.purge_expired``) et le dossier de sauvegardes lui-même en sont
-exclus par construction : on ne zippe que ``settings.audio_dir``, jamais tout
-``/data``.
+``_snapshot_db``) **sanitisée** : les données cliniques — tables
+``consultations`` et ``recordings`` — sont vidées avant empaquetage, ainsi
+que l'arborescence ``audio/``. La sauvegarde ne contient donc que la
+configuration, les comptes, les gabarits et les statistiques d'usage : elle
+permet de restaurer une installation (réglages, usagers, gabarits) sans
+emporter de renseignements de santé. ``dictations/`` (tranches de dictée en
+cours, éphémères, déjà purgées séparément — voir ``dictation.purge_expired``)
+et le dossier de sauvegardes lui-même en sont exclus par construction : on ne
+zippe que la base, jamais tout ``/data``.
 
 La restauration est destructive par nature : avant de rien écraser, une
 sauvegarde de l'état courant est prise (même fonction, ``kind="pre_restore"``)
@@ -46,6 +50,12 @@ _DB_ENTRY = "consultai.db"
 _MANIFEST_ENTRY = "manifest.json"
 _AUDIO_PREFIX = "audio/"
 _RESTART_SENTINEL = os.path.join(os.path.dirname(os.path.normpath(settings.audio_dir)), "RESTART_REQUIRED")
+
+#: Tables vidées de toute donnée clinique avant l'empaquetage (voir
+#: ``_sanitize_snapshot``). ``consultations`` porte transcriptions et notes ;
+#: ``recordings`` les références aux fichiers audio. Les métadonnées
+#: d'identification sont portées par ``consultations`` et partent avec elle.
+_CLINICAL_TABLES = ("consultations", "recordings")
 
 
 @dataclass
@@ -88,6 +98,31 @@ def _snapshot_db(dest_path: str) -> None:
         source.close()
 
 
+def _sanitize_snapshot(db_path: str) -> None:
+    """Vide les données cliniques de la copie de la base avant empaquetage.
+
+    La sauvegarde ne doit jamais emporter de renseignements de santé : on
+    efface les lignes des tables cliniques de la copie. Le schéma est
+    conservé, ce qui permet à la restauration de reconstruire une base
+    fonctionnelle sans ces données.
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        existing = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        for table in _CLINICAL_TABLES:
+            if table not in existing:
+                continue
+            conn.execute(f"DELETE FROM {table}")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def create_backup(kind: str = "manual") -> BackupInfo:
     """Fonction unique : appelée par la tâche quotidienne (``kind="scheduled"``),
     par « Exporter maintenant » (``kind="manual"``) et avant toute restauration
@@ -100,20 +135,16 @@ def create_backup(kind: str = "manual") -> BackupInfo:
     tmp_db = path + ".db.tmp"
     try:
         _snapshot_db(tmp_db)
+        _sanitize_snapshot(tmp_db)
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(tmp_db, _DB_ENTRY)
             archive.writestr(_MANIFEST_ENTRY, json.dumps({
                 "kind": kind,
                 "created_at": now.isoformat(),
                 "app": "ConsultAI",
-                "format": 1,
+                "format": 2,
+                "sanitized": True,
             }))
-            if os.path.isdir(settings.audio_dir):
-                for root, _dirs, files in os.walk(settings.audio_dir):
-                    for name in files:
-                        full = os.path.join(root, name)
-                        rel = _AUDIO_PREFIX + os.path.relpath(full, settings.audio_dir).replace(os.sep, "/")
-                        archive.write(full, rel)
     finally:
         if os.path.exists(tmp_db):
             os.remove(tmp_db)
@@ -260,7 +291,9 @@ def restore_backup(source_path: str) -> BackupInfo:
     Restauration destructive :
       1. sauvegarde de sécurité de l'état courant (même fonction, kind="pre_restore")
       2. validation du contenu de l'archive avant de rien toucher
-      3. remplacement de consultai.db (+ -wal/-shm) et de audio/
+      3. remplacement de consultai.db (+ -wal/-shm) ; restaure audio/ SEULEMENT
+         si l'archive en contient (les sauvegardes récentes sont sanitisées et
+         n'en ont pas)
       4. pose du sentinel qui bloque les écritures jusqu'au redémarrage manuel
     """
     with zipfile.ZipFile(source_path) as archive:
@@ -297,17 +330,21 @@ def restore_backup(source_path: str) -> BackupInfo:
                     os.remove(stale)
             shutil.move(tmp_db, db_path)
 
-            if os.path.isdir(settings.audio_dir):
-                shutil.rmtree(settings.audio_dir)
-            os.makedirs(settings.audio_dir, exist_ok=True)
-            for name in names:
-                if not name.startswith(_AUDIO_PREFIX) or name.endswith("/"):
-                    continue
-                rel = name[len(_AUDIO_PREFIX):]
-                dest = os.path.join(settings.audio_dir, rel)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                with archive.open(name) as src, open(dest, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+            audio_entries = [n for n in names if n.startswith(_AUDIO_PREFIX) and not n.endswith("/")]
+            if audio_entries:
+                if os.path.isdir(settings.audio_dir):
+                    shutil.rmtree(settings.audio_dir)
+                os.makedirs(settings.audio_dir, exist_ok=True)
+                for name in audio_entries:
+                    rel = name[len(_AUDIO_PREFIX):]
+                    dest = os.path.join(settings.audio_dir, rel)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with archive.open(name) as src, open(dest, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+            else:
+                logger.info(
+                    "Restauration : archive sans enregistrements audio — audio existant laissé intact"
+                )
         finally:
             if os.path.exists(tmp_db):
                 os.remove(tmp_db)

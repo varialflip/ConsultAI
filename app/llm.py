@@ -1193,12 +1193,14 @@ def generate_note(
 # début de sa consultation ; les lui faire ressaisir au clavier n'aurait pas
 # de sens. On les relit donc dans la dictée après la mise en forme.
 #
+# Volontairement sans « patient_name » ni « record_number » : l'identité du
+# patient (nom, numéro de dossier) n'est plus collectée ni stockée.
+#
 # Appel séparé, volontairement : la génération de la note est la partie
 # critique de l'application et son invite ne doit pas être alourdie par une
 # tâche annexe. Un échec ici ne doit jamais faire perdre la note.
 # ===========================================================================
-METADATA_FIELDS = ("patient_name", "record_number", "consultation_date", "reason",
-                   "requester", "accompanied_by")
+METADATA_FIELDS = ("consultation_date", "reason", "requester", "accompanied_by")
 
 _METADATA_PROMPT_FR = """\
 Tu extrais les données d'identification d'une consultation médicale à partir de
@@ -1208,8 +1210,6 @@ Réponds UNIQUEMENT par un objet JSON, sans texte autour et sans bloc de code,
 comportant exactement ces clés :
 
 {
-  "patient_name":      "nom et prénom du patient",
-  "record_number":     "numéro de dossier / NAM / identifiant",
   "consultation_date": "date de la consultation au format AAAA-MM-JJ",
   "reason":            "raison de consultation, en 8 mots au maximum",
   "requester":         "personne ou service demandeur",
@@ -1224,8 +1224,6 @@ RÈGLES :
   complète, pas de ponctuation finale.
 - Pour la date, convertis les formulations parlées (« le 12 mars dernier »)
   en AAAA-MM-JJ. Si l'année n'est pas dicible avec certitude, laisse "".
-- Un numéro de dossier dicté chiffre par chiffre doit être recollé sans
-  espaces.
 """
 
 _METADATA_PROMPT_EN = """\
@@ -1236,8 +1234,6 @@ Reply ONLY with a JSON object, with no surrounding text and no code block,
 containing exactly these keys:
 
 {
-  "patient_name":      "patient's first and last name",
-  "record_number":     "record number / health card / identifier",
   "consultation_date": "consultation date in YYYY-MM-DD format",
   "reason":            "reason for consultation, 8 words maximum",
   "requester":         "requesting person or service",
@@ -1252,7 +1248,6 @@ RULES:
   punctuation.
 - For the date, convert spoken forms ("last March 12th") to YYYY-MM-DD. If the
   year cannot be established with certainty, leave "".
-- A record number dictated digit by digit must be joined without spaces.
 """
 
 _METADATA_PROMPTS = {"fr": _METADATA_PROMPT_FR, "en": _METADATA_PROMPT_EN}

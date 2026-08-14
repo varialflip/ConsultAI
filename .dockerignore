@@ -20,5 +20,6 @@ node_modules/
 README.md
 *.md
 !app/**/*.md
+!CHANGELOG.md
 .DS_Store
 @eaDir/

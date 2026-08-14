@@ -70,6 +70,27 @@
   .login-mobile button{margin-top:22px;max-width:none}
   button:hover{filter:brightness(1.08)}
   .foot{margin-top:14px;font-size:11px;color:#94a3b8;text-align:center;line-height:1.5}
+  .legal{margin-top:8px;font-size:11px;color:#94a3b8;text-align:center}
+  .legal button{background:none;border:0;padding:0;margin:0;font-size:11px;color:#64748b;
+                cursor:pointer;text-decoration:underline;text-underline-offset:2px;width:auto}
+  .legal button:hover{color:#0d9488;filter:none}
+
+  /* ===== Modale politique de confidentialité ===== */
+  .privacy-overlay{display:none;position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.5);
+                   backdrop-filter:blur(4px);padding:16px;overflow-y:auto}
+  .privacy-overlay.open{display:flex;align-items:center;justify-content:center}
+  .privacy-card{background:#fff;border-radius:18px;max-width:720px;width:100%;
+                box-shadow:0 24px 60px rgba(15,23,42,.25);overflow:hidden}
+  .privacy-head{display:flex;align-items:center;gap:12px;padding:14px 18px;
+                border-bottom:1px solid #e2e8f0}
+  .privacy-head h2{margin:0;font-size:16px;color:#0f172a}
+  .privacy-head button{margin:0 0 0 auto;width:32px;height:32px;background:#f1f5f9;border:0;
+                       border-radius:8px;font-size:18px;color:#64748b;cursor:pointer;line-height:1}
+  .privacy-head button:hover{background:#e2e8f0;color:#0f172a;filter:none}
+  .privacy-body{padding:16px 18px 20px;max-height:70vh;overflow-y:auto;text-align:left}
+  .privacy-body h3{margin:16px 0 4px;font-size:13px;color:#0f172a}
+  .privacy-body h3:first-child{margin-top:0}
+  .privacy-body p{margin:0 0 4px;font-size:13px;line-height:1.6;color:#475569}
 </style>
 </head>
 <body>
@@ -150,7 +171,33 @@
 
     <button type="submit">{% if lang == 'fr' %}Continuer{% else %}Continue{% endif %}</button>
     <p class="foot">{{ t('auth.session_note') }}</p>
+    <p class="legal"><button type="button" id="btnPrivacyMobile">{{ t('privacy.footer_link') }}</button></p>
   </form>
+</div>
+
+<!-- Pied de page (bureau) + lien politique de confidentialité -->
+<div class="legal" style="position:fixed;bottom:max(10px,env(safe-area-inset-bottom));left:0;right:0;z-index:20">
+  <button type="button" id="btnPrivacyDesktop">{{ t('privacy.footer_link') }}</button>
+</div>
+
+<!-- Modale politique de confidentialité -->
+<div id="privacyOverlay" class="privacy-overlay">
+  <div class="privacy-card">
+    <div class="privacy-head">
+      <h2>{{ t('privacy.title') }}</h2>
+      <button type="button" id="btnPrivacyClose" aria-label="{{ t('privacy.close') }}">&times;</button>
+    </div>
+    <div class="privacy-body">
+      <h3>{{ t('privacy.q1_title') }}</h3><p>{{ t('privacy.q1_body') }}</p>
+      <h3>{{ t('privacy.q2_title') }}</h3><p>{{ t('privacy.q2_body') }}</p>
+      <h3>{{ t('privacy.q3_title') }}</h3><p>{{ t('privacy.q3_body') }}</p>
+      <h3>{{ t('privacy.q4_title') }}</h3><p>{{ t('privacy.q4_body') }}</p>
+      <h3>{{ t('privacy.q5_title') }}</h3><p>{{ t('privacy.q5_body') }}</p>
+      <h3>{{ t('privacy.q6_title') }}</h3><p>{{ t('privacy.q6_body') }}</p>
+      <h3>{{ t('privacy.q7_title') }}</h3><p>{{ t('privacy.q7_body') }}</p>
+      <h3>{{ t('privacy.q8_title') }}</h3><p>{{ t('privacy.q8_body') }}</p>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -160,6 +207,18 @@
       this.closest('.choice').classList.add('sel');
     });
   });
+
+  // Politique de confidentialité — ouverture/fermeture de la modale
+  (function(){
+    var overlay = document.getElementById('privacyOverlay');
+    function openPrivacy(){ overlay.classList.add('open'); }
+    function closePrivacy(){ overlay.classList.remove('open'); }
+    document.getElementById('btnPrivacyDesktop').addEventListener('click', openPrivacy);
+    var mobile = document.getElementById('btnPrivacyMobile');
+    if (mobile) mobile.addEventListener('click', openPrivacy);
+    document.getElementById('btnPrivacyClose').addEventListener('click', closePrivacy);
+    overlay.addEventListener('click', function(e){ if (e.target === overlay) closePrivacy(); });
+  })();
 
   // Si l'application est installée (PWA, plein écran) sur un appareil mobile,
   // on saute le choix de durée de session : on reste connecté 30 jours et on

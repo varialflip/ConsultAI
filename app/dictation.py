@@ -53,7 +53,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from app import live, llm, usage
+from app import live, llm, runtime_config, usage
 from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
 from app.stt import (
@@ -362,8 +362,14 @@ def purge_for_user(username: str) -> int:
 
 
 def purge_expired() -> int:
-    """Supprime les dictées abandonnées. Appelée au démarrage."""
-    limit = settings.dictation_retention_hours * 3600
+    """Supprime les dictées abandonnées. Appelée au démarrage et à l'accès à
+    la liste des brouillons. Rétention harmonisée sur celle des consultations
+    (``consultation_retention_hours``, défaut 12 h) : une seule politique.
+    ``0`` désactive la purge."""
+    hours = runtime_config.value_float("consultation_retention_hours", 12.0)
+    if hours <= 0:
+        return 0
+    limit = hours * 3600
     now = time.time()
     removed = 0
     try:
@@ -381,8 +387,8 @@ def purge_expired() -> int:
             shutil.rmtree(directory, ignore_errors=True)
             removed += 1
     if removed:
-        logger.info("Purge des dictées : %d session(s) de plus de %d h supprimée(s)",
-                    removed, settings.dictation_retention_hours)
+        logger.info("Purge des dictées : %d session(s) de plus de %g h supprimée(s)",
+                    removed, hours)
     return removed
 
 

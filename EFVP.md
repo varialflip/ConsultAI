@@ -32,7 +32,7 @@ Déploiement en production (2026-08-14) :
 
 | Élément | Valeur |
 |---|---|
-| Infrastructure | VM Oracle Cloud (OCI), hébergement auto-géré |
+| Infrastructure | VM Oracle Cloud (OCI), hébergement auto-géré — **stockage chiffré au repos (OCI, clés contrôlées par le client)** |
 | Emplacement | /opt/dictai — pile Docker Compose (Caddy, consultai, pocket-id, pocket-id-loki, crowdsec, turnstile-gate) |
 | Accès public | `app.dictai.ca` / `app.loki.casa` (HTTPS TLS) |
 | Fournisseur d'identité | Pocket ID, auto-hébergé : `login.dictai.ca` et `login.loki.casa` (2 instances) |
@@ -109,7 +109,7 @@ Déploiement en production (2026-08-14) :
 | Donnée | Durée | Mécanisme |
 |---|---|---|
 | Audio, transcription et note d'une consultation | **12 h par défaut** sans modification (`consultation_retention_hours`, réglable au panneau en heures ; 0 = désactivé) | Purge automatique au démarrage et à l'ouverture de la liste des brouillons, basée sur `updated_at`. Suppression immédiate (fichier compris) à la suppression du brouillon |
-| Dictée en cours, jamais conclue | 72 h (`DICTATION_RETENTION_HOURS`) | Purge au démarrage |
+| Dictée en cours, jamais conclue | Rétention harmonisée sur celle des dossiers (`consultation_retention_hours`, défaut 12 h) | Purge au démarrage et à l'accès à la liste des brouillons |
 | Copies temporaires du navigateur (IndexedDB) | Jusqu'à l'envoi réussi, puis effacées | Automatique |
 | Sauvegardes | Rotation automatique quotidienne, `backup_retention_count` (défaut 7) — couverture quotidienne/hebdo/mensuelle | **Sanitisées** : les archives ne contiennent **ni audio, ni données patient** (config, comptes, gabarits et statistiques seulement) |
 | Journaux Caddy / CrowdSec | Fenêtre glissante couvrant les dernières 24 h pour l'analyse ; journaux bruts conservés selon le volume | Rotation des journaux |
@@ -128,7 +128,7 @@ Déploiement en production (2026-08-14) :
 [ConsultAI — conteneur]
    ├─ SQLite  consultai.db   (transcriptions, notes, métadonnées non identifiantes, usagers, usage)
    ├─ /data/audio/           (enregistrements, fichier par consultation, purge 12 h par défaut)
-   ├─ /data/dictations/      (dictées en cours, purge 72 h)
+   ├─ /data/dictations/      (dictées en cours, purge harmonisée 12 h par défaut)
    └─ /data/backups/         (sauvegardes sanitisées : ni audio, ni données patient)
         │  audio + note (Vertex AI, région Montréal)         ← traitement hors périmètre local
         ▼
@@ -166,10 +166,11 @@ Autres flux :
 
 > ⚠️ **Décision documentée (2026-07-31, confirmée au 2026-08-13)** : l'audio et le
 > texte sont envoyés au **modèle Gemini via Vertex AI en région Montréal** — le seul
-> fournisseur retenu gardant le traitement au Québec. Le panneau permet de changer
-> de fournisseur STT/LLM en deux clics : **chaque changement est une décision de
-> conformité** (résidence des données, entente de service) et doit être revalidé
-> avant toute bascule.
+> fournisseur retenu gardant le traitement au Québec. **Addendum de politique cloud
+> de Google consenti le 2026-08-14** (traitement des renseignements de santé chez
+> Google Cloud). Le panneau permet de changer de fournisseur STT/LLM en deux clics :
+> **chaque changement est une décision de conformité** (résidence des données, entente
+> de service) et doit être revalidé avant toute bascule.
 
 ---
 
@@ -189,7 +190,7 @@ Autres flux :
 |---|---|---|---|---|
 | R1 | **Accès non autorisé** à l'application ou à la base (mot de passe, session volée, compte compromis) | E | M | **Élevé** |
 | R2 | **Divulgation des renseignements de santé** par un tiers de traitement (fournisseur de modèle, courriel) | E | F | Moyen |
-| R3 | **Surconservation** de l'audio ou des notes (pas de rétention automatique, sauvegardes longues) | M | M | Moyen |
+| R3 | **Surconservation** de l'audio ou des notes (rétention courte par défaut, mais réglage possible) | M | M | Moyen |
 | R4 | **Erreur humaine** : note générée inexacte ou tronquée versée au dossier sans relecture | E | M | **Élevé** |
 | R5 | **Interception en transit** (réseau) | E | F | Moyen |
 | R6 | **Perte / vol d'appareil** (PWA : données en IndexedDB, session persistante 30 j) | M | M | Moyen |
@@ -259,6 +260,8 @@ Autres flux :
 ### 7.4 Traitement et résidence des données
 
 - LLM + audio sur **Vertex AI, région `northamerica-northeast1` (Montréal)**.
+- **Addendum de politique cloud de Google consenti le 2026-08-14** — le traitement
+  des renseignements de santé par Google Cloud est couvert par l'entente.
 - `GOOGLE_CLOUD_LOCATION` explicite ; vérification que `GEMINI_API_KEY` est **vide**
   (une clé renseignée ferait retomber silencieusement sur l'API grand public, hors région).
 - Les réglages effectifs du panneau priment sur le `.env` : un contrôle périodique
@@ -268,9 +271,11 @@ Autres flux :
 ### 7.5 Protection de la base et des sauvegardes
 
 - Fichier `consultai.db` propriétaire UID/GID 1000 ; volume monté sur la VM.
-- Transcriptions et notes stockées **en clair** dans SQLite (pas de chiffrement natif) :
-  le volume n'est pas chiffré au repos actuellement — **action recommandée** : stocker
-  `/opt/dictai/data/consultai` sur un volume chiffré.
+- Transcriptions et notes stockées **en clair** dans SQLite (pas de chiffrement natif
+  applicatif), mais le **stockage au repos est chiffré chez l'hébergeur** : Oracle Cloud
+  Infrastructure chiffre les volumes de bloc par défaut (clés gérées par le client /
+  OCI), y compris `/opt/dictai/data/consultai`. Le chiffrement applicatif reste une
+  option si l'analyse de risque l'exige au-delà du chiffrement de plateforme.
 - **Sauvegardes sanitisées (2026-08-14)** : les archives ZIP contiennent la base
   **vidée de toute donnée clinique** (tables `consultations` et `recordings` purgées)
   et **aucun fichier audio**. Elles ne renferment que la configuration, les comptes,

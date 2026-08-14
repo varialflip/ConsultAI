@@ -3,6 +3,16 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.26
+
+- Pied de page sur toutes les pages avec politique de confidentialité (FAQ
+  modale, fondée sur l'ÉFVP) — traitement et hébergement au Québec, un seul
+  cookie de session, aucun cookie de tracking.
+- Rétention des dictées abandonnées harmonisée sur celle des consultations
+  (`consultation_retention_hours`, 12 h par défaut) — variable
+  `DICTATION_RETENTION_HOURS` retirée ; purge aussi à l'accès à la liste des
+  brouillons.
+
 ## 2026-08-14 — v2.0.0-beta.25
 
 - Rétention des dossiers en heures (défaut 12 h) au lieu de jours.

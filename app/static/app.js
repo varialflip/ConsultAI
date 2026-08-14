@@ -5721,6 +5721,10 @@
     $('btnDrafts').addEventListener('click', openDraftsModal);
     $('btnCloseDrafts').addEventListener('click', () => $('draftsModal').classList.add('hidden'));
 
+    // --- Politique de confidentialité ---
+    $('btnPrivacyPolicy').addEventListener('click', () => $('privacyModal').classList.remove('hidden'));
+    $('btnClosePrivacy').addEventListener('click', () => $('privacyModal').classList.add('hidden'));
+
     // --- Synchronisation en direct ---
     $('btnSyncReload').addEventListener('click', () => {
       hideBlockingSyncModal();
@@ -5779,6 +5783,7 @@
         closeTemplatesModal();
         $('draftsModal').classList.add('hidden');
         $('adminModal').classList.add('hidden');
+        $('privacyModal').classList.add('hidden');
         toggleIdentityMenu(false);
       }
       // Ctrl/Cmd + S : sauvegarde immédiate
@@ -5792,7 +5797,7 @@
         generateNote();
       }
     });
-    [$('templatesModal'), $('draftsModal'), $('adminModal')].forEach((modal) => {
+    [$('templatesModal'), $('draftsModal'), $('adminModal'), $('privacyModal')].forEach((modal) => {
       modal.addEventListener('click', (event) => {
         if (event.target === modal) modal.classList.add('hidden');
       });

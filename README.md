@@ -601,8 +601,8 @@ votre contexte avant toute utilisation clinique réelle.
   audio ni données cliniques (config, comptes, gabarits, statistiques
   seulement). Une restauration ne ramène donc pas les données patient.
 * Pendant la dictée, deux copies temporaires existent, effacées à la conclusion :
-  sur le serveur sous `DICTATION_DIR` (purgée après
-  `DICTATION_RETENTION_HOURS` si la dictée n'est jamais conclue), et dans le
+  sur le serveur sous `DICTATION_DIR` (purgée selon la rétention commune
+  `consultation_retention_hours` si la dictée n'est jamais conclue), et dans le
   navigateur (IndexedDB) pour rejouer un envoi raté.
 * Transcriptions et notes sont stockées **en clair** dans SQLite. Placez `./data`
   sur un partage chiffré si votre analyse de risque l'exige.

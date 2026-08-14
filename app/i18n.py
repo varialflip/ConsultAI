@@ -321,6 +321,95 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Aucune nouveauté cette semaine.",
         "Nothing new this week.",
     ),
+
+    # --- Politique de confidentialité (FAQ) -------------------------------
+    "privacy.title": ("Politique de confidentialité", "Privacy policy"),
+    "privacy.footer_link": ("Politique de confidentialité", "Privacy policy"),
+    "privacy.close": ("Fermer", "Close"),
+    "privacy.q1_title": ("Où sont traitées les données ?", "Where is the data processed?"),
+    "privacy.q1_body": (
+        "La dictée, la transcription et la note sont traitées au Québec, auprès "
+        "d'un fournisseur de services cloud conforme. Aucune donnée clinique "
+        "n'est transmise à des services situés hors du Québec.",
+        "The dictation, transcript and note are processed in Québec, with a "
+        "compliant cloud service provider. No clinical data is sent to "
+        "services located outside Québec.",
+    ),
+    "privacy.q2_title": ("Quelles données sont collectées ?", "What data is collected?"),
+    "privacy.q2_body": (
+        "L'enregistrement audio, la transcription, la note générée et quelques "
+        "métadonnées non identifiantes (date, raison de consultation, "
+        "demandeur, accompagnateur). Le nom et le numéro de dossier du patient "
+        "ne sont pas collectés ni conservés.",
+        "The audio recording, the transcript, the generated note and a few "
+        "non-identifying metadata fields (date, reason for consultation, "
+        "requester, companion). The patient's name and record number are "
+        "neither collected nor kept.",
+    ),
+    "privacy.q3_title": ("Où sont-elles stockées ?", "Where are they stored?"),
+    "privacy.q3_body": (
+        "Sur un serveur sécurisé hébergé au Québec, dont le stockage est "
+        "chiffré au repos. Aucun transit par un service tiers de diffusion "
+        "(CDN).",
+        "On a secure server hosted in Québec, encrypted at rest. No transit "
+        "through a third-party content delivery network (CDN).",
+    ),
+    "privacy.q4_title": (
+        "Combien de temps sont-elles conservées ?",
+        "How long are they kept?",
+    ),
+    "privacy.q4_body": (
+        "12 heures par défaut, réglable dans l'administration. Une dictée "
+        "jamais conclue est supprimée selon la même rétention. La suppression "
+        "d'un brouillon efface définitivement la transcription, la note et "
+        "l'audio.",
+        "12 hours by default, adjustable in the administration. An abandoned "
+        "dictation is removed under the same retention. Deleting a draft "
+        "permanently erases the transcript, the note and the audio.",
+    ),
+    "privacy.q5_title": (
+        "Les sauvegardes contiennent-elles des données cliniques ?",
+        "Do backups contain clinical data?",
+    ),
+    "privacy.q5_body": (
+        "Non. Les archives de sauvegarde sont sanitisées : elles ne renferment "
+        "ni audio ni données de patients (configuration, comptes et gabarits "
+        "seulement).",
+        "No. Backup archives are sanitized: they contain neither audio nor "
+        "patient data (configuration, accounts and templates only).",
+    ),
+    "privacy.q6_title": ("Qui a accès aux données ?", "Who has access to the data?"),
+    "privacy.q6_body": (
+        "Seuls les cliniciens autorisés (connexion sécurisée, comptes "
+        "nominatifs et groupes de permissions). Le fournisseur de traitement "
+        "au Québec est lié par une entente de service couvrant les "
+        "renseignements de santé. La supervision de sécurité n'analyse que "
+        "des journaux techniques, jamais le contenu des consultations.",
+        "Only authorized clinicians (secure sign-in, named accounts and "
+        "permission groups). The Québec-based processing provider is bound by "
+        "a service agreement covering health information. Security monitoring "
+        "analyzes only technical logs, never consultation content.",
+    ),
+    "privacy.q7_title": ("Quels cookies ?", "Which cookies?"),
+    "privacy.q7_body": (
+        "Un seul cookie de session, utilisé pour la connexion. Aucun cookie de "
+        "tracking, aucune publicité ni statistique tierce. Le seul stockage "
+        "local utilisé (mémoriser le dernier gabarit choisi) reste dans votre "
+        "navigateur et n'est jamais transmis.",
+        "A single session cookie, used for signing in. No tracking cookies, "
+        "no advertising and no third-party analytics. The only local storage "
+        "used (remembering the last chosen template) stays in your browser "
+        "and is never transmitted.",
+    ),
+    "privacy.q8_title": ("Quelles garanties de sécurité ?", "What security guarantees?"),
+    "privacy.q8_body": (
+        "Connexions chiffrées, protection contre les accès malveillants, "
+        "accès nominatifs et traçables, et conformité à la Loi 25 du Québec "
+        "(évaluation des facteurs relatifs à la vie privée documentée).",
+        "Encrypted connections, protection against malicious access, named "
+        "and traceable access, and compliance with Québec's Law 25 "
+        "(documented privacy impact assessment).",
+    ),
     "note.engine_dictation": ("dictée {engine}", "dictation {engine}"),
     "note.engine_note": ("note {engine}", "note {engine}"),
     "note.engine_stt_title": ("Transcription : {engine}", "Transcription: {engine}"),

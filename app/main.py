@@ -2511,6 +2511,9 @@ def list_consultations(
     """
     user = current_user(request)
     limit = max(1, min(limit, 200))
+    # Même cadence que la purge des consultations : une dictée abandonnée est
+    # nettoyée dans les heures qui suivent, sans attendre un redémarrage.
+    dictation.purge_expired()
     purge_expired_consultations(db)
     rows = db.scalars(
         select(Consultation)

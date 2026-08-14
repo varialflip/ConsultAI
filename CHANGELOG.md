@@ -3,6 +3,14 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.28
+
+- Permission des capteurs : une seule demande (`DeviceMotionEvent.
+  requestPermission()`, qui couvre aussi `deviceorientation`) au lieu de deux
+  simultanées, qui pouvaient rester en suspens sur iOS (état « pending »
+  permanent) ; retentative à chaque geste tant que la décision n'est pas
+  mémorisée par le système.
+
 ## 2026-08-14 — v2.0.0-beta.27
 
 - Mode dictaphone (téléphone retourné) réparé sur iPhone : détection par

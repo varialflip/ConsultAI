@@ -1338,34 +1338,34 @@
   }
 
   /** iOS 13+ n'émet devicemotion/deviceorientation qu'après une permission,
-   * demandée sur un geste. La réponse est partagée entre les deux API ; les
-   * deux requêtes partent donc dans le même geste. Refus ou réglage iOS
-   * désactivé : on le dit une fois, le mode restant muet sans les capteurs. */
-  let orientationPermissionAsked = false;
+   * demandée sur un geste. UNE SEULE demande suffit : sur iOS,
+   * DeviceMotionEvent.requestPermission() couvre les deux types d'événements.
+   * En demander deux simultanément peut laisser la seconde promesse en
+   * suspens (état « pending » permanent). Tant que la permission n'est pas
+   * tranchée, on retente à chaque geste : un premier appel resté bloqué se
+   * débloque une fois la réponse mémorisée par le système. Refus ou réglage
+   * iOS désactivé : on le dit une fois, le mode restant muet sans capteurs. */
+  let motionPermissionAsked = false;
   let motionPermissionState = 'pending'; // pending | granted | denied | na
   let motionPermissionNotified = false;
   async function maybeRequestOrientationPermission() {
-    if (orientationPermissionAsked) return;
-    orientationPermissionAsked = true;
-    const requests = [];
-    if (typeof DeviceOrientationEvent !== 'undefined'
-        && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      requests.push(DeviceOrientationEvent.requestPermission());
-    }
-    if (typeof DeviceMotionEvent !== 'undefined'
-        && typeof DeviceMotionEvent.requestPermission === 'function') {
-      requests.push(DeviceMotionEvent.requestPermission());
-    }
-    if (!requests.length) {
+    if (motionPermissionAsked && motionPermissionState !== 'pending') return;
+    motionPermissionAsked = true;
+    const motionApi = (typeof DeviceMotionEvent !== 'undefined'
+        && typeof DeviceMotionEvent.requestPermission === 'function')
+      ? DeviceMotionEvent
+      : (typeof DeviceOrientationEvent !== 'undefined'
+        && typeof DeviceOrientationEvent.requestPermission === 'function')
+        ? DeviceOrientationEvent
+        : null;
+    if (!motionApi) {
       motionPermissionState = 'na'; // navigateur sans permission à demander
       updateSensorDebug();
       return;
     }
     try {
-      const results = await Promise.allSettled(requests);
-      motionPermissionState = results.some((r) =>
-        r.status === 'fulfilled' ? r.value !== 'granted' : true)
-        ? 'denied' : 'granted';
+      const result = await motionApi.requestPermission();
+      motionPermissionState = result === 'granted' ? 'granted' : 'denied';
     } catch (err) {
       motionPermissionState = 'denied';
     }

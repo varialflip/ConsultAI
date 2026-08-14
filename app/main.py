@@ -2313,23 +2313,39 @@ def _generate_and_publish(
     )
 
     raw = ""
+    prev = ""
+    seq = 0
     result = None
-    last_publish = 0.0
+    last_snapshot = 0.0
     try:
-        # Publie au plus toutes les 250 ms : la file SSE de l'usager est
-        # plafonnée (live._MAX_QUEUE) et un déluge d'évènements minuscules
-        # n'apporterait rien de visible.
+        # Chaque fragment du fournisseur est publié DÈS qu'il arrive, sous
+        # forme de delta (texte nouveau depuis le précédent) : la latence de
+        # diffusion est minimale et le volume total reste petit (pas de
+        # renvoi du texte entier à chaque fois). Un snapshot du texte complet
+        # part toutes les ~1 s : le navigateur se répare lui-même si un delta
+        # a été perdu en route (file SSE plafonnée, live._MAX_QUEUE). La
+        # réponse JSON finale de /api/generate reste LA source de vérité.
         while _generation_guard.is_current(payload.consultation_id, generation_seq):
             raw = next(generator)
+            delta = raw[len(prev):] if raw.startswith(prev) else raw
+            prev = raw
+            seq += 1
             now = time.monotonic()
-            if now - last_publish >= 0.25:
+            if delta:
                 live.publish(user.owner_key, "generation_chunk", {
+                    "type": "delta", "seq": seq, "delta": delta,
                     "consultation_id": payload.consultation_id,
                     "generation_token": payload.generation_token,
                     "origin_tab": origin_tab,
-                    "markdown": raw,
                 })
-                last_publish = now
+            if now - last_snapshot >= 1.0:
+                live.publish(user.owner_key, "generation_chunk", {
+                    "type": "snapshot", "seq": seq, "markdown": raw,
+                    "consultation_id": payload.consultation_id,
+                    "generation_token": payload.generation_token,
+                    "origin_tab": origin_tab,
+                })
+                last_snapshot = now
         else:
             # Supplantée pendant la génération : on coupe le flux fournisseur
             # (pas de jetons gaspillés) et on laisse le garde final de
@@ -2345,14 +2361,14 @@ def _generate_and_publish(
         generator.close()
         raise
 
-    # Dernier morceau, sans filtre temporel : l'écran montre le texte au
-    # complet juste avant que la réponse JSON finale ne le remplace.
+    # Snapshot final : l'écran montre le texte au complet juste avant que la
+    # réponse JSON finale ne le remplace par la version définitive.
     if _generation_guard.is_current(payload.consultation_id, generation_seq):
         live.publish(user.owner_key, "generation_chunk", {
+            "type": "snapshot", "seq": seq, "markdown": raw,
             "consultation_id": payload.consultation_id,
             "generation_token": payload.generation_token,
             "origin_tab": origin_tab,
-            "markdown": raw,
         })
     return result
 

@@ -459,6 +459,17 @@
   let pendingRetranscribe = null;
   let pendingTranscribe = null;
 
+  // État du rendu en continu de la génération (hors ``state`` : ce n'est pas
+  // une donnée du brouillon, seulement l'accumulation des morceaux du flux
+  // pour l'affichage). ``genText`` est le texte brut accumulé, ``genSeq`` le
+  // numéro du dernier morceau appliqué (détection des trous), et la minuterie
+  // cadence le rendu pour rester lisse même quand les évènements arrivent en
+  // rafale (voir onGenerationChunk/applyGenText).
+  let genText = '';
+  let genSeq = 0;
+  let genDirty = false;
+  let genRenderTimer = null;
+
   const state = {
     templates: [],
     isTemplateAdmin: true,
@@ -2189,7 +2200,12 @@
     // un témoin discret — pastille sur le panneau de transcription sur grand
     // écran, barre horizontale dans l'aperçu sur mobile. Une note déjà
     // présente est effacée pour laisser place à la nouvelle, qui arrivera en
-    // streaming (et l'ancienne est restituée si la génération échoue).
+    // streaming (et l'ancienne est restituée si la génération échoue). Un
+    // clic de régénération repart aussi d'un flux de rendu vierge.
+    if (genRenderTimer) { clearTimeout(genRenderTimer); genRenderTimer = null; }
+    genText = '';
+    genSeq = 0;
+    genDirty = false;
     setGenerating(true);
     $('markdownEditor').value = '';
     showPreview();
@@ -2270,6 +2286,10 @@
       if (pendingGenerate === controller) {
         pendingGenerate = null;
         state.generationToken = null;
+        // La génération est finie (succès, échec ou annulation) : plus aucun
+        // rendu en continu à appliquer ni minuteur en attente.
+        if (genRenderTimer) { clearTimeout(genRenderTimer); genRenderTimer = null; }
+        genDirty = false;
         setGenerating(false);
       }
     }
@@ -5527,11 +5547,13 @@
 
   /**
    * Un morceau du texte de la note, diffusé par le serveur pendant que
-   * /api/generate attend encore. Seuls les morceaux de CETTE tentative
-   * (même jeton de corrélation, même brouillon) sont appliqués — un flux
-   * supplanté par un clic de régénération, ou un flux d'un autre onglet,
-   * est ignoré sans effet. La réponse JSON finale de /api/generate reste la
-   * source de vérité : elle remplace ce texte brut par le texte définitif.
+   * /api/generate attend encore. Le flux porte soit des DELTAS (texte nouveau
+   * depuis le morceau précédent), soit — toutes les ~1 s et toujours à la fin
+   * — un SNAPSHOT du texte complet : un delta perdu en route (file SSE
+   * saturée) est ainsi corrigé par le snapshot suivant. Seuls les morceaux de
+   * CETTE tentative (même jeton de corrélation, même brouillon) sont pris en
+   * compte. La réponse JSON finale de /api/generate reste la source de
+   * vérité : elle remplace ce texte brut par la version définitive.
    */
   function onGenerationChunk(evt) {
     if (!pendingGenerate) return;
@@ -5539,10 +5561,37 @@
     if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
 
-    $('markdownEditor').value = payload.markdown || '';
+    if (payload.type === 'snapshot' || !payload.type) {
+      // Snapshot (ou ancien format, texte complet) : remplace tout.
+      genText = payload.markdown || '';
+      genSeq = payload.seq || 0;
+    } else {
+      // Delta : on n'ajoute que s'il est contigu au précédent, sinon on
+      // attend le prochain snapshot — un trou se répare tout seul.
+      if (genSeq + 1 === payload.seq || genSeq === 0) {
+        genText += payload.delta || '';
+      }
+      genSeq = payload.seq || genSeq;
+    }
+
+    genDirty = true;
+    if (!genRenderTimer) {
+      genRenderTimer = setTimeout(applyGenText, 120);
+    }
+  }
+
+  /**
+   * Applique le dernier texte accumulé à cadence fixe (~120 ms). Les
+   * évènements peuvent arriver en rafale (les deltas se succèdent vite) ; ce
+   * minuteur coalesce le rendu du markdown et le défilement pour rester
+   * lisse, tout en suivant toujours la fin du texte en cours de génération.
+   */
+  function applyGenText() {
+    genRenderTimer = null;
+    if (!genDirty) return;
+    genDirty = false;
+    $('markdownEditor').value = genText;
     renderMarkdown();
-    // On suit toujours la fin du texte en cours de génération, quelle que
-    // soit la vue active (Aperçu ou Éditer).
     if (state.editingMarkdown) {
       $('markdownEditor').scrollTop = $('markdownEditor').scrollHeight;
     } else {

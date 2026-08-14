@@ -3,6 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.41
+
+- Génération en continu plus fluide : les fragments du modèle sont diffusés au
+  navigateur **dès leur arrivée** (au lieu d'être regroupés toutes les 250 ms),
+  et l'affichage est rafraîchi à cadence fixe pour éviter les à-coups. Le texte
+  coule maintenant au fil de la génération au lieu de sauter par grands blocs.
+- Diffusion par deltas + auto-réparation : chaque morceau ne porte que le texte
+  nouveau, avec un point de référence complet chaque seconde — un morceau perdu
+  (réseau, file SSE saturée) est corrigé par la suite. La note finale reste
+  celle renvoyée par le serveur, inchangée et fiable.
+- Latence de diffusion réduite côté proxy (flush SSE ~100 ms).
+
 ## 2026-08-14 — v2.0.0-beta.40
 
 - Correction d'un crash à l'ouverture d'un brouillon (« Parameter 1 not node ») :

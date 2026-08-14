@@ -3,6 +3,11 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.34
+
+- Politique de confidentialité reformulée en constats factuels : les questions
+  restent en titres, les corps énoncent des faits.
+
 ## 2026-08-14 — v2.0.0-beta.33
 
 - Mode dictaphone (téléphone retourné) : retour au comportement d'origine,

@@ -343,58 +343,59 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "privacy.q2_title": ("Quelles données sont collectées ?", "What data is collected?"),
     "privacy.q2_body": (
-        "L'enregistrement audio, la transcription, la note générée et quelques "
-        "métadonnées non identifiantes (date, raison de consultation, "
-        "demandeur, accompagnateur). Le nom et le numéro de dossier du patient "
-        "ne sont pas collectés ni conservés.",
-        "The audio recording, the transcript, the generated note and a few "
-        "non-identifying metadata fields (date, reason for consultation, "
-        "requester, companion). The patient's name and record number are "
-        "neither collected nor kept.",
+        "L'application collecte l'enregistrement audio, la transcription, la "
+        "note générée et des métadonnées non identifiantes (date, raison de "
+        "consultation, demandeur, accompagnateur). Le nom et le numéro de "
+        "dossier du patient ne sont ni collectés ni conservés.",
+        "The application collects the audio recording, the transcript, the "
+        "generated note and non-identifying metadata (date, reason for "
+        "consultation, requester, companion). The patient's name and record "
+        "number are neither collected nor kept.",
     ),
     "privacy.q3_title": ("Où sont-elles stockées ?", "Where are they stored?"),
     "privacy.q3_body": (
-        "Sur un serveur sécurisé hébergé au Québec, dont le stockage est "
+        "Les données sont stockées sur un serveur sécurisé hébergé au Québec, "
         "chiffré au repos. Aucun transit par un service tiers de diffusion "
         "(CDN).",
-        "On a secure server hosted in Québec, encrypted at rest. No transit "
-        "through a third-party content delivery network (CDN).",
+        "The data is stored on a secure server hosted in Québec, encrypted at "
+        "rest. No transit through a third-party content delivery network "
+        "(CDN).",
     ),
     "privacy.q4_title": (
         "Combien de temps sont-elles conservées ?",
         "How long are they kept?",
     ),
     "privacy.q4_body": (
-        "12 heures par défaut, réglable dans l'administration. Une dictée "
-        "jamais conclue est supprimée selon la même rétention. La suppression "
-        "d'un brouillon efface définitivement la transcription, la note et "
-        "l'audio.",
-        "12 hours by default, adjustable in the administration. An abandoned "
-        "dictation is removed under the same retention. Deleting a draft "
-        "permanently erases the transcript, the note and the audio.",
+        "La rétention est de 12 heures par défaut, réglable dans "
+        "l'administration. Une dictée jamais conclue est supprimée selon la "
+        "même rétention. La suppression d'un brouillon efface définitivement "
+        "la transcription, la note et l'audio.",
+        "Retention is 12 hours by default, adjustable in the administration. "
+        "An abandoned dictation is removed under the same retention. Deleting "
+        "a draft permanently erases the transcript, the note and the audio.",
     ),
     "privacy.q5_title": (
         "Les sauvegardes contiennent-elles des données cliniques ?",
         "Do backups contain clinical data?",
     ),
     "privacy.q5_body": (
-        "Non. Les archives de sauvegarde sont sanitisées : elles ne renferment "
-        "ni audio ni données de patients (configuration, comptes et gabarits "
+        "Les archives de sauvegarde sont sanitisées : elles ne renferment ni "
+        "audio ni données de patients (configuration, comptes et gabarits "
         "seulement).",
-        "No. Backup archives are sanitized: they contain neither audio nor "
-        "patient data (configuration, accounts and templates only).",
+        "Backup archives are sanitized: they contain neither audio nor patient "
+        "data (configuration, accounts and templates only).",
     ),
     "privacy.q6_title": ("Qui a accès aux données ?", "Who has access to the data?"),
     "privacy.q6_body": (
-        "Seuls les cliniciens autorisés (connexion sécurisée, comptes "
-        "nominatifs et groupes de permissions). Le fournisseur de traitement "
-        "au Québec est lié par une entente de service couvrant les "
-        "renseignements de santé. La supervision de sécurité n'analyse que "
-        "des journaux techniques, jamais le contenu des consultations.",
-        "Only authorized clinicians (secure sign-in, named accounts and "
-        "permission groups). The Québec-based processing provider is bound by "
-        "a service agreement covering health information. Security monitoring "
-        "analyzes only technical logs, never consultation content.",
+        "L'accès est réservé aux cliniciens autorisés (connexion sécurisée, "
+        "comptes nominatifs et groupes de permissions). Le fournisseur de "
+        "traitement au Québec est lié par une entente de service couvrant les "
+        "renseignements de santé. La supervision de sécurité n'analyse que des "
+        "journaux techniques, jamais le contenu des consultations.",
+        "Access is reserved for authorized clinicians (secure sign-in, named "
+        "accounts and permission groups). The Québec-based processing provider "
+        "is bound by a service agreement covering health information. Security "
+        "monitoring analyzes only technical logs, never consultation content.",
     ),
     "privacy.q7_title": ("Quels cookies ?", "Which cookies?"),
     "privacy.q7_body": (

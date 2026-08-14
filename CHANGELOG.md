@@ -8,6 +8,12 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 - Politique de confidentialité reformulée en constats factuels : les questions
   restent en titres, les corps énoncent des faits.
 
+## 2026-08-14 — v2.0.0-beta.36
+
+- Calque dictaphone : boutons stop/terminer rendus en ligne (`flex` rétabli sur
+  leur emplacement réservé) — plus d'empilement vertical ni de chevauchement
+  du texte d'aide.
+
 ## 2026-08-14 — v2.0.0-beta.35
 
 - Calque dictaphone : le gros bouton reste fixe quand la dictée démarre. Les

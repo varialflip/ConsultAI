@@ -483,6 +483,19 @@
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
             <input id="audioFileInput" type="file" accept="audio/*" class="hidden">
           </label>
+
+          <!-- Mode retourné : bascule MANUELLE du dictaphone grand bouton.
+               Secours quand iOS refuse l'accès aux capteurs (permission
+               « Mouvement et orientation ») — la détection automatique du
+               retournement reste active quand elle est possible. -->
+          <button id="btnFlipMode" type="button" title="{{ t('dictaphone.toggle_title') }}"
+                  class="w-12 lg:w-10 grid place-items-center rounded-lg border transition border-slate-300 hover:bg-slate-50 active:bg-slate-100">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+              <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
+          </button>
         </div>
 
         <!-- Chronomètre et waveform. Une barre plate alors qu'on parle signale
@@ -844,6 +857,13 @@
      =================================================================== -->
 <div id="dictaphoneOverlay" class="no-print hidden fixed inset-0 z-50 bg-slate-900 text-white
                                   select-none" style="touch-action: manipulation">
+  <button id="btnDictaphoneExit" type="button" title="{{ t('dictaphone.exit_title') }}"
+          aria-label="{{ t('dictaphone.exit_title') }}"
+          class="absolute top-2 right-2 w-10 h-10 grid place-items-center rounded-full
+                 text-slate-400 hover:text-white active:bg-slate-800 transition">
+    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
   <div class="flex flex-col items-center justify-center gap-6 w-full h-full p-6"
        style="padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom)">
     <button id="btnDictaphoneMain" type="button"

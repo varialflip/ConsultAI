@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.30
+
+- Mode retourné en accès direct : bouton « Mode retourné » dans la barre
+  d'enregistrement pour activer/désactiver le grand bouton de dictée sans
+  dépendre des capteurs — secours quand iOS refuse l'accès au mouvement et à
+  l'orientation (permission refusée, « Empêcher le suivi intersites » actif).
+  Bouton de sortie ajouté au calque (suspend l'auto-détection tant que le
+  téléphone reste retourné).
+
 ## 2026-08-14 — v2.0.0-beta.29
 
 - Aide permission des capteurs : le message de refus indique en premier le

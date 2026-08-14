@@ -212,6 +212,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Retournez le téléphone pour quitter ce mode",
         "Flip the phone back to leave this mode",
     ),
+    "dictaphone.toggle_title": (
+        "Mode retourné (grand bouton)",
+        "Flip mode (big button)",
+    ),
+    "dictaphone.exit_title": (
+        "Quitter le mode retourné",
+        "Exit flip mode",
+    ),
     "dictaphone.permission": (
         "Mode téléphone retourné désactivé : iOS refuse l'accès aux capteurs. "
         "Réglages → Apps → Safari → Confidentialité et sécurité → désactiver "

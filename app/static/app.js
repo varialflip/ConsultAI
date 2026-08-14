@@ -1234,7 +1234,7 @@
    * Anti-rebond : un état ne s'applique qu'après 400 ms stables, pour ne
    * pas faire clignoter le calque pendant le mouvement de bascule.
    * ---------------------------------------------------------------------- */
-  const dphone = { active: false, rotation: 0, candidate: null, since: 0 };
+  const dphone = { active: false, rotation: 0, candidate: null, since: 0, userDisabled: false };
 
   const ICON_MIC_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
     + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
@@ -1299,7 +1299,10 @@
   function applyDictaphoneCandidate() {
     const flipped = screenIsUpsideDown() || gravitySaysUpsideDown()
                  || orientationEventSaysUpsideDown();
-    const c = flipped
+    // Revenu à l'endroit : une éventuelle sortie manuelle cesse de bloquer
+    // l'auto-détection.
+    if (!flipped) dphone.userDisabled = false;
+    const c = flipped && !dphone.userDisabled
       // Rotation CSS pour que le calque reste lisible : 180° par rapport à
       // l'angle d'affichage courant (180−0 → 180 en portrait, 180−180 → 0
       // quand l'OS a pivoté, 180−90 → 90 si iOS a basculé en paysage).
@@ -5683,6 +5686,18 @@
     });
     $('btnDictaphoneFinish').addEventListener('click', finishRecording);
     $('btnDictaphoneAbort').addEventListener('click', abortRecording);
+    // Bascule manuelle : secours quand iOS refuse l'accès aux capteurs
+    // (permission « Mouvement et orientation » refusée ou indisponible).
+    $('btnFlipMode').addEventListener('click', () => {
+      dphone.userDisabled = false;
+      setDictaphone(!dphone.active, 0);
+    });
+    // Sortie explicite du mode : tant que le téléphone reste retourné, elle
+    // suspend l'auto-détection jusqu'au retour à l'endroit.
+    $('btnDictaphoneExit').addEventListener('click', () => {
+      dphone.userDisabled = true;
+      setDictaphone(false, 0);
+    });
 
     // --- Import d'un fichier audio existant ---
     $('audioFileInput').addEventListener('change', async (event) => {

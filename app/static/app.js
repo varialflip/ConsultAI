@@ -272,8 +272,12 @@
     $('markdownEditor').classList.toggle('gen-pane', active);
 
     const isMobile = window.matchMedia('(max-width: 1023px)').matches;
-    $('genIndicator').classList.toggle('hidden', !active || isMobile);
-    $('genBar').classList.toggle('hidden', !active || !isMobile);
+    // Gardes : les éléments peuvent manquer dans un DOM d'un cache périmé —
+    // l'affichage du témoin n'est jamais une raison de faire échouer l'UI.
+    const indicator = $('genIndicator');
+    const bar = $('genBar');
+    if (indicator) indicator.classList.toggle('hidden', !active || isMobile);
+    if (bar) bar.classList.toggle('hidden', !active || !isMobile);
     if (active && isMobile) positionGenBar();
   }
 
@@ -286,6 +290,7 @@
   function positionGenBar() {
     const pane = $('previewPane');
     const bar = $('genBar');
+    if (!bar) return;
     const viewportBottom = pane.scrollTop + pane.clientHeight;
     if (viewportBottom <= 0 || pane.clientHeight <= 0) return;
     // Le vide visible commence après le texte déjà rendu, ou au haut du cadre
@@ -2182,8 +2187,11 @@
     // Le voile plein écran laisserait le texte généré invisible : à la place
     // on force la vue « Aperçu » (où le texte défilera en direct) et on pose
     // un témoin discret — pastille sur le panneau de transcription sur grand
-    // écran, barre horizontale dans l'aperçu sur mobile.
+    // écran, barre horizontale dans l'aperçu sur mobile. Une note déjà
+    // présente est effacée pour laisser place à la nouvelle, qui arrivera en
+    // streaming (et l'ancienne est restituée si la génération échoue).
     setGenerating(true);
+    $('markdownEditor').value = '';
     showPreview();
     setMobilePane('note');
 
@@ -2595,6 +2603,10 @@
   function renderMarkdown() {
     const markdown = $('markdownEditor').value;
     const pane = $('previewPane');
+    // #genBar est capturé AVANT le rendu : innerHTML le retire du document,
+    // et document.getElementById ne le retrouverait plus après — ce qui
+    // faisait passer null à appendChild (crash « Parameter 1 not node »).
+    const bar = $('genBar');
     if (!markdown.trim()) {
       pane.innerHTML = `<p class="text-slate-400 italic">${esc(T('note.empty'))}</p>`;
     } else {
@@ -2602,8 +2614,7 @@
     }
     // #genBar vit DANS l'aperçu (positionnement absolu dans son défilement)
     // mais ``innerHTML`` l'efface à chaque rendu : on le remet en place.
-    const bar = $('genBar');
-    if (!pane.contains(bar)) pane.appendChild(bar);
+    if (bar && !pane.contains(bar)) pane.appendChild(bar);
   }
 
   /**

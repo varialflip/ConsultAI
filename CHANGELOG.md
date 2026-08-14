@@ -3,6 +3,17 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.40
+
+- Correction d'un crash à l'ouverture d'un brouillon (« Parameter 1 not node ») :
+  le témoin horizontal de génération est recapturé avant chaque rendu de
+  l'aperçu au lieu d'être cherché après son effacement du DOM.
+- Régénération : la note déjà affichée est effacée dès le clic sur
+  « Mettre en forme », laissant la place à la nouvelle qui arrive en streaming
+  (l'ancienne est restituée si la génération échoue).
+- Voile de chargement sans effet de flou (`backdrop-blur` retiré) pendant les
+  opérations en arrière-plan.
+
 ## 2026-08-14 — v2.0.0-beta.39
 
 - Génération en direct : la note s'affiche **au fur et à mesure** que le modèle

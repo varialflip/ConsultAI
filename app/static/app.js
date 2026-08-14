@@ -258,6 +258,44 @@
   }
 
   /**
+   * État « génération en cours » — remplace le voile plein écran, qui
+   * cacherait le texte en cours de génération, par un témoin discret :
+   *  - grand écran : pastille posée sur le panneau de transcription (le
+   *    panneau de la note reste libre, le texte y défile) ;
+   *  - mobile : barre horizontale animée, centrée sur la portion encore vide
+   *    de l'aperçu (voir positionGenBar).
+   * Le fond du texte généré passe temporairement en gris pâle, le temps que
+   * le résultat soit confirmé par la réponse finale de /api/generate.
+   */
+  function setGenerating(active) {
+    $('previewPane').classList.toggle('gen-pane', active);
+    $('markdownEditor').classList.toggle('gen-pane', active);
+
+    const isMobile = window.matchMedia('(max-width: 1023px)').matches;
+    $('genIndicator').classList.toggle('hidden', !active || isMobile);
+    $('genBar').classList.toggle('hidden', !active || !isMobile);
+    if (active && isMobile) positionGenBar();
+  }
+
+  /**
+   * Place la barre horizontale mobile au centre vertical de la portion vide
+   * de l'aperçu — entre la fin du texte déjà généré et le bas de la zone
+   * visible. Le texte défilant en bas (on suit toujours la fin), la portion
+   * vide est ce qui sépare la dernière ligne du bas du cadre.
+   */
+  function positionGenBar() {
+    const pane = $('previewPane');
+    const bar = $('genBar');
+    const viewportBottom = pane.scrollTop + pane.clientHeight;
+    if (viewportBottom <= 0 || pane.clientHeight <= 0) return;
+    // Le vide visible commence après le texte déjà rendu, ou au haut du cadre
+    // si tout est déjà rempli (le témoin se rabat alors sur le bord inférieur).
+    const emptyTop = Math.min(pane.scrollHeight, viewportBottom);
+    const center = (emptyTop + viewportBottom) / 2;
+    bar.style.top = `${Math.max(0, center - bar.offsetHeight / 2)}px`;
+  }
+
+  /**
    * Appel API centralisé.
    * Traduit les erreurs HTTP en exceptions porteuses du message renvoyé par
    * FastAPI (champ « detail »), déjà rédigé en français.
@@ -438,6 +476,15 @@
     // Dernière note réellement générée (pas éditée) pour ce brouillon : sert
     // à savoir, avant une régénération, s'il y a une modification à perdre.
     lastGeneratedMarkdown: '',
+    // Texte de l'éditeur au moment où la génération a démarré : si elle échoue
+    // en cours de route (le flux a déjà rempli l'éditeur de texte partiel), on
+    // restaure ce contenu — on ne laisse jamais un brouillon écrasé par un
+    // texte inachevé.
+    preGenerateMarkdown: '',
+    // Jeton de corrélation de LA génération en cours dans CET onglet : les
+    // évènements ``generation_chunk`` qui ne le portent pas (flux supplanté,
+    // autre onglet) sont ignorés. Voir _generate_and_publish côté serveur.
+    generationToken: null,
     // Langue dans laquelle l'audio a réellement été reconnu — pas celle du
     // gabarit courant. C'est l'écart entre les deux qui déclenche la
     // proposition de retranscription (voir maybeOfferRetranscription).
@@ -2124,7 +2171,22 @@
     const controller = new AbortController();
     pendingGenerate = controller;
 
-    setBusy(true, T('generate.busy', { name: tpl.name }));
+    // Une régénération peut écraser une note déjà en place : on conserve
+    // l'ancien texte pour pouvoir le restituer si la nouvelle échoue en
+    // plein flux, et on ouvre un jeton que le serveur répétera dans chaque
+    // morceau diffusé en direct — seuls les morceaux portant CE jeton seront
+    // appliqués (voir onGenerationChunk).
+    state.preGenerateMarkdown = $('markdownEditor').value;
+    state.generationToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random());
+
+    // Le voile plein écran laisserait le texte généré invisible : à la place
+    // on force la vue « Aperçu » (où le texte défilera en direct) et on pose
+    // un témoin discret — pastille sur le panneau de transcription sur grand
+    // écran, barre horizontale dans l'aperçu sur mobile.
+    setGenerating(true);
+    showPreview();
+    setMobilePane('note');
+
     try {
       const consultationId = await ensureConsultation();
       const result = await api('/api/generate', {
@@ -2136,9 +2198,16 @@
           consultation_id: consultationId,
           extra_instructions: $('ctxExtra').value.trim(),
           use_pro: false,
+          generation_token: state.generationToken,
         }, readMetadata()),
       });
 
+      // Supplantée par un AUTRE onglet (un onglet ne se supplante jamais
+      // lui-même : son clic annule sa propre requête, AbortError). Le serveur
+      // n'a rien persisté : on ne touche à rien — l'écran garde le texte déjà
+      // affiché, et l'évènement ``generated`` de l'onglet gagnant
+      // resynchronisera ce brouillon dans un instant.
+      if (result.superseded) return;
       state.consultationId = result.consultation_id;
       state.lastGeneratedMarkdown = result.markdown;
       $('markdownEditor').value = result.markdown;
@@ -2176,16 +2245,24 @@
     } catch (err) {
       // Une annulation volontaire (supplantée par un clic plus récent) ne
       // doit produire ni toast d'erreur ni changement d'état : c'est
-      // exactement le comportement voulu, pas une panne.
-      if (err.name !== 'AbortError') toast(err.message, 'error', 10000);
+      // exactement le comportement voulu, pas une panne. Sur toute AUTRE
+      // erreur, le flux a peut-être déjà rempli l'éditeur de texte partiel :
+      // on restitue la note qui s'y trouvait avant cette tentative.
+      if (err.name !== 'AbortError') {
+        $('markdownEditor').value = state.preGenerateMarkdown;
+        renderMarkdown();
+        showPreview();
+        toast(err.message, 'error', 10000);
+      }
     } finally {
       // Les deux lignes ci-dessous ne s'exécutent que si RIEN de plus récent
       // n'a pris la relève — sinon le ``finally`` de CET appel annulé,
       // exécuté après coup, effacerait la référence du nouvel appel en cours
-      // ET masquerait sa barre de progression alors qu'il tourne toujours.
+      // ET masquerait son témoin alors qu'il tourne toujours.
       if (pendingGenerate === controller) {
         pendingGenerate = null;
-        setBusy(false);
+        state.generationToken = null;
+        setGenerating(false);
       }
     }
   }
@@ -2515,70 +2592,18 @@
     refreshTranscriptFooter();
   }
 
-  /**
-   * Section informative du panneau de droite : version logicielle et
-   * changelogs des 7 derniers jours. Affiche uniquement quand aucune note
-   * n'est ouverte — c'est l'état de départ de l'application.
-   */
-  let changelogCache = null;
-  let changelogPending = null;
-  function renderChangelogPanel() {
-    const pane = $('previewPane');
-    if (!pane) return;
-
-    pane.innerHTML = `
-      <div class="space-y-4">
-        <div>
-          <h3 class="font-semibold text-slate-700">${esc(T('home.welcome'))}</h3>
-          <p class="text-slate-500 text-sm">${esc(T('home.intro'))}</p>
-          <p class="text-xs text-slate-400 mt-1">${esc(T('home.version', { version: window.CONSULTAI.version || '' }))}</p>
-        </div>
-        <div>
-          <h4 class="font-semibold text-slate-600 text-sm mb-1">${esc(T('home.changelog'))}</h4>
-          <div id="changelogBody" class="text-sm text-slate-500 space-y-3">
-            <p class="text-slate-400 italic">${esc(T('home.changelog_loading'))}</p>
-          </div>
-        </div>
-      </div>`;
-
-    const body = $('changelogBody');
-    if (!body) return;
-
-    const render = (entries) => {
-      if (!entries || !entries.length) {
-        body.innerHTML = `<p class="text-slate-400 italic">${esc(T('home.changelog_empty'))}</p>`;
-        return;
-      }
-      body.innerHTML = entries.map((entry) => `
-        <div>
-          <div class="font-medium text-slate-700 text-xs uppercase tracking-wide">${esc(entry.date)} — ${esc(entry.title)}</div>
-          ${entry.items && entry.items.length
-            ? `<ul class="list-disc pl-4 mt-0.5 space-y-0.5">${entry.items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`
-            : ''}
-        </div>`).join('');
-    };
-
-    if (changelogCache) {
-      render(changelogCache);
-      return;
-    }
-    if (!changelogPending) {
-      changelogPending = api('/api/changelog')
-        .then((data) => { changelogCache = (data && data.entries) || []; return changelogCache; })
-        .catch(() => { changelogCache = []; return changelogCache; })
-        .finally(() => { changelogPending = null; });
-    }
-    changelogPending.then(render);
-  }
-
   function renderMarkdown() {
     const markdown = $('markdownEditor').value;
     const pane = $('previewPane');
     if (!markdown.trim()) {
-      renderChangelogPanel();
-      return;
+      pane.innerHTML = `<p class="text-slate-400 italic">${esc(T('note.empty'))}</p>`;
+    } else {
+      pane.innerHTML = markdownToHtml(markdown);
     }
-    pane.innerHTML = markdownToHtml(markdown);
+    // #genBar vit DANS l'aperçu (positionnement absolu dans son défilement)
+    // mais ``innerHTML`` l'efface à chaque rendu : on le remet en place.
+    const bar = $('genBar');
+    if (!pane.contains(bar)) pane.appendChild(bar);
   }
 
   /**
@@ -5489,6 +5514,33 @@
     if (!$('draftsModal').classList.contains('hidden')) openDraftsModal();
   }
 
+  /**
+   * Un morceau du texte de la note, diffusé par le serveur pendant que
+   * /api/generate attend encore. Seuls les morceaux de CETTE tentative
+   * (même jeton de corrélation, même brouillon) sont appliqués — un flux
+   * supplanté par un clic de régénération, ou un flux d'un autre onglet,
+   * est ignoré sans effet. La réponse JSON finale de /api/generate reste la
+   * source de vérité : elle remplace ce texte brut par le texte définitif.
+   */
+  function onGenerationChunk(evt) {
+    if (!pendingGenerate) return;
+    const payload = JSON.parse(evt.data || '{}');
+    if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+
+    $('markdownEditor').value = payload.markdown || '';
+    renderMarkdown();
+    // On suit toujours la fin du texte en cours de génération, quelle que
+    // soit la vue active (Aperçu ou Éditer).
+    if (state.editingMarkdown) {
+      $('markdownEditor').scrollTop = $('markdownEditor').scrollHeight;
+    } else {
+      const pane = $('previewPane');
+      pane.scrollTop = pane.scrollHeight;
+      positionGenBar();
+    }
+  }
+
   function onSyncConsultationCreated() {
     if (!$('draftsModal').classList.contains('hidden')) openDraftsModal();
   }
@@ -5550,6 +5602,7 @@
     liveSource.addEventListener('recording_added', onSyncRecording);
     liveSource.addEventListener('recording_deleted', onSyncRecording);
     liveSource.addEventListener('generated', onSyncGeneratedOrPatched);
+    liveSource.addEventListener('generation_chunk', onGenerationChunk);
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);
     liveSource.addEventListener('consultation_created', onSyncConsultationCreated);
     liveSource.addEventListener('consultation_deleted', onSyncConsultationDeleted);
@@ -5563,6 +5616,13 @@
     // Date du jour pré-remplie : c'est le cas de très loin le plus fréquent,
     // et une valeur déjà présente n'est jamais écrasée par l'extraction.
     $('metaDate').value = new Date().toISOString().slice(0, 10);
+
+    // Rotation / changement de fenêtre pendant une génération : le témoin
+    // adapté (pastille grand écran vs barre mobile) est re-évalué et la barre
+    // mobile recalculée pour rester centrée sur la portion vide.
+    window.addEventListener('resize', () => {
+      if (state.generationToken !== null) setGenerating(true);
+    });
 
     // --- Enregistrement ---
     $('btnRecord').addEventListener('click', startRecording);

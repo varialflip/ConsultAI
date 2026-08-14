@@ -102,7 +102,7 @@ from app.database import (
     utcnow,
 )
 from app.dictation import DictationError, SequenceMismatch, SessionNotFound
-from app.llm import GenerationError, extract_metadata, generate_note, list_available_models
+from app.llm import GenerationError, extract_metadata, list_available_models
 from app.stt import TranscriptionError, transcribe
 
 configure_logging()
@@ -471,6 +471,12 @@ class GenerateIn(BaseModel):
     extra_instructions: str = Field("", max_length=4000)
     # Bascule ponctuelle vers le modèle « pro » pour une dictée difficile.
     use_pro: bool = False
+    # Jeton propre à CETTE demande de génération, généré par l'onglet qui
+    # clique sur « Mettre en forme ». Repris tel quel dans les évènements
+    # ``generation_chunk`` diffusés en direct, il permet à l'onglet émetteur de
+    # ne s'appliquer que SES propres morceaux et d'ignorer ceux d'un flux
+    # supplanté (voir _generate_and_publish et connectLiveEvents côté JS).
+    generation_token: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -891,6 +897,13 @@ async def auth_login(request: Request):
             "sso_name": settings.sso_label,
             "default_hours": max(1, settings.session_max_age_seconds // 3600),
             "stay_days": max(1, settings.session_stay_max_age_seconds // 86400),
+            # Version logicielle et nouveautés récentes, affichées avant la
+            # connexion — la page de login est la seule surface publique.
+            "app_version": __version__,
+            "changelog_days": [
+                {"date": day.date.isoformat(), "items": day.items}
+                for day in changelog.recent_by_day(days=7)
+            ],
         },
     )
 
@@ -1245,25 +1258,6 @@ async def api_config(request: Request):
         # source : ajouter une langue ne demande de toucher qu'à app/i18n.py.
         "languages": [
             {"value": code, "label": label} for code, label in i18n.LANGUAGES
-        ],
-    }
-
-
-@app.get("/api/changelog")
-async def api_changelog(request: Request):
-    """Changelogs des 7 derniers jours, pour la section informative du
-    panneau de droite. Aucune donnée clinique : uniquement des versions."""
-    current_user(request)
-    entries = changelog.recent_entries(days=7)
-    return {
-        "version": __version__,
-        "entries": [
-            {
-                "date": entry.date.isoformat(),
-                "title": entry.title,
-                "items": entry.items,
-            }
-            for entry in entries
         ],
     }
 
@@ -2283,6 +2277,86 @@ def cancel_dictation(session_id: str, request: Request):
 # ===========================================================================
 # Génération de la note
 # ===========================================================================
+def _generate_and_publish(
+    user: Principal,
+    payload: GenerateIn,
+    template_row: TemplateModel,
+    model_name: Optional[str],
+    audio_payload: Optional[Tuple[bytes, str]],
+    generation_seq: int,
+    origin_tab: str,
+) -> dict:
+    """
+    Génère la note en continu et diffuse les morceaux en direct (SSE).
+
+    Tourne dans le threadpool : ``live.publish`` est sûr d'être appelé depuis
+    n'importe quel fil d'exécution (voir app/live.py, même schéma que
+    ``dictation._store_part``). La diffusion s'interrompt dès que cette
+    tentative n'est plus la plus récente pour la consultation (garde
+    ``_generation_guard``) : un clic de régénération supplante l'ancien flux,
+    qui cesse aussitôt de consommer des jetons chez le fournisseur.
+
+    Le texte brut (non encore nettoyé) est envoyé tel quel dans chaque morceau :
+    l'écran est sans état, un morceau perdu (file SSE saturée) est comblé par le
+    suivant, et la réponse JSON finale remplace de toute façon le tout par le
+    texte définitif.
+    """
+    generator = llm.generate_note_stream(
+        payload.transcript,
+        template_row.system_instructions,
+        template_row.layout_format,
+        _build_context_lines(payload),
+        payload.extra_instructions,
+        model_name,
+        template_row.language,
+        audio_payload,
+    )
+
+    raw = ""
+    result = None
+    last_publish = 0.0
+    try:
+        # Publie au plus toutes les 250 ms : la file SSE de l'usager est
+        # plafonnée (live._MAX_QUEUE) et un déluge d'évènements minuscules
+        # n'apporterait rien de visible.
+        while _generation_guard.is_current(payload.consultation_id, generation_seq):
+            raw = next(generator)
+            now = time.monotonic()
+            if now - last_publish >= 0.25:
+                live.publish(user.owner_key, "generation_chunk", {
+                    "consultation_id": payload.consultation_id,
+                    "generation_token": payload.generation_token,
+                    "origin_tab": origin_tab,
+                    "markdown": raw,
+                })
+                last_publish = now
+        else:
+            # Supplantée pendant la génération : on coupe le flux fournisseur
+            # (pas de jetons gaspillés) et on laisse le garde final de
+            # ``api_generate`` écarter ce résultat.
+            generator.close()
+            return {
+                "markdown": "", "superseded": True,
+                "consultation_id": payload.consultation_id,
+            }
+    except StopIteration as stop:
+        result = stop.value
+    except Exception:
+        generator.close()
+        raise
+
+    # Dernier morceau, sans filtre temporel : l'écran montre le texte au
+    # complet juste avant que la réponse JSON finale ne le remplace.
+    if _generation_guard.is_current(payload.consultation_id, generation_seq):
+        live.publish(user.owner_key, "generation_chunk", {
+            "consultation_id": payload.consultation_id,
+            "generation_token": payload.generation_token,
+            "origin_tab": origin_tab,
+            "markdown": raw,
+        })
+    return result
+
+
 @app.post("/api/generate")
 async def api_generate(
     payload: GenerateIn,
@@ -2321,15 +2395,14 @@ async def api_generate(
 
     try:
         result = await run_in_threadpool(
-            generate_note,
-            payload.transcript,
-            template_row.system_instructions,
-            template_row.layout_format,
-            _build_context_lines(payload),
-            payload.extra_instructions,
+            _generate_and_publish,
+            user,
+            payload,
+            template_row,
             model_name,
-            template_row.language,
             audio_payload,
+            generation_seq,
+            request.headers.get("x-consultai-tab", ""),
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)

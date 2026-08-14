@@ -254,6 +254,68 @@
     .accent-dot { background-color: var(--color-accent-border); }
     .accent-spinner { border-top-color: var(--color-accent-border); }
     .toast-success { background-color: var(--color-accent); }
+
+    /* ---------------------------------------------------------------
+       GÉNÉRATION EN DIRECT — témoins et fond temporaires
+       Pendant la mise en forme, le voile plein écran est remplacé par :
+       - un fond gris pâle sur la zone du texte en cours de génération
+         (.gen-pane, retiré dès que la note définitive est en place) ;
+       - une pastille compacte posée sur le panneau de transcription
+         (#genIndicator, grand écran) ;
+       - une barre horizontale animée centrée sur la portion encore vide
+         de l'aperçu (#genBar, mobile). Sa position verticale est calculée
+         par positionGenBar() (app.js) à chaque morceau reçu.
+       --------------------------------------------------------------- */
+    .gen-pane { background-color: #f8fafc; }
+
+    #genIndicator {
+      position: absolute;
+      top: 3rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      border: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.35);
+    }
+    #genIndicator.hidden { display: none; }
+    #genIndicator .spin {
+      width: 1rem;
+      height: 1rem;
+      border-radius: 9999px;
+      border: 2px solid #e2e8f0;
+      border-top-color: var(--color-accent-border);
+      animation: gen-spin 0.9s linear infinite;
+    }
+    @keyframes gen-spin { to { transform: rotate(360deg); } }
+
+    /* Barre mobile : courte (40 % de la largeur), centrée horizontalement,
+       et dont l'animation la fait balayer de gauche à droite. La hauteur
+       (top) est pilotée par positionGenBar() pour rester au centre de la
+       portion de l'aperçu qui ne contient pas encore de texte. */
+    #genBar {
+      position: absolute;
+      height: 5px;
+      width: 40%;
+      left: 50%;
+      border-radius: 9999px;
+      background: var(--color-accent-border);
+      box-shadow: 0 0 10px var(--color-accent-border);
+      opacity: 0.85;
+      pointer-events: none;
+      animation: gen-sweep 1.3s ease-in-out infinite;
+    }
+    #genBar.hidden { display: none; }
+    @keyframes gen-sweep {
+      0%, 100% { transform: translateX(calc(-50% - 3.5rem)); }
+      50%      { transform: translateX(calc(-50% + 3.5rem)); }
+    }
+
     /* Le texte d'aide (placeholder) de la transcription adopte la même
        apparence que le message « La note structurée apparaît ici… » du
        panneau de droite — couleur, italique, ET taille : le textarea fixe
@@ -615,7 +677,14 @@
 
     <!-- PANNEAU : transcription brute -->
     <section id="paneDictee" data-pane="dictee"
-             class="flex-1 min-h-0 overflow-hidden bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
+             class="relative flex-1 min-h-0 overflow-hidden bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
+      <!-- Témoin de génération (grand écran) : posé SUR ce panneau pour que le
+           panneau de la note, où le texte défile en direct, reste dégagé.
+           Affiché/masqué par setGenerating() (app.js). -->
+      <div id="genIndicator" class="no-print hidden" role="status" aria-live="polite">
+        <span class="spin"></span>
+        <span class="text-xs font-medium text-slate-600">{{ t('generate.streaming') }}</span>
+      </div>
       <!-- items-end, et non items-center : les deux en-têtes partagent la même
            rangée (subgrid plus haut), et l'œil compare les DEUX rangées de
            boutons. C'est donc leur ligne du bas qui doit concorder, pas le
@@ -767,10 +836,15 @@
            implicite et ruinerait l'alignement avec le panneau voisin. -->
       <div class="flex-1 min-h-0 flex flex-col">
         <div id="previewPane"
-             class="flex-1 min-h-0 overflow-auto p-4 sm:p-6 thin-scroll prose prose-slate prose-sm max-w-none
+             class="relative flex-1 min-h-0 overflow-auto p-4 sm:p-6 thin-scroll prose prose-slate prose-sm max-w-none
                     prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h2:uppercase
                     prose-h2:tracking-wide prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-1
                     prose-h3:text-sm prose-h3:italic prose-table:text-xs">
+          <!-- Témoin horizontal mobile : vit DANS l'aperçu (position absolue
+               dans son défilement) et est remis en place par renderMarkdown()
+               après chaque réécriture du contenu. Affiché/masqué par
+               setGenerating(), positionné par positionGenBar() (app.js). -->
+          <div id="genBar" class="hidden" role="status" aria-hidden="true"></div>
           <p class="text-slate-400 italic">{{ t('note.empty') }}</p>
         </div>
 

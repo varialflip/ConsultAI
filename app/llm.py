@@ -685,6 +685,35 @@ def _translate_error(provider: str, model: str, exc: Exception) -> GenerationErr
     return GenerationError(f"Erreur {provider} : {message}")
 
 
+def _gemini_usage(usage_metadata) -> Dict[str, Optional[int]]:
+    """
+    Décompte des jetons Gemini, texte et audio séparés.
+
+    Gemini 2.5 Flash facture l'audio entrant à un tarif distinct du texte et le
+    ventile dans prompt_tokens_details (vérifié sur Vertex AI : une entrée AUDIO
+    et une entrée TEXT par requête multimodale). On range donc l'audio à part :
+    prompt_tokens = texte seul, audio_prompt_tokens = audio. Sans ventilation
+    (modèle plus ancien), prompt_tokens reste le total.
+    """
+    if usage_metadata is None:
+        return {}
+    usage = {
+        "prompt_tokens": getattr(usage_metadata, "prompt_token_count", None),
+        "output_tokens": getattr(usage_metadata, "candidates_token_count", None),
+        "total_tokens": getattr(usage_metadata, "total_token_count", None),
+    }
+    details = getattr(usage_metadata, "prompt_tokens_details", None) or []
+    if details and usage["prompt_tokens"] is not None:
+        audio_tokens = sum(
+            (getattr(d, "token_count", None) or 0)
+            for d in details
+            if str(getattr(getattr(d, "modality", None), "value", getattr(d, "modality", ""))).upper() == "AUDIO"
+        )
+        usage["audio_prompt_tokens"] = audio_tokens
+        usage["prompt_tokens"] = usage["prompt_tokens"] - audio_tokens
+    return usage
+
+
 def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None) -> Completion:
     from google.genai import types
 
@@ -721,34 +750,421 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     candidates = getattr(response, "candidates", None) or []
     finish_reason = str(getattr(candidates[0], "finish_reason", "") or "") if candidates else ""
 
-    usage = {}
-    usage_metadata = getattr(response, "usage_metadata", None)
-    if usage_metadata is not None:
-        usage = {
-            "prompt_tokens": getattr(usage_metadata, "prompt_token_count", None),
-            "output_tokens": getattr(usage_metadata, "candidates_token_count", None),
-            "total_tokens": getattr(usage_metadata, "total_token_count", None),
-        }
-        # Gemini 2.5 Flash facture l'audio entrant à un tarif distinct du
-        # texte et le ventile dans prompt_tokens_details (vérifié sur Vertex
-        # AI : une entrée AUDIO et une entrée TEXT par requête multimodale).
-        # On range donc l'audio à part : prompt_tokens = texte seul,
-        # audio_prompt_tokens = audio. Sans ventilation (modèle plus ancien),
-        # prompt_tokens reste le total, comme avant.
-        details = getattr(usage_metadata, "prompt_tokens_details", None) or []
-        if details and usage["prompt_tokens"] is not None:
-            audio_tokens = sum(
-                (getattr(d, "token_count", None) or 0)
-                for d in details
-                if str(getattr(getattr(d, "modality", None), "value", getattr(d, "modality", ""))).upper() == "AUDIO"
-            )
-            usage["audio_prompt_tokens"] = audio_tokens
-            usage["prompt_tokens"] = usage["prompt_tokens"] - audio_tokens
+    usage = _gemini_usage(getattr(response, "usage_metadata", None))
 
     return Completion(
         text=getattr(response, "text", None) or "",
         model=model, provider="gemini", finish_reason=finish_reason, usage=usage,
     )
+
+
+def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None):
+    """
+    Version en continu de ``_complete_gemini`` : rend chaque fragment de texte
+    au fil de l'eau, puis rend un ``Completion`` complet (usage, motif d'arrêt)
+    pris dans les derniers morceaux du flux.
+    """
+    from google.genai import types
+
+    client = get_client("gemini")
+    config_kwargs = dict(
+        system_instruction=system,
+        temperature=temperature,
+        max_output_tokens=max_tokens,
+        safety_settings=_safety_settings(),
+    )
+    # Même choix que la version non-streaming : le raisonnement (thinking) est
+    # inutile pour une tâche de mise en forme.
+    config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    if json_mode:
+        config_kwargs["response_mime_type"] = "application/json"
+    else:
+        config_kwargs["top_p"] = 0.95
+
+    contents = user
+    if audio is not None:
+        audio_bytes, mime_type = audio
+        contents = [user, types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)]
+
+    try:
+        stream = client.models.generate_content_stream(
+            model=model, contents=contents, config=types.GenerateContentConfig(**config_kwargs)
+        )
+    except Exception as exc:
+        logger.exception("Échec de l'appel Gemini (flux)")
+        raise _translate_error("Gemini", model, exc) from exc
+
+    full: List[str] = []
+    candidates = None
+    usage_metadata = None
+    try:
+        for chunk in stream:
+            # ``chunk.text`` est None quand le morceau ne porte que des parties
+            # non textuelles (ou rien) : on l'ignore silencieusement.
+            part = getattr(chunk, "text", None) or ""
+            if part:
+                full.append(part)
+                yield part
+            if getattr(chunk, "candidates", None):
+                candidates = chunk.candidates
+            if getattr(chunk, "usage_metadata", None) is not None:
+                usage_metadata = chunk.usage_metadata
+    except Exception as exc:
+        logger.exception("Échec du flux Gemini")
+        raise _translate_error("Gemini", model, exc) from exc
+    finally:
+        fermeture = getattr(stream, "close", None)
+        if callable(fermeture):
+            try:
+                fermeture()
+            except Exception:
+                pass
+
+    finish_reason = str(getattr(candidates[0], "finish_reason", "") or "") if candidates else ""
+    return Completion(
+        text="".join(full),
+        model=model, provider="gemini",
+        finish_reason=finish_reason, usage=_gemini_usage(usage_metadata),
+    )
+
+
+def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode):
+    """
+    Version en continu de ``_complete_anthropic``. ``create(stream=True)``
+    renvoie un objet itérable ; ``get_final_message()`` fournit en fin de flux
+    l'usage et le motif d'arrêt exacts du message complet.
+    """
+    client = get_client("anthropic")
+    if json_mode:
+        system = f"{system}\n\nRéponds UNIQUEMENT par l'objet JSON demandé, sans texte autour."
+
+    try:
+        stream = _call_tolerant(client.messages.create, {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "temperature": temperature,
+            "messages": [{"role": "user", "content": user}],
+            "stream": True,
+        })
+    except Exception as exc:
+        logger.exception("Échec de l'appel Anthropic (flux)")
+        raise _translate_error("Anthropic", model, exc) from exc
+
+    full: List[str] = []
+    try:
+        for event in stream:
+            # Seuls les fragments de texte comptent — ni titre de bloc, ni
+            # raisonnement, ni signal de fin.
+            if (
+                getattr(event, "type", "") == "content_block_delta"
+                and getattr(getattr(event, "delta", None), "type", "") == "text_delta"
+            ):
+                text = getattr(event.delta, "text", "") or ""
+                if text:
+                    full.append(text)
+                    yield text
+        final = stream.get_final_message()
+    except Exception as exc:
+        logger.exception("Échec du flux Anthropic")
+        raise _translate_error("Anthropic", model, exc) from exc
+    finally:
+        fermeture = getattr(stream, "close", None)
+        if callable(fermeture):
+            try:
+                fermeture()
+            except Exception:
+                pass
+
+    usage_data = getattr(final, "usage", None)
+    usage = {
+        "prompt_tokens": getattr(usage_data, "input_tokens", None),
+        "output_tokens": getattr(usage_data, "output_tokens", None),
+    } if usage_data else {}
+
+    return Completion(
+        text="".join(full), model=model, provider="anthropic",
+        finish_reason=str(getattr(final, "stop_reason", "") or ""), usage=usage,
+    )
+
+
+def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=None):
+    """
+    Version en continu de ``_complete_openai``/``_complete_qwen_omni``.
+
+    ``stream_options={"include_usage": True}`` demande à l'API l'usage dans le
+    dernier morceau (OpenAI, OpenRouter, Qwen DashScope) ; un point de
+    terminaison personnalisé qui refuse ce paramètre est retenté sans lui, le
+    décompte d'usage restant alors vide (la note, elle, est identique).
+    """
+    client = get_client(provider)
+    label = {
+        "openai": "OpenAI",
+        "custom": "Point de terminaison personnalisé",
+        "qwen_omni": "Qwen Omni",
+    }[provider]
+
+    if audio is not None:
+        audio_bytes, mime_type = audio
+        # Qwen attend le préfixe ``data:…;base64,`` ; OpenAI/OpenRouter le base64
+        # brut. On réutilise la partie audio du fournisseur concerné.
+        fabrique = _qwen_audio_part if provider == "qwen_omni" else _openai_audio_part
+        user_content = [{"type": "text", "text": user}, fabrique(audio_bytes, mime_type)]
+    else:
+        user_content = user
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
+    kwargs = {
+        "model": model,
+        "messages": messages,
+        "max_completion_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+        if provider == "qwen_omni":
+            # Même raison que la version non-streaming : le raisonnement de Qwen
+            # y gaspille des jetons sur cette tâche mécanique.
+            kwargs["enable_thinking"] = False
+
+    try:
+        stream = _call_tolerant(client.chat.completions.create, kwargs)
+    except Exception as exc:
+        # Certains points de terminaison personnalisés refusent stream_options
+        # (motifs d'erreur variés selon le serveur) : on retente sans lui avant
+        # de renoncer. Le décompte d'usage reste alors vide, la note est la même.
+        message = str(exc).lower()
+        if any(
+            mot in message
+            for mot in ("stream_options", "unknown parameter", "unknown field",
+                        "extra input", "unexpected", "not supported")
+        ):
+            kwargs.pop("stream_options", None)
+            try:
+                stream = _call_tolerant(client.chat.completions.create, kwargs)
+            except Exception as exc2:
+                logger.exception("Échec de l'appel %s (flux)", label)
+                raise _translate_error(label, model, exc2) from exc2
+        else:
+            logger.exception("Échec de l'appel %s (flux)", label)
+            raise _translate_error(label, model, exc) from exc
+
+    full: List[str] = []
+    finish_reason = ""
+    usage_data = None
+    try:
+        for chunk in stream:
+            choice = (getattr(chunk, "choices", None) or [None])[0]
+            delta = getattr(choice, "message", None) if choice else None
+            delta_content = getattr(delta, "content", None) or ""
+            # ``reasoning_content`` (Qwen) n'est pas du texte de note : ignoré.
+            if delta_content:
+                full.append(delta_content)
+                yield delta_content
+            fr = getattr(choice, "finish_reason", "") or ""
+            if fr:
+                finish_reason = str(fr)
+            if getattr(chunk, "usage", None) is not None:
+                usage_data = chunk.usage
+    except Exception as exc:
+        logger.exception("Échec du flux %s", label)
+        raise _translate_error(label, model, exc) from exc
+    finally:
+        fermeture = getattr(stream, "close", None)
+        if callable(fermeture):
+            try:
+                fermeture()
+            except Exception:
+                pass
+
+    usage = {
+        "prompt_tokens": getattr(usage_data, "prompt_tokens", None),
+        "output_tokens": getattr(usage_data, "completion_tokens", None),
+        "total_tokens": getattr(usage_data, "total_tokens", None),
+    } if usage_data else {}
+
+    # Qwen facture l'audio entrant à part, comme Gemini (voir la version
+    # non-streaming) : même rangement, si l'usage est bien présent.
+    if provider == "qwen_omni" and usage_data is not None:
+        details = getattr(usage_data, "prompt_tokens_details", None)
+        audio_tokens = getattr(details, "audio_tokens", None) if details else None
+        if audio_tokens is not None and usage.get("prompt_tokens") is not None:
+            usage["audio_prompt_tokens"] = audio_tokens
+            usage["prompt_tokens"] = usage["prompt_tokens"] - audio_tokens
+
+    return Completion(
+        text="".join(full), model=model, provider=provider,
+        finish_reason=finish_reason, usage=usage,
+    )
+
+
+#: Fournisseurs dont le SDK/API sait rendre un flux : Gemini, Anthropic,
+#: OpenAI-compatible (OpenAI, point de terminaison personnalisé, Qwen Omni).
+#: Cohere et Mistral, interrogés en HTTP sans SDK, restent non-streaming et se
+#: contentent d'un unique morceau (comportement visuel d'origine) — voir le
+#: branchement de ``complete_stream``.
+
+
+def complete_stream(
+    system: str,
+    user: str,
+    *,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    json_mode: bool = False,
+    provider: Optional[str] = None,
+    audio: Optional[Tuple[bytes, str]] = None,
+):
+    """
+    Version en continu de ``complete()``.
+
+    Générateur : rend le texte par fragments concaténables, puis rend le
+    ``Completion`` complet via ``StopIteration.value`` (l'appelant le récupère
+    en terminant la boucle ``next()``). Cohere/Mistral retombent sur
+    ``complete()`` : un seul fragment, même contrat.
+    """
+    provider = provider or active_provider()
+    max_tokens = _clamp_max_tokens(provider, model, max_tokens)
+
+    if provider == "gemini":
+        gen = _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio)
+    elif provider == "anthropic":
+        gen = _stream_anthropic(system, user, model, temperature, max_tokens, json_mode)
+    elif provider == "openai":
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=audio)
+    elif provider == "custom":
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio)
+    elif provider == "qwen_omni":
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio)
+    elif provider in ("cohere", "mistral"):
+        completion = complete(
+            system, user, model=model, temperature=temperature,
+            max_tokens=max_tokens, json_mode=json_mode, provider=provider, audio=audio,
+        )
+        yield completion.text
+        return completion
+    else:
+        raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
+
+    value = yield from gen
+    return value
+
+
+def generate_note_stream(
+    transcript: str,
+    system_instructions: str,
+    layout_format: str,
+    context_lines: Optional[List[str]] = None,
+    extra_instructions: str = "",
+    model: Optional[str] = None,
+    language: Optional[str] = None,
+    audio: Optional[Tuple[bytes, str]] = None,
+):
+    """
+    Version en continu de ``generate_note``.
+
+    Générateur : rend le texte **brut** (non encore nettoyé de son éventuel
+    bloc de code / de ses marqueurs de prompt) au fil de l'eau, pour
+    l'affichage en direct — puis rend, via ``StopIteration.value``, exactement
+    le même dictionnaire que ``generate_note``. Le nettoyage final s'applique
+    une seule fois, à la fin, sur le texte complet : l'écran remplace alors le
+    texte brut par la version définitive.
+    """
+    provider = active_provider()
+    opts = audio_settings(provider)
+    transcript_clean = (transcript or "").strip()
+    audio_only = opts["bypass_stt"] and audio is not None
+    if not transcript_clean and not audio_only:
+        raise GenerationError("La transcription est vide : rien à mettre en forme.")
+
+    model_name = model or active_model()
+    if not model_name:
+        raise GenerationError(
+            f"Aucun modèle configuré pour {provider}. Panneau d'administration "
+            "→ Modèle de langage."
+        )
+
+    langue = i18n.normalize(language or runtime_config.language())
+
+    logger.info(
+        "Mise en forme (flux) via %s (%s) — %d caractères de transcription, langue %s%s",
+        provider, model_name, len(transcript), langue,
+        " (audio seul, STT contourné)" if audio_only else "",
+    )
+    audio_to_send = audio if (audio is not None and provider in _AUDIO_CAPABLE_PROVIDERS) else None
+
+    user_prompt = build_user_prompt(
+        "" if audio_only else transcript,
+        layout_format, context_lines, extra_instructions, langue,
+    )
+    if audio_to_send is not None:
+        note = _AUDIO_PRIMARY_NOTE if audio_only else _AUDIO_CROSSCHECK_NOTE
+        user_prompt = f"{user_prompt}\n\n{note[langue]}"
+
+    t0 = time.monotonic()
+    stream = complete_stream(
+        build_system_prompt(
+            system_instructions, runtime_config.general_prompt(langue), langue
+        ),
+        user_prompt,
+        model=model_name,
+        temperature=active_temperature(),
+        max_tokens=settings.gemini_max_output_tokens,
+        provider=provider,
+        audio=audio_to_send,
+    )
+
+    # Rend le texte brut accumulé ; conserve le Completion final. Le
+    # ``finally`` referme le générateur fournisseur : sur une génération
+    # supplantée (generator.close() depuis _generate_and_publish), il coupe le
+    # flux HTTP du SDK et cesse de consommer des jetons chez le fournisseur.
+    raw = ""
+    result = None
+    try:
+        while True:
+            try:
+                fragment = next(stream)
+            except StopIteration as stop:
+                result = stop.value
+                break
+            if fragment:
+                raw += fragment
+                yield raw
+    finally:
+        fermeture = getattr(stream, "close", None)
+        if callable(fermeture):
+            try:
+                fermeture()
+            except Exception:
+                pass
+    elapsed_seconds = time.monotonic() - t0
+
+    if not result.text.strip():
+        if result.blocked:
+            raise GenerationError(
+                f"{provider} a bloqué la réponse pour des raisons de filtrage de "
+                "contenu. Reformulez ou générez la note par sections."
+            )
+        raise GenerationError(
+            f"{provider} a renvoyé une réponse vide "
+            f"(motif : {result.finish_reason or 'inconnu'})."
+        )
+
+    if result.truncated:
+        logger.warning("Réponse tronquée (limite de jetons atteinte, modèle %s)", model_name)
+
+    return {
+        "markdown": _strip_prompt_markers(_strip_code_fence(result.text)),
+        "model": model_name,
+        "provider": provider,
+        "truncated": result.truncated,
+        "usage": result.usage,
+        "audio_used": audio_to_send is not None,
+        "transcript_used": not audio_only,
+        "elapsed_seconds": round(elapsed_seconds, 2),
+    }
 
 
 #: Paramètres d'échantillonnage que les modèles les plus récents refusent —

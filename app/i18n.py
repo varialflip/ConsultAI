@@ -313,20 +313,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "La note structurée apparaîtra ici après la mise en forme.",
         "The structured note will appear here after formatting.",
     ),
-    "home.welcome": ("ConsultAI", "ConsultAI"),
-    "home.intro": (
-        "Dictez une consultation : la transcription brute s'affiche à gauche, "
-        "la note structurée à droite après la mise en forme.",
-        "Dictate a consultation: the raw transcript shows on the left, the "
-        "structured note on the right after formatting.",
-    ),
-    "home.version": ("Version logicielle : {version}", "Software version: {version}"),
-    "home.changelog": ("Nouveautés (7 derniers jours)", "What's new (last 7 days)"),
-    "home.changelog_loading": ("Chargement…", "Loading…"),
-    "home.changelog_empty": (
-        "Aucune nouveauté cette semaine.",
-        "Nothing new this week.",
-    ),
 
     # --- Politique de confidentialité (FAQ) -------------------------------
     "privacy.title": ("Politique de confidentialité", "Privacy policy"),
@@ -735,9 +721,9 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Sélectionnez un gabarit de consultation.",
         "Select a consultation template.",
     ),
-    "generate.busy": (
-        "Mise en forme avec le gabarit « {name} »…",
-        "Formatting with the “{name}” template…",
+    "generate.streaming": (
+        "La note se génère…",
+        "Generating the note…",
     ),
     "generate.truncated": (
         "La note a été tronquée : le modèle a atteint sa limite de longueur. "
@@ -2216,6 +2202,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "auth.session_note": (
         "La session expire après la durée choisie sans activité.",
         "The session expires after the chosen period of inactivity.",
+    ),
+    "auth.changelog": ("Nouveautés (7 derniers jours)", "What's new (last 7 days)"),
+    "auth.changelog_empty": (
+        "Aucune nouveauté cette semaine.",
+        "Nothing new this week.",
     ),
 
     # --- Page 403 (rendue par le middleware) --------------------------------

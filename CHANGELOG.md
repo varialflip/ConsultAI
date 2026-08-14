@@ -3,6 +3,31 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.39
+
+- Génération en direct : la note s'affiche **au fur et à mesure** que le modèle
+  la rédige, au lieu d'apparaître d'un bloc à la fin. Le texte défile
+  automatiquement pour toujours montrer la fin en cours.
+- Desktop : le témoin de génération quitte le voile plein écran (qui cachait le
+  texte) pour une pastille posée sur le panneau de transcription ; la vue passe
+  automatiquement en « Aperçu ».
+- Mobile : bascule directe sur la vue « Aperçu » pendant la génération ; un
+  témoin horizontal animé, centré sur la portion encore vide de la note, balaie
+  de gauche à droite.
+- Le fond du texte en cours de génération est temporairement gris pâle,
+  signalant que la note n'est pas encore définitive.
+- Streaming pris en charge par Gemini, Anthropic, OpenAI, Qwen Omni et le point
+  de terminaison personnalisé ; Cohere et Mistral conservent l'affichage en un
+  bloc (comportement d'origine). Coût et facturation inchangés (le nombre de
+  jetons ne varie pas).
+
+## 2026-08-14 — v2.0.0-beta.38
+
+- Nouveautés déplacées sur la page de connexion : version logicielle et
+  changelogs des 7 derniers jours s'affichent avant l'authentification. Le
+  panneau de droite de l'application redevient vierge (l'aperçu de la note
+  apparaît seul, sans note ouverte).
+
 ## 2026-08-14 — v2.0.0-beta.34
 
 - Politique de confidentialité reformulée en constats factuels : les questions

@@ -209,6 +209,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "rec.import_title": ("Importer un fichier audio", "Import an audio file"),
     "rec.level_aria": ("Niveau sonore du micro", "Microphone level"),
     "dictaphone.hint": (
+        "Retournez le téléphone pour quitter ce mode",
+        "Flip the phone back to leave this mode",
+    ),
+    "dictaphone.hint_manual": (
         "Bouton ✕ pour quitter ce mode",
         "Tap ✕ to leave this mode",
     ),
@@ -219,14 +223,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "dictaphone.exit_title": (
         "Quitter le mode retourné",
         "Exit flip mode",
-    ),
-    "dictaphone.permission": (
-        "Mode téléphone retourné désactivé : iOS refuse l'accès aux capteurs. "
-        "Réglages → Apps → Safari → Confidentialité et sécurité → désactiver "
-        "« Empêcher le suivi intersites », puis rechargez la page.",
-        "Upside-down dictation disabled: iOS is denying sensor access. "
-        "Settings → Apps → Safari → Privacy & Security → turn off "
-        "\"Prevent Cross-Site Tracking\", then reload the page.",
     ),
 
     # --- Détails ------------------------------------------------------------

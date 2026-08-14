@@ -3,6 +3,19 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-14 — v2.0.0-beta.33
+
+- Mode dictaphone (téléphone retourné) : retour au comportement d'origine,
+  plus simple et stable, sur toutes les plateformes (détection par rotation
+  d'affichage à 180° sur Android et par `deviceorientation` avec anti-rebond
+  400 ms).
+- iOS : la demande de permission des capteurs est supprimée (aucune popup,
+  aucun toast). Le mode retourné s'y active par le bouton « Mode retourné »,
+  qui affiche le calque micro renversé de 180° ; sortie par le bouton ✕.
+- Android : comportement d'origine seul, sans option de revirement manuel
+  (boutons masqués).
+- Panneau de diagnostic `?debug=sensors` retiré.
+
 ## 2026-08-14 — v2.0.0-beta.32
 
 - Mode retourné manuel corrigé sur Android : la rotation de 180° à l'ouverture

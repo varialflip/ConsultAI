@@ -878,7 +878,11 @@
          masqué. Une trace plate signale immédiatement un micro coupé. -->
     <canvas id="dictaphoneWave" class="w-full max-w-md h-16 rounded bg-slate-800"
             role="img" aria-label="{{ t('rec.level_aria') }}"></canvas>
-    <div id="dictaphoneActions" class="hidden items-center gap-4">
+    <!-- Slot de hauteur fixe : les boutons stop/terminer y apparaissent sans
+         décaler le gros bouton (la colonne reste de hauteur constante et
+         centrée). L'affichage se pilote par visibilité (invisible), pas par
+         display:none. -->
+    <div id="dictaphoneActions" class="items-center gap-4 h-14">
       <button id="btnDictaphoneAbort" type="button" title="{{ t('rec.abort_title') }}"
               aria-label="{{ t('rec.abort_title') }}"
               class="w-14 h-14 grid place-items-center rounded-full border border-slate-600

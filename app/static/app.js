@@ -1308,8 +1308,9 @@
     if (!main) return;
     const actions = $('dictaphoneActions');
     $('dictaphoneTimer').textContent = formatDuration(state.recordedSeconds);
-    actions.classList.toggle('hidden', !state.recording);
-    actions.classList.toggle('flex', state.recording);
+    // Visibilité seule (jamais display:none) : le slot conserve sa hauteur et
+    // le gros bouton reste centré quand les actions apparaissent.
+    actions.classList.toggle('invisible', !state.recording);
     const base = 'w-56 h-56 rounded-full grid place-items-center shadow-2xl active:scale-95 transition ';
     if (state.recording && !state.paused) {
       main.className = base + 'bg-red-600 rec-dot';

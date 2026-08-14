@@ -8,6 +8,13 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 - Politique de confidentialité reformulée en constats factuels : les questions
   restent en titres, les corps énoncent des faits.
 
+## 2026-08-14 — v2.0.0-beta.35
+
+- Calque dictaphone : le gros bouton reste fixe quand la dictée démarre. Les
+  boutons stop/terminer apparaissent dans un emplacement de hauteur réservée
+  (visibilité seule, plus `display:none`) — la colonne centrée ne se décale
+  plus, notamment sur le calque renversé de l'iPhone.
+
 ## 2026-08-14 — v2.0.0-beta.33
 
 - Mode dictaphone (téléphone retourné) : retour au comportement d'origine,

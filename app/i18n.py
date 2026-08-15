@@ -2127,6 +2127,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "choice.on": ("Activé", "Enabled"),
     "choice.off": ("Désactivé", "Disabled"),
+    "choice.reasoning_auto": ("Automatique", "Automatic"),
+    "choice.reasoning_low": ("Faible", "Low"),
+    "choice.reasoning_medium": ("Moyen", "Medium"),
+    "choice.reasoning_high": ("Élevé", "High"),
 
     # --- Chargement et diagnostic ------------------------------------------
     "app.load_failed": ("Chargement impossible : {error}", "Loading failed: {error}"),

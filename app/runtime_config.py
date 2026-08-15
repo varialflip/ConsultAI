@@ -429,7 +429,13 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     Setting(
         "custom_llm_reasoning_effort", "choice", "group.llm",
-        default=lambda: "auto", choices=("auto", "low", "medium", "high"),
+        default=lambda: "auto",
+        choices=(
+            ("auto", "choice.reasoning_auto"),
+            ("low", "choice.reasoning_low"),
+            ("medium", "choice.reasoning_medium"),
+            ("high", "choice.reasoning_high"),
+        ),
     ),
     Setting(
         "custom_send_audio", "choice", "group.llm",

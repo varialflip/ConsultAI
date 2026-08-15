@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.54
+
+- **Panneau Réglages réparé (régression de la beta.53)**. Le réglage
+  « Raisonnement » du point de terminaison personnalisé déclarait ses choix
+  comme de simples chaînes au lieu de couples « valeur, libellé » : le
+  panneau d'administration renvoyait une erreur 500. Les choix sont désormais
+  des couples (`auto/low/medium/high`, libellés fr/en « Automatique /
+  Faible / Moyen / Élevé »).
+
 ## 2026-08-15 — v2.0.0-beta.53
 
 - **Modèle de langage — point de terminaison personnalisé : modèles à

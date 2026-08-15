@@ -1330,6 +1330,14 @@ def compress_silence(source_path: str) -> Optional[Tuple[bytes, float]]:
     if runtime_config.value("stt_trim_silence") == "false" or not _ffmpeg_available():
         return None
 
+    if runtime_config.value("stt_provider") == "custom":
+        # Endpoints personnalisés (ex. Parakeet/ONNX local) : pas de
+        # facturation à la durée — la concaténation des paroles n'économise
+        # rien — et le modèle y est sensible (le plafonnement des pauses
+        # coupe les attaques de mots et fait mélanger les langues à un
+        # modèle multilingue). On envoie l'audio tel quel.
+        return None
+
     keep = max(0.0, runtime_config.value_float(
         "stt_silence_keep_seconds", settings.stt_silence_keep_seconds
     ))

@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.45
+
+- **Reconnaissance vocale — retrait des silences suspendu pour l'endpoint
+  personnalisé**. Le plafonnement des pauses (qui concatène les paroles)
+  dégradait les modèles locaux multilingues : sur Parakeet/ONNX, il faisait
+  mélanger les langues (français/anglais). Comme cet endpoint n'est pas
+  facturé à la durée, l'audio y est maintenant envoyé tel quel. Corrige la
+  bascule Parakeet du 2.0.0-beta.44.
+
 ## 2026-08-15 — v2.0.0-beta.44
 
 - **Reconnaissance vocale — point de terminaison personnalisé : repli et

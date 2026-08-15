@@ -220,7 +220,10 @@ QWEN_OMNI_BASE_URL=            # documentation DashScope
 > principal, la transcription est retentée une fois avec le modèle de repli ;
 > un **seuil de durée** (`custom_stt_max_seconds`) peut en outre envoyer
 > directement au modèle de repli les dictées trop longues pour l'endpoint
-> principal (ex. un Parakeet/ONNX plafonnant autour de 6-7 min par passe).
+> principal (ex. un Parakeet/ONNX plafonnant autour de 6-7 min par passe). Le
+> **retrait des silences est suspendu** pour cet endpoint (pas de facturation à
+> la durée, et le plafonnement des pauses dégrade certains modèles locaux
+> multilingues) : l'audio lui est envoyé tel quel.
 
 ---
 

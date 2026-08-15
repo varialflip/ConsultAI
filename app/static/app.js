@@ -3291,6 +3291,21 @@
 
   /* ---- Brouillons -------------------------------------------------------- */
 
+  /** Libellé affichable du statut d'un brouillon. Les valeurs en base sont
+   *  sans accent (« genere », « finalise ») : on ne les affiche jamais brutes,
+   *  sous peine de « GENERE » en majuscules. Inconnu → valeur brute, en repli. */
+  function statusLabel(status) {
+    const labels = {
+      brouillon: 'status.brouillon',
+      transcrit: 'status.transcrit',
+      genere: 'status.genere',
+      finalise: 'status.finalise',
+      error: 'status.error',
+    };
+    const cle = labels[status];
+    return cle ? T(cle) : status;
+  }
+
   /**
    * Un brouillon dans la liste.
    *
@@ -3320,7 +3335,7 @@
         ${reason}
         <div class="text-[11px] text-slate-400 mt-1">
           ${draft.template_name ? esc(draft.template_name) + ' · ' : ''}
-          <span class="uppercase tracking-wide">${esc(draft.status)}</span>
+          <span class="uppercase tracking-wide">${esc(statusLabel(draft.status))}</span>
         </div>
       </div>
       <button type="button" data-delete="${draft.id}"

@@ -1242,9 +1242,62 @@ def migrate_general_prompt_elements_a_valider(db: Session) -> int:
     return touches
 
 
-# ---------------------------------------------------------------------------
-# Groupes et comptes : amorçage
-# ---------------------------------------------------------------------------
+#: Empreintes des consignes générales LIVRÉES avant la reformulation de la
+#: section finale (« correction apportée » / « à confirmer », jamais
+#: « Confirmé »). Même mécanique que les migrations précédentes : on ne
+#: remplace la valeur en base que si elle est encore EXACTEMENT le défaut
+#: livré, pour ne jamais écraser une consigne personnalisée. Vérifié le
+#: 2026-08-15 contre ``default_prompts`` : la copie en base des deux langues
+#: était strictement identique au module avant l'édition.
+_OLD_GENERAL_PROMPT_SHA3 = {
+    "general_prompt_fr": "3ee3c9b120a15db38e9ab3bbcb32fd0e16b1382dff28edec786c576921f83086",
+    "general_prompt_en": "7f02abbededa37f721e9a673c6384fe380d58dfa982a61979c8cd54892081c54",
+}
+
+
+def migrate_general_prompt_a_confirmer(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la reformulation de la section
+    finale : deux mentions possibles — « correction apportée » (correction
+    retenue avec confiance) ou « à confirmer » (lecture incertaine) — et
+    interdiction d'écrire « Confirmé », contradictoire dans une section
+    destinée à la vérification par le clinicien.
+
+    La consigne générale est éditable et vit en base (elle surcharge le module
+    ``default_prompts``) : corriger le module seul laisserait l'installation en
+    service avec l'ancien texte. Comme pour les migrations précédentes, la
+    valeur n'est remplacée que si elle est encore EXACTEMENT le défaut livré
+    (comparaison par empreinte) ; une consigne personnalisée est laissée
+    intacte et signalée au journal.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA3.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : migration « à confirmer » "
+                "ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : section finale en « correction "
+            "apportée » / « à confirmer », plus jamais « Confirmé ».",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
 #: Groupes livrés. « admins » ouvre le panneau d'administration, « users » ne
 #: donne accès qu'à ses propres consultations.
 _SYSTEM_GROUPS = (
@@ -1509,6 +1562,7 @@ def init_db() -> None:
         migrate_general_prompt(db)
         migrate_general_prompt_keep_reasoning(db)
         migrate_general_prompt_elements_a_valider(db)
+        migrate_general_prompt_a_confirmer(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

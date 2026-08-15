@@ -906,6 +906,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Raison de consultation non précisée",
         "Reason for consultation not specified",
     ),
+    # Statut affiché dans la liste des brouillons. Les valeurs en base sont
+    # sans accent (« genere », « finalise ») : on affiche le libellé, jamais la
+    # valeur brute.
+    "status.brouillon": ("Brouillon", "Draft"),
+    "status.transcrit": ("Transcrit", "Transcribed"),
+    "status.genere": ("Générée", "Generated"),
+    "status.finalise": ("Finalisée", "Finalized"),
+    "status.error": ("Erreur", "Error"),
     "drafts.confirm_delete": (
         "Supprimer définitivement ce brouillon ?",
         "Permanently delete this draft?",

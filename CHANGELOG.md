@@ -3,6 +3,22 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.52
+
+- **Liste des brouillons — statut lisible**. Le statut était affiché brut en
+  majuscules (« GENERE », « FINALISE »), les valeurs en base étant sans accent.
+  Il passe par un libellé localisé (« Générée », « Finalisée », « Transcrit »,
+  « Brouillon », « Erreur ») — `statusLabel()` côté client, clés `status.*` en
+  fr / en.
+- **Consigne générale — section finale : plus jamais « Confirmé »**. Le modèle
+  écrivait « terme dicté → Confirmé », contradictoire dans une section destinée
+  à la vérification par le clinicien. La consigne impose désormais **deux
+  mentions possibles** : « → correction apportée : <lecture> » pour une
+  correction retenue avec confiance, « → à confirmer » pour une lecture encore
+  incertaine. Porté automatiquement dans les installations dont la consigne est
+  restée au défaut livré (migration par empreinte, `database.py`) ; une
+  consigne personnalisée dans le panneau n'est pas touchée.
+
 ## 2026-08-15 — v2.0.0-beta.51
 
 - **Consigne générale — « Éléments à valider » rendue prioritaire, aucun

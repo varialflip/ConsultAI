@@ -58,6 +58,21 @@ class TranscriptionError(RuntimeError):
     """Erreur métier de transcription, avec un message affichable à l'écran."""
 
 
+class _EndpointHttpError(Exception):
+    """
+    Erreur HTTP d'un point de terminaison OpenAI-compatible.
+
+    Porte le code de statut et le détail renvoyés par le serveur, pour que
+    l'appelant puisse décider du comportement (repli sur un autre modèle,
+    erreur de clé, etc.) sans avoir à interroger le transport.
+    """
+
+    def __init__(self, code: int, detail: str) -> None:
+        super().__init__(f"HTTP {code}: {detail}")
+        self.code = code
+        self.detail = detail
+
+
 # ===========================================================================
 # LEXIQUE — adaptation du modèle de reconnaissance
 # ===========================================================================
@@ -1691,7 +1706,7 @@ def _transcribe_mistral(payload: AudioPayload, extra_phrase_hints: Optional[str]
 # modèle de langage (voir llm.py), sert aussi ici — même compte, comme Cohere
 # et Mistral, mais dans l'autre sens puisque la clé LLM existait déjà.
 # ===========================================================================
-_OPENAI_STT_URL = "https://api.openai.com/v1/audio/transcriptions"
+_OPENAI_STT_BASE = "https://api.openai.com/v1"
 _OPENAI_STT_MODEL_DEFAUT = "whisper-1"
 
 
@@ -1702,10 +1717,6 @@ def _transcribe_openai(payload: AudioPayload, extra_phrase_hints: Optional[str] 
     ``extra_phrase_hints`` est ignoré : aucune adaptation au vocabulaire n'est
     documentée pour ce service, comme pour Cohere et Mistral.
     """
-    import json as _json
-    import urllib.error
-    import urllib.request
-
     api_key = runtime_config.value("openai_api_key")
     if not api_key:
         raise TranscriptionError(
@@ -1722,32 +1733,18 @@ def _transcribe_openai(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         round(payload.effective_seconds, 1) or "?", model, langue or "auto",
     )
 
-    champs = {"model": model}
-    if langue:
-        champs["language"] = langue
-    corps, ctype = _multipart_body_fields(champs, "file", "dictee.ogg", payload.content)
-
-    requete = urllib.request.Request(
-        _OPENAI_STT_URL,
-        data=corps,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": ctype},
-        method="POST",
-    )
     try:
-        with urllib.request.urlopen(requete, timeout=240) as reponse:
-            data = _json.loads(reponse.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:400]
-        logger.error("OpenAI a refusé la requête (%s) : %s", exc.code, detail)
+        data = _post_openai_compatible(
+            _OPENAI_STT_BASE, api_key, model, langue, payload, libelle="OpenAI",
+        )
+    except _EndpointHttpError as exc:
+        logger.error("OpenAI a refusé la requête (%s) : %s", exc.code, exc.detail)
         if exc.code in (401, 403):
             raise TranscriptionError(
                 "OpenAI refuse la clé API. Vérifiez-la dans le panneau "
                 "d'administration."
             ) from exc
-        raise TranscriptionError(f"Erreur OpenAI ({exc.code}) : {detail}") from exc
-    except Exception as exc:
-        logger.exception("Échec de l'appel OpenAI")
-        raise TranscriptionError(f"Erreur OpenAI : {exc}") from exc
+        raise TranscriptionError(f"Erreur OpenAI ({exc.code}) : {exc.detail}") from exc
 
     transcript = str(data.get("text") or "").strip()
     if not transcript and not payload.allow_silence:
@@ -1774,31 +1771,32 @@ def _transcribe_openai(payload: AudioPayload, extra_phrase_hints: Optional[str] 
 # forme multipart), mais l'adresse ET la clé sont propres à ce réglage : rien
 # ne garantit qu'un serveur auto-hébergé ou un service tiers partage un compte
 # avec un autre fournisseur déjà configuré.
+#
+# Ce bloc fournit la primitive ``_post_openai_compatible`` — réutilisable par
+# n'importe quel endpoint compatible OpenAI à l'avenir — et le schéma de repli
+# propre à l'endpoint personnalisé : routage optionnel par durée, puis retry
+# sur erreur HTTP 5xx vers un modèle de secours configurable.
 # ===========================================================================
 
 
-def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
-    """Transcription par un point de terminaison personnalisé, compatible OpenAI."""
+def _post_openai_compatible(
+    base_url: str,
+    api_key: str,
+    model: str,
+    langue: str,
+    payload: AudioPayload,
+    timeout: int = 240,
+    libelle: str = "du point de terminaison personnalisé",
+) -> dict:
+    """
+    POST multipart vers ``{base_url}/audio/transcriptions`` (compatible OpenAI).
+
+    Lève ``_EndpointHttpError`` si le serveur répond en erreur HTTP, ou
+    ``TranscriptionError`` (message affichable) en cas d'échec de transport.
+    """
     import json as _json
     import urllib.error
     import urllib.request
-
-    base_url = runtime_config.value("custom_stt_base_url").strip().rstrip("/")
-    if not base_url:
-        raise TranscriptionError(
-            "Point de terminaison personnalisé sélectionné mais aucune adresse "
-            "n'est renseignée. Panneau d'administration → Reconnaissance vocale."
-        )
-    api_key = runtime_config.value("custom_stt_api_key")
-    model = runtime_config.value("custom_stt_model") or _OPENAI_STT_MODEL_DEFAUT
-    langue = runtime_config.stt_language("custom")
-
-    logger.info(
-        "Envoi au point de terminaison personnalisé (%s) : %.2f Mo, %s s "
-        "facturées, modèle %s, langue %s",
-        base_url, len(payload.content) / 1048576,
-        round(payload.effective_seconds, 1) or "?", model, langue or "auto",
-    )
 
     champs = {"model": model}
     if langue:
@@ -1813,27 +1811,112 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         f"{base_url}/audio/transcriptions", data=corps, headers=headers, method="POST",
     )
     try:
-        with urllib.request.urlopen(requete, timeout=240) as reponse:
-            data = _json.loads(reponse.read().decode("utf-8"))
+        with urllib.request.urlopen(requete, timeout=timeout) as reponse:
+            return _json.loads(reponse.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:400]
         logger.error(
-            "Le point de terminaison personnalisé a refusé la requête (%s) : %s",
-            exc.code, detail,
+            "L'endpoint OpenAI-compatible (%s) a refusé la requête (%s) : %s",
+            base_url, exc.code, detail,
         )
-        if exc.code in (401, 403):
-            raise TranscriptionError(
-                "Le point de terminaison personnalisé refuse la clé API. "
-                "Vérifiez-la dans le panneau d'administration."
-            ) from exc
-        raise TranscriptionError(
-            f"Erreur du point de terminaison personnalisé ({exc.code}) : {detail}"
-        ) from exc
+        raise _EndpointHttpError(exc.code, detail) from exc
     except Exception as exc:
-        logger.exception("Échec de l'appel au point de terminaison personnalisé")
+        logger.exception("Échec de l'appel à l'endpoint OpenAI-compatible (%s)", base_url)
+        raise TranscriptionError(f"Erreur {libelle} : {exc}") from exc
+
+
+def _fallback_custom_target(base_url: str) -> Tuple[str, str]:
+    """
+    Cible de repli de l'endpoint personnalisé : (modèle, base_url).
+
+    ``custom_stt_fallback_base_url`` vide → on réutilise l'adresse du modèle
+    principal. ``custom_stt_fallback_model`` vide → pas de repli configuré.
+    """
+    fb_model = runtime_config.value("custom_stt_fallback_model").strip()
+    fb_url = runtime_config.value("custom_stt_fallback_base_url").strip().rstrip("/")
+    return fb_model, fb_url or base_url
+
+
+def _parse_seuil_secondes(valeur: str) -> float:
+    """
+    Lit un seuil de durée configuré ; une valeur invalide désactive le routage.
+    """
+    try:
+        return float(valeur)
+    except ValueError:
+        logger.warning("Réglage custom_stt_max_seconds invalide, ignoré : %r", valeur)
+        return float("inf")
+
+
+def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
+    """
+    Transcription par un point de terminaison personnalisé, compatible OpenAI.
+
+    Routage optionnel par durée (``custom_stt_max_seconds``) : au-delà du seuil,
+    l'audio est envoyé directement au modèle de repli — utile quand l'endpoint
+    principal plafonne (ex. Parakeet/ONNX limité à ~6-7 min en une passe). En
+    cas d'erreur HTTP 5xx du modèle principal, on retente une fois avec le
+    modèle de repli.
+    """
+    base_url = runtime_config.value("custom_stt_base_url").strip().rstrip("/")
+    if not base_url:
         raise TranscriptionError(
-            f"Erreur du point de terminaison personnalisé : {exc}"
-        ) from exc
+            "Point de terminaison personnalisé sélectionné mais aucune adresse "
+            "n'est renseignée. Panneau d'administration → Reconnaissance vocale."
+        )
+    api_key = runtime_config.value("custom_stt_api_key")
+    model = runtime_config.value("custom_stt_model") or _OPENAI_STT_MODEL_DEFAUT
+    langue = runtime_config.stt_language("custom")
+
+    fb_model, fb_url = _fallback_custom_target(base_url)
+
+    # --- Routage optionnel par durée -------------------------------------
+    maxsec = runtime_config.value("custom_stt_max_seconds").strip()
+    if maxsec and fb_model and payload.effective_seconds:
+        if payload.effective_seconds > _parse_seuil_secondes(maxsec):
+            logger.info(
+                "STT custom : dictée de %.0f s > seuil %s s → envoi direct au "
+                "modèle de repli %s",
+                payload.effective_seconds, maxsec, fb_model,
+            )
+            model, base_url = fb_model, fb_url
+
+    logger.info(
+        "Envoi au point de terminaison personnalisé (%s) : %.2f Mo, %s s "
+        "facturées, modèle %s, langue %s",
+        base_url, len(payload.content) / 1048576,
+        round(payload.effective_seconds, 1) or "?", model, langue or "auto",
+    )
+
+    try:
+        data = _post_openai_compatible(base_url, api_key, model, langue, payload)
+    except _EndpointHttpError as exc:
+        if exc.code >= 500 and fb_model and fb_model != model:
+            logger.warning(
+                "STT custom : repli %s → %s après erreur HTTP %s (%s)",
+                model, fb_model, exc.code, base_url,
+            )
+            try:
+                data = _post_openai_compatible(fb_url, api_key, fb_model, langue, payload)
+                model = fb_model
+            except _EndpointHttpError as exc2:
+                if exc2.code in (401, 403):
+                    raise TranscriptionError(
+                        "Le point de terminaison personnalisé refuse la clé API. "
+                        "Vérifiez-la dans le panneau d'administration."
+                    ) from exc2
+                raise TranscriptionError(
+                    f"Erreur du point de terminaison personnalisé ({exc2.code}) : {exc2.detail}"
+                ) from exc2
+        else:
+            if exc.code in (401, 403):
+                raise TranscriptionError(
+                    "Le point de terminaison personnalisé refuse la clé API. "
+                    "Vérifiez-la dans le panneau d'administration."
+                ) from exc
+            raise TranscriptionError(
+                f"Erreur du point de terminaison personnalisé ({exc.code}) : {exc.detail}"
+            ) from exc
 
     transcript = str(data.get("text") or "").strip()
     if not transcript and not payload.allow_silence:

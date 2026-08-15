@@ -1,9 +1,15 @@
 # Évaluation des facteurs relatifs à la vie privée (ÉFVP)
 
 **Système** : ConsultAI (DictAI.ca) — dictée et rédaction de notes de consultations cliniques
-**Version du document** : 1.2
+**Version du document** : 1.3
 **Date** : 2026-08-14
 **Base légale** : *Loi sur la protection des renseignements personnels dans le secteur privé* (RLRQ, c. P-39.1), notamment ses articles 3.1 à 3.5 (Loi 25).
+
+> ⚠️ **Portée — usage prévu** : ConsultAI **n'est pas** un « scribe IA » au sens
+> du Collège des médecins du Québec, et n'est pas destiné à l'enregistrement
+> d'une conversation entre un médecin et ses patients. L'application est un
+> outil de dictée post-consultation utilisé par le clinicien seul — le dialogue
+> avec le patient ne fait pas partie de l'usage prévu du système.
 
 ---
 
@@ -45,9 +51,10 @@ Déploiement en production (2026-08-14) :
 - Image conteneurisée `ghcr.io/varialflip/consultai`, UID/GID 1000, un seul worker uvicorn.
 - Volume de données persistantes `/opt/dictai/data/consultai` : base SQLite, audio,
   dictées en cours, sauvegardes.
-- **Whisper local** (`speaches`, faster-whisper, CPU, modèle int8 résident) :
-  point de terminaison STT personnalisé de ConsultAI, **interne au réseau Docker**
-  (aucun port publié). L'audio n'y quitte jamais la machine.
+- **STT local** (`speaches`, endpoint personnalisé interne au réseau Docker, aucun
+  port publié) : **Parakeet TDT 0.6B v3** (ONNX, CPU) pour les dictées courtes,
+  **Whisper small** en repli (routage par durée au-delà de ~6 min et en cas
+  d'erreur 5xx). L'audio n'y quitte jamais la machine.
 - Reverse proxy Caddy avec TLS (Let's Encrypt), réponses **403** aux chemins de
   scan connus (`.env`, `.git`, `.aws`, `wp-*`, …).
 - CrowdSec (détection/bannissement d'IP), règles géographiques **fail-closed** :
@@ -154,7 +161,7 @@ Autres flux :
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
 | Audio + note → Vertex AI | Audio brut, transcription, note, gabarit | `northamerica-northeast1` (Montréal) | **Québec** |
-| STT séparé (secours) | Audio brut | Whisper local `speaches` (réseau Docker interne) | **Locale — jamais exporté** |
+| STT séparé (secours) | Audio brut | `speaches` (endpoint personnalisé interne) — Parakeet / Whisper small | **Locale — jamais exporté** |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
 | Turnstile (captcha) | Données du navigateur, adresse IP | Cloudflare | Hors Canada (données non cliniques) |
@@ -270,9 +277,10 @@ Autres flux :
 ### 7.4 Traitement et résidence des données
 
 - LLM + audio sur **Vertex AI, région `northamerica-northeast1` (Montréal)**.
-- Le STT séparé, lorsqu'il est actif, passe par le **Whisper local** (`speaches`,
-  interne au réseau Docker) : l'audio n'est envoyé **ni** à un service STT
-  externe **ni** hors de la machine.
+- Le STT séparé, lorsqu'il est actif, passe par le **STT local** (`speaches`,
+  endpoint personnalisé interne au réseau Docker — Parakeet TDT 0.6B v3, Whisper
+  small en repli) : l'audio n'est envoyé **ni** à un service STT externe **ni**
+  hors de la machine.
 - **Addendum de politique cloud de Google consenti le 2026-08-14** — le traitement
   des renseignements de santé par Google Cloud est couvert par l'entente.
 - `GOOGLE_CLOUD_LOCATION` explicite ; vérification que `GEMINI_API_KEY` est **vide**

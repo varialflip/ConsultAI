@@ -246,6 +246,18 @@ SETTINGS: Tuple[Setting, ...] = (
         "custom_stt_language", "text", "group.stt",
         default=lambda: "", placeholder="fr / en / auto",
     ),
+    Setting(
+        "custom_stt_fallback_model", "text", "group.stt",
+        default=lambda: "", placeholder="Systran/faster-whisper-small",
+    ),
+    Setting(
+        "custom_stt_fallback_base_url", "text", "group.stt",
+        default=lambda: "", placeholder="(vide = même adresse que le principal)",
+    ),
+    Setting(
+        "custom_stt_max_seconds", "text", "group.stt",
+        default=lambda: "", placeholder="ex. 380 (vide = pas de routage par durée)",
+    ),
 
     # --- Modèle de langage ---------------------------------------------------
     # AUCUN réglage commun ici, volontairement : un champ « Modèle » unique

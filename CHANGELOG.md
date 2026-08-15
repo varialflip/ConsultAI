@@ -3,6 +3,24 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.44
+
+- **Reconnaissance vocale — point de terminaison personnalisé : repli et
+  routage**. Le modèle de repli (`custom_stt_fallback_model`) prend le relais
+  en cas d'erreur HTTP 5xx du modèle principal (une seule tentative), et un
+  seuil de durée (`custom_stt_max_seconds`) envoie directement au modèle de
+  repli les dictées trop longues pour l'endpoint principal. En pratique, le
+  secours local (speaches) bascule entre **Parakeet TDT 0.6B v3** (dictées
+  courtes) et **Whisper small** (dictées longues) sans intervention.
+
+## 2026-08-14
+
+- **Politique de confidentialité** : ajout en tête de la liste d'un énoncé de
+  portée — ConsultAI n'est **pas** un « scribe IA » au sens du Collège des
+  médecins du Québec : l'application n'est pas faite pour l'enregistrement
+  d'une conversation entre un médecin et ses patients, mais pour la dictée
+  post-consultation par le clinicien seul. Énoncé repris en tête de l'ÉFVP.
+
 ## 2026-08-14 — v2.0.0-beta.43
 
 - **Reprise automatique sur quota Gemini dépassé** : un refus 429

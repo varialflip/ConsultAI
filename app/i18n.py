@@ -318,6 +318,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "privacy.title": ("Politique de confidentialité", "Privacy policy"),
     "privacy.footer_link": ("Politique de confidentialité", "Privacy policy"),
     "privacy.close": ("Fermer", "Close"),
+    "privacy.q0_title": ("Est-ce un scribe IA ?", "Is this an AI scribe?"),
+    "privacy.q0_body": (
+        "Non. ConsultAI n'est pas un « scribe IA » au sens du Collège des "
+        "médecins du Québec : l'application n'est pas faite pour "
+        "l'enregistrement d'une conversation entre un médecin et ses patients. "
+        "C'est un outil de dictée que le clinicien utilise après la "
+        "consultation, seul — le dialogue avec le patient ne fait pas partie "
+        "de l'usage prévu.",
+        "No. ConsultAI is not an \"AI scribe\" within the meaning of the "
+        "Collège des médecins du Québec: the application is not made to record "
+        "a conversation between a physician and their patients. It is a "
+        "dictation tool the clinician uses after the consultation, on their "
+        "own — the dialogue with the patient is not part of its intended use.",
+    ),
     "privacy.q1_title": ("Où sont traitées les données ?", "Where is the data processed?"),
     "privacy.q1_body": (
         "La dictée, la transcription et la note sont traitées au Québec, auprès "
@@ -1554,6 +1568,31 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "si le service détecte la langue lui-même.",
         "Leave empty to follow the template language, or enter “auto” if the "
         "service detects the language itself.",
+    ),
+    "set.custom_stt_fallback_model.label": ("Modèle de repli", "Fallback model"),
+    "set.custom_stt_fallback_model.help": (
+        "Modèle utilisé quand l'endpoint principal échoue (erreur HTTP 5xx) ou "
+        "que la dictée dépasse le seuil de durée ci-dessous. Laisser vide pour "
+        "désactiver le repli. Ex. « Systran/faster-whisper-small ».",
+        "Model used when the main endpoint fails (HTTP 5xx) or when the "
+        "dictation exceeds the duration threshold below. Leave empty to disable "
+        "the fallback. E.g. “Systran/faster-whisper-small”.",
+    ),
+    "set.custom_stt_fallback_base_url.label": ("Adresse de repli", "Fallback base URL"),
+    "set.custom_stt_fallback_base_url.help": (
+        "Adresse du point de terminaison de repli, même format que l'adresse "
+        "principale. Vide = même adresse que le principal.",
+        "Fallback endpoint address, same format as the main address. Empty = "
+        "same address as the main one.",
+    ),
+    "set.custom_stt_max_seconds.label": ("Seuil de durée (s)", "Duration threshold (s)"),
+    "set.custom_stt_max_seconds.help": (
+        "Au-delà de cette durée, la dictée part directement au modèle de repli "
+        "(utile si l'endpoint principal plafonne en longueur d'audio). Vide = "
+        "pas de routage par durée, seul le repli sur erreur 5xx s'applique.",
+        "Beyond this duration, the dictation is sent straight to the fallback "
+        "model (useful when the main endpoint caps audio length). Empty = no "
+        "duration-based routing; only the 5xx fallback applies.",
     ),
 
     # Avertissement affiché dans le panneau quand Cohere est sélectionné.

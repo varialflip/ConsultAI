@@ -3850,6 +3850,9 @@
     custom_stt_base_url: { key: 'stt_provider', value: 'custom' },
     custom_stt_model: { key: 'stt_provider', value: 'custom' },
     custom_stt_language: { key: 'stt_provider', value: 'custom' },
+    custom_stt_fallback_model: { key: 'stt_provider', value: 'custom' },
+    custom_stt_fallback_base_url: { key: 'stt_provider', value: 'custom' },
+    custom_stt_max_seconds: { key: 'stt_provider', value: 'custom' },
   };
 
   /**

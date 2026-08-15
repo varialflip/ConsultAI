@@ -214,7 +214,13 @@ QWEN_OMNI_BASE_URL=            # documentation DashScope
 > Un **point de terminaison personnalisé** (ex. Whisper auto-hébergé,
 > compatible API OpenAI) se configure uniquement depuis le panneau, sans
 > variable de clé propre : `custom_stt_base_url`, `custom_stt_model` et une clé
-> éventuelle. L'audio y reste sur votre machine (§ 7.2, § 11.2).
+> éventuelle. L'audio y reste sur votre machine (§ 7.2, § 11.2). Il accepte
+> aussi un **modèle de repli** (`custom_stt_fallback_model` et, au besoin,
+> `custom_stt_fallback_base_url`) : en cas d'erreur HTTP 5xx de l'endpoint
+> principal, la transcription est retentée une fois avec le modèle de repli ;
+> un **seuil de durée** (`custom_stt_max_seconds`) peut en outre envoyer
+> directement au modèle de repli les dictées trop longues pour l'endpoint
+> principal (ex. un Parakeet/ONNX plafonnant autour de 6-7 min par passe).
 
 ---
 
@@ -628,6 +634,10 @@ votre contexte avant toute utilisation clinique réelle.
   dossier ne sont ni saisis ni stockés (dénominalisation). Les notes générées
   sont dénominalisées ; l'identification se rattache au versement au dossier,
   hors de l'application.
+* 🩺 **Ce n'est pas un « scribe IA »** : l'application n'est pas faite pour
+  enregistrer une conversation entre un médecin et ses patients — c'est un outil
+  de dictée post-consultation utilisé par le clinicien seul (voir la politique
+  de confidentialité).
 * 💾 **Les sauvegardes sont sanitisées** : les archives ZIP ne contiennent ni
   audio ni données cliniques (config, comptes, gabarits, statistiques
   seulement). Une restauration ne ramène donc pas les données patient.

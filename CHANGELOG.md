@@ -3,6 +3,23 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.53
+
+- **Modèle de langage — point de terminaison personnalisé : modèles à
+  raisonnement (DeepSeek) réparés et contrôlables**. La régénération vers un
+  modèle à raisonnement (ex. `deepseek/deepseek-v4-pro` via OpenRouter) sortait
+  une note vide (« réponse vide, motif : length ») : le raisonnement consommait
+  tout le budget de sortie — hérité du plafond de Gemini (8192 jetons) — avant
+  le moindre texte. Deux nouveaux réglages propres au fournisseur custom :
+  **Budget de sortie** (`custom_llm_max_tokens`, 32768 par défaut) et
+  **Raisonnement** (`custom_llm_reasoning_effort`, « Auto » par défaut, qui
+  envoie `reasoning.effort` au point de terminaison). De plus, si la réponse
+  revient vide avec un motif « length », l'application **relance
+  automatiquement** avec un budget doublé (plafonné). Les jetons de
+  raisonnement (`reasoning_tokens`) sont désormais capturés dans l'usage pour
+  le diagnostic. Côté panneau, le fournisseur custom a son propre budget, sans
+  toucher à celui de Gemini.
+
 ## 2026-08-15 — v2.0.0-beta.52
 
 - **Liste des brouillons — statut lisible**. Le statut était affiché brut en

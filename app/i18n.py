@@ -2015,6 +2015,33 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "has no place in a clinical note. Some endpoints ignore this setting: "
         "the note is produced anyway.",
     ),
+    "set.custom_llm_max_tokens.label": ("Budget de sortie (jetons)", "Output budget (tokens)"),
+    "set.custom_llm_max_tokens.help": (
+        "Plafond de jetons de sortie pour ce fournisseur (raisonnement + "
+        "texte). Les modèles à raisonnement (ex. DeepSeek) consomment une "
+        "large part du budget dans leur pensée : un budget trop bas produit "
+        "une réponse vide (« motif : length »). 32768 par défaut, en sus du "
+        "réglage propre à Gemini.",
+        "Output token cap for this provider (reasoning + text). Reasoning "
+        "models (e.g. DeepSeek) spend a large share of the budget on "
+        "thinking: a too-small budget yields an empty reply ('finish_reason: "
+        "length'). Default 32768, in addition to the Gemini-specific setting.",
+    ),
+    "set.custom_llm_reasoning_effort.label": ("Raisonnement", "Reasoning"),
+    "set.custom_llm_reasoning_effort.help": (
+        "Effort de raisonnement demandé aux modèles qui en ont un (DeepSeek, "
+        "etc.) : « Auto » = paramètre non envoyé, le modèle fait son choix. "
+        "« Faible/Moyen/Élevé » envoie le réglage au point de terminaison "
+        "(OpenRouter `reasoning.effort`) ; tous les modèles ne l'honorent pas. "
+        "Si la note sort vide (raisonnement saturant le budget), relevez le "
+        "Budget de sortie plutôt que d'augmenter l'effort.",
+        "Reasoning effort requested from models that support it (DeepSeek, "
+        "etc.): 'Auto' = parameter not sent, the model decides. "
+        "'Low/Medium/High' forwards the setting to the endpoint (OpenRouter "
+        "`reasoning.effort`); not every model honors it. If the note comes "
+        "back empty (reasoning saturating the budget), raise the Output "
+        "budget rather than increasing effort.",
+    ),
     "set.custom_send_audio.label": (
         "Joindre aussi l'audio (silences plafonnés)",
         "Also attach audio (pauses capped)",

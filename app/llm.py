@@ -586,6 +586,37 @@ def _clamp_max_tokens(provider: str, model: str, requested: int) -> int:
     return limite
 
 
+#: Budget de sortie par défaut du point de terminaison personnalisé. Un modèle
+#: à raisonnement (ex. DeepSeek) consomme une large part dans sa pensée : un
+#: budget trop bas produit une réponse vide (« finish_reason: length »).
+_CUSTOM_MAX_TOKENS_DEFAUT = 32768
+
+#: Plafond de la relance automatique (raisonnement débordé) — voir
+#: ``generate_note_stream``.
+_CUSTOM_MAX_TOKENS_PLAFOND = 65536
+
+
+def _custom_max_tokens() -> int:
+    """Budget de sortie du point de terminaison personnalisé (raisonnement + texte)."""
+    valeur = runtime_config.value("custom_llm_max_tokens").strip()
+    try:
+        entier = int(float(valeur))
+    except (TypeError, ValueError):
+        return _CUSTOM_MAX_TOKENS_DEFAUT
+    return entier if entier > 0 else _CUSTOM_MAX_TOKENS_DEFAUT
+
+
+def _custom_reasoning_effort() -> Optional[str]:
+    """
+    Effort de raisonnement demandé au point de terminaison personnalisé.
+
+    « auto » (défaut) → ``None`` : le paramètre n'est pas envoyé, le modèle
+    fait son choix. Tous les modèles n'honorent pas ``reasoning.effort``.
+    """
+    effort = (runtime_config.value("custom_llm_reasoning_effort") or "").strip().lower()
+    return effort if effort in ("low", "medium", "high") else None
+
+
 _LIMITE_DANS_ERREUR = re.compile(
     r"less than or equal to\s+(\d+)", re.IGNORECASE
 )
@@ -641,6 +672,8 @@ def complete(
     (``generate_note``) de ne le fournir que si le fournisseur actif le gère.
     """
     provider = provider or active_provider()
+    if provider == "custom":
+        max_tokens = max(max_tokens, _custom_max_tokens())
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
     if provider == "gemini":
         return _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio)
@@ -1127,6 +1160,13 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
             # y gaspille des jetons sur cette tâche mécanique.
             kwargs["enable_thinking"] = False
 
+    if provider == "custom":
+        effort = _custom_reasoning_effort()
+        if effort:
+            # Modèles à raisonnement (DeepSeek…) : effort demandé, s'il est
+            # honoré par le point de terminaison (OpenRouter ``reasoning.effort``).
+            kwargs["reasoning"] = {"effort": effort}
+
     try:
         stream = _call_tolerant(client.chat.completions.create, kwargs)
     except Exception as exc:
@@ -1182,6 +1222,12 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         "output_tokens": getattr(usage_data, "completion_tokens", None),
         "total_tokens": getattr(usage_data, "total_tokens", None),
     } if usage_data else {}
+    # Part du raisonnement dans les jetons de sortie (DeepSeek etc.) : le
+    # diagnostic « réponse vide, motif length » dépend de cette part.
+    details_usage = getattr(usage_data, "completion_tokens_details", None)
+    raisonnement = getattr(details_usage, "reasoning_tokens", None) if details_usage else None
+    if raisonnement is not None:
+        usage["reasoning_tokens"] = raisonnement
 
     # Qwen facture l'audio entrant à part, comme Gemini (voir la version
     # non-streaming) : même rangement, si l'usage est bien présent.
@@ -1225,6 +1271,8 @@ def complete_stream(
     ``complete()`` : un seul fragment, même contrat.
     """
     provider = provider or active_provider()
+    if provider == "custom":
+        max_tokens = max(max_tokens, _custom_max_tokens())
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
 
     if provider == "gemini":
@@ -1303,41 +1351,63 @@ def generate_note_stream(
         user_prompt = f"{user_prompt}\n\n{note[langue]}"
 
     t0 = time.monotonic()
-    stream = complete_stream(
-        build_system_prompt(
-            system_instructions, runtime_config.general_prompt(langue), langue
-        ),
-        user_prompt,
-        model=model_name,
-        temperature=active_temperature(),
-        max_tokens=settings.gemini_max_output_tokens,
-        provider=provider,
-        audio=audio_to_send,
-    )
-
-    # Rend le texte brut accumulé ; conserve le Completion final. Le
-    # ``finally`` referme le générateur fournisseur : sur une génération
-    # supplantée (generator.close() depuis _generate_and_publish), il coupe le
-    # flux HTTP du SDK et cesse de consommer des jetons chez le fournisseur.
+    # Budget de sortie propre au point de terminaison personnalisé : un modèle
+    # à raisonnement (DeepSeek…) consomme une large part dans sa pensée, et un
+    # budget trop bas (celui de Gemini) produisait une note vide (« motif :
+    # length »). La boucle relance une fois avec un budget doublé si le
+    # raisonnement a saturé tout le budget avant le moindre texte.
+    budget = _custom_max_tokens() if provider == "custom" else settings.gemini_max_output_tokens
     raw = ""
     result = None
-    try:
-        while True:
-            try:
-                fragment = next(stream)
-            except StopIteration as stop:
-                result = stop.value
-                break
-            if fragment:
-                raw += fragment
-                yield raw
-    finally:
-        fermeture = getattr(stream, "close", None)
-        if callable(fermeture):
-            try:
-                fermeture()
-            except Exception:
-                pass
+    for tentative in range(3 if provider == "custom" else 1):
+        stream = complete_stream(
+            build_system_prompt(
+                system_instructions, runtime_config.general_prompt(langue), langue
+            ),
+            user_prompt,
+            model=model_name,
+            temperature=active_temperature(),
+            max_tokens=budget,
+            provider=provider,
+            audio=audio_to_send,
+        )
+
+        # Rend le texte brut accumulé ; conserve le Completion final. Le
+        # ``finally`` referme le générateur fournisseur : sur une génération
+        # supplantée (generator.close() depuis _generate_and_publish), il coupe
+        # le flux HTTP du SDK et cesse de consommer des jetons chez le
+        # fournisseur.
+        raw = ""
+        result = None
+        try:
+            while True:
+                try:
+                    fragment = next(stream)
+                except StopIteration as stop:
+                    result = stop.value
+                    break
+                if fragment:
+                    raw += fragment
+                    yield raw
+        finally:
+            fermeture = getattr(stream, "close", None)
+            if callable(fermeture):
+                try:
+                    fermeture()
+                except Exception:
+                    pass
+
+        if result is None or result.text.strip() or not result.truncated:
+            break
+        if tentative < 2:
+            budget = min(int(budget * 2), _CUSTOM_MAX_TOKENS_PLAFOND)
+            logger.warning(
+                "Note vide (%s, modèle %s) : raisonnement saturant le budget de "
+                "sortie — relance au budget %d jetons",
+                provider, model_name, budget,
+            )
+        else:
+            break
     elapsed_seconds = time.monotonic() - t0
 
     if not result.text.strip():
@@ -1348,7 +1418,10 @@ def generate_note_stream(
             )
         raise GenerationError(
             f"{provider} a renvoyé une réponse vide "
-            f"(motif : {result.finish_reason or 'inconnu'})."
+            f"(motif : {result.finish_reason or 'inconnu'}). "
+            "Le raisonnement du modèle peut saturer le budget de sortie : "
+            "augmentez-le dans le panneau (Raisonnement) ou réduisez l'effort "
+            "de raisonnement."
         )
 
     if result.truncated:
@@ -1479,6 +1552,10 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
     }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
+    if provider == "custom":
+        effort = _custom_reasoning_effort()
+        if effort:
+            kwargs["reasoning"] = {"effort": effort}
 
     try:
         response = _call_tolerant(client.chat.completions.create, kwargs)
@@ -1494,6 +1571,10 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
         "output_tokens": getattr(usage_data, "completion_tokens", None),
         "total_tokens": getattr(usage_data, "total_tokens", None),
     } if usage_data else {}
+    details_usage = getattr(usage_data, "completion_tokens_details", None)
+    raisonnement = getattr(details_usage, "reasoning_tokens", None) if details_usage else None
+    if raisonnement is not None:
+        usage["reasoning_tokens"] = raisonnement
 
     return Completion(
         text=text, model=model, provider=provider,

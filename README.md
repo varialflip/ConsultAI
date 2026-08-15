@@ -383,6 +383,16 @@ réglages de chaque service, actif ou non : on peut y coller une clé ou un
 modèle sans mettre le service en production — il n'y a plus de case à cocher
 pour dévoiler les fournisseurs non sélectionnés.
 
+> Le **point de terminaison personnalisé** expose un **Budget de sortie**
+> (`custom_llm_max_tokens`, 32768 jetons par défaut) propre à ce fournisseur,
+> distinct du plafond de Gemini, et un réglage **Raisonnement**
+> (`custom_llm_reasoning_effort`, « Auto » par défaut) qui envoie
+> `reasoning.effort` aux modèles à raisonnement (DeepSeek via OpenRouter…). Un
+> tel modèle consomme une large part du budget dans sa pensée : si le budget
+> est trop bas, il renvoie une réponse vide (« motif : length ») — l'application
+> relance alors automatiquement avec un budget doublé, et le panneau explique
+> comment l'ajuster.
+
 Dans l'onglet Comptes, l'appartenance se règle en cliquant les pastilles de
 groupe, et chaque changement s'applique immédiatement — il n'y a rien à
 enregistrer.

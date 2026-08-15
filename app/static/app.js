@@ -3930,6 +3930,8 @@
     custom_llm_model: { key: 'llm_provider', value: 'custom' },
     custom_llm_model_fast: { key: 'llm_provider', value: 'custom' },
     custom_llm_temperature: { key: 'llm_provider', value: 'custom' },
+    custom_llm_max_tokens: { key: 'llm_provider', value: 'custom' },
+    custom_llm_reasoning_effort: { key: 'llm_provider', value: 'custom' },
     // Options audio : le point de terminaison personnalisé peut être
     // multimodal (OpenRouter) — mêmes réglages que Gemini/Qwen Omni.
     custom_send_audio: { key: 'llm_provider', value: 'custom' },

@@ -424,6 +424,14 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: str(settings.gemini_temperature),
     ),
     Setting(
+        "custom_llm_max_tokens", "text", "group.llm",
+        default=lambda: "32768", placeholder="ex. 32768 (jetons de sortie)",
+    ),
+    Setting(
+        "custom_llm_reasoning_effort", "choice", "group.llm",
+        default=lambda: "auto", choices=("auto", "low", "medium", "high"),
+    ),
+    Setting(
         "custom_send_audio", "choice", "group.llm",
         default=lambda: "false", choices=ON_OFF,
     ),

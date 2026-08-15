@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.48
+
+- **Modèle de langage — Gemini : bascule « Raisonnement (thinking) »**. Nouveau
+  réglage dans l'onglet Gemini : « Raisonnement » activé/désactivé. Désactivé
+  (par défaut) : raisonnement quasi nul (budget 128 — le minimum que
+  gemini-2.5-pro sur Vertex accepte, 0 étant refusé, et l'absence de réglage
+  laissant le modèle penser à plein régime). Activé : le « Budget de
+  raisonnement » s'applique pour laisser le modèle réfléchir avant de répondre.
+
 ## 2026-08-15 — v2.0.0-beta.47
 
 - **Modèle de langage — Gemini : budget de raisonnement réglable**. Nouveau

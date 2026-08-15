@@ -3787,6 +3787,7 @@
     gemini_model: { key: 'llm_provider', value: 'gemini' },
     gemini_model_fast: { key: 'llm_provider', value: 'gemini' },
     gemini_temperature: { key: 'llm_provider', value: 'gemini' },
+    gemini_thinking: { key: 'llm_provider', value: 'gemini' },
     gemini_thinking_budget: { key: 'llm_provider', value: 'gemini' },
     // Options audio : propres à Gemini, PAS des réglages communs — sans ces
     // entrées elles s'affichaient (à tort) sous les six autres onglets.

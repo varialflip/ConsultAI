@@ -291,6 +291,10 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: str(settings.gemini_temperature),
     ),
     Setting(
+        "gemini_thinking", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+    Setting(
         "gemini_thinking_budget", "number", "group.llm",
         default=lambda: str(settings.gemini_thinking_budget),
         placeholder="128",

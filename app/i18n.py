@@ -1656,19 +1656,31 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "accept it: the setting is then ignored and the note is produced "
         "anyway.",
     ),
+    "set.gemini_thinking.label": (
+        "Raisonnement (thinking)",
+        "Thinking",
+    ),
+    "set.gemini_thinking.help": (
+        "Désactivé (recommandé) : raisonnement quasi nul (budget 128, le "
+        "minimum que gemini-2.5-pro sur Vertex accepte — 0 est refusé). "
+        "Activé : le modèle réfléchit avant de répondre ; le champ « Budget de "
+        "raisonnement » ci-dessous fixe l'ampleur.",
+        "Off (recommended): near-zero reasoning (budget 128, the minimum "
+        "gemini-2.5-pro on Vertex accepts — 0 is rejected). On: the model "
+        "thinks before answering; the “Thinking budget” field below sets how "
+        "much.",
+    ),
     "set.gemini_thinking_budget.label": (
         "Budget de raisonnement (thinking)",
         "Thinking budget",
     ),
     "set.gemini_thinking_budget.help": (
-        "Jetons de raisonnement alloués au modèle avant de répondre. Minimum "
-        "accepté par gemini-2.5-pro sur Vertex : 128 (0 et 1-127 sont "
-        "refusés). Vide = 128, raisonnement quasi nul — recommandé pour une "
-        "simple mise en forme.",
-        "Reasoning tokens allocated to the model before answering. Minimum "
-        "accepted by gemini-2.5-pro on Vertex: 128 (0 and 1-127 are "
-        "rejected). Empty = 128, near-zero reasoning — recommended for "
-        "simple formatting.",
+        "Prise en compte si « Raisonnement » est activé. Jetons de raisonnement "
+        "alloués au modèle avant de répondre. Minimum accepté par "
+        "gemini-2.5-pro sur Vertex : 128 (0 et 1-127 sont refusés). Vide = 128.",
+        "Used when “Thinking” is on. Reasoning tokens allocated to the model "
+        "before answering. Minimum accepted by gemini-2.5-pro on Vertex: 128 "
+        "(0 and 1-127 are rejected). Empty = 128.",
     ),
     "set.gemini_send_audio.label": (
         "Joindre aussi l'audio (silences plafonnés)",

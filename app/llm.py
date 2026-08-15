@@ -754,12 +754,19 @@ _GEMINI_THINKING_BUDGET_MIN = 128
 
 def _gemini_thinking_budget() -> int:
     """
-    Budget de raisonnement Gemini du panneau, ramené dans la plage valide.
+    Budget de raisonnement Gemini, selon la bascule « thinking ».
 
-    Un champ vide ou illisible retombe sur 128 ; toute valeur sous le minimum
-    est relevée au minimum pour ne pas faire échouer la requête — le modèle
-    refuse un budget trop petit, il n'en ignore pas la valeur.
+    Désactivé (par défaut) : budget minimal 128 — gemini-2.5-pro refuse 0 et
+    1-127, et omettre ``thinking_config`` laisserait au contraire le modèle
+    penser à plein régime (≈1800 jetons de pensée constatés). 128 est donc le
+    plus proche d'un raisonnement coupé que le modèle accepte.
+
+    Activé : le budget du panneau s'applique, ramené dans la plage valide —
+    un champ vide ou illisible retombe sur 128, et toute valeur sous le minimum
+    est relevée au minimum pour ne pas faire échouer la requête.
     """
+    if runtime_config.value("gemini_thinking") != "true":
+        return _GEMINI_THINKING_BUDGET_MIN
     try:
         budget = int(float(runtime_config.value("gemini_thinking_budget")))
     except (TypeError, ValueError):
@@ -826,10 +833,10 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     # Le raisonnement (thinking) est inutile pour une tache de mise en forme
     # qui ne demande ni diagnostic ni inference : le reduire rend la reponse
     # plus rapide, evite de consommer la limite de jetons en pensee, et
-    # protege contre les notes et les JSON tronques. Le budget vient du panneau
-    # (128 par defaut : le minimum accepte par gemini-2.5-pro sur Vertex, 0 et
-    # 1-127 sont refuses) ; un modele qui refuse le champ ``thinking_config``
-    # retombe sur un appel sans lui.
+    # protege contre les notes et les JSON tronques. La bascule et le budget
+    # viennent du panneau (bascule coupee par defaut = 128, le minimum accepte
+    # par gemini-2.5-pro sur Vertex ; 0 et 1-127 sont refuses) ; un modele qui
+    # refuse le champ ``thinking_config`` retombe sur un appel sans lui.
     config_kwargs["thinking_config"] = types.ThinkingConfig(
         thinking_budget=_gemini_thinking_budget()
     )
@@ -888,9 +895,10 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
         safety_settings=_safety_settings(),
     )
     # Même choix que la version non-streaming : le raisonnement (thinking) est
-    # inutile pour une tâche de mise en forme. Le budget vient du panneau (128
-    # par défaut, minimum accepté par gemini-2.5-pro sur Vertex) ; un modèle
-    # qui refuse le champ ``thinking_config`` retombe sur le flux sans lui.
+    # inutile pour une tâche de mise en forme. La bascule et le budget viennent
+    # du panneau (bascule coupée par défaut = 128, minimum accepté par
+    # gemini-2.5-pro sur Vertex) ; un modèle qui refuse le champ
+    # ``thinking_config`` retombe sur le flux sans lui.
     config_kwargs["thinking_config"] = types.ThinkingConfig(
         thinking_budget=_gemini_thinking_budget()
     )

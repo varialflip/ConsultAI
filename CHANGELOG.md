@@ -3,6 +3,21 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.49
+
+- **Modèle de langage — Gemini : « Raisonnement » désactivé = vraie coupure**.
+  La bascule passe désormais le budget de raisonnement à 0 : coupure réelle
+  (pensée `None`), supportée par gemini-2.5-flash. gemini-2.5-pro refuse le
+  budget 0 : un message le signale alors et invite à passer « Raisonnement »
+  sur « Oui » avec un budget de 128 (plus de repli silencieux vers un
+  raisonnement à plein régime).
+- **Audio réparé pour les WebM sans durée**. Certains enregistrements produits
+  par le navigateur (MediaRecorder, muxeur « live ») n'ont aucune durée dans
+  leurs métadonnées : ffprobe renvoyait `N/A` et l'audio était jugé
+  « illisible » et jamais envoyé au modèle. La mesure de durée retombe
+  maintenant sur un décodage complet (quelques secondes, uniquement quand la
+  durée manque) : ces enregistrements repartent réellement à Gemini.
+
 ## 2026-08-15 — v2.0.0-beta.48
 
 - **Modèle de langage — Gemini : bascule « Raisonnement (thinking) »**. Nouveau

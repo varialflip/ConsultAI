@@ -680,6 +680,12 @@ def _translate_error(provider: str, model: str, exc: Exception) -> GenerationErr
         return GenerationError(
             f"Quota {provider} dépassé. Patientez quelques instants puis réessayez."
         )
+    if _est_think_refusee_gemini(exc):
+        return GenerationError(
+            f"Le modèle « {model} » refuse un raisonnement coupé (budget 0). "
+            "Dans le panneau d'administration, passez « Raisonnement » sur "
+            "« Oui » avec un budget de 128."
+        )
     if "credit" in lowered or "billing" in lowered or "quota" in lowered:
         return GenerationError(f"Problème de facturation côté {provider} : {message}")
     return GenerationError(f"Erreur {provider} : {message}")
@@ -748,7 +754,8 @@ def _est_think_refusee_gemini(exc: Exception) -> bool:
 #: Budget de raisonnement minimal accepté par gemini-2.5-pro sur Vertex AI : 0
 #: et 1-127 sont refusés (400 INVALID_ARGUMENT « thinking_budget is out of
 #: range; supported values are integers from 128 to 32768 »). 128 = raisonnement
-#: quasi nul, juste de quoi satisfaire l'API.
+#: quasi nul, juste de quoi satisfaire l'API. gemini-2.5-flash, lui, accepte 0 :
+#: c'est la « vraie » coupure utilisée quand la bascule est désactivée.
 _GEMINI_THINKING_BUDGET_MIN = 128
 
 
@@ -756,17 +763,18 @@ def _gemini_thinking_budget() -> int:
     """
     Budget de raisonnement Gemini, selon la bascule « thinking ».
 
-    Désactivé (par défaut) : budget minimal 128 — gemini-2.5-pro refuse 0 et
-    1-127, et omettre ``thinking_config`` laisserait au contraire le modèle
-    penser à plein régime (≈1800 jetons de pensée constatés). 128 est donc le
-    plus proche d'un raisonnement coupé que le modèle accepte.
+    Désactivé : budget 0 — la vraie coupure du raisonnement, acceptée par
+    gemini-2.5-flash (pensée ``None``). gemini-2.5-pro refuse 0 : la requête
+    échoue alors avec un message qui renvoie vers « Raisonnement : Oui,
+    budget 128 » — mieux que de relancer silencieusement avec le raisonnement
+    à plein régime (≈1800 jetons de pensée constatés sans ``thinking_config``).
 
     Activé : le budget du panneau s'applique, ramené dans la plage valide —
     un champ vide ou illisible retombe sur 128, et toute valeur sous le minimum
     est relevée au minimum pour ne pas faire échouer la requête.
     """
     if runtime_config.value("gemini_thinking") != "true":
-        return _GEMINI_THINKING_BUDGET_MIN
+        return 0
     try:
         budget = int(float(runtime_config.value("gemini_thinking_budget")))
     except (TypeError, ValueError):
@@ -834,9 +842,11 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     # qui ne demande ni diagnostic ni inference : le reduire rend la reponse
     # plus rapide, evite de consommer la limite de jetons en pensee, et
     # protege contre les notes et les JSON tronques. La bascule et le budget
-    # viennent du panneau (bascule coupee par defaut = 128, le minimum accepte
-    # par gemini-2.5-pro sur Vertex ; 0 et 1-127 sont refuses) ; un modele qui
-    # refuse le champ ``thinking_config`` retombe sur un appel sans lui.
+    # viennent du panneau : bascule coupee = budget 0 (vraie coupure, acceptee
+    # par gemini-2.5-flash, refusee par gemini-2.5-pro — l'erreur renvoie alors
+    # vers « Raisonnement : Oui, budget 128 ») ; bascule activee = budget du
+    # panneau, releve a 128 au minimum. Un modele qui refuse le champ
+    # ``thinking_config`` avec un budget non nul retombe sur un appel sans lui.
     config_kwargs["thinking_config"] = types.ThinkingConfig(
         thinking_budget=_gemini_thinking_budget()
     )
@@ -856,6 +866,13 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
         )
     except Exception as exc:
         if _est_think_refusee_gemini(exc):
+            if getattr(config_kwargs.get("thinking_config"), "thinking_budget", 0) == 0:
+                # Raisonnement coupé (budget 0) : le modèle le refuse. On laisse
+                # l'erreur remonter plutôt que de relancer avec le raisonnement
+                # à plein régime — l'usager passe alors « Raisonnement : Oui,
+                # budget 128 » dans le panneau.
+                logger.exception("Échec de l'appel Gemini")
+                raise _translate_error("Gemini", model, exc) from exc
             logger.warning(
                 "Gemini (%s) refuse thinking_config : nouvel appel sans "
                 "raisonnement configure.", model,
@@ -896,12 +913,15 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     )
     # Même choix que la version non-streaming : le raisonnement (thinking) est
     # inutile pour une tâche de mise en forme. La bascule et le budget viennent
-    # du panneau (bascule coupée par défaut = 128, minimum accepté par
-    # gemini-2.5-pro sur Vertex) ; un modèle qui refuse le champ
-    # ``thinking_config`` retombe sur le flux sans lui.
+    # du panneau (bascule coupée = budget 0, la vraie coupure — acceptée par
+    # gemini-2.5-flash, refusée par gemini-2.5-pro dont l'erreur renvoie vers
+    # « Raisonnement : Oui, budget 128 ») ; un modèle qui refuse le champ
+    # ``thinking_config`` avec un budget non nul retombe sur le flux sans lui.
+    budget_thinking = _gemini_thinking_budget()
     config_kwargs["thinking_config"] = types.ThinkingConfig(
-        thinking_budget=_gemini_thinking_budget()
+        thinking_budget=budget_thinking
     )
+    couper_thinking = budget_thinking == 0
     if json_mode:
         config_kwargs["response_mime_type"] = "application/json"
     else:
@@ -919,22 +939,28 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     # qu'à sa création : on couvre les deux, tant qu'aucun texte n'a encore été
     # diffusé — reprendre après une diffusion dupliquerait la note. Même
     # mécanique pour le refus du ``thinking_config`` : une seule relance, sans
-    # le champ.
+    # le champ. Le refus d'un budget 0 (raisonnement coupé) n'est PAS rattrapé
+    # ici : l'erreur doit rester visible pour que l'usager passe la bascule
+    # sur « Oui » avec un budget de 128.
     for tentative in range(1, _GEMINI_TENTATIVES + 1):
         try:
             stream = client.models.generate_content_stream(
                 model=model, contents=contents, config=config
             )
         except Exception as exc:
-            if _est_think_refusee_gemini(exc) and not sans_thinking:
-                logger.warning(
-                    "Gemini (%s) refuse thinking_config (flux) : nouvel essai "
-                    "sans raisonnement configuré.", model,
-                )
-                config_kwargs.pop("thinking_config", None)
-                config = types.GenerateContentConfig(**config_kwargs)
-                sans_thinking = True
-                continue
+            if _est_think_refusee_gemini(exc):
+                if couper_thinking:
+                    logger.exception("Échec de l'appel Gemini (flux)")
+                    raise _translate_error("Gemini", model, exc) from exc
+                if not sans_thinking:
+                    logger.warning(
+                        "Gemini (%s) refuse thinking_config (flux) : nouvel "
+                        "essai sans raisonnement configuré.", model,
+                    )
+                    config_kwargs.pop("thinking_config", None)
+                    config = types.GenerateContentConfig(**config_kwargs)
+                    sans_thinking = True
+                    continue
             if not _est_quota_gemini(exc) or tentative == _GEMINI_TENTATIVES:
                 logger.exception("Échec de l'appel Gemini (flux)")
                 raise _translate_error("Gemini", model, exc) from exc
@@ -962,19 +988,19 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
                 if getattr(chunk, "usage_metadata", None) is not None:
                     usage_metadata = chunk.usage_metadata
         except Exception as exc:
-            if (
-                _est_think_refusee_gemini(exc)
-                and not sans_thinking
-                and not deja_diffuse
-            ):
-                logger.warning(
-                    "Gemini (%s) refuse thinking_config (flux) : nouvel essai "
-                    "sans raisonnement configuré.", model,
-                )
-                config_kwargs.pop("thinking_config", None)
-                config = types.GenerateContentConfig(**config_kwargs)
-                sans_thinking = True
-                continue
+            if _est_think_refusee_gemini(exc):
+                if couper_thinking:
+                    logger.exception("Échec du flux Gemini")
+                    raise _translate_error("Gemini", model, exc) from exc
+                if not sans_thinking and not deja_diffuse:
+                    logger.warning(
+                        "Gemini (%s) refuse thinking_config (flux) : nouvel "
+                        "essai sans raisonnement configuré.", model,
+                    )
+                    config_kwargs.pop("thinking_config", None)
+                    config = types.GenerateContentConfig(**config_kwargs)
+                    sans_thinking = True
+                    continue
             if (
                 _est_quota_gemini(exc)
                 and not deja_diffuse

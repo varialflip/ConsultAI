@@ -283,7 +283,16 @@ def _ffmpeg_available() -> bool:
 
 
 def probe_duration(path: str) -> float:
-    """Durée de l'audio via ffprobe ; 0 si indéterminable (non bloquant)."""
+    """
+    Durée de l'audio via ffprobe ; 0 si indéterminable (non bloquant).
+
+    Les WebM produits par MediaRecorder (muxeur « live ») n'écrivent aucune
+    durée dans leurs métadonnées : ffprobe renvoie alors « N/A » au niveau
+    format ET stream, alors que le fichier se décode parfaitement. On retombe
+    sur un décodage complet (``ffmpeg … -f null -``) pour lire la dernière
+    horloge ``time=`` — quelques secondes pour un fichier long, uniquement
+    quand la durée manque.
+    """
     if not shutil.which("ffprobe"):
         return 0.0
     try:
@@ -298,6 +307,30 @@ def probe_duration(path: str) -> float:
         )
         return float(result.stdout.strip())
     except (subprocess.SubprocessError, ValueError):
+        pass
+    return _probe_duration_decodage(path)
+
+
+def _probe_duration_decodage(path: str) -> float:
+    """Durée mesurée en décodant l'audio jusqu'au bout (repli WebM « live »)."""
+    if not shutil.which("ffmpeg"):
+        return 0.0
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "info", "-i", path, "-f", "null", "-"],
+            capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.SubprocessError:
+        return 0.0
+    if result.returncode != 0:
+        return 0.0
+    horloges = re.findall(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr or "")
+    if not horloges:
+        return 0.0
+    heures, minutes, secondes = horloges[-1]
+    try:
+        return int(heures) * 3600 + int(minutes) * 60 + float(secondes)
+    except ValueError:
         return 0.0
 
 

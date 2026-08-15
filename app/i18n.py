@@ -1661,14 +1661,15 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Thinking",
     ),
     "set.gemini_thinking.help": (
-        "Désactivé (recommandé) : raisonnement quasi nul (budget 128, le "
-        "minimum que gemini-2.5-pro sur Vertex accepte — 0 est refusé). "
-        "Activé : le modèle réfléchit avant de répondre ; le champ « Budget de "
+        "Désactivé (par défaut) : raisonnement coupé (budget 0). Pris en charge "
+        "par gemini-2.5-flash ; gemini-2.5-pro le refuse — un message le "
+        "signale alors, passez sur « Oui » avec un budget de 128. Activé : le "
+        "modèle réfléchit avant de répondre ; le champ « Budget de "
         "raisonnement » ci-dessous fixe l'ampleur.",
-        "Off (recommended): near-zero reasoning (budget 128, the minimum "
-        "gemini-2.5-pro on Vertex accepts — 0 is rejected). On: the model "
-        "thinks before answering; the “Thinking budget” field below sets how "
-        "much.",
+        "Off (default): reasoning cut (budget 0). Supported by "
+        "gemini-2.5-flash; gemini-2.5-pro rejects it — you will be told, "
+        "then switch to “On” with a budget of 128. On: the model thinks "
+        "before answering; the “Thinking budget” field below sets how much.",
     ),
     "set.gemini_thinking_budget.label": (
         "Budget de raisonnement (thinking)",

@@ -3,6 +3,23 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.55
+
+- **Modèle de langage — point de terminaison personnalisé : streaming réparé
+  et paramètre de raisonnement correctement transmis**. Deux bugs rendaient la
+  génération impossible dès que le réglage « Raisonnement » passait à Faible /
+  Moyen / Élevé :
+  - le flux OpenAI-compatible lisait `choice.message` alors que le SDK expose
+    le texte dans `choice.delta` (un `ChoiceDelta`) : le contenu était **toujours
+    vide** pour tout fournisseur OpenAI-compatible (OpenAI, OpenRouter, Qwen
+    Omni). Le correctif lit `choice.delta` ;
+  - `reasoning` était passé en argument direct du SDK, qui le refuse
+    (`TypeError: Completions.create() got an unexpected keyword argument
+    'reasoning'`). Il passe désormais par `extra_body`, que le SDK fusionne
+    dans le corps JSON (OpenRouter l'accepte).
+  Le réglage « Raisonnement » du point de terminaison personnalisé est donc
+  pleinement opérationnel.
+
 ## 2026-08-15 — v2.0.0-beta.54
 
 - **Panneau Réglages réparé (régression de la beta.53)**. Le réglage

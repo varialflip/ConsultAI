@@ -1165,7 +1165,9 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         if effort:
             # Modèles à raisonnement (DeepSeek…) : effort demandé, s'il est
             # honoré par le point de terminaison (OpenRouter ``reasoning.effort``).
-            kwargs["reasoning"] = {"effort": effort}
+            # Passé par ``extra_body`` : ``reasoning`` n'est pas un paramètre du
+            # SDK OpenAI, qui refuse les arguments inconnus en kwargs directs.
+            kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
 
     try:
         stream = _call_tolerant(client.chat.completions.create, kwargs)
@@ -1195,9 +1197,14 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
     try:
         for chunk in stream:
             choice = (getattr(chunk, "choices", None) or [None])[0]
-            delta = getattr(choice, "message", None) if choice else None
+            # Streaming : le SDK OpenAI expose le texte dans ``choice.delta``
+            # (un ``ChoiceDelta``), pas dans ``choice.message`` qui n'existe que
+            # hors flux. Lire ``message`` renvoyait ``None`` → note toujours vide
+            # pour tout fournisseur OpenAI-compatible.
+            delta = getattr(choice, "delta", None) if choice else None
             delta_content = getattr(delta, "content", None) or ""
-            # ``reasoning_content`` (Qwen) n'est pas du texte de note : ignoré.
+            # ``reasoning_content`` (Qwen, DeepSeek) n'est pas du texte de note :
+            # ignoré — seule la part ``reasoning_tokens`` de l'usage est retenue.
             if delta_content:
                 full.append(delta_content)
                 yield delta_content
@@ -1555,7 +1562,9 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
     if provider == "custom":
         effort = _custom_reasoning_effort()
         if effort:
-            kwargs["reasoning"] = {"effort": effort}
+            # ``reasoning`` passe par ``extra_body`` : le SDK OpenAI refuse les
+            # kwargs inconnus (cf. ``_stream_openai_like``).
+            kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
 
     try:
         response = _call_tolerant(client.chat.completions.create, kwargs)

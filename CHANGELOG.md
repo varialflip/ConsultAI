@@ -3,6 +3,16 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.56
+
+- **Modèle de langage — point de terminaison personnalisé : « Raisonnement »
+  peut être désactivé.** Le réglage gagne les options **« Aucun »** (none →
+  `reasoning.effort: none`, raisonnement totalement désactivé, vérifié à
+  `reasoning_tokens = 0` sur DeepSeek v4) et **« Minimal »**. Sur DeepSeek
+  v4-flash, le défaut (« Automatique ») ne raisonne déjà quasiment pas ;
+  curieusement, « Faible »/« Minimal » y *augmentent* la pensée (contraire à
+  l'intuition) — « Aucun » est la valeur pour forcer 0.
+
 ## 2026-08-15 — v2.0.0-beta.55
 
 - **Modèle de langage — point de terminaison personnalisé : streaming réparé

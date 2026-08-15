@@ -2029,18 +2029,21 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "set.custom_llm_reasoning_effort.label": ("Raisonnement", "Reasoning"),
     "set.custom_llm_reasoning_effort.help": (
-        "Effort de raisonnement demandé aux modèles qui en ont un (DeepSeek, "
-        "etc.) : « Auto » = paramètre non envoyé, le modèle fait son choix. "
-        "« Faible/Moyen/Élevé » envoie le réglage au point de terminaison "
-        "(OpenRouter `reasoning.effort`) ; tous les modèles ne l'honorent pas. "
-        "Si la note sort vide (raisonnement saturant le budget), relevez le "
-        "Budget de sortie plutôt que d'augmenter l'effort.",
+        "Effort de raisonnement demandé aux modèles à raisonnement (DeepSeek, "
+        "etc.) : « Automatique » = paramètre non envoyé, le modèle fait son "
+        "choix ; « Aucun » = raisonnement totalement désactivé (plus rapide, "
+        "moins cher). Les autres valeurs envoient le réglage au point de "
+        "terminaison (OpenRouter `reasoning.effort`) ; tous les modèles ne "
+        "l'honorent pas (sur DeepSeek v4, « Faible »/« Minimal » augmentent la "
+        "pensée). Si la note sort vide (raisonnement saturant le budget), "
+        "relevez le Budget de sortie plutôt que d'augmenter l'effort.",
         "Reasoning effort requested from models that support it (DeepSeek, "
-        "etc.): 'Auto' = parameter not sent, the model decides. "
-        "'Low/Medium/High' forwards the setting to the endpoint (OpenRouter "
-        "`reasoning.effort`); not every model honors it. If the note comes "
-        "back empty (reasoning saturating the budget), raise the Output "
-        "budget rather than increasing effort.",
+        "etc.): 'Automatic' = parameter not sent, the model decides; 'None' = "
+        "reasoning fully disabled (faster, cheaper). Other values forward the "
+        "setting to the endpoint (OpenRouter `reasoning.effort`); not every "
+        "model honors it (on DeepSeek v4, 'Low'/'Minimal' increase thinking). "
+        "If the note comes back empty (reasoning saturating the budget), raise "
+        "the Output budget rather than increasing effort.",
     ),
     "set.custom_send_audio.label": (
         "Joindre aussi l'audio (silences plafonnés)",
@@ -2128,6 +2131,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "choice.on": ("Activé", "Enabled"),
     "choice.off": ("Désactivé", "Disabled"),
     "choice.reasoning_auto": ("Automatique", "Automatic"),
+    "choice.reasoning_none": ("Aucun", "None"),
+    "choice.reasoning_minimal": ("Minimal", "Minimal"),
     "choice.reasoning_low": ("Faible", "Low"),
     "choice.reasoning_medium": ("Moyen", "Medium"),
     "choice.reasoning_high": ("Élevé", "High"),

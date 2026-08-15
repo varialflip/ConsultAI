@@ -611,10 +611,12 @@ def _custom_reasoning_effort() -> Optional[str]:
     Effort de raisonnement demandé au point de terminaison personnalisé.
 
     « auto » (défaut) → ``None`` : le paramètre n'est pas envoyé, le modèle
-    fait son choix. Tous les modèles n'honorent pas ``reasoning.effort``.
+    fait son choix. « none » désactive totalement le raisonnement (vérifié
+    sur DeepSeek v4 : `reasoning_tokens = 0`). Tous les modèles n'honorent pas
+    ``reasoning.effort`` — sur v4, low/minimal augmentent la pensée.
     """
     effort = (runtime_config.value("custom_llm_reasoning_effort") or "").strip().lower()
-    return effort if effort in ("low", "medium", "high") else None
+    return effort if effort in ("none", "minimal", "low", "medium", "high") else None
 
 
 _LIMITE_DANS_ERREUR = re.compile(

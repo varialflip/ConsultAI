@@ -432,6 +432,8 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "auto",
         choices=(
             ("auto", "choice.reasoning_auto"),
+            ("none", "choice.reasoning_none"),
+            ("minimal", "choice.reasoning_minimal"),
             ("low", "choice.reasoning_low"),
             ("medium", "choice.reasoning_medium"),
             ("high", "choice.reasoning_high"),

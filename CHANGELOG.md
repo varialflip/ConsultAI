@@ -3,6 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.46
+
+- **Modèle de langage — Gemini : budget de raisonnement réglé et repli en cas
+  de refus**. `thinking_budget` passe de 0 à 128 : gemini-2.5-pro (Vertex)
+  refuse 0 et 1-127 (« thinking_budget is out of range; supported values are
+  integers from 128 to 32768 »), ce qui faisait échouer toute génération avec
+  ce modèle (400 INVALID_ARGUMENT). 128 est le minimum accepté tout en laissant
+  un raisonnement quasi nul. Au cas où un modèle refuserait entièrement le
+  champ `thinking_config`, une nouvelle tentative sans lui est faite
+  automatiquement (une seule, avant toute diffusion) pour les appels en flux et
+  hors flux.
+
 ## 2026-08-15 — v2.0.0-beta.45
 
 - **Reconnaissance vocale — retrait des silences suspendu pour l'endpoint

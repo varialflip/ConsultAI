@@ -732,6 +732,19 @@ def _est_quota_gemini(exc: Exception) -> bool:
     return "resource_exhausted" in lowered or "rate_limit" in lowered or "429" in lowered
 
 
+def _est_think_refusee_gemini(exc: Exception) -> bool:
+    """
+    Vrai si Gemini refuse le ``thinking_config`` demandé (400).
+
+    Certains modèles (gemini-2.5-pro sur Vertex) rejettent
+    ``ThinkingConfig(thinking_budget=…)`` : le message annonce alors « does not
+    support setting thinking_budget ». C'est une erreur de réglage, pas de
+    quota : l'appelant retire le champ et relance.
+    """
+    lowered = str(exc).lower()
+    return "thinking_budget" in lowered and "does not support" in lowered
+
+
 def _gemini_pause_retry(tentative: int, exc: Exception, etape: str) -> None:
     """
     Attend avant la prochaine tentative, en respectant « Retry-After » quand le
@@ -783,10 +796,13 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
         safety_settings=_safety_settings(),
     )
     # Le raisonnement (thinking) est inutile pour une tache de mise en forme
-    # qui ne demande ni diagnostic ni inference : le couper rend la reponse
+    # qui ne demande ni diagnostic ni inference : le reduire rend la reponse
     # plus rapide, evite de consommer la limite de jetons en pensee, et
-    # protege contre les notes et les JSON tronques.
-    config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    # protege contre les notes et les JSON tronques. 128 est le budget minimal
+    # accepte par gemini-2.5-pro sur Vertex (0 et 1-127 sont refuses) tout en
+    # laissant un raisonnement quasi nul ; un modele qui refuse le champ
+    # ``thinking_config`` retombe sur un appel sans lui.
+    config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=128)
     if json_mode:
         config_kwargs["response_mime_type"] = "application/json"
     else:
@@ -802,8 +818,18 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
             client, model, contents, types.GenerateContentConfig(**config_kwargs)
         )
     except Exception as exc:
-        logger.exception("Échec de l'appel Gemini")
-        raise _translate_error("Gemini", model, exc) from exc
+        if _est_think_refusee_gemini(exc):
+            logger.warning(
+                "Gemini (%s) refuse thinking_config : nouvel appel sans "
+                "raisonnement configure.", model,
+            )
+            config_kwargs.pop("thinking_config", None)
+            response = _gemini_appel(
+                client, model, contents, types.GenerateContentConfig(**config_kwargs)
+            )
+        else:
+            logger.exception("Échec de l'appel Gemini")
+            raise _translate_error("Gemini", model, exc) from exc
 
     candidates = getattr(response, "candidates", None) or []
     finish_reason = str(getattr(candidates[0], "finish_reason", "") or "") if candidates else ""
@@ -832,8 +858,10 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
         safety_settings=_safety_settings(),
     )
     # Même choix que la version non-streaming : le raisonnement (thinking) est
-    # inutile pour une tâche de mise en forme.
-    config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    # inutile pour une tâche de mise en forme. 128 est le budget minimal accepté
+    # par gemini-2.5-pro sur Vertex (0 et 1-127 sont refusés) ; un modèle qui
+    # refuse le champ ``thinking_config`` retombe sur le flux sans lui.
+    config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=128)
     if json_mode:
         config_kwargs["response_mime_type"] = "application/json"
     else:
@@ -845,16 +873,28 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
         contents = [user, types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)]
 
     config = types.GenerateContentConfig(**config_kwargs)
+    sans_thinking = False
 
     # Le refus de quota (429) arrive souvent au premier morceau du flux plutôt
     # qu'à sa création : on couvre les deux, tant qu'aucun texte n'a encore été
-    # diffusé — reprendre après une diffusion dupliquerait la note.
+    # diffusé — reprendre après une diffusion dupliquerait la note. Même
+    # mécanique pour le refus du ``thinking_config`` : une seule relance, sans
+    # le champ.
     for tentative in range(1, _GEMINI_TENTATIVES + 1):
         try:
             stream = client.models.generate_content_stream(
                 model=model, contents=contents, config=config
             )
         except Exception as exc:
+            if _est_think_refusee_gemini(exc) and not sans_thinking:
+                logger.warning(
+                    "Gemini (%s) refuse thinking_config (flux) : nouvel essai "
+                    "sans raisonnement configuré.", model,
+                )
+                config_kwargs.pop("thinking_config", None)
+                config = types.GenerateContentConfig(**config_kwargs)
+                sans_thinking = True
+                continue
             if not _est_quota_gemini(exc) or tentative == _GEMINI_TENTATIVES:
                 logger.exception("Échec de l'appel Gemini (flux)")
                 raise _translate_error("Gemini", model, exc) from exc
@@ -882,6 +922,19 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
                 if getattr(chunk, "usage_metadata", None) is not None:
                     usage_metadata = chunk.usage_metadata
         except Exception as exc:
+            if (
+                _est_think_refusee_gemini(exc)
+                and not sans_thinking
+                and not deja_diffuse
+            ):
+                logger.warning(
+                    "Gemini (%s) refuse thinking_config (flux) : nouvel essai "
+                    "sans raisonnement configuré.", model,
+                )
+                config_kwargs.pop("thinking_config", None)
+                config = types.GenerateContentConfig(**config_kwargs)
+                sans_thinking = True
+                continue
             if (
                 _est_quota_gemini(exc)
                 and not deja_diffuse

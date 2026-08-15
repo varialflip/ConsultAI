@@ -3,6 +3,32 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.51
+
+- **Consigne générale — « Éléments à valider » rendue prioritaire, aucun
+  médicament ignoré**. La section finale de la consigne est présentée comme
+  **obligatoire** : elle ne doit jamais être omise ni vidée, et reste énumérée
+  même quand plus de 8 éléments sont regroupés par catégorie (aucun doute valide
+  ne disparaît). Nouvelle règle absolue en tête de consigne : **aucun
+  médicament n'est jamais ignoré** — un nom de médicament incertain, mal
+  entendu ou inaudible, une dose inconnue ou douteuse est toujours reporté en
+  « Éléments à valider », jamais retiré du rapport sans trace. Porté
+  automatiquement dans les installations dont la consigne est restée au défaut
+  livré (migration par empreinte, `database.py`) ; une consigne personnalisée
+  dans le panneau n'est pas touchée.
+- **Reconnaissance vocale — barre de progression pour la retranscription et
+  l'import**. L'appel HTTP reste bloquant (le texte complet revient en une
+  réponse), mais le serveur publie son avancement en direct par événements
+  SSE (`transcription_progress`) pendant le découpage du point de terminaison
+  personnalisé : le navigateur affiche une **barre de progression déterministe**
+  (pourcentage de l'audio déjà traité, indéterminée en pulsation avant le
+  premier événement). Corrige la retranscription d'un long enregistrement :
+  l'ancien toast « Retranscription… » expirait après 60 s alors que l'opération
+  pouvait durer plusieurs minutes, ce qui poussait à relancer — et à jeter —
+  des transcriptions entières. `toast()` accepte désormais une durée nulle
+  (persistant) comme `toastWithAction()` ; le voile plein écran de l'import est
+  remplacé par la barre.
+
 ## 2026-08-15 — v2.0.0-beta.50
 
 - **Reconnaissance vocale — endpoint personnalisé : découpage en tranches de

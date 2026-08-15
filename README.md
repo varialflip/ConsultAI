@@ -489,7 +489,11 @@ donc une proposition :
 La retranscription ne touche pas la note déjà mise en forme, et n'a lieu que sur
 réponse affirmative : c'est un appel facturé de plus, sur toute la durée de
 l'enregistrement. Elle exige que l'audio ait été conservé — ce qui est le cas
-par défaut (§ 11).
+par défaut (§ 11). L'appel reste bloquant — le texte complet revient en une
+réponse — mais une **barre de progression** (événements SSE
+`transcription_progress`, alimentée pendant le découpage du point de
+terminaison personnalisé) montre l'avancement en temps réel ; l'import de
+fichier (§ 7.4) en bénéficie aussi.
 
 > Rien de tout cela n'est automatique. Retranscrire écrase du texte que le
 > médecin a pu déjà corriger à la main.

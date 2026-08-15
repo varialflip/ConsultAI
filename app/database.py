@@ -1187,6 +1187,61 @@ def migrate_general_prompt_keep_reasoning(db: Session) -> int:
     return touches
 
 
+#: Empreintes des consignes générales LIVRÉES avant l'ajout de la règle
+#: « Éléments à valider prioritaire et jamais ignorée ». Même mécanique que
+#: ``_OLD_GENERAL_PROMPT_SHA`` : on ne remplace la valeur en base que si elle
+#: est encore EXACTEMENT le défaut livré d'origine, pour ne jamais écraser une
+#: consigne personnalisée par le médecin. Vérifié le 2026-08-15 contre
+#: ``default_prompts`` : la copie en base des deux langues était strictement
+#: identique au module avant l'édition.
+_OLD_GENERAL_PROMPT_SHA2 = {
+    "general_prompt_fr": "3c635edeaa8daf6f61d4a71d76994409b45da9c34270115d469be9dbaee182f8",
+    "general_prompt_en": "a01f7fa88ad7f6ed1fa051d1ed2f3df961beff58058f77b8ed9f9887ec5cf956",
+}
+
+
+def migrate_general_prompt_elements_a_valider(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la règle « Éléments à valider
+    obligatoire » et « aucun médicament n'est jamais ignoré ».
+
+    La consigne générale est éditable et vit en base (elle surcharge le module
+    ``default_prompts``) : corriger le module seul laisserait l'installation en
+    service avec l'ancien texte. Comme pour
+    ``migrate_general_prompt_keep_reasoning``, la valeur n'est remplacée que si
+    elle est encore EXACTEMENT le défaut livré (comparaison par empreinte) ;
+    une consigne personnalisée est laissée intacte et signalée au journal.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA2.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : migration « Éléments à valider "
+                "prioritaire » ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : « Éléments à valider » rendue "
+            "obligatoire et règle « aucun médicament ignoré » ajoutée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 # ---------------------------------------------------------------------------
 # Groupes et comptes : amorçage
 # ---------------------------------------------------------------------------
@@ -1453,6 +1508,7 @@ def init_db() -> None:
         seed_editable_templates(db)
         migrate_general_prompt(db)
         migrate_general_prompt_keep_reasoning(db)
+        migrate_general_prompt_elements_a_valider(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

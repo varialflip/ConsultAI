@@ -160,7 +160,9 @@
         setTimeout(() => el.remove(), 320);
       }
     };
-    timer = setTimeout(dismiss, durationMs);
+    // ``durationMs <= 0`` rend le toast persistant : il ne part que par la
+    // croix, le glissé ou un dismiss() explicite (voir showTranscriptionProgress).
+    timer = durationMs > 0 ? setTimeout(dismiss, durationMs) : null;
     close.addEventListener('click', () => dismiss());
 
     // Glissé pour fermer. La croix gère son propre clic : le glissé ne la
@@ -459,6 +461,11 @@
   let pendingRetranscribe = null;
   let pendingTranscribe = null;
 
+  // Barre de progression d'une transcription en cours (import ou
+  // retranscription), alimentée par les événements SSE « transcription_progress »
+  // publiés pendant l'appel bloquant. ``null`` hors de toute transcription.
+  let transcriptionProgress = null;
+
   // État du rendu en continu de la génération (hors ``state`` : ce n'est pas
   // une donnée du brouillon, seulement l'accumulation des morceaux du flux
   // pour l'affichage). ``genText`` est le texte brut reçu (cible), ``genShown``
@@ -662,6 +669,80 @@
   }
 
   /**
+   * Barre de progression d'une transcription en cours (import ou
+   * retranscription).
+   *
+   * L'appel HTTP reste bloquant — le texte final revient dans la réponse —
+   * mais le serveur publie son avancement en direct (événement SSE
+   * « transcription_progress », endpoint personnalisé découpé) : la barre est
+   * indéterminée (pulsation) avant le premier événement, déterministe ensuite
+   * (pourcentage de l'audio déjà traité). Retourne ``{ dismiss, setPercent }``.
+   */
+  function showTranscriptionProgress(message) {
+    if (transcriptionProgress) transcriptionProgress.dismiss();
+
+    const el = document.createElement('div');
+    el.className = 'bg-slate-800 text-white text-sm pl-4 pr-3 py-3 rounded-lg shadow-lg '
+      + 'max-w-md flex flex-col gap-2 transition-opacity duration-300';
+    const ligne = document.createElement('div');
+    ligne.className = 'flex items-center justify-between gap-2';
+    const texte = document.createElement('span');
+    texte.className = 'flex-1';
+    texte.textContent = message;
+    const pct = document.createElement('span');
+    pct.className = 'shrink-0 text-xs text-white/80 tabular-nums';
+    pct.textContent = '';
+    ligne.append(texte, pct);
+
+    const piste = document.createElement('div');
+    piste.className = 'h-1.5 w-full rounded-full bg-white/20 overflow-hidden';
+    const remplissage = document.createElement('div');
+    remplissage.className = 'h-full rounded-full bg-emerald-400 transition-[width] duration-500 ease-out';
+    remplissage.style.width = '0%';
+    piste.appendChild(remplissage);
+    el.append(ligne, piste);
+    $('toastZone').appendChild(el);
+
+    let dismissed = false;
+    const dismiss = () => {
+      if (dismissed) return;
+      dismissed = true;
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 320);
+    };
+    const setPercent = (value) => {
+      if (value == null) {
+        // Durée inconnue (aucun événement encore, ou fournisseur sans
+        // découpage) : barre indéterminée, pas de faux pourcentage.
+        pct.textContent = '…';
+        remplissage.style.width = '100%';
+        remplissage.style.animation = 'pulse-rec 1.5s ease-in-out infinite';
+        return;
+      }
+      remplissage.style.animation = '';
+      const borne = Math.max(0, Math.min(100, value));
+      remplissage.style.width = `${borne}%`;
+      pct.textContent = `${Math.round(borne)} %`;
+    };
+    transcriptionProgress = { dismiss, setPercent };
+    return transcriptionProgress;
+  }
+
+  /**
+   * Avancement reçu du serveur pendant un import ou une retranscription.
+   * Ne touche que la barre active (celle de l'onglet qui a lancé l'opération,
+   * sur la consultation affichée) ; les autres onglets reçoivent le texte
+   * final par « consultation_patched ».
+   */
+  function onTranscriptionProgress(evt) {
+    if (!transcriptionProgress) return;
+    const payload = JSON.parse(evt.data);
+    if (payload.consultation_id != null
+        && String(payload.consultation_id) !== String(state.consultationId)) return;
+    transcriptionProgress.setPercent(payload.percent);
+  }
+
+  /**
    * Renvoie l'audio conservé au service vocal et remplace la transcription.
    *
    * Partagée par les deux déclencheurs : la proposition automatique sur
@@ -687,16 +768,16 @@
     const controller = new AbortController();
     pendingRetranscribe = controller;
 
-    // Durée volontairement longue : l'opération peut prendre du temps sur un
-    // long enregistrement. Sans le retirer explicitement dès la réponse, ce
-    // toast restait affiché jusqu'à ses 60 s même après celui de résultat.
-    const enCours = toast(T('retranscribe.running', { langue }), 'info', 60000);
+    // Barre persistante : la retranscription d'un long enregistrement peut
+    // prendre plusieurs minutes, aucun toast à durée fixe ne doit expirer
+    // avant le résultat (le serveur publie l'avancement par SSE).
+    const bar = showTranscriptionProgress(T('retranscribe.running', { langue }));
     try {
       const data = await api(`/api/consultations/${state.consultationId}/retranscribe`, {
         method: 'POST', signal: controller.signal,
         body: { template_id: tpl ? tpl.id : null },
       });
-      enCours.dismiss();
+      bar.dismiss();
       // Supplantée par une tentative plus récente (voir le garde côté
       // serveur) : ce texte n'a jamais été écrit en base, on ne l'affiche
       // donc pas non plus — silencieusement, ce n'est pas un échec.
@@ -724,12 +805,15 @@
         partiel ? 10000 : undefined,
       );
     } catch (err) {
-      enCours.dismiss();
+      bar.dismiss();
       if (err.name !== 'AbortError') {
         toast(T('retranscribe.failed', { error: err.message || err }), 'error', 8000);
       }
     } finally {
-      if (pendingRetranscribe === controller) pendingRetranscribe = null;
+      if (pendingRetranscribe === controller) {
+        pendingRetranscribe = null;
+        transcriptionProgress = null;
+      }
     }
   }
 
@@ -2083,7 +2167,10 @@
     const controller = new AbortController();
     pendingTranscribe = controller;
 
-    setBusy(true, T('transcribe.busy', { size: megabytes }));
+    // Barre de progression persistante (alimentée par SSE pendant l'appel
+    // bloquant) au lieu du voile plein écran : l'import d'un long fichier
+    // peut durer plusieurs minutes.
+    const bar = showTranscriptionProgress(T('transcribe.busy', { size: megabytes }));
 
     try {
       // Le brouillon existe avant l'envoi : si le navigateur se ferme pendant
@@ -2099,6 +2186,7 @@
       const result = await api('/api/transcribe', {
         method: 'POST', signal: controller.signal, body: form,
       });
+      bar.dismiss();
 
       // Supplantée par un import plus récent (voir le garde côté serveur) :
       // ce texte n'a jamais été écrit en base, on ne l'affiche donc pas non
@@ -2128,10 +2216,12 @@
         'success',
       );
     } catch (err) {
+      bar.dismiss();
       if (err.name !== 'AbortError') toast(err.message, 'error', 10000);
     } finally {
       if (pendingTranscribe === controller) {
         pendingTranscribe = null;
+        transcriptionProgress = null;
         setBusy(false);
       }
     }
@@ -5703,6 +5793,7 @@
     liveSource.addEventListener('recording_deleted', onSyncRecording);
     liveSource.addEventListener('generated', onSyncGeneratedOrPatched);
     liveSource.addEventListener('generation_chunk', onGenerationChunk);
+    liveSource.addEventListener('transcription_progress', onTranscriptionProgress);
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);
     liveSource.addEventListener('consultation_created', onSyncConsultationCreated);
     liveSource.addEventListener('consultation_deleted', onSyncConsultationDeleted);

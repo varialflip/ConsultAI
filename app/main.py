@@ -1972,9 +1972,24 @@ async def api_transcribe(
             preferences.bind_document_language(template_row.language)
 
     try:
+        # Avancement publié en direct (endpoint personnalisé découpé) : le
+        # navigateur remplit sa barre de progression pendant l'appel bloquant.
+        def _publier_progres(curseur: float, duree: float) -> None:
+            percent = None if not duree else min(100.0, 100.0 * curseur / duree)
+            live.publish(user.owner_key, "transcription_progress", {
+                "consultation_id": consultation_id,
+                "percent": percent,
+                "cursor_seconds": round(curseur, 1),
+                "duration_seconds": round(duree, 1),
+                "recording_index": 0,
+                "recordings_total": 1,
+                "origin_tab": request.headers.get("x-consultai-tab", ""),
+            })
+
         # Appel bloquant (réseau + ffmpeg) : exécuté hors de la boucle asyncio.
         result = await run_in_threadpool(
-            transcribe, raw, file.content_type or "", extra_hints
+            transcribe, raw, file.content_type or "", extra_hints,
+            on_progress=_publier_progres,
         )
     except TranscriptionError as exc:
         logger.warning("Transcription refusée pour %s : %s", user.username, exc)
@@ -2804,12 +2819,17 @@ async def retranscribe_consultation(
 
     # Plusieurs enregistrements = plusieurs passes de dictée sur le même
     # brouillon. On les reprend dans l'ordre de création, comme ils ont été
-    # dictés, et on recompose le texte dans le même ordre.
+    # dictés, et on recompose le texte dans le même ordre. La barre de
+    # progression du navigateur avance de la somme des durées : on la nourrit
+    # après chaque tranche (endpoint custom) et à la fin de chaque
+    # enregistrement, par SSE.
+    total_secondes = sum(float(p.duration_seconds or 0) for p in pistes) or 0.0
+    done_secondes = 0.0
     morceaux: List[str] = []
     secondes = 0.0
     moteur = ("", "")
     dernier_refus = ""
-    for piste in pistes:
+    for index, piste in enumerate(pistes):
         chemin = recordings.absolute_path(piste)
         if not os.path.exists(chemin):
             logger.warning(
@@ -2817,10 +2837,29 @@ async def retranscribe_consultation(
                 consultation_id, piste.id,
             )
             continue
+        done_avant = done_secondes
+
+        def _publier_progres(curseur: float, duree: float, _idx=index, _fait=done_avant) -> None:
+            if total_secondes:
+                percent = min(100.0, 100.0 * (_fait + curseur) / total_secondes)
+            else:
+                percent = None
+            live.publish(user.owner_key, "transcription_progress", {
+                "consultation_id": consultation_id,
+                "percent": percent,
+                "cursor_seconds": round(curseur, 1),
+                "duration_seconds": round(duree, 1),
+                "recording_index": _idx,
+                "recordings_total": len(pistes),
+                "origin_tab": request.headers.get("x-consultai-tab", ""),
+            })
+
         with open(chemin, "rb") as handle:
             brut = handle.read()
         try:
-            resultat = await run_in_threadpool(transcribe, brut, piste.mime_type, hints)
+            resultat = await run_in_threadpool(
+                transcribe, brut, piste.mime_type, hints, on_progress=_publier_progres,
+            )
         except TranscriptionError as exc:
             # Un enregistrement muet ne doit pas emporter les autres. Une
             # consultation en compte souvent plusieurs, dont un faux départ de
@@ -2843,6 +2882,7 @@ async def retranscribe_consultation(
         if texte:
             morceaux.append(texte)
         secondes += float(resultat.get("duration_seconds") or 0)
+        done_secondes += float(resultat.get("duration_seconds") or 0)
         if resultat.get("provider"):
             moteur = (resultat["provider"], resultat.get("model") or "")
 

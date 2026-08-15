@@ -710,8 +710,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 
     # --- Transcription et mise en forme ------------------------------------
     "transcribe.busy": (
-        "Transcription en cours ({size} Mo)… Cela peut prendre une minute.",
-        "Transcribing ({size} MB)… This may take a minute.",
+        "Transcription en cours ({size} Mo)…",
+        "Transcribing ({size} MB)…",
     ),
     "transcribe.busy_short": ("Transcription…", "Transcribing…"),
     "transcribe.done": (

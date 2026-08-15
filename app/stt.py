@@ -46,7 +46,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 from app import i18n, preferences, runtime_config
 from app.config import settings
@@ -486,13 +486,20 @@ def transcribe(
     content_type: str = "",
     extra_phrase_hints: Optional[str] = None,
     boost: float = 15.0,
+    on_progress: Optional[Callable[[float, float], None]] = None,
 ) -> dict:
     """
     Transcrit un enregistrement complet (import de fichier, dictée en un bloc).
 
+    ``on_progress(curseur, durée)``, appelé au fil du traitement (endpoint
+    personnalisé découpé) : laisse le serveur publier l'avancement sans que
+    la couche STT connaisse le transport.
+
     Retourne ``{"transcript", "confidence", "duration_seconds", "segments"}``.
     """
-    return transcribe_payload(prepare_audio(raw_audio, content_type), extra_phrase_hints, boost)
+    return transcribe_payload(
+        prepare_audio(raw_audio, content_type), extra_phrase_hints, boost, on_progress,
+    )
 
 
 # Au-delà de cette durée, la reconnaissance synchrone est refusée par Google.
@@ -509,13 +516,15 @@ def transcribe_payload(
     payload: AudioPayload,
     extra_phrase_hints: Optional[str] = None,
     boost: float = 15.0,
+    on_progress: Optional[Callable[[float, float], None]] = None,
 ) -> dict:
     """
     Envoie un audio déjà normalisé au service configuré.
 
     Le choix du fournisseur se fait ici et nulle part ailleurs : tout ce qui
     précède — transcodage, découpage en tranches, lexique — est commun, et
-    tout ce qui suit reçoit le même dictionnaire de résultat.
+    tout ce qui suit reçoit le même dictionnaire de résultat. ``on_progress``
+    est relayé au fournisseur qui sait le renseigner (endpoint personnalisé).
     """
     # Après retrait des silences, une tranche peut ne plus contenir que la
     # pause conservée : il n'y a rien à reconnaître, et l'appel serait
@@ -549,7 +558,7 @@ def transcribe_payload(
     if provider == "openai":
         return _transcribe_openai(payload, extra_phrase_hints)
     if provider == "custom":
-        return _transcribe_custom(payload, extra_phrase_hints)
+        return _transcribe_custom(payload, extra_phrase_hints, on_progress)
     return _transcribe_google(payload, extra_phrase_hints, boost)
 
 
@@ -1880,14 +1889,14 @@ def _fallback_custom_target(base_url: str) -> Tuple[str, str]:
     return fb_model, fb_url or base_url
 
 
-def _parse_seuil_secondes(valeur: str) -> float:
+def _parse_seuil_secondes(valeur: str, libelle: str = "durée") -> float:
     """
-    Lit un seuil de durée configuré ; une valeur invalide désactive le routage.
+    Lit un seuil de durée configuré ; une valeur invalide désactive le réglage.
     """
     try:
         return float(valeur)
     except ValueError:
-        logger.warning("Réglage custom_stt_max_seconds invalide, ignoré : %r", valeur)
+        logger.warning("Réglage %s invalide, ignoré : %r", libelle, valeur)
         return float("inf")
 
 
@@ -1949,6 +1958,7 @@ def _transcribe_custom_chunked(
     fb_url: str,
     payload: AudioPayload,
     chunk_seconds: float,
+    on_progress: Optional[Callable[[float, float], None]] = None,
 ) -> dict:
     """
     Découpe ``payload`` en tranches d'au plus ``chunk_seconds`` et transcrit
@@ -1987,6 +1997,8 @@ def _transcribe_custom_chunked(
         modele_final = model
         dernier_refus = ""
         start = 0.0
+        if on_progress:
+            on_progress(0.0, duree)
         while start < duree - 0.05:
             restant = duree - start
             # Dernier morceau : on le prend entier, sans coupe donc sans risque.
@@ -2026,6 +2038,8 @@ def _transcribe_custom_chunked(
                 "curseur %.0f s)",
                 seg.duration_seconds, len(texte), start,
             )
+            if on_progress:
+                on_progress(start, duree)
 
         if not morceaux:
             raise TranscriptionError(
@@ -2046,7 +2060,8 @@ def _transcribe_custom_chunked(
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
+def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] = None,
+                       on_progress: Optional[Callable[[float, float], None]] = None) -> dict:
     """
     Transcription par un point de terminaison personnalisé, compatible OpenAI.
 
@@ -2073,7 +2088,7 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
 
     # --- Découpage optionnel en tranches ----------------------------------
     chunk_seconds = _parse_seuil_secondes(
-        runtime_config.value("custom_stt_chunk_seconds")
+        runtime_config.value("custom_stt_chunk_seconds"), "custom_stt_chunk_seconds",
     )
     if (
         0 < chunk_seconds < float("inf")
@@ -2081,13 +2096,14 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         and payload.effective_seconds > chunk_seconds
     ):
         return _transcribe_custom_chunked(
-            base_url, api_key, model, langue, fb_model, fb_url, payload, chunk_seconds,
+            base_url, api_key, model, langue, fb_model, fb_url, payload,
+            chunk_seconds, on_progress,
         )
 
     # --- Routage optionnel par durée (repli direct sur fichier long) -----
     maxsec = runtime_config.value("custom_stt_max_seconds").strip()
     if maxsec and fb_model and payload.effective_seconds:
-        if payload.effective_seconds > _parse_seuil_secondes(maxsec):
+        if payload.effective_seconds > _parse_seuil_secondes(maxsec, "custom_stt_max_seconds"):
             logger.info(
                 "STT custom : dictée de %.0f s > seuil %s s → envoi direct au "
                 "modèle de repli %s",
@@ -2110,6 +2126,9 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
             "Aucune parole n'a été détectée. Vérifiez le micro et le volume "
             "de l'enregistrement, puis réessayez."
         )
+
+    if on_progress:
+        on_progress(payload.effective_seconds or 0.0, payload.effective_seconds or 0.0)
 
     return {
         "transcript": transcript,

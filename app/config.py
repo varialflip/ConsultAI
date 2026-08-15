@@ -230,6 +230,7 @@ class Settings:
     gemini_model_pro: str = "gemini-2.5-pro"
     gemini_use_pro: bool = False
     gemini_temperature: float = 0.15
+    gemini_thinking_budget: int = 128
     gemini_max_output_tokens: int = 8192
     google_cloud_project: str = ""
     google_cloud_location: str = "northamerica-northeast1"
@@ -426,6 +427,7 @@ class Settings:
             gemini_model_pro=_env("GEMINI_MODEL_PRO", "gemini-2.5-pro"),
             gemini_use_pro=_env_bool("GEMINI_USE_PRO", False),
             gemini_temperature=_env_float("GEMINI_TEMPERATURE", 0.15),
+            gemini_thinking_budget=_env_int("GEMINI_THINKING_BUDGET", 128),
             gemini_max_output_tokens=_env_int("GEMINI_MAX_OUTPUT_TOKENS", 8192),
             google_cloud_project=_env("GOOGLE_CLOUD_PROJECT"),
             google_cloud_location=_env("GOOGLE_CLOUD_LOCATION", "northamerica-northeast1"),

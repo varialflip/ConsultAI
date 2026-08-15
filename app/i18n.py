@@ -1656,6 +1656,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "accept it: the setting is then ignored and the note is produced "
         "anyway.",
     ),
+    "set.gemini_thinking_budget.label": (
+        "Budget de raisonnement (thinking)",
+        "Thinking budget",
+    ),
+    "set.gemini_thinking_budget.help": (
+        "Jetons de raisonnement alloués au modèle avant de répondre. Minimum "
+        "accepté par gemini-2.5-pro sur Vertex : 128 (0 et 1-127 sont "
+        "refusés). Vide = 128, raisonnement quasi nul — recommandé pour une "
+        "simple mise en forme.",
+        "Reasoning tokens allocated to the model before answering. Minimum "
+        "accepted by gemini-2.5-pro on Vertex: 128 (0 and 1-127 are "
+        "rejected). Empty = 128, near-zero reasoning — recommended for "
+        "simple formatting.",
+    ),
     "set.gemini_send_audio.label": (
         "Joindre aussi l'audio (silences plafonnés)",
         "Also attach audio (pauses capped)",

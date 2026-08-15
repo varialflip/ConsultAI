@@ -3751,7 +3751,10 @@
         </div>`;
     } else {
       const type = field.kind === 'number' ? 'number' : 'text';
-      const step = field.kind === 'number' ? ' step="0.05" min="0" max="2"' : '';
+      // Les températures se règlent par pas de 0,05 entre 0 et 2 ; un autre
+      // champ numérique (budget de raisonnement…) reste un entier libre.
+      const step = (field.kind === 'number' && field.key.endsWith('_temperature'))
+        ? ' step="0.05" min="0" max="2"' : '';
       const list = LLM_MODEL_FIELD_KEYS.has(field.key) ? ' list="modelOptions"' : '';
       control = `<input id="${id}" data-key="${field.key}" type="${type}"${step}${list}
                    value="${esc(field.value || '')}" placeholder="${esc(field.placeholder)}"
@@ -3784,6 +3787,7 @@
     gemini_model: { key: 'llm_provider', value: 'gemini' },
     gemini_model_fast: { key: 'llm_provider', value: 'gemini' },
     gemini_temperature: { key: 'llm_provider', value: 'gemini' },
+    gemini_thinking_budget: { key: 'llm_provider', value: 'gemini' },
     // Options audio : propres à Gemini, PAS des réglages communs — sans ces
     // entrées elles s'affichaient (à tort) sous les six autres onglets.
     gemini_send_audio: { key: 'llm_provider', value: 'gemini' },

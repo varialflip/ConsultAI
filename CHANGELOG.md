@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.47
+
+- **Modèle de langage — Gemini : budget de raisonnement réglable**. Nouveau
+  champ « Budget de raisonnement (thinking) » dans l'onglet Gemini du panneau
+  (variable `GEMINI_THINKING_BUDGET`). 128 par défaut — le minimum accepté par
+  gemini-2.5-pro sur Vertex, raisonnement quasi nul —, modulable à la hausse
+  pour laisser le modèle réfléchir avant de répondre. Toute valeur sous 128 est
+  relevée au minimum (0 et 1-127 sont refusés par le modèle).
+
 ## 2026-08-15 — v2.0.0-beta.46
 
 - **Modèle de langage — Gemini : budget de raisonnement réglé et repli en cas

@@ -52,9 +52,10 @@ Déploiement en production (2026-08-14) :
 - Volume de données persistantes `/opt/dictai/data/consultai` : base SQLite, audio,
   dictées en cours, sauvegardes.
 - **STT local** (`speaches`, endpoint personnalisé interne au réseau Docker, aucun
-  port publié) : **Parakeet TDT 0.6B v3** (ONNX, CPU) pour les dictées courtes,
-  **Whisper small** en repli (routage par durée au-delà de ~6 min et en cas
-  d'erreur 5xx). L'audio n'y quitte jamais la machine.
+  port publié) : **Parakeet TDT 0.6B v3** (ONNX, CPU), l'audio long étant
+  **découpé en tranches de 60 s** côté application avant envoi (chaque tranche
+  reste sous le plafond d'une passe du modèle) ; **Whisper small** en repli
+  uniquement en cas d'erreur 5xx. L'audio n'y quitte jamais la machine.
 - Reverse proxy Caddy avec TLS (Let's Encrypt), réponses **403** aux chemins de
   scan connus (`.env`, `.git`, `.aws`, `wp-*`, …).
 - CrowdSec (détection/bannissement d'IP), règles géographiques **fail-closed** :
@@ -148,8 +149,9 @@ Déploiement en production (2026-08-14) :
 
 > ℹ️ **Le trajet STT séparé est inactif par défaut** : l'audio est envoyé
 > directement à Gemini (Vertex AI, Montréal). Si la transcription séparée est
-> réactivée (`stt_provider`), elle passe par le **Whisper local** (`speaches`,
-> interne au réseau Docker) : l'audio reste alors entièrement sur la machine,
+> réactivée (`stt_provider`), elle passe par le **STT local** (`speaches`,
+> interne au réseau Docker — Parakeet, audio long découpé en tranches de 60 s) :
+> l'audio reste alors entièrement sur la machine,
 > aucun service STT hébergé n'est sollicité.
 
 > ℹ️ Les sauvegardes ZIP ne contiennent plus d'audio ni de données cliniques
@@ -161,7 +163,7 @@ Autres flux :
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
 | Audio + note → Vertex AI | Audio brut, transcription, note, gabarit | `northamerica-northeast1` (Montréal) | **Québec** |
-| STT séparé (secours) | Audio brut | `speaches` (endpoint personnalisé interne) — Parakeet / Whisper small | **Locale — jamais exporté** |
+| STT séparé (secours) | Audio brut | `speaches` (endpoint personnalisé interne) — Parakeet (audio découpé en tranches de 60 s) / Whisper small en repli 5xx | **Locale — jamais exporté** |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
 | Turnstile (captcha) | Données du navigateur, adresse IP | Cloudflare | Hors Canada (données non cliniques) |
@@ -278,8 +280,9 @@ Autres flux :
 
 - LLM + audio sur **Vertex AI, région `northamerica-northeast1` (Montréal)**.
 - Le STT séparé, lorsqu'il est actif, passe par le **STT local** (`speaches`,
-  endpoint personnalisé interne au réseau Docker — Parakeet TDT 0.6B v3, Whisper
-  small en repli) : l'audio n'est envoyé **ni** à un service STT externe **ni**
+  endpoint personnalisé interne au réseau Docker — Parakeet TDT 0.6B v3, audio
+  long découpé en tranches de 60 s, Whisper small en repli 5xx) : l'audio n'est
+  envoyé **ni** à un service STT externe **ni**
   hors de la machine.
 - **Addendum de politique cloud de Google consenti le 2026-08-14** — le traitement
   des renseignements de santé par Google Cloud est couvert par l'entente.

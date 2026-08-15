@@ -834,8 +834,8 @@ _ASSEMBLYAI_BASE = "https://api.assemblyai.com/v2"
 #: Une expression d'adaptation ne peut dépasser six mots.
 _ASSEMBLYAI_MAX_WORDS = 6
 
-#: Cadence et plafond d'attente. Une tranche de trente secondes revient en
-#: quelques secondes ; le plafond n'existe que pour ne pas bloquer un thread
+#: Cadence et plafond d'attente. Une tranche d'une dizaine de secondes revient
+#: en quelques secondes ; le plafond n'existe que pour ne pas bloquer un thread
 #: indéfiniment si la tâche reste coincée.
 _ASSEMBLYAI_POLL_SECONDS = 1.5
 _ASSEMBLYAI_TIMEOUT_SECONDS = 240
@@ -1483,8 +1483,8 @@ def extract_segment(path: str, start: float, length: float) -> AudioPayload:
 # LA CONTRAINTE QUI GOUVERNE CE CODE : 5 REQUÊTES / MINUTE
 # --------------------------------------------------------
 # C'est la limite des clés d'essai — une clé de production se négocie avec
-# Cohere. Or la dictée par tranches envoie une requête toutes les ~30 s et par
-# usager : un seul médecin tient (2/min), deux tiennent à peine (4/min), trois
+# Cohere. Or la dictée par tranches envoie une requête toutes les ~10 s et par
+# usager : un seul médecin tient (6/min), deux tiennent à peine (12/min), trois
 # dépassent. Ce service n'est donc pas adapté à un usage simultané, et
 # l'application le dit dans le panneau au lieu de laisser découvrir des
 # tranches perdues au milieu d'une consultation.
@@ -1815,8 +1815,10 @@ def _transcribe_openai(payload: AudioPayload, extra_phrase_hints: Optional[str] 
 #
 # Ce bloc fournit la primitive ``_post_openai_compatible`` — réutilisable par
 # n'importe quel endpoint compatible OpenAI à l'avenir — et le schéma de repli
-# propre à l'endpoint personnalisé : routage optionnel par durée, puis retry
-# sur erreur HTTP 5xx vers un modèle de secours configurable.
+# propre à l'endpoint personnalisé : découpage optionnel en tranches
+# (``custom_stt_chunk_seconds``), routage optionnel par durée
+# (``custom_stt_max_seconds``), puis retry sur erreur HTTP 5xx vers un modèle
+# de secours configurable.
 # ===========================================================================
 
 
@@ -1889,14 +1891,172 @@ def _parse_seuil_secondes(valeur: str) -> float:
         return float("inf")
 
 
+def _post_custom_avec_repli(
+    base_url: str,
+    api_key: str,
+    model: str,
+    fb_model: str,
+    fb_url: str,
+    langue: str,
+    payload: AudioPayload,
+) -> Tuple[dict, str]:
+    """
+    POST une tranche à l'endpoint personnalisé, avec repli sur erreur 5xx.
+
+    Retourne ``(réponse, modèle_utilisé)``. En cas d'erreur HTTP 5xx du modèle
+    principal, on retente une fois avec le modèle de secours. Lève
+    ``TranscriptionError`` si l'endpoint refuse définitivement (401/403, ou 5xx
+    sans repli disponible) — l'appelant décide alors d'abandonner ou de sauter
+    la tranche.
+    """
+    try:
+        data = _post_openai_compatible(base_url, api_key, model, langue, payload)
+        return data, model
+    except _EndpointHttpError as exc:
+        if exc.code >= 500 and fb_model and fb_model != model:
+            logger.warning(
+                "STT custom : repli %s → %s après erreur HTTP %s (%s)",
+                model, fb_model, exc.code, base_url,
+            )
+            try:
+                data = _post_openai_compatible(fb_url, api_key, fb_model, langue, payload)
+                return data, fb_model
+            except _EndpointHttpError as exc2:
+                if exc2.code in (401, 403):
+                    raise TranscriptionError(
+                        "Le point de terminaison personnalisé refuse la clé API. "
+                        "Vérifiez-la dans le panneau d'administration."
+                    ) from exc2
+                raise TranscriptionError(
+                    f"Erreur du point de terminaison personnalisé ({exc2.code}) : {exc2.detail}"
+                ) from exc2
+        if exc.code in (401, 403):
+            raise TranscriptionError(
+                "Le point de terminaison personnalisé refuse la clé API. "
+                "Vérifiez-la dans le panneau d'administration."
+            ) from exc
+        raise TranscriptionError(
+            f"Erreur du point de terminaison personnalisé ({exc.code}) : {exc.detail}"
+        ) from exc
+
+
+def _transcribe_custom_chunked(
+    base_url: str,
+    api_key: str,
+    model: str,
+    langue: str,
+    fb_model: str,
+    fb_url: str,
+    payload: AudioPayload,
+    chunk_seconds: float,
+) -> dict:
+    """
+    Découpe ``payload`` en tranches d'au plus ``chunk_seconds`` et transcrit
+    chacune au modèle principal, en coupant de préférence dans un silence.
+
+    Raison d'être : un endpoint comme Parakeet/ONNX plafonne autour de 6-7 min
+    d'audio en une passe (HTTP 500 au-delà). En découpant — plutôt qu'en
+    routant le fichier entier vers le modèle de repli — on garde le modèle
+    principal sur toute la durée. Le repli 5xx s'applique tranche par tranche ;
+    une tranche qui échoue est sautée (le texte partiel est conservé), comme la
+    retranscription écarte un enregistrement muet.
+    """
+    if not _ffmpeg_available():
+        raise TranscriptionError("ffmpeg est absent du conteneur.")
+
+    # Fenêtre de coupe : on cherche un silence autour de la durée visée pour ne
+    # pas trancher un mot en deux — réutilise la logique de la dictée.
+    low = chunk_seconds * 0.75
+    high = chunk_seconds * 1.25
+
+    workdir = tempfile.mkdtemp(prefix="consultai-chunk-")
+    src = os.path.join(workdir, "source.ogg")
+    try:
+        with open(src, "wb") as handle:
+            handle.write(payload.content)
+
+        duree = payload.effective_seconds or 0.0
+        logger.info(
+            "STT custom : dictée de %.0f s > %s s → découpage en tranches "
+            "(%.2f Mo, modèle %s, langue %s)",
+            duree, chunk_seconds, len(payload.content) / 1048576,
+            model, langue or "auto",
+        )
+
+        morceaux: List[str] = []
+        modele_final = model
+        dernier_refus = ""
+        start = 0.0
+        while start < duree - 0.05:
+            restant = duree - start
+            # Dernier morceau : on le prend entier, sans coupe donc sans risque.
+            coupe = (
+                restant if restant <= high
+                else find_cut_point(src, start, chunk_seconds, low, high)
+            )
+            try:
+                seg = extract_segment(src, start, coupe)
+            except TranscriptionError as exc:
+                # Fin de fichier atteinte : rien de plus à découper.
+                logger.debug("STT custom : plus de tranche extractible (%s)", exc)
+                break
+            if seg.duration_seconds <= 0:
+                break
+            debut = start
+            start += seg.duration_seconds
+
+            try:
+                data, modele_utilise = _post_custom_avec_repli(
+                    base_url, api_key, model, fb_model, fb_url, langue, seg,
+                )
+            except TranscriptionError as exc:
+                dernier_refus = str(exc)
+                logger.warning(
+                    "STT custom : tranche [%.0f-%.0f s] écartée — %s",
+                    debut, start, exc,
+                )
+                continue
+
+            texte = str(data.get("text") or "").strip()
+            if texte:
+                morceaux.append(texte)
+                modele_final = modele_utilise
+            logger.info(
+                "STT custom : tranche de %.0f s transcrite (%d caractères, "
+                "curseur %.0f s)",
+                seg.duration_seconds, len(texte), start,
+            )
+
+        if not morceaux:
+            raise TranscriptionError(
+                dernier_refus
+                or "Aucune parole n'a été détectée. Vérifiez le micro et le "
+                   "volume de l'enregistrement, puis réessayez."
+            )
+
+        return {
+            "transcript": "\n".join(morceaux),
+            "confidence": 0.0,
+            "duration_seconds": int(round(payload.duration_seconds)),
+            "segments": len(morceaux),
+            "provider": "custom",
+            "model": modele_final,
+        }
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
     """
     Transcription par un point de terminaison personnalisé, compatible OpenAI.
 
-    Routage optionnel par durée (``custom_stt_max_seconds``) : au-delà du seuil,
-    l'audio est envoyé directement au modèle de repli — utile quand l'endpoint
-    principal plafonne (ex. Parakeet/ONNX limité à ~6-7 min en une passe). En
-    cas d'erreur HTTP 5xx du modèle principal, on retente une fois avec le
+    Découpage optionnel en tranches (``custom_stt_chunk_seconds``) : au-delà de
+    la durée configurée, l'audio est découpé et chaque tranche part au modèle
+    principal — utile quand l'endpoint plafonne en longueur d'audio par passe
+    (ex. Parakeet/ONNX limité à ~6-7 min). Le découpage prime sur le routage
+    par durée. Sans découpage, un routage optionnel par durée
+    (``custom_stt_max_seconds``) envoie directement au modèle de repli les
+    dictées trop longues. En cas d'erreur HTTP 5xx, on retente une fois avec le
     modèle de repli.
     """
     base_url = runtime_config.value("custom_stt_base_url").strip().rstrip("/")
@@ -1911,7 +2071,20 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
 
     fb_model, fb_url = _fallback_custom_target(base_url)
 
-    # --- Routage optionnel par durée -------------------------------------
+    # --- Découpage optionnel en tranches ----------------------------------
+    chunk_seconds = _parse_seuil_secondes(
+        runtime_config.value("custom_stt_chunk_seconds")
+    )
+    if (
+        0 < chunk_seconds < float("inf")
+        and payload.effective_seconds
+        and payload.effective_seconds > chunk_seconds
+    ):
+        return _transcribe_custom_chunked(
+            base_url, api_key, model, langue, fb_model, fb_url, payload, chunk_seconds,
+        )
+
+    # --- Routage optionnel par durée (repli direct sur fichier long) -----
     maxsec = runtime_config.value("custom_stt_max_seconds").strip()
     if maxsec and fb_model and payload.effective_seconds:
         if payload.effective_seconds > _parse_seuil_secondes(maxsec):
@@ -1929,35 +2102,7 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         round(payload.effective_seconds, 1) or "?", model, langue or "auto",
     )
 
-    try:
-        data = _post_openai_compatible(base_url, api_key, model, langue, payload)
-    except _EndpointHttpError as exc:
-        if exc.code >= 500 and fb_model and fb_model != model:
-            logger.warning(
-                "STT custom : repli %s → %s après erreur HTTP %s (%s)",
-                model, fb_model, exc.code, base_url,
-            )
-            try:
-                data = _post_openai_compatible(fb_url, api_key, fb_model, langue, payload)
-                model = fb_model
-            except _EndpointHttpError as exc2:
-                if exc2.code in (401, 403):
-                    raise TranscriptionError(
-                        "Le point de terminaison personnalisé refuse la clé API. "
-                        "Vérifiez-la dans le panneau d'administration."
-                    ) from exc2
-                raise TranscriptionError(
-                    f"Erreur du point de terminaison personnalisé ({exc2.code}) : {exc2.detail}"
-                ) from exc2
-        else:
-            if exc.code in (401, 403):
-                raise TranscriptionError(
-                    "Le point de terminaison personnalisé refuse la clé API. "
-                    "Vérifiez-la dans le panneau d'administration."
-                ) from exc
-            raise TranscriptionError(
-                f"Erreur du point de terminaison personnalisé ({exc.code}) : {exc.detail}"
-            ) from exc
+    data, model = _post_custom_avec_repli(base_url, api_key, model, fb_model, fb_url, langue, payload)
 
     transcript = str(data.get("text") or "").strip()
     if not transcript and not payload.allow_silence:

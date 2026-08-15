@@ -1594,16 +1594,29 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "model (useful when the main endpoint caps audio length). Empty = no "
         "duration-based routing; only the 5xx fallback applies.",
     ),
+    "set.custom_stt_chunk_seconds.label": ("Découpage (s)", "Chunk size (s)"),
+    "set.custom_stt_chunk_seconds.help": (
+        "Découpe l'audio en tranches de cette durée (ex. 60) avant l'envoi, "
+        "en coupant de préférence dans un silence : chaque tranche part au "
+        "modèle principal, même au-delà de sa limite d'audio en une passe "
+        "(ex. Parakeet/ONNX plafonnant vers 6-7 min). Vide = envoi en un bloc, "
+        "le seuil de durée ci-dessus s'applique alors.",
+        "Splits the audio into chunks of this length (e.g. 60) before sending, "
+        "cutting preferably in a silence: each chunk goes to the main model, "
+        "even beyond its one-pass audio limit (e.g. Parakeet/ONNX capping "
+        "around 6-7 min). Empty = single send, and the duration threshold "
+        "above applies.",
+    ),
 
     # Avertissement affiché dans le panneau quand Cohere est sélectionné.
     "admin.cohere_warning": (
         "Cohere est limité à 5 requêtes par minute. La dictée envoie une "
-        "tranche toutes les 30 secondes et par usager : une dictée passe, deux "
+        "tranche toutes les 10 secondes et par usager : une dictée passe, deux "
         "passent à peine, trois dépassent. Déconseillé pour des dictées "
         "simultanées. L'application étale les envois et réessaie, mais une "
         "tranche peut être retardée.",
         "Cohere is rate-limited to 5 requests per minute. Dictation sends one "
-        "segment every 30 seconds per user: one dictation fits, two barely, "
+        "segment every 10 seconds per user: one dictation fits, two barely, "
         "three exceed it. Not recommended for concurrent dictation sessions. "
         "The application spaces out requests and retries, but a segment may be "
         "delayed.",

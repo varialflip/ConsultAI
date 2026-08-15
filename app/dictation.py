@@ -14,7 +14,7 @@ La trajectoire actuelle :
 
     navigateur ──(fragments de ~5 s)──▶  fichier « raw » sur le serveur
         │                                        │
-        └── copie locale (IndexedDB)             ├─▶ tranche de ~30 s (ffmpeg)
+        └── copie locale (IndexedDB)             ├─▶ tranche de ~10 s (ffmpeg)
             gardée jusqu'à la fin réussie        └─▶ Google STT ─▶ brouillon
 
 Trois garanties en découlent :
@@ -27,8 +27,9 @@ DÉCOUPAGE
 ---------
 Les fragments sont concaténés tels quels : le résultat est un conteneur
 tronqué, illisible par Google mais parfaitement décodable par ffmpeg. On en
-extrait des tranches autonomes, en cherchant un silence autour de 30 secondes
-plutôt qu'en coupant à la seconde fixe (voir ``stt.find_cut_point``).
+extrait des tranches autonomes, en cherchant un silence autour de la durée
+cible (`dictation_segment_seconds`, 10 s par défaut) plutôt qu'en coupant à la
+seconde fixe (voir ``stt.find_cut_point``).
 
 Le curseur ``offset_seconds`` n'avance que de la durée **mesurée** sur la
 tranche produite : aucune dérive ne peut faire sauter un passage.

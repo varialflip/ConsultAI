@@ -258,6 +258,10 @@ SETTINGS: Tuple[Setting, ...] = (
         "custom_stt_max_seconds", "text", "group.stt",
         default=lambda: "", placeholder="ex. 380 (vide = pas de routage par durée)",
     ),
+    Setting(
+        "custom_stt_chunk_seconds", "text", "group.stt",
+        default=lambda: "60", placeholder="ex. 60 (vide = pas de découpage)",
+    ),
 
     # --- Modèle de langage ---------------------------------------------------
     # AUCUN réglage commun ici, volontairement : un champ « Modèle » unique

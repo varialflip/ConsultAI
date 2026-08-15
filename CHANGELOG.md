@@ -3,6 +3,24 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-15 — v2.0.0-beta.50
+
+- **Reconnaissance vocale — endpoint personnalisé : découpage en tranches de
+  1 minute**. L'audio envoyé au point de terminaison personnalisé est découpé
+  en tranches de 60 s (`custom_stt_chunk_seconds`, réglable dans le panneau)
+  dès qu'il dépasse cette durée, en coupant de préférence dans un silence pour
+  ne pas trancher un mot. Chaque tranche part au **modèle principal** (ex.
+  Parakeet/ONNX), même au-delà de son plafond d'une passe (~6-7 min) : une
+  retranscription ou un import de plusieurs minutes reste transcrite par le
+  bon modèle plutôt que routée en bloc vers le modèle de repli Whisper. Le
+  repli sur erreur 5xx s'applique tranche par tranche ; une tranche en échec
+  est sautée, le texte partiel est conservé. Le découpage prime sur le seuil
+  de durée (`custom_stt_max_seconds`), qui reste disponible sans découpage.
+- **Documentation harmonisée** : la cible de tranche de dictée est bien de
+  **10 s** (`DICTATION_SEGMENT_SECONDS`, fenêtre de coupe 6-11,5 s), et non
+  « ~30 s » comme l'affirmaient plusieurs textes périmés (diagramme de
+  `dictation.py`, avertissement Cohere, commentaire AssemblyAI) — corrigés.
+
 ## 2026-08-15 — v2.0.0-beta.49
 
 - **Modèle de langage — Gemini : « Raisonnement » désactivé = vraie coupure**.

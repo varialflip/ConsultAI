@@ -217,13 +217,18 @@ QWEN_OMNI_BASE_URL=            # documentation DashScope
 > éventuelle. L'audio y reste sur votre machine (§ 7.2, § 11.2). Il accepte
 > aussi un **modèle de repli** (`custom_stt_fallback_model` et, au besoin,
 > `custom_stt_fallback_base_url`) : en cas d'erreur HTTP 5xx de l'endpoint
-> principal, la transcription est retentée une fois avec le modèle de repli ;
-> un **seuil de durée** (`custom_stt_max_seconds`) peut en outre envoyer
-> directement au modèle de repli les dictées trop longues pour l'endpoint
-> principal (ex. un Parakeet/ONNX plafonnant autour de 6-7 min par passe). Le
-> **retrait des silences est suspendu** pour cet endpoint (pas de facturation à
-> la durée, et le plafonnement des pauses dégrade certains modèles locaux
-> multilingues) : l'audio lui est envoyé tel quel.
+> principal, la transcription est retentée une fois avec le modèle de repli.
+> Un **découpage en tranches** (`custom_stt_chunk_seconds`, 60 s par défaut)
+> découpe l'audio au-delà de cette durée et envoie chaque tranche au modèle
+> principal, en coupant de préférence dans un silence : même un endpoint qui
+> plafonne en longueur d'audio par passe (ex. un Parakeet/ONNX plafonnant
+> autour de 6-7 min) garde le modèle principal sur toute la dictée. Le
+> découpage prime sur le **seuil de durée** (`custom_stt_max_seconds`), qui
+> reste disponible sans découpage pour envoyer directement au modèle de repli
+> les dictées trop longues. Le **retrait des silences est suspendu** pour cet
+> endpoint (pas de facturation à la durée, et le plafonnement des pauses
+> dégrade certains modèles locaux multilingues) : l'audio lui est envoyé tel
+> quel.
 
 ---
 

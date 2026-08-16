@@ -1193,7 +1193,8 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         "openai": "OpenAI",
         "custom": "Point de terminaison personnalisé",
         "qwen_omni": "Qwen Omni",
-    }[provider]
+        "augure": "Augure",
+    }.get(provider) or "Point de terminaison personnalisé"
 
     if audio is not None:
         audio_bytes, mime_type = audio

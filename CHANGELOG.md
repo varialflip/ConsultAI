@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-16 — v2.0.0-beta.58
+
+- **Hotfix — génération Augure (streaming) réparée.** La variante en continu
+  de l'appel OpenAI-compatible (`_stream_openai_like`) résolvait le libellé
+  du fournisseur par une table indexée qui ignorait « augure », provoquant
+  une `KeyError` → 502 dès qu'Augure était actif. La table accepte désormais
+  « augure » (et retombe sur un libellé générique si un futur fournisseur en
+  échappait une fois de plus).
+
 ## 2026-08-16 — (benchmark Augure)
 
 - **Nouveau fournisseur de modèle de langage : Augure AI.** L'onglet

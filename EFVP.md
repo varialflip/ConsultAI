@@ -1,7 +1,7 @@
 # Évaluation des facteurs relatifs à la vie privée (ÉFVP)
 
 **Système** : ConsultAI (DictAI.ca) — dictée et rédaction de notes de consultations cliniques
-**Version du document** : 1.4
+**Version du document** : 1.5
 **Date** : 2026-08-16
 **Base légale** : *Loi sur la protection des renseignements personnels dans le secteur privé* (RLRQ, c. P-39.1), notamment ses articles 3.1 à 3.5 (Loi 25).
 

@@ -71,14 +71,6 @@
   button:hover{filter:brightness(1.08)}
   .foot{margin-top:14px;font-size:11px;color:#94a3b8;text-align:center;line-height:1.5}
   .login-mobile .foot{font-size:11px;margin-bottom:2px}
-  /* Badge d'attribution Augure — snippet de marque officiel, ≥ 12px.
-     Masqué par défaut ; le serveur ne rend que ses balises si augure_active. */
-  .augure-attrib{display:none;margin:16px auto 0;width:max-content;align-items:center;
-                 gap:6px;padding:4px 12px;border:1px solid #e5e5e5;border-radius:6px;
-                 font-family:system-ui,sans-serif;font-size:12px;color:#1E1E1E;
-                 text-decoration:none;line-height:1.4}
-  .login .augure-attrib{display:inline-flex}
-  .login-mobile .augure-attrib{display:inline-flex;margin-top:14px}
   .legal{margin-top:8px;font-size:11px;color:#94a3b8;text-align:center}
   .legal button{background:none;border:0;padding:0;margin:0;font-size:11px;color:#64748b;
                 cursor:pointer;text-decoration:underline;text-underline-offset:2px;width:auto}
@@ -173,11 +165,6 @@
 
         <button type="submit">{% if lang == 'fr' %}Continuer{% else %}Continue{% endif %}</button>
         <p class="foot">{{ t('auth.session_note') }}</p>
-        {% if augure_active %}
-        <a class="augure-attrib" href="https://augureai.ca" target="_blank" rel="noopener noreferrer">
-          {{ t('brand.augure.powered') }} <strong>Augure</strong>
-        </a>
-        {% endif %}
       </form>
     </div>
   </div>
@@ -248,11 +235,6 @@
 
     <button type="submit">{% if lang == 'fr' %}Continuer{% else %}Continue{% endif %}</button>
     <p class="foot">{{ t('auth.session_note') }}</p>
-    {% if augure_active %}
-    <a class="augure-attrib" href="https://augureai.ca" target="_blank" rel="noopener noreferrer">
-      {{ t('brand.augure.powered') }} <strong>Augure</strong>
-    </a>
-    {% endif %}
   </form>
 </div>
 

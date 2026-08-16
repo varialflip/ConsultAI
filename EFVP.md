@@ -1,7 +1,7 @@
 # Évaluation des facteurs relatifs à la vie privée (ÉFVP)
 
 **Système** : ConsultAI (DictAI.ca) — dictée et rédaction de notes de consultations cliniques
-**Version du document** : 1.5
+**Version du document** : 1.6
 **Date** : 2026-08-16
 **Base légale** : *Loi sur la protection des renseignements personnels dans le secteur privé* (RLRQ, c. P-39.1), notamment ses articles 3.1 à 3.5 (Loi 25).
 
@@ -31,7 +31,7 @@
 | Personne en charge du suivi | Dr Frederick Duong |
 | Titulaire des renseignements | Les patients dont les consultations sont dictées |
 | Utilisateurs du système | Médecins et cliniciennes de la pratique (actuellement : `frederick.duong`, `genevieve.belanger`) |
-| Fournisseurs de services (tiers) | Augure AI (inférence de mise en forme : partenaire canadien, traitement en sol canadien — cas exceptionnel : requêtes anonymisées vers des fournisseurs européens sous accords de non-conservation), Pocket ID (auto-hébergé), SMTP2GO (courriels), Cloudflare (Turnstile), GitHub Container Registry (distribution de l'image). La reconnaissance vocale est effectuée au Québec, sur le serveur local |
+| Fournisseurs de services (tiers) | Google Vertex AI (mise en forme : Gemini, région `northamerica-northeast1` — Montréal, Québec), Pocket ID (auto-hébergé), SMTP2GO (courriels), Cloudflare (Turnstile), GitHub Container Registry (distribution de l'image). La reconnaissance vocale est effectuée au Québec, sur le serveur local |
 
 ---
 
@@ -52,7 +52,7 @@ Déploiement en production (2026-08-14) :
 | Emplacement | `/opt/dictai` — application et services auxiliaires (proxy sécurisé, reconnaissance vocale locale, fournisseur d'identité, protection réseau) |
 | Accès public | `app.dictai.ca` / `app.loki.casa` (HTTPS TLS) |
 | Fournisseur d'identité | Pocket ID, auto-hébergé : `login.dictai.ca` et `login.loki.casa` (2 instances) |
-| Modèle de langage | **Augure AI** (partenaire d'inférence **canadien**, traitement en sol canadien) — IA souveraine canadienne, **texte seul** (l'audio est transcrit en amont par le STT local et ne quitte jamais la machine), **attribution ToS requise** (badge « Propulsé par Augure ») dès qu'il est le fournisseur actif, facturation en **CAD**. Cas exceptionnel : requêtes anonymisées vers des fournisseurs européens sous accords de non-conservation |
+| Modèle de langage | **Google Gemini via Vertex AI**, région `northamerica-northeast1` (Montréal, Québec) — modèle `gemini-2.5-pro`, **audio de la dictée envoyé directement au modèle multimodal** ; la transcription locale Parakeet reste configurée en secours. Les requêtes restent dans la région (addendum de politique cloud Google consenti pour les renseignements de santé) |
 | Reconnaissance vocale | Effectuée **au Québec, sur le serveur local** : l'audio n'en sort jamais |
 | Base de données | SQLite (`/data/consultai.db`), WAL |
 
@@ -150,15 +150,20 @@ Déploiement en production (2026-08-14) :
    ├─ /data/dictations/      (dictées en cours, purge harmonisée 12 h par défaut)
    └─ /data/backups/         (sauvegardes sanitisées : ni audio, ni données patient)
 
-La transcription est réalisée sur le serveur : l'audio ne le quitte jamais. Seul le
-texte de la transcription est transmis pour la mise en forme, puis revient sous
-forme de note. Aucune sortie hors du périmètre local pour l'audio.
-        │  texte de la transcription (jamais l'audio)     ← seule sortie du périmètre local
+Trajet principal (depuis 2026-08-16) : l'audio de la dictée est envoyé
+**directement** au modèle multimodal Gemini (Vertex AI, région Montréal) — le
+flux vocal quitte la machine vers Vertex, mais reste **dans la région
+Québec**. La transcription locale (Parakeet/speaches) demeure configurée en
+secours (`stt_provider`) : si elle est utilisée, l'audio ne quitte alors pas
+la machine et seul le texte de la transcription part à Gemini.
+        │  audio de la dictée (HTTPS, Vertex `northamerica-northeast1`, Montréal)
         ▼
-[Partenaire d'inférence canadien — **Augure AI**, traitement en sol canadien]
-   (mise en forme de la note ; cas exceptionnel : requêtes anonymisées vers des
-    fournisseurs européens sous accords de non-conservation, sans adresse IP
-    ni identifiant)
+[Google Vertex AI — Gemini `gemini-2.5-pro`]
+   (mise en forme de la note ; requêtes dans la région Montréal, addendum de
+    politique cloud Google pour les renseignements de santé consenti ; aucune
+    donnée utilisée pour entraîner les modèles)
+   └─ secours : [Parakeet (speaches, serveur local)] transcription locale, puis
+      texte seul à Gemini — l'audio ne quitte alors pas la machine
 ```
 
 > ℹ️ Les sauvegardes ZIP ne contiennent plus d'audio ni de données cliniques
@@ -169,8 +174,8 @@ Autres flux :
 
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
-| Mise en forme de la note (depuis 2026-08-16) | Texte de la transcription, gabarit — **jamais l'audio** | **Augure AI** (partenaire canadien, traitement en sol canadien) ; cas exceptionnel : fournisseurs européens (requêtes anonymisées, non-conservation) | Canada (sol canadien) ; cas exceptionnel hors du Canada (anonymisé) — voir § 7.4 |
-| Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** |
+| Mise en forme de la note (depuis 2026-08-16) | **Audio de la dictée** (trajet principal) ; texte recoupé par le gabarit | Google Vertex AI — Gemini `gemini-2.5-pro` | Québec (région `northamerica-northeast1`, Montréal) — voir § 7.4 |
+| Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (secours Parakeet) |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
 | Turnstile (captcha) | Données du navigateur, adresse IP | Cloudflare | Hors Canada (données non cliniques) |
@@ -190,19 +195,21 @@ Autres flux :
 [threat_reports/ (7 j) + ajout ASN à ban-known-bad-asn-ssh.yaml]
 ```
 
-> ⚠️ **Décision documentée (2026-08-16)** : la mise en forme est confiée à
-> **Augure AI** — un **partenaire d'inférence canadien** (IA souveraine
-> canadienne, `augureai.ca`) dont le traitement est effectué **en sol
-> canadien**, en **texte seul** (seule la transcription est transmise, jamais
-> l'audio), avec **attribution ToS obligatoire** (badge « Propulsé par Augure »)
-> et facturation en **CAD** ; **exceptionnellement**, des requêtes
-> **anonymisées** (sans adresse IP ni identifiant) peuvent être transmises à des
-> **fournisseurs tiers européens** sous **accords de non-conservation**. Seul le
-> **texte de la transcription** est transmis — jamais l'audio — la reconnaissance
-> vocale restant effectuée au Québec, sur le serveur local. Les informations
-> transmises ne sont **jamais utilisées pour entraîner des modèles**.
-> **Historique** : avant le 2026-08-16, la mise en forme passait par un modèle
-> Gemini via Vertex AI (région Montréal, Québec). Le panneau permet de changer de
+> ⚠️ **Décision documentée (2026-08-16, révisée)** : la mise en forme est
+> confiée à **Google Vertex AI** (Gemini `gemini-2.5-pro`), région
+> **`northamerica-northeast1` (Montréal, Québec)** — le seul choix qui garde le
+> traitement au Québec. L'**audio de la dictée** est envoyé **directement au
+> modèle multimodal** (trajet principal) ; la **transcription locale**
+> (Parakeet/speaches, serveur local) reste configurée en secours, l'audio ne
+> quittant alors pas la machine. Les informations transmises ne sont **jamais
+> utilisées pour entraîner des modèles** (addendum de politique cloud Google
+> pour les renseignements de santé consenti).
+> **Historique** : entre le 2026-08-16 (beta.57) et la beta.62, la mise en
+> forme a été confiée un temps à **Augure AI**, présenté comme partenaire
+> canadien au traitement « en sol canadien » ; le constat a établi que le
+> traitement passait en réalité par des fournisseurs européens. Le fournisseur
+> **Augure a donc été retiré** (beta.62) et le déploiement revient au trajet
+> Vertex/Gemini documenté ci-dessus. Le panneau permet de changer de
 > fournisseur STT/LLM en deux clics : **chaque changement est une décision de
 > conformité** (résidence des données, entente de service) et doit être revalidé
 > avant toute bascule.
@@ -239,13 +246,14 @@ Autres flux :
   normale 4 h / « rester connecté » 30 j), comptes Pocket ID (passkeys + code), groupes
   `admins`/`users`. Menaces : vol de session, phishing, rejeu. La session est glissante
   (repoussée à chaque requête) — risque d'une session longue sur un poste partagé.
-- **R2/R8 (tiers)** — La mise en forme (texte seul) est confiée à un partenaire
-  d'inférence canadien (traitement en sol canadien) ; le cas exceptionnel de
-  fournisseurs européens ne porte que sur des requêtes anonymisées, sans IP ni
-  identifiant, sous accords de non-conservation. Un changement de fournisseur
-  depuis le panneau d'administration (par ex. vers OpenAI, Anthropic, Cohere,
-  Mistral, Google, Qwen Omni) **déplace le traitement** immédiatement et sans
-  revalidation — chaque bascule reste une décision de conformité revalidée (§ 8).
+- **R2/R8 (tiers)** — La mise en forme (trajet principal : audio direct, ou
+  texte après transcription locale en secours) est confiée à Google Vertex AI,
+  région Montréal (`northamerica-northeast1`), couverte par l'addendum de
+  politique cloud Google pour les renseignements de santé. Un changement de
+  fournisseur depuis le panneau d'administration (par ex. vers OpenAI,
+  Anthropic, Cohere, Mistral, Google, Qwen Omni) **déplace le traitement**
+  immédiatement et sans revalidation — chaque bascule reste une décision de
+  conformité revalidée (§ 8).
 - **R4 (erreur humaine)** — La transcription et la mise en forme sont imparfaites ;
   la note peut contenir des mots faux (molécules, acronymes) ou être coupée.
 - **R3 (surconservation)** — L'audio est la donnée la plus sensible (voix non
@@ -297,20 +305,18 @@ Autres flux :
 
 ### 7.4 Traitement, résidence et transferts
 
-- **Reconnaissance vocale** : effectuée **au Québec, sur le serveur local** — l'audio
-  n'en sort jamais et n'est envoyé à aucun service externe.
-- **Mise en forme** : seul le **texte de la transcription** est transmis à
-  **Augure AI**, partenaire d'inférence canadien (IA souveraine canadienne,
-  `augureai.ca`) dont le traitement est effectué **en sol canadien**, en mode
-  **texte seul**, avec **attribution ToS obligatoire** (« Propulsé par Augure »)
-  et facturation en **CAD**. Les informations transmises ne sont **jamais
-  utilisées pour entraîner des modèles**.
-- **Transferts hors Québec (article 17)** : l'inférence est réalisée **en sol
-  canadien**. **Exceptionnellement**, des requêtes **anonymisées** — sans adresse
-  IP, sans identifiant, sans information d'utilisation — peuvent être transmises à
-  des **fournisseurs tiers européens** sous **accords de non-conservation des
-  données** (sur ouverture ou bascule). Aucune information clinique n'échappe à ce
-  cadre.
+- **Reconnaissance vocale** : effectuée **au Québec, sur le serveur local**
+  (Parakeet/speaches) — en mode secours, l'audio ne sort pas de la machine.
+- **Mise en forme (trajet principal)** : l'**audio de la dictée** est envoyé
+  **directement à Google Vertex AI** (Gemini `gemini-2.5-pro`), région
+  **`northamerica-northeast1` (Montréal, Québec)** — les requêtes restent
+  dans la région. Les informations transmises ne sont **jamais utilisées
+  pour entraîner des modèles** (addendum de politique cloud Google pour les
+  renseignements de santé consenti).
+- **Transferts hors Québec (article 17)** : l'inférence est réalisée **au
+  Québec** (région Montréal de Vertex AI). Aucun transfert vers des
+  fournisseurs tiers hors de ce cadre n'est utilisé pour le traitement
+  clinique.
 - **Responsabilité des bascules** : les réglages effectifs du panneau priment sur
   le `.env` ; un contrôle périodique vérifie qu'aucun fournisseur non validé n'a
   été activé, et toute bascule est revalidée (§ 8).
@@ -381,8 +387,8 @@ protection des renseignements personnels (Dr Frederick Duong, § 1) :
 - **Portabilité** : recevoir leurs renseignements dans un format structuré et
   couramment utilisé ;
 - **Explication** : obtenir des explications sur la façon dont la dictée est
-  traitée (reconnaissance vocale au Québec sur le serveur local, mise en forme
-  par un partenaire d'inférence canadien en sol canadien) et sur toute décision
+  traitée (reconnaissance vocale sur le serveur local en secours, mise en forme
+  par Google Vertex AI — Gemini, région Montréal) et sur toute décision
   automatisée éventuelle (§ 12.1) ; l'application n'est pas un scribe IA (§
   portée) et toute note est révisée par le clinicien avant usage.
 

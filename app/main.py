@@ -897,9 +897,6 @@ async def auth_login(request: Request):
             "sso_name": settings.sso_label,
             "default_hours": max(1, settings.session_max_age_seconds // 3600),
             "stay_days": max(1, settings.session_stay_max_age_seconds // 86400),
-            # Badge d'attribution ToS Augure sur la page publique de connexion,
-            # visible uniquement quand Augure est le fournisseur actif.
-            "augure_active": llm.active_provider() == "augure",
             # Version logicielle et nouveautés récentes, affichées avant la
             # connexion — la page de login est la seule surface publique.
             "app_version": __version__,

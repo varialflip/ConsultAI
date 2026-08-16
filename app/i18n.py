@@ -334,21 +334,18 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "privacy.q1_title": ("Où sont traitées les données ?", "Where is the data processed?"),
     "privacy.q1_body": (
-        "La reconnaissance vocale est effectuée au Québec, sur le serveur local : "
-        "l'audio n'en sort jamais. Seul le texte de la transcription est transmis "
-        "pour la mise en forme de la note. Cette mise en forme est confiée à un "
-        "partenaire d'inférence canadien dont le traitement est effectué en sol "
-        "canadien. Exceptionnellement, certaines requêtes anonymisées peuvent "
-        "être transmises à des fournisseurs tiers européens, dans le cadre "
-        "d'accords de non-conservation des données ; elles ne contiennent aucune "
-        "adresse IP ni identifiant d'utilisateur.",
-        "Speech recognition is performed in Québec, on the local server: the "
-        "audio never leaves it. Only the transcript text is sent for note "
-        "formatting. Formatting is entrusted to a Canadian inference partner "
-        "whose processing takes place on Canadian soil. Exceptionally, some "
-        "anonymized requests may be forwarded to European third-party providers "
-        "under data non-retention agreements; they contain no IP address or "
-        "user identifier.",
+        "La reconnaissance vocale peut être effectuée au Québec, sur le serveur "
+        "local : l'audio n'en sort alors jamais. Depuis 2026-08-16, la "
+        "mise en forme de la note repose sur Google Gemini via Vertex AI, "
+        "région northamerica-northeast1 (Montréal) : l'audio de la dictée "
+        "est envoyé directement au modèle multimodal et les requêtes restent "
+        "dans cette région. La transcription locale reste configurée en secours.",
+        "Speech recognition may be performed in Québec, on the local server: "
+        "the audio then never leaves it. Since 2026-08-16, note formatting "
+        "relies on Google Gemini via Vertex AI, region "
+        "northamerica-northeast1 (Montréal): dictation audio is sent "
+        "directly to that multimodal model and requests stay in that region. "
+        "Local transcription remains configured as a fallback.",
     ),
     "privacy.q2_title": ("Quelles données sont collectées ?", "What data is collected?"),
     "privacy.q2_body": (
@@ -395,26 +392,24 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "data (configuration, accounts and templates only).",
     ),
     "privacy.q6_title": ("Qui a accès aux données ?", "Who has access to the data?"),
-    "privacy.q6_body": (
+"privacy.q6_body": (
         "L'accès est réservé aux cliniciens autorisés (connexion sécurisée, "
         "comptes nominatifs et groupes de permissions). Le fournisseur de "
         "traitement au Québec est lié par une entente de service couvrant les "
         "renseignements de santé. La supervision de sécurité n'analyse que des "
-        "journaux techniques, jamais le contenu des consultations. Le partenaire "
-        "d'inférence est canadien et son traitement est effectué en sol "
-        "canadien. Les informations ne sont jamais utilisées pour entraîner des "
-        "modèles. Exceptionnellement, des requêtes anonymisées peuvent être "
-        "traitées par des fournisseurs européens liés par des accords de "
-        "non-conservation des données, sans aucune adresse IP ni identifiant.",
+        "journaux techniques, jamais le contenu des consultations. La mise en "
+        "forme passe par Google Gemini via Vertex AI, région "
+        "northamerica-northeast1 (Montréal). Les informations ne sont jamais "
+        "utilisées pour entraîner des modèles (l'addendum de politique cloud de "
+        "Google pour les renseignements de santé est consenti).",
         "Access is reserved for authorized clinicians (secure sign-in, named "
         "accounts and permission groups). The Québec-based processing provider "
         "is bound by a service agreement covering health information. Security "
         "monitoring analyzes only technical logs, never consultation content. "
-        "The inference partner is Canadian and its processing takes place on "
-        "Canadian soil. The information is never used to train models. "
-        "Exceptionally, anonymized requests may be processed by European "
-        "providers bound by data non-retention agreements, with no IP address "
-        "or identifier.",
+        "Formatting relies on Google Gemini via Vertex AI, region "
+        "northamerica-northeast1 (Montréal). Information is never used to "
+        "train models (Google's cloud policy addendum for health information "
+        "is in force).",
     ),
     "privacy.q7_title": ("Quels cookies ?", "Which cookies?"),
     "privacy.q7_body": (
@@ -2146,66 +2141,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "still generated from the audio. Off (default): no call to the "
         "speech service during recording, maximum savings.",
     ),
-
-    "provider.augure": ("Augure AI", "Augure AI"),
-    "set.augure_api_key.label": ("Clé API", "API key"),
-    "set.augure_api_key.help": (
-        "Clé émise depuis le tableau de bord développeurs Augure "
-        "(chat.augureai.ca/developers/dashboard).",
-        "Key issued from the Augure developer dashboard "
-        "(chat.augureai.ca/developers/dashboard).",
-    ),
-    "set.augure_base_url.label": ("Adresse de base", "Base URL"),
-    "set.augure_base_url.help": (
-        "Adresse compatible OpenAI d'Augure, préfixe de version inclus "
-        "(défaut « https://api.augureai.ca/v1 »).",
-        "Augure's OpenAI-compatible address, including the version prefix "
-        "(default “https://api.augureai.ca/v1”).",
-    ),
-    "set.augure_model.label": ("Modèle", "Model"),
-    "set.augure_model.help": (
-        "Modèle Augure (ossington-4, ossington-4-1, ossington-5, rosedale-1, "
-        "tofino-2.5 ou auto).",
-        "Augure model (ossington-4, ossington-4-1, ossington-5, rosedale-1, "
-        "tofino-2.5 or auto).",
-    ),
-    "set.augure_model_fast.label": (
-        "Modèle rapide (métadonnées)",
-        "Fast model (metadata)",
-    ),
-    "set.augure_model_fast.help": (
-        "Utilisé pour la seule relecture des métadonnées. Laisser vide pour "
-        "employer le modèle principal.",
-        "Used only to re-read metadata. Leave empty to use the main model.",
-    ),
-    "set.augure_temperature.label": ("Température", "Temperature"),
-    "set.augure_temperature.help": (
-        "0 = déterministe. Les Ossington restent des modèles à raisonnement : "
-        "le raisonnement demeure actif et n'est pas réglable proprement par "
-        "la température.",
-        "0 = deterministic. Ossington are reasoning models: reasoning stays "
-        "active and is not properly controlled by temperature.",
-    ),
-    "set.augure_max_tokens.label": (
-        "Budget de sortie (jetons)",
-        "Output budget (tokens)",
-    ),
-    "set.augure_max_tokens.help": (
-        "Raisonnement + texte. Le raisonnement des Ossington consomme une "
-        "large part du budget : garder un budget généreux (32768) pour que la "
-        "note aboutisse.",
-        "Reasoning + text. Ossington reasoning consumes a large share of the "
-        "budget: keep it generous (32768) so the note completes.",
-    ),
-    "set.augure_reasoning_effort.label": ("Raisonnement", "Reasoning"),
-    "set.augure_reasoning_effort.help": (
-        "Les Ossington raisonnent toujours et répondent de façon imprévisible "
-        "à un effort forcé : le défaut (« Automatique ») est le plus fiable.",
-        "Ossington always reason and respond unpredictably to a forced effort: "
-        "the default (“Automatic”) is the most reliable.",
-    ),
-
-    "brand.augure.powered": ("Propulsé par", "Powered by"),
 
     "provider.custom_endpoint": (
         "Point de terminaison personnalisé",

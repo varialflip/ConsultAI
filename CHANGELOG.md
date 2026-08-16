@@ -3,6 +3,30 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-16 — v2.0.0-beta.62
+
+- **Fournisseur Augure retiré, retour à Vertex AI (Gemini 2.5 Pro).** Le
+  partenaire d'inférence **Augure AI** (introduit en beta.57) est **retiré de
+  l'application** : fournisseur, réglages du panneau, tarifs, badges
+  « Propulsé par Augure » (connexion et pied de page) et documentation. Les
+  entrées des beta.57 à beta.61 du présent journal restent conservées comme
+  trace. Constat documenté : le traitement annoncé « en sol canadien » passait
+  en réalité par des fournisseurs européens — la décision de conformité est
+  donc réversible, voir `EFVP.md`.
+- **Mise en forme de retour sur Google Gemini via Vertex AI, région
+  `northamerica-northeast1` (Montréal).** Le déploiement revient au trajet
+  du 2026-08-14 : **audio envoyé directement au modèle multimodal**
+  (gemini-2.5-pro, par défaut via Vertex), la transcription locale Parakeet
+  restant configurée en secours. Cinq fournisseurs → modèle de langage : les
+  onglets du panneau « Modèle de langage » et les tarifs « Statistiques » ne
+  proposent plus que les fournisseurs actifs.
+- **Politique de confidentialité et ÉFVP actualisées.** Les mentions
+  « partenaire d'inférence canadien en sol canadien » et le « cas exceptionnel
+  de requêtes anonymisées vers des fournisseurs européens » sont remplacées
+  par la fiche factuelle : inference Gemini via Vertex `northamerica-northeast1`
+  (Montréal), addendum de politique cloud Google consenti pour les
+  renseignements de santé, audio de la dictée envoyé directement au modèle.
+
 ## 2026-08-16 — v2.0.0-beta.61
 
 - **ÉFVP complété.** L'ÉFVP précise désormais qu'en tant qu'outil de dictée

@@ -2535,14 +2535,7 @@
     const parts = (providerModel || '').split(' / ');
     const model = parts.slice(1).map(shortModelName).join(' / ');
     // Feeds d'information : le nom du modèle, jamais le chemin du fournisseur.
-    // L'attribution ToS Augure (« Propulsé par Augure ») vit dans les badges
-    // (login + pied de page), pas ici.
     return model || (parts[0] || '');
-  }
-
-  /** Le fournisseur actif est-il Augure (audit du badge ToS) ? */
-  function isAugureActive(config) {
-    return (config && config.llm_provider === 'augure') || false;
   }
 
   function showNoteEngines(stt, llm, audioUsed) {
@@ -3959,15 +3952,6 @@
     custom_send_audio_max_minutes: { key: 'llm_provider', value: 'custom' },
     custom_bypass_stt: { key: 'llm_provider', value: 'custom' },
     custom_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'custom' },
-    // Augure : texte seul (la voix reste au STT local, jamais exportée), d'où
-    // l'absence de réglages audio — un point de terminaison OpenAI-compatible.
-    augure_api_key: { key: 'llm_provider', value: 'augure' },
-    augure_base_url: { key: 'llm_provider', value: 'augure' },
-    augure_model: { key: 'llm_provider', value: 'augure' },
-    augure_model_fast: { key: 'llm_provider', value: 'augure' },
-    augure_temperature: { key: 'llm_provider', value: 'augure' },
-    augure_max_tokens: { key: 'llm_provider', value: 'augure' },
-    augure_reasoning_effort: { key: 'llm_provider', value: 'augure' },
     // Réglages propres à chaque service vocal
     deepgram_api_key: { key: 'stt_provider', value: 'deepgram' },
     deepgram_model: { key: 'stt_provider', value: 'deepgram' },
@@ -4040,7 +4024,6 @@
     'group.llm|mistral': 'mistral_api_key',
     'group.llm|qwen_omni': 'qwen_omni_api_key',
     'group.llm|custom': 'custom_llm_api_key',
-    'group.llm|augure': 'augure_api_key',
   };
 
   /**
@@ -5134,9 +5117,6 @@
 
   const PRICING_UNITS = ['token_input_1m', 'token_output_1m', 'token_audio_input_1m', 'audio_minute'];
 
-  // Le fournisseur « augure » (dédié) s'affiche sous son nom de marque.
-  const PRICING_PROVIDER_LABELS = { augure: 'Augure' };
-
   /** Barre d'onglets par fournisseur, au-dessus du tableau des tarifs. */
   function renderPricingTabs() {
     const rates = adminState.pricing || [];
@@ -5151,7 +5131,7 @@
     return `
       <div class="flex flex-wrap gap-1.5">
         ${pilule('', T('admin.stats.pricing_all'))}
-        ${providers.map((p) => pilule(p, PRICING_PROVIDER_LABELS[p] || p)).join('')}
+        ${providers.map((p) => pilule(p, p)).join('')}
       </div>`;
   }
 
@@ -5650,11 +5630,6 @@
         : `${sttShort} → ${llmShort}`;
       label.title = config.llm_provider;
     }
-
-    // Attribution ToS Augure : badge affiché dans le pied de page dès qu'Augure
-    // est le fournisseur actif (provider « augure » dédié).
-    const badge = $('augureBadge');
-    if (badge) badge.classList.toggle('hidden', !isAugureActive(config));
     return config;
   }
 

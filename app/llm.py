@@ -298,7 +298,6 @@ _MODEL_KEYS = {
     "cohere": "cohere_llm_model",
     "mistral": "mistral_llm_model",
     "qwen_omni": "qwen_omni_model",
-    "augure": "augure_model",
     "custom": "custom_llm_model",
 }
 
@@ -310,7 +309,6 @@ _TEMPERATURE_KEYS = {
     "cohere": "cohere_llm_temperature",
     "mistral": "mistral_llm_temperature",
     "qwen_omni": "qwen_omni_temperature",
-    "augure": "augure_temperature",
     "custom": "custom_llm_temperature",
 }
 
@@ -356,7 +354,6 @@ def active_temperature() -> float:
 #: personnalisé n'a rien à voir avec celle d'un autre fournisseur.
 _API_KEY_SETTING = {
     "custom": "custom_llm_api_key",
-    "augure": "augure_api_key",
 }
 
 
@@ -371,7 +368,6 @@ def _missing_key(provider: str) -> GenerationError:
         "gemini": "Google Gemini", "anthropic": "Anthropic",
         "openai": "OpenAI", "cohere": "Cohere", "mistral": "Mistral AI",
         "qwen_omni": "Qwen Omni",
-        "augure": "Augure AI",
         "custom": "du point de terminaison personnalisé",
     }
     return GenerationError(
@@ -396,8 +392,6 @@ def get_client(provider: Optional[str] = None):
     # continuer à servir un client pointé vers l'ancienne adresse.
     if provider == "custom":
         base_url = runtime_config.value("custom_llm_base_url").strip()
-    elif provider == "augure":
-        base_url = runtime_config.value("augure_base_url").strip()
     elif provider == "qwen_omni":
         base_url = runtime_config.value("qwen_omni_base_url").strip()
     else:
@@ -460,22 +454,6 @@ def get_client(provider: Optional[str] = None):
             raise GenerationError(
                 "Aucune adresse configurée pour le point de terminaison "
                 "personnalisé. Panneau d'administration → Modèle de langage."
-            )
-        try:
-            import openai
-        except ImportError as exc:  # pragma: no cover
-            raise GenerationError("La bibliothèque openai n'est pas installée.") from exc
-        client = openai.OpenAI(
-            api_key=key, base_url=base_url, timeout=_CUSTOM_LLM_TIMEOUT_SECONDS,
-        )
-
-    elif provider == "augure":
-        if not key:
-            raise _missing_key(provider)
-        if not base_url:
-            raise GenerationError(
-                "Aucune adresse configurée pour Augure. Panneau "
-                "d'administration → Modèle de langage."
             )
         try:
             import openai
@@ -643,35 +621,6 @@ def _custom_reasoning_effort() -> Optional[str]:
     return effort if effort in ("none", "minimal", "low", "medium", "high") else None
 
 
-#: Budget de sortie par défaut d'Augure (AI canadienne, raisonnement des
-#: Ossington qui consomme une large part de la pensée — comme DeepSeek).
-_AUGURE_MAX_TOKENS_DEFAUT = 32768
-
-#: Plafond de la relance automatique (raisonnement débordé) — voir
-#: ``generate_note_stream``.
-_AUGURE_MAX_TOKENS_PLAFOND = 65536
-
-
-def _augure_max_tokens() -> int:
-    """Budget de sortie d'Augure (raisonnement + texte)."""
-    valeur = runtime_config.value("augure_max_tokens").strip()
-    try:
-        entier = int(float(valeur))
-    except (TypeError, ValueError):
-        return _AUGURE_MAX_TOKENS_DEFAUT
-    return entier if entier > 0 else _AUGURE_MAX_TOKENS_DEFAUT
-
-
-def _augure_reasoning_effort() -> Optional[str]:
-    """
-    Effort de raisonnement d'Augure. Les Ossington raisonnent toujours et ne
-    répondent pas de façon prévisible à ``reasoning.effort`` : le défaut
-    (« auto » → ``None``) est donc plus fiable que de forcer une valeur.
-    """
-    effort = (runtime_config.value("augure_reasoning_effort") or "").strip().lower()
-    return effort if effort in ("none", "minimal", "low", "medium", "high") else None
-
-
 _LIMITE_DANS_ERREUR = re.compile(
     r"less than or equal to\s+(\d+)", re.IGNORECASE
 )
@@ -729,8 +678,6 @@ def complete(
     provider = provider or active_provider()
     if provider == "custom":
         max_tokens = max(max_tokens, _custom_max_tokens())
-    elif provider == "augure":
-        max_tokens = max(max_tokens, _augure_max_tokens())
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
     if provider == "gemini":
         return _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio)
@@ -746,8 +693,6 @@ def complete(
         return _complete_qwen_omni(system, user, model, temperature, max_tokens, json_mode, audio=audio)
     if provider == "custom":
         return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio)
-    if provider == "augure":
-        return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="augure", audio=audio)
     raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
 
 
@@ -1193,7 +1138,6 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         "openai": "OpenAI",
         "custom": "Point de terminaison personnalisé",
         "qwen_omni": "Qwen Omni",
-        "augure": "Augure",
     }.get(provider) or "Point de terminaison personnalisé"
 
     if audio is not None:
@@ -1227,10 +1171,6 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
             # honoré par le point de terminaison (OpenRouter ``reasoning.effort``).
             # Passé par ``extra_body`` : ``reasoning`` n'est pas un paramètre du
             # SDK OpenAI, qui refuse les arguments inconnus en kwargs directs.
-            kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
-    elif provider == "augure":
-        effort = _augure_reasoning_effort()
-        if effort:
             kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
 
     try:
@@ -1344,8 +1284,6 @@ def complete_stream(
     provider = provider or active_provider()
     if provider == "custom":
         max_tokens = max(max_tokens, _custom_max_tokens())
-    elif provider == "augure":
-        max_tokens = max(max_tokens, _augure_max_tokens())
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
 
     if provider == "gemini":
@@ -1356,8 +1294,6 @@ def complete_stream(
         gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=audio)
     elif provider == "custom":
         gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio)
-    elif provider == "augure":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="augure", audio=audio)
     elif provider == "qwen_omni":
         gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio)
     elif provider in ("cohere", "mistral"):
@@ -1431,11 +1367,10 @@ def generate_note_stream(
     # budget trop bas (celui de Gemini) produisait une note vide (« motif :
     # length »). La boucle relance une fois avec un budget doublé si le
     # raisonnement a saturé tout le budget avant le moindre texte.
-    budget = _custom_max_tokens() if provider == "custom" else (
-        _augure_max_tokens() if provider == "augure" else settings.gemini_max_output_tokens)
+    budget = _custom_max_tokens() if provider == "custom" else settings.gemini_max_output_tokens
     raw = ""
     result = None
-    for tentative in range(3 if provider in ("custom", "augure") else 1):
+    for tentative in range(3 if provider == "custom" else 1):
         stream = complete_stream(
             build_system_prompt(
                 system_instructions, runtime_config.general_prompt(langue), langue
@@ -1476,7 +1411,7 @@ def generate_note_stream(
         if result is None or result.text.strip() or not result.truncated:
             break
         if tentative < 2:
-            budget = min(int(budget * 2), _AUGURE_MAX_TOKENS_PLAFOND if provider == "augure" else _CUSTOM_MAX_TOKENS_PLAFOND)
+            budget = min(int(budget * 2), _CUSTOM_MAX_TOKENS_PLAFOND)
             logger.warning(
                 "Note vide (%s, modèle %s) : raisonnement saturant le budget de "
                 "sortie — relance au budget %d jetons",
@@ -1612,7 +1547,6 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
     client = get_client(provider)
     label = {
         "openai": "OpenAI",
-        "augure": "Augure",
     }.get(provider) or "Point de terminaison personnalisé"
     if audio is not None:
         audio_bytes, mime_type = audio

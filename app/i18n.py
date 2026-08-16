@@ -334,12 +334,21 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "privacy.q1_title": ("Où sont traitées les données ?", "Where is the data processed?"),
     "privacy.q1_body": (
-        "La dictée, la transcription et la note sont traitées au Québec, auprès "
-        "d'un fournisseur de services cloud conforme. Aucune donnée clinique "
-        "n'est transmise à des services situés hors du Québec.",
-        "The dictation, transcript and note are processed in Québec, with a "
-        "compliant cloud service provider. No clinical data is sent to "
-        "services located outside Québec.",
+        "La reconnaissance vocale est effectuée au Québec, sur le serveur local : "
+        "l'audio n'en sort jamais. Seul le texte de la transcription est transmis "
+        "pour la mise en forme de la note. Cette mise en forme est confiée à un "
+        "partenaire d'inférence canadien dont le traitement est effectué en sol "
+        "canadien. Exceptionnellement, certaines requêtes anonymisées peuvent "
+        "être transmises à des fournisseurs tiers européens, dans le cadre "
+        "d'accords de non-conservation des données ; elles ne contiennent aucune "
+        "adresse IP ni identifiant d'utilisateur.",
+        "Speech recognition is performed in Québec, on the local server: the "
+        "audio never leaves it. Only the transcript text is sent for note "
+        "formatting. Formatting is entrusted to a Canadian inference partner "
+        "whose processing takes place on Canadian soil. Exceptionally, some "
+        "anonymized requests may be forwarded to European third-party providers "
+        "under data non-retention agreements; they contain no IP address or "
+        "user identifier.",
     ),
     "privacy.q2_title": ("Quelles données sont collectées ?", "What data is collected?"),
     "privacy.q2_body": (
@@ -391,11 +400,21 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "comptes nominatifs et groupes de permissions). Le fournisseur de "
         "traitement au Québec est lié par une entente de service couvrant les "
         "renseignements de santé. La supervision de sécurité n'analyse que des "
-        "journaux techniques, jamais le contenu des consultations.",
+        "journaux techniques, jamais le contenu des consultations. Le partenaire "
+        "d'inférence est canadien et son traitement est effectué en sol "
+        "canadien. Les informations ne sont jamais utilisées pour entraîner des "
+        "modèles. Exceptionnellement, des requêtes anonymisées peuvent être "
+        "traitées par des fournisseurs européens liés par des accords de "
+        "non-conservation des données, sans aucune adresse IP ni identifiant.",
         "Access is reserved for authorized clinicians (secure sign-in, named "
         "accounts and permission groups). The Québec-based processing provider "
         "is bound by a service agreement covering health information. Security "
-        "monitoring analyzes only technical logs, never consultation content.",
+        "monitoring analyzes only technical logs, never consultation content. "
+        "The inference partner is Canadian and its processing takes place on "
+        "Canadian soil. The information is never used to train models. "
+        "Exceptionally, anonymized requests may be processed by European "
+        "providers bound by data non-retention agreements, with no IP address "
+        "or identifier.",
     ),
     "privacy.q7_title": ("Quels cookies ?", "Which cookies?"),
     "privacy.q7_body": (
@@ -412,10 +431,31 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "privacy.q8_body": (
         "Connexions chiffrées, protection contre les accès malveillants, "
         "accès nominatifs et traçables, et conformité à la Loi 25 du Québec "
-        "(évaluation des facteurs relatifs à la vie privée documentée).",
+        "(évaluation des facteurs relatifs à la vie privée documentée). Tout "
+        "incident de confidentialité présentant un risque est signalé à la "
+        "Commission d'accès à l'information et aux personnes concernées, et "
+        "fait l'objet d'un registre.",
         "Encrypted connections, protection against malicious access, named "
         "and traceable access, and compliance with Québec's Law 25 "
-        "(documented privacy impact assessment).",
+        "(documented privacy impact assessment). Any confidentiality incident "
+        "posing a risk is reported to the Commission d'accès à l'information "
+        "and to the individuals concerned, and is recorded in an incident "
+        "register.",
+    ),
+    "privacy.q9_title": ("Quels sont vos droits ?", "What are your rights?"),
+    "privacy.q9_body": (
+        "Les résidents du Québec peuvent demander l'accès, la rectification ou "
+        "la suppression de leurs renseignements personnels, ainsi que leur "
+        "portabilité dans un format structuré, en s'adressant au responsable "
+        "de la protection des renseignements personnels de l'application. Ils "
+        "peuvent également obtenir des explications sur la façon dont la "
+        "dictée est traitée et sur toute décision automatisée reposant sur ces "
+        "renseignements.",
+        "Québec residents may request access to, rectification of, or "
+        "deletion of their personal information, as well as its portability "
+        "in a structured format, by contacting the application's privacy "
+        "officer. They may also obtain explanations about how dictation is "
+        "processed and about any automated decision based on this information.",
     ),
     "note.engine_dictation": ("dictée {engine}", "dictation {engine}"),
     "note.engine_note": ("note {engine}", "note {engine}"),

@@ -3,6 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-16 — v2.0.0-beta.60
+
+- **Politique de confidentialité et ÉFVP actualisées (Loi 25).** Le texte complet
+  des enjeux couverts (STT au Québec sur serveur local, partenaire d'inférence
+  canadien en sol canadien, cas exceptionnel de requêtes anonymisées vers des
+  fournisseurs européens sous accords de non-conservation, absence
+  d'entraînement des modèles, droits des personnes, incidents de confidentialité,
+  transferts hors Québec) est détaillé dans la section dédiée du dépôt.
+- La page de politique de confidentialité gagne une question « Quels sont vos
+  droits ? » (accès, rectification, suppression, portabilité, explication du
+  traitement), en français et en anglais.
+
 ## 2026-08-16 — v2.0.0-beta.59
 
 - **Badge « Propulsé par Augure » sur la page de connexion.** Dès qu'Augure est

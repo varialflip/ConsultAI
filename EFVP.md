@@ -1,9 +1,14 @@
 # Évaluation des facteurs relatifs à la vie privée (ÉFVP)
 
 **Système** : ConsultAI (DictAI.ca) — dictée et rédaction de notes de consultations cliniques
-**Version du document** : 1.3
-**Date** : 2026-08-14
+**Version du document** : 1.4
+**Date** : 2026-08-16
 **Base légale** : *Loi sur la protection des renseignements personnels dans le secteur privé* (RLRQ, c. P-39.1), notamment ses articles 3.1 à 3.5 (Loi 25).
+
+> ℹ️ Le présent document constitue l'évaluation des facteurs relatifs à la vie
+> privée (ÉFVP) exigée au titre de l'article 3.3 de la Loi 25 pour un traitement
+> présentant un risque élevé. Il est tenu à jour avant tout déploiement et à
+> chaque changement de traitement décrit dans le présent document.
 
 > ⚠️ **Portée — usage prévu** : ConsultAI **n'est pas** un « scribe IA » au sens
 > du Collège des médecins du Québec, et n'est pas destiné à l'enregistrement
@@ -21,7 +26,7 @@
 | Personne en charge du suivi | Dr Frederick Duong |
 | Titulaire des renseignements | Les patients dont les consultations sont dictées |
 | Utilisateurs du système | Médecins et cliniciennes de la pratique (actuellement : `frederick.duong`, `genevieve.belanger`) |
-| Fournisseurs de services (tiers) | Alphabet (Google Cloud — Vertex AI, région `northamerica-northeast1`, Montréal), Pocket ID (auto-hébergé), SMTP2GO (courriels), Cloudflare (Turnstile), GitHub Container Registry (distribution de l'image) |
+| Fournisseurs de services (tiers) | Augure AI (inférence de mise en forme : partenaire canadien, traitement en sol canadien — cas exceptionnel : requêtes anonymisées vers des fournisseurs européens sous accords de non-conservation), Pocket ID (auto-hébergé), SMTP2GO (courriels), Cloudflare (Turnstile), GitHub Container Registry (distribution de l'image). La reconnaissance vocale est effectuée au Québec, sur le serveur local |
 
 ---
 
@@ -39,11 +44,11 @@ Déploiement en production (2026-08-14) :
 | Élément | Valeur |
 |---|---|
 | Infrastructure | VM Oracle Cloud (OCI), hébergement auto-géré — **stockage chiffré au repos (OCI, clés contrôlées par le client)** |
-| Emplacement | /opt/dictai — pile Docker Compose (Caddy, consultai, speaches, pocket-id, pocket-id-loki, crowdsec, turnstile-gate) |
+| Emplacement | `/opt/dictai` — application et services auxiliaires (proxy sécurisé, reconnaissance vocale locale, fournisseur d'identité, protection réseau) |
 | Accès public | `app.dictai.ca` / `app.loki.casa` (HTTPS TLS) |
 | Fournisseur d'identité | Pocket ID, auto-hébergé : `login.dictai.ca` et `login.loki.casa` (2 instances) |
-| Modèle de langage | Gemini via Vertex AI — région `northamerica-northeast1` (Montréal, Québec) |
-| Reconnaissance vocale | Audio envoyé **directement** au modèle (Gemini, Vertex AI, Montréal) — aucun envoi à un service STT externe. En secours, un **Whisper local** (`speaches`, faster-whisper, interne au réseau Docker) : l'audio n'y quitte pas la machine |
+| Modèle de langage | Partenaire d'inférence canadien pour la mise en forme de la note (texte seul, traitement en sol canadien ; cas exceptionnel : requêtes anonymisées vers des fournisseurs européens sous accords de non-conservation) |
+| Reconnaissance vocale | Effectuée **au Québec, sur le serveur local** : l'audio n'en sort jamais |
 | Base de données | SQLite (`/data/consultai.db`), WAL |
 
 ### 2.2 Environnement technique
@@ -51,11 +56,9 @@ Déploiement en production (2026-08-14) :
 - Image conteneurisée `ghcr.io/varialflip/consultai`, UID/GID 1000, un seul worker uvicorn.
 - Volume de données persistantes `/opt/dictai/data/consultai` : base SQLite, audio,
   dictées en cours, sauvegardes.
-- **STT local** (`speaches`, endpoint personnalisé interne au réseau Docker, aucun
-  port publié) : **Parakeet TDT 0.6B v3** (ONNX, CPU), l'audio long étant
-  **découpé en tranches de 60 s** côté application avant envoi (chaque tranche
-  reste sous le plafond d'une passe du modèle) ; **Whisper small** en repli
-  uniquement en cas d'erreur 5xx. L'audio n'y quitte jamais la machine.
+- Service de reconnaissance vocale exécuté **sur le serveur** (résident, interne au
+  réseau local) : l'audio n'est jamais envoyé à un service externe ni hors de la
+  machine.
 - Reverse proxy Caddy avec TLS (Let's Encrypt), réponses **403** aux chemins de
   scan connus (`.env`, `.git`, `.aws`, `wp-*`, …).
 - CrowdSec (détection/bannissement d'IP), règles géographiques **fail-closed** :
@@ -141,18 +144,17 @@ Déploiement en production (2026-08-14) :
    ├─ /data/audio/           (enregistrements, fichier par consultation, purge 12 h par défaut)
    ├─ /data/dictations/      (dictées en cours, purge harmonisée 12 h par défaut)
    └─ /data/backups/         (sauvegardes sanitisées : ni audio, ni données patient)
-        │  audio + note (Vertex AI, région Montréal)         ← traitement hors périmètre local
-        ▼
-[Vertex AI — Gemini — northamerica-northeast1]
-   (transcription + mise en forme, API Google Cloud)
-```
 
-> ℹ️ **Le trajet STT séparé est inactif par défaut** : l'audio est envoyé
-> directement à Gemini (Vertex AI, Montréal). Si la transcription séparée est
-> réactivée (`stt_provider`), elle passe par le **STT local** (`speaches`,
-> interne au réseau Docker — Parakeet, audio long découpé en tranches de 60 s) :
-> l'audio reste alors entièrement sur la machine,
-> aucun service STT hébergé n'est sollicité.
+La transcription est réalisée sur le serveur : l'audio ne le quitte jamais. Seul le
+texte de la transcription est transmis pour la mise en forme, puis revient sous
+forme de note. Aucune sortie hors du périmètre local pour l'audio.
+        │  texte de la transcription (jamais l'audio)     ← seule sortie du périmètre local
+        ▼
+[Partenaire d'inférence canadien — traitement en sol canadien]
+   (mise en forme de la note ; cas exceptionnel : requêtes anonymisées vers des
+    fournisseurs européens sous accords de non-conservation, sans adresse IP
+    ni identifiant)
+```
 
 > ℹ️ Les sauvegardes ZIP ne contiennent plus d'audio ni de données cliniques
 > (config, comptes, gabarits, statistiques) : une restauration ne ramène pas
@@ -162,8 +164,8 @@ Autres flux :
 
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
-| Audio + note → Vertex AI | Audio brut, transcription, note, gabarit | `northamerica-northeast1` (Montréal) | **Québec** |
-| STT séparé (secours) | Audio brut | `speaches` (endpoint personnalisé interne) — Parakeet (audio découpé en tranches de 60 s) / Whisper small en repli 5xx | **Locale — jamais exporté** |
+| Mise en forme de la note (depuis 2026-08-16) | Texte de la transcription, gabarit — **jamais l'audio** | Partenaire d'inférence canadien (traitement en sol canadien) ; cas exceptionnel : fournisseurs européens (requêtes anonymisées, non-conservation) | Canada (sol canadien) ; cas exceptionnel hors du Canada (anonymisé) — voir § 7.4 |
+| Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
 | Turnstile (captcha) | Données du navigateur, adresse IP | Cloudflare | Hors Canada (données non cliniques) |
@@ -183,13 +185,19 @@ Autres flux :
 [threat_reports/ (7 j) + ajout ASN à ban-known-bad-asn-ssh.yaml]
 ```
 
-> ⚠️ **Décision documentée (2026-07-31, confirmée au 2026-08-13)** : l'audio et le
-> texte sont envoyés au **modèle Gemini via Vertex AI en région Montréal** — le seul
-> fournisseur retenu gardant le traitement au Québec. **Addendum de politique cloud
-> de Google consenti le 2026-08-14** (traitement des renseignements de santé chez
-> Google Cloud). Le panneau permet de changer de fournisseur STT/LLM en deux clics :
-> **chaque changement est une décision de conformité** (résidence des données, entente
-> de service) et doit être revalidé avant toute bascule.
+> ⚠️ **Décision documentée (2026-08-16) — phase d'évaluation d'Augure** : la mise en
+> forme est confiée à un **partenaire d'inférence canadien** dont le traitement est
+> effectué **en sol canadien** ; **exceptionnellement**, des requêtes **anonymisées**
+> (sans adresse IP ni identifiant) peuvent être transmises à des **fournisseurs
+> tiers européens** sous **accords de non-conservation** des données. Seul le
+> **texte de la transcription** est transmis — jamais l'audio — la reconnaissance
+> vocale restant effectuée au Québec, sur le serveur local. Les informations
+> transmises ne sont **jamais utilisées pour entraîner des modèles**.
+> **Historique** : avant le 2026-08-16, la mise en forme passait par un modèle
+> Gemini via Vertex AI (région Montréal, Québec). Le panneau permet de changer de
+> fournisseur STT/LLM en deux clics : **chaque changement est une décision de
+> conformité** (résidence des données, entente de service) et doit être revalidé
+> avant toute bascule.
 
 ---
 
@@ -223,10 +231,13 @@ Autres flux :
   normale 4 h / « rester connecté » 30 j), comptes Pocket ID (passkeys + code), groupes
   `admins`/`users`. Menaces : vol de session, phishing, rejeu. La session est glissante
   (repoussée à chaque requête) — risque d'une session longue sur un poste partagé.
-- **R2/R8 (tiers)** — Le traitement est confié à Vertex AI (Montréal) pour l'audio et la
-  note. Un changement de fournisseur depuis le panneau d'administration (par ex. vers
-  OpenAI, Anthropic, Cohere, Mistral, AssemblyAI, Deepgram, Google STT global, Qwen Omni)
-  **déplace le traitement hors Québec** immédiatement et sans revalidation.
+- **R2/R8 (tiers)** — La mise en forme (texte seul) est confiée à un partenaire
+  d'inférence canadien (traitement en sol canadien) ; le cas exceptionnel de
+  fournisseurs européens ne porte que sur des requêtes anonymisées, sans IP ni
+  identifiant, sous accords de non-conservation. Un changement de fournisseur
+  depuis le panneau d'administration (par ex. vers OpenAI, Anthropic, Cohere,
+  Mistral, Google, Qwen Omni) **déplace le traitement** immédiatement et sans
+  revalidation — chaque bascule reste une décision de conformité revalidée (§ 8).
 - **R4 (erreur humaine)** — La transcription et la mise en forme sont imparfaites ;
   la note peut contenir des mots faux (molécules, acronymes) ou être coupée.
 - **R3 (surconservation)** — L'audio est la donnée la plus sensible (voix non
@@ -271,34 +282,28 @@ Autres flux :
 - **CrowdSec** actif : scénarios géo **fail-closed** (seules les IP canadiennes
   explicites passent), brute-force SSH/Web, bannissement des ASN d'hébergeurs connus.
 - Caddy renvoie **403** aux chemins de scan ; Turnstile sur les pages de connexion.
-- Secrets hors image, en lecture seule (`/secrets/gcp-sa.json`), `SESSION_SECRET` dans `/etc/dictai/.env`.
+- Secrets hors image, en lecture seule ; `SESSION_SECRET` dans `/etc/dictai/.env`.
 - Pare-feu : le port du conteneur n'est pas joignable au-delà du proxy.
 - Le service worker ne met en cache que des ressources statiques et anonymes ; ni la
   page ni les `/api/` (ils contiennent des renseignements de santé).
 
-### 7.4 Traitement et résidence des données
+### 7.4 Traitement, résidence et transferts
 
-- LLM + audio sur **Vertex AI, région `northamerica-northeast1` (Montréal)**.
-- **Option fournisseur Augure AI (depuis 2026-08-16)** : exposée dans le panneau,
-  mais **inactive par défaut**. Si un jour activé (`llm_provider = augure`), le
-  flux devient **texte seul** : l'audio est transcrit par le **STT local**
-  (Parakeet) et ne quitte jamais la machine ; seul le texte part vers Augure
-  (API OpenAI-compatible, résidence données **Canada + UE**, zéro-rétention,
-  jamais les États-Unis — gateway Beauharnois QC, PIPEDA + Loi 25, branding
-  « Propulsé par Augure » affiché dès l'activation). Toute activation reste une
-  **décision de conformité** (voir § 8) : résidence hors Québec à documenter.
-- Le STT séparé, lorsqu'il est actif, passe par le **STT local** (`speaches`,
-  endpoint personnalisé interne au réseau Docker — Parakeet TDT 0.6B v3, audio
-  long découpé en tranches de 60 s, Whisper small en repli 5xx) : l'audio n'est
-  envoyé **ni** à un service STT externe **ni**
-  hors de la machine.
-- **Addendum de politique cloud de Google consenti le 2026-08-14** — le traitement
-  des renseignements de santé par Google Cloud est couvert par l'entente.
-- `GOOGLE_CLOUD_LOCATION` explicite ; vérification que `GEMINI_API_KEY` est **vide**
-  (une clé renseignée ferait retomber silencieusement sur l'API grand public, hors région).
-- Les réglages effectifs du panneau priment sur le `.env` : un contrôle périodique
-  (`app_settings` → `stt_provider`, `llm_provider`) vérifie qu'aucun fournisseur non
-  validé n'a été activé.
+- **Reconnaissance vocale** : effectuée **au Québec, sur le serveur local** — l'audio
+  n'en sort jamais et n'est envoyé à aucun service externe.
+- **Mise en forme** : seul le **texte de la transcription** est transmis à un
+  **partenaire d'inférence canadien dont le traitement est effectué en sol
+  canadien**. Les informations transmises ne sont **jamais utilisées pour
+  entraîner des modèles**.
+- **Transferts hors Québec (article 17)** : l'inférence est réalisée **en sol
+  canadien**. **Exceptionnellement**, des requêtes **anonymisées** — sans adresse
+  IP, sans identifiant, sans information d'utilisation — peuvent être transmises à
+  des **fournisseurs tiers européens** sous **accords de non-conservation des
+  données** (sur ouverture ou bascule). Aucune information clinique n'échappe à ce
+  cadre.
+- **Responsabilité des bascules** : les réglages effectifs du panneau priment sur
+  le `.env` ; un contrôle périodique vérifie qu'aucun fournisseur non validé n'a
+  été activé, et toute bascule est revalidée (§ 8).
 
 ### 7.5 Protection de la base et des sauvegardes
 
@@ -354,6 +359,26 @@ L'application ne collecte plus l'identité du patient :
 - Les métadonnées restantes (`consultation_date`, `reason`, `requester`,
   `accompanied_by`) ne permettent pas d'identifier un patient.
 
+### 7.8 Droits des personnes (Loi 25)
+
+Les personnes peuvent exercer leurs droits en s'adressant au responsable de la
+protection des renseignements personnels (Dr Frederick Duong, § 1) :
+
+- **Accès et rectification** : obtenir les renseignements personnels les
+  concernant et les faire rectifier ;
+- **Suppression** : demander la suppression de leurs renseignements (audio,
+  transcription, note, métadonnées), sans préjudice de la rétention légale ;
+- **Portabilité** : recevoir leurs renseignements dans un format structuré et
+  couramment utilisé ;
+- **Explication** : obtenir des explications sur la façon dont la dictée est
+  traitée (reconnaissance vocale au Québec sur le serveur local, mise en forme
+  par un partenaire d'inférence canadien en sol canadien) et sur toute décision
+  automatisée éventuelle (§ 12.1) ; l'application n'est pas un scribe IA (§
+  portée) et toute note est révisée par le clinicien avant usage.
+
+La politique de confidentialité de l'application reprend ces droits à
+destination du public (page de connexion et pied de page).
+
 ---
 
 ## 8. Registre des incidents
@@ -390,4 +415,4 @@ réévaluation du présent document.
 
 | Rôle | Nom | Signature | Date |
 |---|---|---|---|
-| Responsable de la protection des renseignements personnels | Dr Frederick Duong | | 2026-08-14 |
+| Responsable de la protection des renseignements personnels | Dr Frederick Duong | | 2026-08-16 |

@@ -2533,12 +2533,11 @@
 
   function shortEngineName(providerModel) {
     const parts = (providerModel || '').split(' / ');
-    const provider = parts[0] || '';
     const model = parts.slice(1).map(shortModelName).join(' / ');
-    // Attribution ToS Augure : un modèle Augure se présente sous ce nom dans
-    // les pieds, au lieu du nom de modèle brut.
-    if (provider.toLowerCase() === 'augure') return T('brand.augure.attribution');
-    return model || provider;
+    // Feeds d'information : le nom du modèle, jamais le chemin du fournisseur.
+    // L'attribution ToS Augure (« Propulsé par Augure ») vit dans les badges
+    // (login + pied de page), pas ici.
+    return model || (parts[0] || '');
   }
 
   /** Le fournisseur actif est-il Augure (audit du badge ToS) ? */

@@ -3,6 +3,22 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-16 — v2.0.0-beta.59
+
+- **Badge « Propulsé par Augure » sur la page de connexion.** Dès qu'Augure est
+  le fournisseur actif, le badge officiel (lien augureai.ca, ≥ 12 px) apparaît
+  sur la page d'accueil, **dans le même bloc que le choix de durée de session**,
+  sous « La session expire après la durée choisie sans activité. » — sur les
+  deux variantes (bureau et mobile). Le layout mobile défile désormais si le
+  contenu dépasse l'écran (`overflow-y:auto`, carte centrée par `margin:auto`).
+- **Libellé du badge corrigé.** « Propulsé par **Augure** » (au lieu de
+  « Propulsé par Augure Augure ») — la clé i18n porte désormais « Propulsé par »,
+  le nom « Augure » venant de la marque.
+- **Pieds de note/dictée : nom du modèle, pas l'attribution.** Le pied de la
+  note structurée revient à la mention par défaut (**`ossington-5`**) pour un
+  modèle Augure ; l'attribution ToS reste portée par les badges (connexion et
+  pied de page).
+
 ## 2026-08-16 — v2.0.0-beta.58
 
 - **Hotfix — génération Augure (streaming) réparée.** La variante en continu

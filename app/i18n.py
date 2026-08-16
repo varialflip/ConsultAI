@@ -2165,11 +2165,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "the default (“Automatic”) is the most reliable.",
     ),
 
-    "brand.augure.powered": ("Propulsé par Augure", "Powered by Augure"),
-    "brand.augure.attribution": (
-        "Infrastructure IA canadienne par Augure",
-        "Canadian AI Infrastructure by Augure",
-    ),
+    "brand.augure.powered": ("Propulsé par", "Powered by"),
 
     "provider.custom_endpoint": (
         "Point de terminaison personnalisé",

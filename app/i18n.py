@@ -1246,6 +1246,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "admin.stats.kind.llm": ("Modèle de langage", "Language model"),
     "admin.stats.kind.stt": ("Reconnaissance vocale", "Speech recognition"),
     "admin.stats.pricing_title": ("Tarifs", "Rates"),
+    "admin.stats.pricing_all": ("Tous", "All"),
     "admin.stats.pricing_add": ("Ajouter un tarif", "Add a rate"),
     "admin.stats.pricing_provider": ("Fournisseur", "Provider"),
     "admin.stats.pricing_model": ("Modèle (vide = défaut du fournisseur)", "Model (empty = provider default)"),
@@ -2104,6 +2105,70 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "running during dictation (visible, editable text), but the note is "
         "still generated from the audio. Off (default): no call to the "
         "speech service during recording, maximum savings.",
+    ),
+
+    "provider.augure": ("Augure AI", "Augure AI"),
+    "set.augure_api_key.label": ("Clé API", "API key"),
+    "set.augure_api_key.help": (
+        "Clé émise depuis le tableau de bord développeurs Augure "
+        "(chat.augureai.ca/developers/dashboard).",
+        "Key issued from the Augure developer dashboard "
+        "(chat.augureai.ca/developers/dashboard).",
+    ),
+    "set.augure_base_url.label": ("Adresse de base", "Base URL"),
+    "set.augure_base_url.help": (
+        "Adresse compatible OpenAI d'Augure, préfixe de version inclus "
+        "(défaut « https://api.augureai.ca/v1 »).",
+        "Augure's OpenAI-compatible address, including the version prefix "
+        "(default “https://api.augureai.ca/v1”).",
+    ),
+    "set.augure_model.label": ("Modèle", "Model"),
+    "set.augure_model.help": (
+        "Modèle Augure (ossington-4, ossington-4-1, ossington-5, rosedale-1, "
+        "tofino-2.5 ou auto).",
+        "Augure model (ossington-4, ossington-4-1, ossington-5, rosedale-1, "
+        "tofino-2.5 or auto).",
+    ),
+    "set.augure_model_fast.label": (
+        "Modèle rapide (métadonnées)",
+        "Fast model (metadata)",
+    ),
+    "set.augure_model_fast.help": (
+        "Utilisé pour la seule relecture des métadonnées. Laisser vide pour "
+        "employer le modèle principal.",
+        "Used only to re-read metadata. Leave empty to use the main model.",
+    ),
+    "set.augure_temperature.label": ("Température", "Temperature"),
+    "set.augure_temperature.help": (
+        "0 = déterministe. Les Ossington restent des modèles à raisonnement : "
+        "le raisonnement demeure actif et n'est pas réglable proprement par "
+        "la température.",
+        "0 = deterministic. Ossington are reasoning models: reasoning stays "
+        "active and is not properly controlled by temperature.",
+    ),
+    "set.augure_max_tokens.label": (
+        "Budget de sortie (jetons)",
+        "Output budget (tokens)",
+    ),
+    "set.augure_max_tokens.help": (
+        "Raisonnement + texte. Le raisonnement des Ossington consomme une "
+        "large part du budget : garder un budget généreux (32768) pour que la "
+        "note aboutisse.",
+        "Reasoning + text. Ossington reasoning consumes a large share of the "
+        "budget: keep it generous (32768) so the note completes.",
+    ),
+    "set.augure_reasoning_effort.label": ("Raisonnement", "Reasoning"),
+    "set.augure_reasoning_effort.help": (
+        "Les Ossington raisonnent toujours et répondent de façon imprévisible "
+        "à un effort forcé : le défaut (« Automatique ») est le plus fiable.",
+        "Ossington always reason and respond unpredictably to a forced effort: "
+        "the default (“Automatic”) is the most reliable.",
+    ),
+
+    "brand.augure.powered": ("Propulsé par Augure", "Powered by Augure"),
+    "brand.augure.attribution": (
+        "Infrastructure IA canadienne par Augure",
+        "Canadian AI Infrastructure by Augure",
     ),
 
     "provider.custom_endpoint": (

@@ -2518,11 +2518,32 @@
    * terminaison personnalisés le partagent, donc c'est le modèle qui
    * identifie réellement ce qui a tourné.
    */
+  /**
+   * Nom lisible d'un modèle : la dernière partie du chemin (retire le
+   * repo/fournisseur tel « istupakov/… » ou « deepseek/… »), et raccourcit
+   * le modèle Parakeet ONNX dont l'identifiant est illisible.
+   */
+  function shortModelName(raw) {
+    const s = String(raw || '');
+    const trimmed = s.trim();
+    if (!trimmed) return trimmed;
+    if (/parakeet/i.test(trimmed)) return 'Parakeet v3';
+    return trimmed.split('/').pop();
+  }
+
   function shortEngineName(providerModel) {
     const parts = (providerModel || '').split(' / ');
     const provider = parts[0] || '';
-    if (provider.toLowerCase() !== 'custom') return provider;
-    return parts.slice(1).join(' / ') || provider;
+    const model = parts.slice(1).map(shortModelName).join(' / ');
+    // Attribution ToS Augure : un modèle Augure se présente sous ce nom dans
+    // les pieds, au lieu du nom de modèle brut.
+    if (provider.toLowerCase() === 'augure') return T('brand.augure.attribution');
+    return model || provider;
+  }
+
+  /** Le fournisseur actif est-il Augure (audit du badge ToS) ? */
+  function isAugureActive(config) {
+    return (config && config.llm_provider === 'augure') || false;
   }
 
   function showNoteEngines(stt, llm, audioUsed) {
@@ -3779,6 +3800,7 @@
     pricing: null,       // réponse de /api/admin/pricing, chargée à la demande
     statsRange: null,   // { from, to } — filtre courant de l'onglet Statistiques
     statsOwner: '',     // filtre d'usager de l'onglet Statistiques ('' = tous)
+    pricingProvider: '',// onglet fournisseur du tableau des tarifs ('' = tous)
     logPage: 0,         // page courante du journal des générations
   };
 
@@ -3938,6 +3960,15 @@
     custom_send_audio_max_minutes: { key: 'llm_provider', value: 'custom' },
     custom_bypass_stt: { key: 'llm_provider', value: 'custom' },
     custom_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'custom' },
+    // Augure : texte seul (la voix reste au STT local, jamais exportée), d'où
+    // l'absence de réglages audio — un point de terminaison OpenAI-compatible.
+    augure_api_key: { key: 'llm_provider', value: 'augure' },
+    augure_base_url: { key: 'llm_provider', value: 'augure' },
+    augure_model: { key: 'llm_provider', value: 'augure' },
+    augure_model_fast: { key: 'llm_provider', value: 'augure' },
+    augure_temperature: { key: 'llm_provider', value: 'augure' },
+    augure_max_tokens: { key: 'llm_provider', value: 'augure' },
+    augure_reasoning_effort: { key: 'llm_provider', value: 'augure' },
     // Réglages propres à chaque service vocal
     deepgram_api_key: { key: 'stt_provider', value: 'deepgram' },
     deepgram_model: { key: 'stt_provider', value: 'deepgram' },
@@ -4010,6 +4041,7 @@
     'group.llm|mistral': 'mistral_api_key',
     'group.llm|qwen_omni': 'qwen_omni_api_key',
     'group.llm|custom': 'custom_llm_api_key',
+    'group.llm|augure': 'augure_api_key',
   };
 
   /**
@@ -5103,9 +5135,32 @@
 
   const PRICING_UNITS = ['token_input_1m', 'token_output_1m', 'token_audio_input_1m', 'audio_minute'];
 
-  /** Tableau des tarifs, sans son titre (porté par le <details> de l'onglet). */
-  function renderPricingTable() {
+  // Le fournisseur « augure » (dédié) s'affiche sous son nom de marque.
+  const PRICING_PROVIDER_LABELS = { augure: 'Augure' };
+
+  /** Barre d'onglets par fournisseur, au-dessus du tableau des tarifs. */
+  function renderPricingTabs() {
     const rates = adminState.pricing || [];
+    const providers = [...new Set(rates.map((r) => r.provider).filter(Boolean))];
+    const active = adminState.pricingProvider || '';
+    const pilule = (val, label) => {
+      const on = active === val;
+      const cls = on ? 'bg-slate-700 text-white' : 'border border-slate-300 text-slate-600 hover:bg-slate-50';
+      return `<button type="button" data-pricing-tab="${esc(val)}"
+              class="px-3 py-1 rounded-lg text-xs font-medium leading-6 ${cls}">${esc(label)}</button>`;
+    };
+    return `
+      <div class="flex flex-wrap gap-1.5">
+        ${pilule('', T('admin.stats.pricing_all'))}
+        ${providers.map((p) => pilule(p, PRICING_PROVIDER_LABELS[p] || p)).join('')}
+      </div>`;
+  }
+
+  /** Tableau des tarifs (filtré par l'onglet actif), sans son titre. */
+  function renderPricingTable() {
+    const all = adminState.pricing || [];
+    const active = adminState.pricingProvider || '';
+    const rates = active ? all.filter((r) => r.provider === active) : all;
     const lignes = rates.map((r) => `
       <tr class="border-b border-slate-100" data-pricing-row="${r.id}">
         <td class="px-2 py-1.5">${esc(r.provider)}</td>
@@ -5113,8 +5168,11 @@
         <td class="px-2 py-1.5">${esc(T(`admin.stats.kind.${r.kind}`))}</td>
         <td class="px-2 py-1.5">${esc(T(`admin.stats.unit.${r.unit}`))}</td>
         <td class="px-2 py-1.5">
-          <input type="number" step="0.0001" value="${r.rate}" data-pricing-rate
-                 class="w-24 border border-slate-300 rounded px-1.5 py-0.5 text-sm">
+          <div class="flex items-center gap-1">
+            <input type="number" step="0.0001" value="${r.rate}" data-pricing-rate
+                   class="w-24 border border-slate-300 rounded px-1.5 py-0.5 text-sm">
+            ${(r.currency && r.currency !== 'USD') ? `<span class="text-[10px] text-slate-400">${esc(r.currency)}</span>` : ''}
+          </div>
         </td>
         <td class="px-2 py-1.5">
           <button type="button" data-save-pricing="${r.id}"
@@ -5125,10 +5183,13 @@
       </tr>`).join('');
 
     return `
-      <div class="overflow-auto rounded-lg border border-slate-200">
-        <table class="w-full text-sm">
-          <tbody>${lignes}</tbody>
-        </table>
+      <div class="space-y-2">
+        ${renderPricingTabs()}
+        <div class="overflow-auto rounded-lg border border-slate-200">
+          <table class="w-full text-sm">
+            <tbody>${lignes}</tbody>
+          </table>
+        </div>
       </div>
       <!-- Un <div>, jamais un <form> : cette section vit à l'intérieur de
            #adminForm (le formulaire du panneau admin, voir index.html) — un
@@ -5156,7 +5217,7 @@
   /** Les tarifs dans un <details> replié : la masse CRUD n'écrase plus l'onglet. */
   function renderPricingDetails() {
     return `
-      <details class="rounded-lg border border-slate-200">
+      <details id="pricingDetails" class="rounded-lg border border-slate-200">
         <summary class="px-3 py-2 text-sm font-semibold text-slate-700 cursor-pointer hover:bg-slate-50">${esc(T('admin.stats.pricing_title'))}</summary>
         <div class="p-3 space-y-3 border-t border-slate-100">${renderPricingTable()}</div>
       </details>`;
@@ -5219,7 +5280,16 @@
       });
     });
 
-    const zoneAjout = $('formAddPricing');
+    boite.querySelectorAll('[data-pricing-tab]').forEach((pilule) => {
+        pilule.addEventListener('click', async () => {
+          adminState.pricingProvider = pilule.dataset.pricingTab;
+          await loadStats();
+          const d = $('pricingDetails');
+          if (d) d.setAttribute('open', '');
+        });
+      });
+
+      const zoneAjout = $('formAddPricing');
     const btnAjout = $('btnAddPricing');
     if (zoneAjout && btnAjout) {
       btnAjout.addEventListener('click', async () => {
@@ -5574,10 +5644,18 @@
       // suggérerait à tort qu'il fait partie de la chaîne qui produit la
       // note, entre parenthèses ça ne dit plus que « pour information ».
       const sttOutOfPipeline = state.llmBypassStt;
+      const sttShort = shortModelName(stt);
+      const llmShort = shortModelName(config.llm_model);
       label.textContent = sttOutOfPipeline
-        ? `(${stt}) - ${config.llm_provider} · ${config.llm_model}`
-        : `${stt} → ${config.llm_provider} · ${config.llm_model}`;
+        ? `(${sttShort}) - ${llmShort}`
+        : `${sttShort} → ${llmShort}`;
+      label.title = config.llm_provider;
     }
+
+    // Attribution ToS Augure : badge affiché dans le pied de page dès qu'Augure
+    // est le fournisseur actif (provider « augure » dédié).
+    const badge = $('augureBadge');
+    if (badge) badge.classList.toggle('hidden', !isAugureActive(config));
     return config;
   }
 

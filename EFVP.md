@@ -279,6 +279,14 @@ Autres flux :
 ### 7.4 Traitement et résidence des données
 
 - LLM + audio sur **Vertex AI, région `northamerica-northeast1` (Montréal)**.
+- **Option fournisseur Augure AI (depuis 2026-08-16)** : exposée dans le panneau,
+  mais **inactive par défaut**. Si un jour activé (`llm_provider = augure`), le
+  flux devient **texte seul** : l'audio est transcrit par le **STT local**
+  (Parakeet) et ne quitte jamais la machine ; seul le texte part vers Augure
+  (API OpenAI-compatible, résidence données **Canada + UE**, zéro-rétention,
+  jamais les États-Unis — gateway Beauharnois QC, PIPEDA + Loi 25, branding
+  « Propulsé par Augure » affiché dès l'activation). Toute activation reste une
+  **décision de conformité** (voir § 8) : résidence hors Québec à documenter.
 - Le STT séparé, lorsqu'il est actif, passe par le **STT local** (`speaches`,
   endpoint personnalisé interne au réseau Docker — Parakeet TDT 0.6B v3, audio
   long découpé en tranches de 60 s, Whisper small en repli 5xx) : l'audio n'est

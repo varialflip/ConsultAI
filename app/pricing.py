@@ -30,8 +30,10 @@ from app.database import PricingRate
 logger = logging.getLogger(__name__)
 
 # provider, model ("" = tarif par défaut du fournisseur), kind, unit, rate (USD)
+# Toute entrée peut porter une 6e valeur optionnelle : la devise (défaut « USD ») —
+# la facturation du point de terminaison personnalisé peut être en CAD (ex. Augure).
 # Placeholders approximatifs — à vérifier/corriger depuis le panneau admin.
-DEFAULT_RATES: Tuple[Tuple[str, str, str, str, float], ...] = (
+DEFAULT_RATES: Tuple[Tuple[str, str, str, str, float, str], ...] = (
     # --- LLM (texte → note), $ / 1M jetons ---------------------------------
     ("gemini", "", "llm", "token_input_1m", 1.25),
     ("gemini", "", "llm", "token_output_1m", 5.00),
@@ -63,6 +65,14 @@ DEFAULT_RATES: Tuple[Tuple[str, str, str, str, float], ...] = (
     ("cohere", "", "stt", "token_input_1m", 0.50),
     ("mistral", "", "stt", "token_input_1m", 2.00),
     ("openai", "", "stt", "audio_minute", 0.006),
+
+    # --- Augure (AI souveraine canadienne, API OpenAI-compatible). Fournisseur
+    # ``augure`` dédié (augure_base_url / augure_api_key) ; texte seul, facturé
+    # en CAD (augureai.ca) — seule ligne à devise non-USD ici. Tarifs officiels
+    # au 2026-08-16 (model 5) : ossington-5 input 1.50 CAD / output 3.00 CAD
+    # par 1M jetons.
+    ("augure", "ossington-5", "llm", "token_input_1m", 1.50, "CAD"),
+    ("augure", "ossington-5", "llm", "token_output_1m", 3.00, "CAD"),
 )
 
 
@@ -74,10 +84,14 @@ def seed_default_rates(db: Session) -> int:
         for row in db.scalars(select(PricingRate))
     }
     added = 0
-    for provider, model, kind, unit, rate in DEFAULT_RATES:
+    for entry in DEFAULT_RATES:
+        provider, model, kind, unit, rate, *devise = entry
         if (provider, model, kind, unit) in existing:
             continue
-        db.add(PricingRate(provider=provider, model=model, kind=kind, unit=unit, rate=rate))
+        db.add(PricingRate(
+            provider=provider, model=model, kind=kind, unit=unit, rate=rate,
+            currency=devise[0] if devise else "USD",
+        ))
         added += 1
     if added:
         db.commit()

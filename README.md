@@ -5,11 +5,13 @@ médecin dicte, l'application transcrit, un modèle de langage met en forme selo
 un gabarit, le médecin relit et exporte.
 
 * Interface **française ou anglaise**, au choix de chaque usager.
-* **Huit** services de reconnaissance vocale et **sept** fournisseurs de
-  modèle de langage, commutables depuis le panneau d'administration sans
-  reconstruire l'image. Plusieurs modèles (Gemini, Qwen Omni, point de
-  terminaison personnalisé) peuvent aussi recevoir **l'audio directement**,
-  sans transcription séparée.
+* **Huit** services de reconnaissance vocale et **huit** fournisseurs de
+  modèle de langage (**Augure AI** compris), commutables depuis le panneau
+  d'administration sans reconstruire l'image. Plusieurs modèles (Gemini, Qwen
+  Omni, point de terminaison personnalisé) peuvent aussi recevoir **l'audio
+  directement**, sans transcription séparée. Augure est **texte seul** : la
+  voix est transcrite en amont par le STT local et ne quitte jamais la machine
+  (attribution « Propulsé par Augure » affichée dès qu'il devient actif).
 * Authentification **OpenID Connect**, assurée par l'application elle-même.
 * Aucune spécialité imposée : ce qui est propre à une pratique vit dans les
   gabarits et dans la consigne générale.
@@ -373,6 +375,13 @@ Modèle : gemini / gemini-2.5-flash | Reconnaissance vocale : soniox (fr-CA) | L
 | Comptes et groupes | Revendications d'identité, comptes, groupes, permissions |
 | Sauvegarde | Sauvegardes manuelles, rotation, restauration (§ 9) |
 | Statistiques | Usage et coûts par fournisseur |
+
+Dans le panneau **Statistiques**, la liste des **Tarifs** est désormais
+groupée par des onglets-fournisseur (dont **Augure**) : un clic filtre le
+tableau. Les tarifs **Augure `ossington-5`** y sont **préremplis** (1,50 CAD /
+3,00 CAD par 1M jetons entrée/sortie) pour un suivi du coût sans saisie — le
+fournisseur actif reste inchangé (voir § 8 pour les décisions de conformité à
+tout changement de fournisseur).
 
 Ces valeurs sont stockées en base et **surchargent le `.env`** : effet immédiat,
 sans reconstruction. Vider un champ le remet à la valeur du `.env`. Chaque champ

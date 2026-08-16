@@ -20,9 +20,10 @@ Qwen Omni, point de terminaison personnalisé). Branché sur
 Tout changement de code (release **ou pas**) doit garder à jour, **dans le
 même commit** :
 
-- **`README.md`** — fonctionnalités, fournisseurs STT/LLM (huit vocaux, sept
-  modèles, audio direct aux multimodaux), configuration, procédures,
-  structure. Aucune nouveauté n'est ajoutée sans y être décrite.
+- **`README.md`** — fonctionnalités, fournisseurs STT/LLM (huit vocaux, huit
+  modèles dont **Augure AI** — texte seul, attribution ToS —, audio direct aux
+  multimodaux), configuration, procédures, structure. Aucune nouveauté n'est
+  ajoutée sans y être décrite.
 - **`CHANGELOG.md`** — entrée datée, copiée dans l'image et affichée sur la
   **page de connexion** (version logicielle + « Nouveautés » des 7 derniers
   jours).

@@ -3,6 +3,32 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-16 — (benchmark Augure)
+
+- **Nouveau fournisseur de modèle de langage : Augure AI.** L'onglet
+  « Modèle de langage » gagne un fournisseur **Augure** dédié
+  (`augure_base_url`, `augure_api_key`, `augure_model`, température, budget
+  de sortie, raisonnement), routeur OpenAI-compatible comme les autres. **Texte
+  seul** : la voix est transcrite en amont par le STT local (Parakeet) et ne
+  quitte jamais la machine. Mesures du benchmark du jour : temps et coût par
+  consultation mesurés (ossington-5 ~ 14 s, ~ 0,035 CAD lissé 15 min).
+- **Attribution ToS Augure.** Dès qu'Augure est le fournisseur actif : les
+  pieds de note et de dictée présentent le modèle sous le libellé
+  « **Infrastructure IA canadienne par Augure** », et un badge officiel
+  « **Propulsé par Augure** » (lien vers augureai.ca) apparaît dans le pied de
+  page de l'application.
+- **Libellés des moteurs raccourcis (en-tête et pieds de note/dictée).** Les
+  modèles affichés ne montrent plus le chemin complet : seule la partie finale
+  du modèle est affichée (Gemini → « gemini-2.5-pro »), et le modèle
+  **Parakeet** (« istupakov/parakeet-tdt-0.6b-v3-onnx ») devient simplement
+  « Parakeet v3 ». Détail preservé pour l'inspection.
+- **Panneau admin — onglets « Tarifs » par fournisseur.** La liste des tarifs
+  (Statistiques) est regroupée par des pilules-fournisseur ; la graine
+  `pricing.py` porte désormais les tarifs sous le provider **`augure`**
+  (`ossington-5` : 1,50 CAD / 3,00 CAD par 1M jetons entrée / sortie, devise
+  `CAD`), préremplis au premier démarrage. Simple saisie de livre de comptes :
+  aucun changement de fournisseur actif.
+
 ## 2026-08-15 — v2.0.0-beta.56
 
 - **Modèle de langage — point de terminaison personnalisé : « Raisonnement »

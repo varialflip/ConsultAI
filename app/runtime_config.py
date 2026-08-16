@@ -101,6 +101,7 @@ LLM_PROVIDERS = (
     ("cohere", "Cohere"),
     ("mistral", "Mistral AI"),
     ("qwen_omni", "Qwen Omni"),
+    ("augure", "provider.augure"),
     ("custom", "provider.custom_endpoint"),
 )
 
@@ -454,6 +455,41 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting(
         "custom_bypass_stt_keep_transcript", "choice", "group.llm",
         default=lambda: "false", choices=ON_OFF,
+    ),
+
+    # Augure — AI souveraine canadienne, API OpenAI-compatible (texte seul :
+    # l'audio est transcrit en amont par le STT local, il ne quitte jamais la
+    # machine). Attribution « Propulsé par Augure » requise (ToS) dès qu'il
+    # devient le fournisseur actif. Facturé en CAD.
+    Setting(
+        "augure_api_key", "secret", "group.llm",
+        default=lambda: "",
+    ),
+    Setting(
+        "augure_base_url", "text", "group.llm",
+        default=lambda: "https://api.augureai.ca/v1",
+    ),
+    Setting("augure_model", "text", "group.llm", default=lambda: ""),
+    Setting("augure_model_fast", "text", "group.llm", default=lambda: ""),
+    Setting(
+        "augure_temperature", "number", "group.llm",
+        default=lambda: str(settings.gemini_temperature),
+    ),
+    Setting(
+        "augure_max_tokens", "text", "group.llm",
+        default=lambda: "32768", placeholder="ex. 32768 (jetons de sortie)",
+    ),
+    Setting(
+        "augure_reasoning_effort", "choice", "group.llm",
+        default=lambda: "auto",
+        choices=(
+            ("auto", "choice.reasoning_auto"),
+            ("none", "choice.reasoning_none"),
+            ("minimal", "choice.reasoning_minimal"),
+            ("low", "choice.reasoning_low"),
+            ("medium", "choice.reasoning_medium"),
+            ("high", "choice.reasoning_high"),
+        ),
     ),
 
     # --- Identité affichée ---------------------------------------------------

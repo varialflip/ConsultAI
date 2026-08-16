@@ -15,6 +15,11 @@
 > d'une conversation entre un médecin et ses patients. L'application est un
 > outil de dictée post-consultation utilisé par le clinicien seul — le dialogue
 > avec le patient ne fait pas partie de l'usage prévu du système.
+>
+> ℹ️ **Conséquence sur l'audio** : la dictée étant post-consultation et réalisée par
+> le clinicien seul, **aucune voix de patient n'est attendue dans l'audio**. La
+> captation d'une voix tierce résulterait d'une erreur d'usage ; l'enregistrement
+> demeure traité comme très sensible et soumis à la rétention de 12 h (§ 3.1).
 
 ---
 
@@ -47,7 +52,7 @@ Déploiement en production (2026-08-14) :
 | Emplacement | `/opt/dictai` — application et services auxiliaires (proxy sécurisé, reconnaissance vocale locale, fournisseur d'identité, protection réseau) |
 | Accès public | `app.dictai.ca` / `app.loki.casa` (HTTPS TLS) |
 | Fournisseur d'identité | Pocket ID, auto-hébergé : `login.dictai.ca` et `login.loki.casa` (2 instances) |
-| Modèle de langage | Partenaire d'inférence canadien pour la mise en forme de la note (texte seul, traitement en sol canadien ; cas exceptionnel : requêtes anonymisées vers des fournisseurs européens sous accords de non-conservation) |
+| Modèle de langage | **Augure AI** (partenaire d'inférence **canadien**, traitement en sol canadien) — IA souveraine canadienne, **texte seul** (l'audio est transcrit en amont par le STT local et ne quitte jamais la machine), **attribution ToS requise** (badge « Propulsé par Augure ») dès qu'il est le fournisseur actif, facturation en **CAD**. Cas exceptionnel : requêtes anonymisées vers des fournisseurs européens sous accords de non-conservation |
 | Reconnaissance vocale | Effectuée **au Québec, sur le serveur local** : l'audio n'en sort jamais |
 | Base de données | SQLite (`/data/consultai.db`), WAL |
 
@@ -75,7 +80,7 @@ Déploiement en production (2026-08-14) :
 |---|---|---|
 | **Renseignements de santé** | Contenu des consultations : anamnèse, motifs, examens, diagnostics, plans de traitement (champs `reason`, `raw_transcript`, `generated_markdown`, `edited_markdown`) | Très élevée |
 | **Identité des patients** | **Non collectée** : le nom (`patient_name`) et le numéro de dossier (`patient_ref`) ne sont plus saisis ni stockés (dénominalisation, § 7.7). Date de consultation, demandeur (`requester`) et accompagnateur (`accompanied_by`) restent conservés | Très élevée (ce qui reste) |
-| **Voix / enregistrements audio** | Enregistrement brut de la dictée (fichiers sous `/data/audio/<consultation_id>/`) | Très élevée — voix non anonymisable, inclut la voix du patient et toute personne présente dans la pièce |
+| **Voix / enregistrements audio** | Enregistrement brut de la dictée (fichiers sous `/data/audio/<consultation_id>/`) | Très élevée — voix non anonymisable. **Aucune voix de patient n'est attendue** (dictée post-consultation par le clinicien seul, § portée) ; une voix tierce captée par erreur reste traitée comme un renseignement de santé, sous rétention automatique de 12 h |
 | **Identité des utilisateurs** | `username`, `email`, `display_name`, `avatar_url`, groupes, dates de connexion | Élevée (données d'identité de professionnels de la santé) |
 | **Données d'usage** | `usage_events` : durées audio, fournisseur/modèle utilisés, tokens, coûts, horodatages | Faible à moyenne (révèle l'activité clinique) |
 | **Données de facturation d'usage** | `pricing_rates`, `usage_daily` | Faible |
@@ -150,7 +155,7 @@ texte de la transcription est transmis pour la mise en forme, puis revient sous
 forme de note. Aucune sortie hors du périmètre local pour l'audio.
         │  texte de la transcription (jamais l'audio)     ← seule sortie du périmètre local
         ▼
-[Partenaire d'inférence canadien — traitement en sol canadien]
+[Partenaire d'inférence canadien — **Augure AI**, traitement en sol canadien]
    (mise en forme de la note ; cas exceptionnel : requêtes anonymisées vers des
     fournisseurs européens sous accords de non-conservation, sans adresse IP
     ni identifiant)
@@ -164,7 +169,7 @@ Autres flux :
 
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
-| Mise en forme de la note (depuis 2026-08-16) | Texte de la transcription, gabarit — **jamais l'audio** | Partenaire d'inférence canadien (traitement en sol canadien) ; cas exceptionnel : fournisseurs européens (requêtes anonymisées, non-conservation) | Canada (sol canadien) ; cas exceptionnel hors du Canada (anonymisé) — voir § 7.4 |
+| Mise en forme de la note (depuis 2026-08-16) | Texte de la transcription, gabarit — **jamais l'audio** | **Augure AI** (partenaire canadien, traitement en sol canadien) ; cas exceptionnel : fournisseurs européens (requêtes anonymisées, non-conservation) | Canada (sol canadien) ; cas exceptionnel hors du Canada (anonymisé) — voir § 7.4 |
 | Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
@@ -185,11 +190,14 @@ Autres flux :
 [threat_reports/ (7 j) + ajout ASN à ban-known-bad-asn-ssh.yaml]
 ```
 
-> ⚠️ **Décision documentée (2026-08-16) — phase d'évaluation d'Augure** : la mise en
-> forme est confiée à un **partenaire d'inférence canadien** dont le traitement est
-> effectué **en sol canadien** ; **exceptionnellement**, des requêtes **anonymisées**
-> (sans adresse IP ni identifiant) peuvent être transmises à des **fournisseurs
-> tiers européens** sous **accords de non-conservation** des données. Seul le
+> ⚠️ **Décision documentée (2026-08-16)** : la mise en forme est confiée à
+> **Augure AI** — un **partenaire d'inférence canadien** (IA souveraine
+> canadienne, `augureai.ca`) dont le traitement est effectué **en sol
+> canadien**, en **texte seul** (seule la transcription est transmise, jamais
+> l'audio), avec **attribution ToS obligatoire** (badge « Propulsé par Augure »)
+> et facturation en **CAD** ; **exceptionnellement**, des requêtes
+> **anonymisées** (sans adresse IP ni identifiant) peuvent être transmises à des
+> **fournisseurs tiers européens** sous **accords de non-conservation**. Seul le
 > **texte de la transcription** est transmis — jamais l'audio — la reconnaissance
 > vocale restant effectuée au Québec, sur le serveur local. Les informations
 > transmises ne sont **jamais utilisées pour entraîner des modèles**.
@@ -291,10 +299,12 @@ Autres flux :
 
 - **Reconnaissance vocale** : effectuée **au Québec, sur le serveur local** — l'audio
   n'en sort jamais et n'est envoyé à aucun service externe.
-- **Mise en forme** : seul le **texte de la transcription** est transmis à un
-  **partenaire d'inférence canadien dont le traitement est effectué en sol
-  canadien**. Les informations transmises ne sont **jamais utilisées pour
-  entraîner des modèles**.
+- **Mise en forme** : seul le **texte de la transcription** est transmis à
+  **Augure AI**, partenaire d'inférence canadien (IA souveraine canadienne,
+  `augureai.ca`) dont le traitement est effectué **en sol canadien**, en mode
+  **texte seul**, avec **attribution ToS obligatoire** (« Propulsé par Augure »)
+  et facturation en **CAD**. Les informations transmises ne sont **jamais
+  utilisées pour entraîner des modèles**.
 - **Transferts hors Québec (article 17)** : l'inférence est réalisée **en sol
   canadien**. **Exceptionnellement**, des requêtes **anonymisées** — sans adresse
   IP, sans identifiant, sans information d'utilisation — peuvent être transmises à

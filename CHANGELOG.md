@@ -3,6 +3,17 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-16 — v2.0.0-beta.61
+
+- **ÉFVP complété.** L'ÉFVP précise désormais qu'en tant qu'outil de dictée
+  post-consultation par le clinicien seul, **aucune voix de patient n'est
+  attendue dans l'audio** ; une voix tierce captée par erreur demeure traitée
+  comme très sensible sous rétention automatique de 12 h. Le fournisseur de
+  modèle de langage est nommé : **Augure AI** (IA souveraine canadienne,
+  traitement en sol canadien, texte seul, attribution ToS « Propulsé par
+  Augure », facturation CAD ; cas exceptionnel de requêtes anonymisées vers des
+  fournisseurs européens sous accords de non-conservation).
+
 ## 2026-08-16 — v2.0.0-beta.60
 
 - **Politique de confidentialité et ÉFVP actualisées (Loi 25).** Le texte complet

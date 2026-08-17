@@ -573,7 +573,8 @@ def _concat_audio(chemins: List[str]) -> Optional[Tuple[bytes, float]]:
 
 
 def _prepare_audio_for_generation(
-    db: Session, consultation_id: int, max_minutes: float = 20.0
+    db: Session, consultation_id: int, max_minutes: float = 20.0,
+    audio_format: str = "ogg",
 ) -> Optional[Tuple[bytes, str]]:
     """
     Extrait audio (silences plafonnés) à joindre à la génération, ou ``None``.
@@ -583,6 +584,11 @@ def _prepare_audio_for_generation(
     enregistrement, et toutes doivent atteindre le modèle — pas seulement la
     dernière.
 
+    ``audio_format`` (``ogg`` / ``mp3`` / ``wav``) décide du conteneur de
+    sortie : le point de terminaison personnalisé peut n'exposer que des
+    modèles réclamant MP3/WAV (ex. Mistral Voxtral, qui refuse l'OGG). Les
+    autres fournisseurs (Gemini, Qwen) restent sur OGG, leur format connu.
+
     Best-effort à dessein : aucun enregistrement, fusion ou rognage impossible,
     ou dictée trop longue (``<fournisseur>_send_audio_max_minutes``)
     retombent sur ``None`` — la note se génère alors comme avant, sur la seule
@@ -590,9 +596,37 @@ def _prepare_audio_for_generation(
     mais chaque repli est journalisé : silencieux pour l'usager, visible dans
     les journaux, sinon un audio manquant est indiscernable d'un bogue.
     """
+    fmt = (audio_format or "ogg").strip().lower()
 
     def _traiter(source: str, provenance: str) -> Optional[Tuple[bytes, str]]:
-        """Rogne les silences, applique le plafond, retourne l'audio OGG."""
+        """Prépare l'audio de ``source`` dans le format demandé."""
+        if fmt in ("mp3", "wav"):
+            # Pas de rognage des silences : l'audio joint au modèle de langage
+            # doit rester la dictée telle quelle (voir stt.transcode_to).
+            transcodé = stt.transcode_to(source, fmt)
+            if transcodé is None:
+                logger.warning(
+                    "Audio non joint (consultation %s, %s) : transcodage %s impossible",
+                    consultation_id, provenance, fmt,
+                )
+                return None
+            contenu, mime, duree = transcodé
+            plafond = max_minutes * 60
+            if duree <= 0 or duree > plafond:
+                logger.info(
+                    "Audio non joint (consultation %s, %s) : %.1f s hors bornes "
+                    "(plafond %.0f s)",
+                    consultation_id, provenance, duree, plafond,
+                )
+                return None
+            logger.info(
+                "Audio joint (consultation %s, %s) : %.1f s (%s)",
+                consultation_id, provenance, duree, mime,
+            )
+            return contenu, mime
+
+        # OGG : comportement historique — rognage des silences, puis repli
+        # sur l'audio d'origine si le rognage est indisponible.
         try:
             trimmed = stt.compress_silence(source)
         except OSError as exc:
@@ -2415,7 +2449,8 @@ async def api_generate(
     audio_payload = None
     if need_audio and payload.consultation_id:
         audio_payload = await run_in_threadpool(
-            _prepare_audio_for_generation, db, payload.consultation_id, audio_opts["max_minutes"],
+            _prepare_audio_for_generation, db, payload.consultation_id,
+            audio_opts["max_minutes"], audio_opts["send_audio_format"],
         )
     elif need_audio:
         logger.info(

@@ -269,12 +269,20 @@ def audio_settings(provider: Optional[str] = None) -> Dict[str, object]:
     Tout à ``False`` (et le plafond par défaut) si le fournisseur ne gère pas
     l'audio — évite à chaque appelant de vérifier lui-même
     ``provider in _AUDIO_CAPABLE_PROVIDERS`` avant de lire ces réglages.
+    ``send_audio_format`` décrit le format demandé pour l'extrait joint
+    (ogg / mp3 / wav) ; il n'est réellement consommé que par le point de
+    terminaison personnalisé, les autres fournisseurs ayant leur propre
+    convention (``_prepare_audio_for_generation`` le prend en compte).
     """
     provider = provider or active_provider()
-    if provider not in _AUDIO_CAPABLE_PROVIDERS:
+    audio = provider in _AUDIO_CAPABLE_PROVIDERS
+    fmt = runtime_config.value("custom_send_audio_format").strip().lower()
+    if fmt not in ("mp3", "wav"):
+        fmt = "ogg"
+    if not audio:
         return {
             "send_audio": False, "bypass_stt": False,
-            "keep_transcript": False, "max_minutes": 20.0,
+            "keep_transcript": False, "max_minutes": 20.0, "send_audio_format": "ogg",
         }
     return {
         "send_audio": runtime_config.value(f"{provider}_send_audio") == "true",
@@ -285,6 +293,7 @@ def audio_settings(provider: Optional[str] = None) -> Dict[str, object]:
         "max_minutes": runtime_config.value_float(
             f"{provider}_send_audio_max_minutes", 20.0
         ),
+        "send_audio_format": fmt,
     }
 
 
@@ -1625,8 +1634,16 @@ def _openai_audio_part(audio_bytes: bytes, mime_type: str) -> dict:
     pour un modèle multimodal exposé via son point de terminaison
     personnalisé — Qwen DashScope, lui, attend le préfixe (voir
     ``_qwen_audio_part``).
+
+    Le champ ``format`` attendu par OpenRouter est un suffixe court (``wav``,
+    ``mp3``) et non le sous-type MIME : ``audio/mpeg`` doit donc devenir
+    ``mp3``. ``_prepare_audio_for_generation`` transcodant l'audio dans le
+    format demandé, ce seul endroit suffit à faire coïncider le contenu et la
+    déclaration.
     """
     fmt = (mime_type.split("/", 1)[-1] or "wav").split(";")[0].strip()
+    if fmt in ("mpeg", "mpeg3"):
+        fmt = "mp3"
     b64 = base64.b64encode(audio_bytes).decode("ascii")
     return {
         "type": "input_audio",

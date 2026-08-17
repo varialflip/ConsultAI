@@ -1418,6 +1418,64 @@ def compress_silence(source_path: str) -> Optional[Tuple[bytes, float]]:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
+_SEND_AUDIO_FORMATS = {
+    # (suffixe de sortie, codec, options du codec, type MIME)
+    "ogg": ("output.ogg", "libopus", ["-b:a", "24k", "-application", "voip"], "audio/ogg"),
+    "mp3": ("output.mp3", "libmp3lame", ["-b:a", "96k"], "audio/mpeg"),
+    "wav": ("output.wav", "pcm_s16le", [], "audio/wav"),
+}
+
+
+def transcode_to(source_path: str, fmt: str = "ogg") -> Optional[Tuple[bytes, str, float]]:
+    """
+    Transcode ``source_path`` vers le format de sortie demandé, en mono 48 kHz.
+
+    Le format OGG/Opus est la convention native de l'application (petit, bon
+    pour la parole), acceptée par Gemini et Qwen. MP3 et WAV sont nécessaires
+    à certains modèles exposés derrière un point de terminaison personnalisé
+    (ex. Mistral Voxtral via OpenRouter, qui refuse l'OGG).
+
+    Contrairement à ``compress_silence``, on ne rogne aucun silence ici : le
+    retrait des pauses sert au service de reconnaissance, qui facture à la
+    durée ; l'audio joint au modèle de langage doit rester la dictée telle
+    quelle. Retourne ``(contenu, type_mime, durée)``, ou ``None`` si le
+    transcodage échoue — l'appelant décide alors de renoncer à l'audio plutôt
+    que d'envoyer un fichier que le modèle pourrait rejeter.
+    """
+    desc = _SEND_AUDIO_FORMATS.get((fmt or "ogg").strip().lower())
+    if desc is None:
+        logger.warning("Format audio inconnu, OGG utilisé à la place : %r", fmt)
+        desc = _SEND_AUDIO_FORMATS["ogg"]
+    sortie, codec, codec_opts, mime = desc
+
+    if not _ffmpeg_available():
+        logger.error("ffmpeg introuvable — transcodage audio impossible")
+        return None
+
+    workdir = tempfile.mkdtemp(prefix="consultai-xcode-")
+    dst = os.path.join(workdir, sortie)
+    try:
+        _run_ffmpeg([
+            "-loglevel", "error", "-i", source_path, "-vn",
+            "-map_metadata", "-1",
+            "-ac", "1", "-ar", "48000",
+            "-c:a", codec, *codec_opts,
+            "-f", sortie.rsplit(".", 1)[-1],
+            "-y", dst,
+        ])
+        with open(dst, "rb") as handle:
+            content = handle.read()
+        if not content:
+            return None
+        duration = probe_duration(dst)
+        return content, mime, duration
+    except (TranscriptionError, subprocess.SubprocessError, OSError) as exc:
+        logger.warning("Transcodage audio (%s) impossible : %s", fmt, exc)
+        return None
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 def _apply_silence_trim(payload: AudioPayload, source_path: str) -> AudioPayload:
     """Remplace le contenu du payload par sa version raccourcie, si utile."""
     trimmed = compress_silence(source_path)

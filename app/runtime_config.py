@@ -448,6 +448,11 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "20",
     ),
     Setting(
+        "custom_send_audio_format", "choice", "group.llm",
+        default=lambda: "ogg",
+        choices=(("ogg", "ogg"), ("mp3", "mp3"), ("wav", "wav")),
+    ),
+    Setting(
         "custom_bypass_stt", "choice", "group.llm",
         default=lambda: "false", choices=ON_OFF,
     ),

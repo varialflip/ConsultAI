@@ -445,6 +445,15 @@ celle de la dictée réelle. Gain constaté : 30 à 40 %.
 Ne descendez pas `STT_SILENCE_KEEP_SECONDS` à 0 : les moteurs se servent des
 pauses pour placer la ponctuation.
 
+> **Audio joint au modèle de langage** : quand « Joindre aussi l'audio » est
+> actif (`send_audio`), l'extrait envoyé est **OGG/Opus** par défaut — petit et
+> accepté par Gemini et Qwen Omni. Le **point de terminaison personnalisé**
+> expose en plus un réglage **Format audio envoyé** (`custom_send_audio_format` :
+> OGG/MP3/WAV) : un modèle comme **Mistral Voxtral** derrière OpenRouter **exige
+> MP3 ou WAV** et rejette l'OGG (`400 Failed to load audio file — valid mp3 or
+> wav`). Choisissez alors `mp3` ; le fichier est transcodé en mono 48 kHz avant
+> l'envoi. Gemini et Qwen ignorent ce réglage.
+
 ### 7.4 Gabarits
 
 Quatre sont livrés, tous verrouillés :

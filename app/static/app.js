@@ -3950,6 +3950,7 @@
     // multimodal (OpenRouter) — mêmes réglages que Gemini/Qwen Omni.
     custom_send_audio: { key: 'llm_provider', value: 'custom' },
     custom_send_audio_max_minutes: { key: 'llm_provider', value: 'custom' },
+    custom_send_audio_format: { key: 'llm_provider', value: 'custom' },
     custom_bypass_stt: { key: 'llm_provider', value: 'custom' },
     custom_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'custom' },
     // Réglages propres à chaque service vocal

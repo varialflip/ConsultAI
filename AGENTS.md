@@ -25,7 +25,11 @@ même commit** :
   structure. Aucune nouveauté n'est ajoutée sans y être décrite.
 - **`CHANGELOG.md`** — entrée datée, copiée dans l'image et affichée sur la
   **page de connexion** (version logicielle + « Nouveautés » des 7 derniers
-  jours).
+  jours). Les entrées sont **condensées par date quand c'est possible** : la
+  page de connexion regroupe par jour les items produits par les plusieurs
+  versions publiées le même jour (voir `app/changelog.py`), donc quand on
+  livre plusieurs releases rapprochées, regrouper leurs notes en une entrée
+  datée unique et conciser les items évite un « Nouveautés » redondant.
 - **`EFVP.md`** — dès que le changement touche aux données : rétention,
   sauvegardes (sanitisées), dénominalisation, fournisseurs, collecte de
   métadonnées, résidence des données. C'est le document de conformité Loi 25.

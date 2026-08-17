@@ -2111,6 +2111,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "attached — the note is generated as before, from the transcript "
         "alone. Protects latency and cost on a very long dictation.",
     ),
+    "set.custom_send_audio_format.label": (
+        "Format audio envoyé",
+        "Audio format sent",
+    ),
+    "set.custom_send_audio_format.help": (
+        "Format du fichier audio joint au modèle. OGG/Opus (défaut) est le "
+        "plus léger et convient à Gemini et Qwen. Certains modèles d'un point "
+        "de terminaison personnalisé n'acceptent que MP3 ou WAV "
+        "(ex. Mistral Voxtral via OpenRouter) : choisissez alors mp3 ou wav.",
+        "Format of the audio file attached to the model. OGG/Opus (default) "
+        "is the lightest and suits Gemini and Qwen. Some models behind a "
+        "custom endpoint only accept MP3 or WAV (e.g. Mistral Voxtral via "
+        "OpenRouter): pick mp3 or wav then.",
+    ),
     "set.custom_bypass_stt.label": (
         "Ignorer la reconnaissance vocale (audio direct)",
         "Skip speech recognition (direct audio)",

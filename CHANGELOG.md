@@ -3,6 +3,21 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-17 — v2.0.0-beta.64
+
+- **Format audio configurable pour le point de terminaison personnalisé**
+  (beta.64). « Joindre aussi l'audio » demande désormais le format de l'extrait
+  joint (`custom_send_audio_format` : OGG/Opus par défaut, ou MP3/WAV). Le
+  constat : un modèle comme **Mistral Voxtral** exposé via OpenRouter exige un
+  fichier **MP3 ou WAV** et refuse l'OGG — l'audio était pourtant envoyé en
+  OGG, voire en WebM brut mal étiqueté quand la langue STT était aussi
+  « custom » et désactivait alors le rognage des silences. Le fournisseur
+  « custom » transcodait désormais réellement l'audio dans le format demandé
+  (`stt.transcode_to`, mono 48 kHz — MP3/WAV sans rognage de silence, l'audio
+  du modèle conservant la dictée telle quelle) et le champ `format` censé par
+  OpenRouter est normalisé (`audio/mpeg` → `mp3`). Gemini et Qwen restent sur
+  OGG, leur format connu.
+
 ## 2026-08-17 — v2.0.0-beta.63
 
 - **Section finale « Éléments à valider » rendue structurellement obligatoire**

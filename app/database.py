@@ -1360,6 +1360,67 @@ def migrate_general_prompt_final_section(db: Session) -> int:
     return touches
 
 
+#: Empreintes des consignes générales LIVRÉES avant l'ajout des règles de
+#: structure explicites : HMA et sections narratives en paragraphes (jamais en
+#: liste à puces), rubrique ENTIÈRE sans contenu dicté supprimée (jamais
+#: remplacée par `[inaudible]`). Même mécanique que les migrations précédentes :
+#: on ne remplace la valeur en base que si elle est encore EXACTEMENT le défaut
+#: livré, pour ne jamais écraser une consigne personnalisée. Vérifié le
+#: 2026-08-17 contre ``default_prompts`` : la copie en base des deux langues
+#: était strictement identique au module avant l'édition.
+_OLD_GENERAL_PROMPT_SHA5 = {
+    "general_prompt_fr": "4fdde800117c3b0de3231c8a99e899be567e43ef9a16133be8cc5024ab284147",
+    "general_prompt_en": "ff56c47eed304db86be0c73922008caafdda8b7bbecb8834c201cde08bdd44e9",
+}
+
+
+def migrate_general_prompt_structure(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE les règles de structure explicites.
+
+    L'ajout porte sur : HMA et sections narratives écrites en paragraphes
+    courts (jamais en liste à puces), et une rubrique ENTIÈRE sans contenu
+    dicté supprimée — jamais remplacée par `[inaudible]` réservé aux passages
+    inintelligibles À L'INTÉRIEUR d'une rubrique qui a du contenu. Ces règles
+    figurent au § 3 STYLE DE RÉDACTION et au § 1 RÈGLE ABSOLUE.
+
+    La consigne générale est éditable et vit en base (elle surcharge le module
+    ``default_prompts``) : corriger le module seul laisserait l'installation en
+    service avec l'ancien texte. Comme pour les migrations précédentes, la
+    valeur n'est remplacée que si elle est encore EXACTEMENT le défaut livré
+    (comparaison par empreinte) ; une consigne personnalisée est laissée
+    intacte et signalée au journal.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA5.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : migration « structure » "
+                "ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : règles de structure explicites "
+            "(HMA en paragraphes, rubriques vides supprimées).",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Groupes livrés. « admins » ouvre le panneau d'administration, « users » ne
 #: donne accès qu'à ses propres consultations.
 _SYSTEM_GROUPS = (
@@ -1626,6 +1687,7 @@ def init_db() -> None:
         migrate_general_prompt_elements_a_valider(db)
         migrate_general_prompt_a_confirmer(db)
         migrate_general_prompt_final_section(db)
+        migrate_general_prompt_structure(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

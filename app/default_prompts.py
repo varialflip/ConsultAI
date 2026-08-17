@@ -72,7 +72,7 @@ Ce principe ne s'applique qu'à TON raisonnement d'édition : comment tu as corr
 - Tes seules interventions permises : corriger un mot mal transcrit, réorganiser l'information, normaliser la terminologie, compléter la syntaxe.
 - Toute correction susceptible de changer le sens clinique (médicament, dose, latéralité, chiffre, date, diagnostic, nom propre) doit être signalée dans **Corrections et éléments à valider** — jamais expliquée en aparté ailleurs dans le rapport.
 - N'utilise jamais un texte de remplissage pour une rubrique ou une ligne vide : ni nom, ni date, ni « Non servi », ni « Non abordé », ni « N/A », ni « — ». Une rubrique sans contenu dicté est simplement supprimée ; un champ d'en-tête sans valeur perd sa ligne.
-- Passage inintelligible → écris `[inaudible]`. Ne devine jamais.
+- Passage inintelligible → écris `[inaudible]`. Ne devine jamais. `[inaudible]` ne s'emploie qu'à l'INTÉRIEUR d'une rubrique qui contient par ailleurs du contenu : une rubrique ENTIÈRE sans contenu dicté est supprimée (titre compris), tout comme une ligne d'en-tête sans valeur dictée (médecin de famille, lieu) — ne les remplace jamais par `[inaudible]`.
 - Deux lectures plausibles → retiens la plus probable dans le corps du rapport; note l'alternative en fin de rapport, sans développer les deux hypothèses en détail.
 - **Aucun médicament n'est jamais ignoré** : un nom de médicament incertain, mal entendu ou inaudible est toujours consigné dans **Éléments à valider**, jamais retiré du rapport sans trace. La dose d'un médicament inconnue ou douteuse suit la même règle.
 - En cas de doute, sous-corriger vaut mieux que sur-corriger.
@@ -135,7 +135,7 @@ Supprime les hésitations, répétitions, autocorrections orales, consignes au l
 # 3. STYLE DE RÉDACTION
 
 - Transforme le style télégraphique de la dictée en phrases cliniques courtes, sobres et professionnelles, **sans ajouter d'information** et sans délayer ce qui tient en une phrase.
-
+- **HMA et sections narratives** (HMA, histoire sociale, investigations) : rédige-les en **paragraphes courts et suivis**, jamais en liste à puces. Une idée ou un bloc logique = un paragraphe. N'enchaîne pas une liste pointée sous ces rubriques : le récit se lit en prose.
 - **Impression** : liste numérotée. Si dicté à la première personne du singulier, transcrire idem — ne jamais convertir à la troisième personne, même si le reste du rapport y est. Par exemple, « Je crois qu'il s'agit d'une maladie d'Alzheimer » reste « Je crois qu'il s'agit d'une maladie d'Alzheimer », jamais « Maladie d'Alzheimer » ni « Le médecin croit… ». Ne pas mettre de résumés par section (par exemple, ne pas écrire « Sur le plan cognitif : »). Ne pas mentionner les conditions médicales chroniques sauf si c'est dicté. Conserve **intégralement** le raisonnement clinique dicté — par exemple la revue des effets secondaires d'une médication et l'écart ou la rétention d'une cause (voir § 0) : ne le résume pas, ne le supprime pas, c'est une donnée clinique au même titre qu'un diagnostic.
 - **Plan** : liste numérotée d'actions concrètes. Si dicté à la première personne du singulier, transcrire idem — ne jamais convertir à la troisième personne. Par exemple, « Je lui donne congé de la clinique » reste « Je lui donne congé de la clinique », jamais « Congé de la clinique » ni « Il lui donne congé ». Cette règle prévaut sur la consigne de rédaction à la troisième personne du § 4 : Impression et Plan ne sont pas des sections narratives.
 
@@ -231,7 +231,11 @@ means dropping an element of the dictated clinical reasoning.
 - Any correction liable to change the clinical meaning (medication, dose,
   laterality, figure, date, diagnosis, proper noun) must be flagged under
   **Items to verify** — never explained as an aside elsewhere in the report.
-- Unintelligible passage → write `[inaudible]`. Never guess.
+- Unintelligible passage → write `[inaudible]`. Never guess. `[inaudible]` is only
+  used INSIDE a section that otherwise has content: an ENTIRE section with
+  nothing dictated is removed (heading included), and so is a header line with
+  no dictated value (family physician, location) — never replace those with
+  `[inaudible]`.
 - Never use placeholder filler text for an empty section or line: no name, no
   date, no "Not addressed", no "N/A", no dash. An empty section is simply
   removed; an empty header field loses its line.
@@ -317,6 +321,11 @@ entirety of the clinical content, without rephrasing more than necessary.
 - Turn the telegraphic style of the dictation into short, plain, professional
   clinical sentences, **without adding information** and without padding what
   fits in one sentence.
+
+- **HPI and narrative sections** (HPI, social history, investigations): write
+  them in **short, flowing paragraphs**, never as bullet lists. One idea or
+  logical block = one paragraph. Do not lay out a bulleted list under these
+  headings: the story reads as prose.
 
 - **Impression**: numbered list. If dictated in the first person singular,
   transcribe it as-is — never convert it to the third person, even if the rest

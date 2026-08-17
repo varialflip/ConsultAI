@@ -3,6 +3,24 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-17 — v2.0.0-beta.66
+
+- **Consigne générale : règles de structure rendues explicites** (beta.66).
+  Constat en production sur `mistralai/voxtral-small-24b-2507` (OpenRouter,
+  audio seul) : la note gérait mal la mise en forme malgré des règles déjà
+  présentes — HMA et sections narratives en liste à puces au lieu d'un récit,
+  rubriques entières vides (Allergies) ou lignes d'en-tête sans valeur
+  (médecin de famille) survécues par le marqueur `[inaudible]`. Le § 3 exige
+  désormais que les sections narratives (HMA, histoire sociale,
+  investigations) soient rédigées en **paragraphes courts et suivis**, jamais
+  en liste à puces — Impression et Plan restant en liste numérotée — et le § 1
+  précise que `[inaudible]` ne couvre qu'un passage inintelligible À
+  L'INTÉRIEUR d'une rubrique qui a du contenu : une rubrique ENTIÈRE sans
+  contenu dicté, ou une ligne d'en-tête sans valeur, est supprimée, jamais
+  remplie par `[inaudible]`. Une migration porte la règle en base si la
+  consigne en place est encore le défaut livré (laissée intacte sinon, le
+  médecin l'ajoute depuis le panneau).
+
 ## 2026-08-17 — v2.0.0-beta.65
 
 - **Extraction des métadonnées : le raisonnement n'est plus envoyé en mode

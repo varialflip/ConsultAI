@@ -486,6 +486,17 @@ regroupés par catégorie). La consigne générale l'exige (§ 4.1) et les gabar
 français livrés l'inscrivent (`## ÉLÉMENTS À VALIDER`) pour que tous les modèles
 la produisent, sans exception.
 
+**Structure des rubriques.** La consigne générale impose deux règles de mise en
+forme (§ 1 et § 3), renforcées en 2026-08-17 pour les modèles plus sensibles :
+les sections **narratives** (HMA, histoire sociale, investigations) se rédigent
+en **paragraphes courts et suivis** — jamais en liste à puces — tandis que
+**Impression** et **Plan** restent en **liste numérotée**. Une rubrique ENTIÈRE
+sans contenu dicté est **supprimée** (titre compris), de même qu'une ligne
+d'en-tête sans valeur dictée (médecin de famille, lieu) ; le marqueur
+`[inaudible]` ne sert qu'à un passage inintelligible situé À L'INTÉRIEUR d'une
+rubrique qui produit par ailleurs du contenu — il ne remplace jamais une rubrique
+ou une ligne vide.
+
 Champs de substitution disponibles dans la mise en page : `{{DATE}}`,
 `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. (`{{PATIENT}}` et `{{DOSSIER}}` sont
 conservés pour la compatibilité des gabarits existants, mais ne sont **plus

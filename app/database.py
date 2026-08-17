@@ -1298,6 +1298,68 @@ def migrate_general_prompt_a_confirmer(db: Session) -> int:
     if touches:
         db.commit()
     return touches
+
+
+#: Empreintes des consignes générales LIVRÉES avant la levée de la contradiction
+#: § 4 / § 4.1 (la rubrique « Éléments à valider » devient la seule rubrique
+#: supplémentaire autorisée, en toute fin de note). Même mécanique que les
+#: migrations précédentes : on ne remplace la valeur en base que si elle est
+#: encore EXACTEMENT le défaut livré, pour ne jamais écraser une consigne
+#: personnalisée. Vérifié le 2026-08-17 contre ``default_prompts`` : la copie
+#: en base des deux langues était strictement identique au module avant l'édition.
+_OLD_GENERAL_PROMPT_SHA4 = {
+    "general_prompt_fr": "983578c5dc837fe52efcae8d60468f54b5b709855861256008c6e081126c0ccc",
+    "general_prompt_en": "a867297c30a77ef3daa9f55e29c9b5886d6860fcd66bbb6eb6ece0eb453ce696",
+}
+
+
+def migrate_general_prompt_final_section(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la rubrique finale « Éléments à
+    valider » rendue structurellement obligatoire.
+
+    La section finale était exigée (§ 4.1) mais contredite par la règle
+    « n'ajoute aucune rubrique absente du gabarit » (§ 4) : Gemini, qui
+    reproduit fidèlement la structure du gabarit, pouvait donc l'omettre. La
+    levée de la contradiction déclare « Éléments à valider » comme l'unique
+    rubrique supplémentaire autorisée, toujours en toute fin de note. La
+    consigne générale vit en base (elle surcharge le module ``default_prompts``)
+    : corriger le module seul laisserait l'installation en service avec
+    l'ancien texte. Comme pour les migrations précédentes, la valeur n'est
+    remplacée que si elle est encore EXACTEMENT le défaut livré (comparaison
+    par empreinte) ; une consigne personnalisée est laissée intacte et signalée
+    au journal.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA4.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : migration « rubrique finale » "
+                "ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : « Éléments à valider » rendue "
+            "structurellement obligatoire (rubrique finale autorisée).",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Groupes livrés. « admins » ouvre le panneau d'administration, « users » ne
 #: donne accès qu'à ses propres consultations.
 _SYSTEM_GROUPS = (
@@ -1563,6 +1625,7 @@ def init_db() -> None:
         migrate_general_prompt_keep_reasoning(db)
         migrate_general_prompt_elements_a_valider(db)
         migrate_general_prompt_a_confirmer(db)
+        migrate_general_prompt_final_section(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

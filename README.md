@@ -466,6 +466,13 @@ Chaque gabarit comporte : **Instructions cliniques** (ce sur quoi le modèle se
 concentre), **Mise en page** (le squelette Markdown, qui fixe la structure
 exacte), **Vocabulaire additionnel** et **Langue**.
 
+**Rubrique finale obligatoire.** Quelle que soit la mise en page, la note se
+termine toujours par la section **`Éléments à valider`** — corrections apportées
+et éléments à confirmer, en liste télégraphique (au-delà de 8 éléments, ils sont
+regroupés par catégorie). La consigne générale l'exige (§ 4.1) et les gabarits
+français livrés l'inscrivent (`## ÉLÉMENTS À VALIDER`) pour que tous les modèles
+la produisent, sans exception.
+
 Champs de substitution disponibles dans la mise en page : `{{DATE}}`,
 `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. (`{{PATIENT}}` et `{{DOSSIER}}` sont
 conservés pour la compatibilité des gabarits existants, mais ne sont **plus

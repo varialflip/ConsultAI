@@ -3,6 +3,20 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-17 — v2.0.0-beta.63
+
+- **Section finale « Éléments à valider » rendue structurellement obligatoire**
+  (beta.63). La section était exigée par la consigne générale (§ 4.1) mais
+  contredite par la règle « n'ajoute aucune rubrique absente du gabarit » (§ 4) :
+  des modèles qui reproduisent fidèlement la structure du gabarit (ex. Gemini)
+  pouvaient alors l'omettre en fin de note. La contradiction est levée — la
+  consigne générale déclare « Éléments à valider » comme l'unique rubrique
+  supplémentaire autorisée, toujours en toute fin de note (même levée de
+  contradiction côté anglais, « Items to verify ») — et le gabarit l'inscrit
+  désormais dans sa structure (`## ÉLÉMENTS À VALIDER` en dernier bloc des
+  gabarits français livrés et des copies en service). La consigne générale en
+  base est migrée sans écraser une version personnalisée.
+
 ## 2026-08-16 — v2.0.0-beta.62
 
 - **Fournisseur Augure retiré, retour à Vertex AI (Gemini 2.5 Pro)** (beta.57–62).

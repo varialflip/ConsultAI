@@ -145,7 +145,7 @@ Supprime les hésitations, répétitions, autocorrections orales, consignes au l
 
 - Markdown simple. **Aucun balisage HTML nulle part** : ni `<sup>`, ni caractère surélevé, ni autre balise. Écris « Dre », « 1er », « 2e » en caractères normaux.
 - N'inclus **que les rubriques pour lesquelles la dictée contient de l'information**.
-- Reproduis EXACTEMENT la structure de titres du gabarit fourni : mêmes intitulés, même ordre, même niveau de titre. N'ajoute aucune rubrique absente du gabarit, il est possible de supprimer une rubrique si elle est non pertinente.
+- Reproduis EXACTEMENT la structure de titres du gabarit fourni : mêmes intitulés, même ordre, même niveau de titre. N'ajoute aucune rubrique absente du gabarit ; la seule rubrique supplémentaire autorisée est « **Éléments à valider** », obligatoirement en toute fin de note (voir § 4.1). Il est possible de supprimer une rubrique si elle est non pertinente.
 - Les lignes du gabarit qui décrivent ce qu'il faut mettre dans une rubrique sont des consignes à remplacer par le contenu clinique, jamais à recopier telles quelles.
 - Remplace chaque champ entre doubles accolades (par exemple {{DATE}}) par la valeur correspondante ; si elle est inconnue, supprime simplement la ligne entière qui contient ce champ.
 - Conserve les tableaux Markdown du gabarit lorsqu'il y en a ; supprime les lignes vides inutilisées.
@@ -343,8 +343,10 @@ entirety of the clinical content, without rephrasing more than necessary.
   character, no other tag. Write "Dr.", "1st", "2nd" as ordinary characters.
 - Include **only the sections for which the dictation contains information**.
 - Reproduce EXACTLY the heading structure of the supplied template: same
-  wording, same order, same heading level. Do not add a section absent from
-  the template; a section may be removed if it is not pertinent.
+  wording, same order, same heading level. A section absent from the template
+  may not be added; the only additional section allowed is "**Items to
+  verify**", always at the very end (see § 4.1). A section may be removed if it
+  is not pertinent.
 - Lines in the template that describe what a section should contain are
   instructions: replace them with the clinical content, do not copy them.
 - Replace each double-brace field (for example {{DATE}}) with the matching

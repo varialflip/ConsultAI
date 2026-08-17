@@ -1175,11 +1175,17 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
 
     if provider == "custom":
         effort = _custom_reasoning_effort()
-        if effort:
+        if effort and not json_mode:
             # Modèles à raisonnement (DeepSeek…) : effort demandé, s'il est
             # honoré par le point de terminaison (OpenRouter ``reasoning.effort``).
             # Passé par ``extra_body`` : ``reasoning`` n'est pas un paramètre du
             # SDK OpenAI, qui refuse les arguments inconnus en kwargs directs.
+            #
+            # JAMAIS en mode JSON ("json_mode") : l'extraction des métadonnées
+            # est une tâche mécanique et le raisonnement d'un modèle reflexif
+            # (DeepSeek…) y produit des réponses hors JSON (vérifié in vivo :
+            # « Expecting property name… » sur 179 caractères) et gaspille des
+            # jetons. Même règle que ``enable_thinking=False`` de Qwen.
             kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
 
     try:
@@ -1576,9 +1582,12 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
         kwargs["response_format"] = {"type": "json_object"}
     if provider == "custom":
         effort = _custom_reasoning_effort()
-        if effort:
+        if effort and not json_mode:
             # ``reasoning`` passe par ``extra_body`` : le SDK OpenAI refuse les
-            # kwargs inconnus (cf. ``_stream_openai_like``).
+            # kwargs inconnus (cf. ``_stream_openai_like``). Jamais en mode JSON
+            # ("json_mode") : l'extraction des métadonnées est une tâche
+            # mécanique et le raisonnement d'un modèle reflexif y produit des
+            # réponses hors JSON, sans parler des jetons gaspillés.
             kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
 
     try:

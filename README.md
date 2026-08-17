@@ -396,7 +396,11 @@ pour dévoiler les fournisseurs non sélectionnés.
 > tel modèle consomme une large part du budget dans sa pensée : si le budget
 > est trop bas, il renvoie une réponse vide (« motif : length ») — l'application
 > relance alors automatiquement avec un budget doublé, et le panneau explique
-> comment l'ajuster.
+> comment l'ajuster. Le raisonnement ne s'applique qu'à la **mise en forme de
+> la note** : l'extraction des métadonnées (tâche mécanique en JSON) ne le
+> reçoit jamais, un modèle reflexif y renvoyant du texte hors JSON. Pour
+> l'extraction, un **modèle rapide non raisonneur** (field « Modèle rapide »)
+> est recommandé.
 
 Dans l'onglet Comptes, l'appartenance se règle en cliquant les pastilles de
 groupe, et chaque changement s'applique immédiatement — il n'y a rien à

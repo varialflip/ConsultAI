@@ -3,6 +3,20 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-17 — v2.0.0-beta.65
+
+- **Extraction des métadonnées : le raisonnement n'est plus envoyé en mode
+  JSON** (beta.65). L'extraction (date, raison, demandeur, accompagné) est une
+  tâche mécanique en `json_mode` ; sur le point de terminaison personnalisé,
+  le réglage « Raisonnement » était pourtant transmis à cette étape et un
+  modèle reflexif (DeepSeek v4 Flash) y renvoyait du texte hors JSON
+  (vérifié en production : « Expecting property name… » sur 179 caractères),
+  laissant l'interface en attente — la note, elle, était bien générée et
+  conservée. Le raisonnement n'est désormais demandé que pour la **mise en
+  forme de la note**, jamais pour l'extraction, comme Qwen le fait déjà avec
+  `enable_thinking=False`. Le choix d'un modèle rapide **non raisonneur**
+  (ministral) pour l'extraction complète le réglage.
+
 ## 2026-08-17 — v2.0.0-beta.64
 
 - **Format audio configurable pour le point de terminaison personnalisé**

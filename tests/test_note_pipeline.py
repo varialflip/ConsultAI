@@ -178,6 +178,28 @@ class ValidatorTests(unittest.TestCase):
         self.assertIn("html_markup", codes)
         self.assertIn("placeholder_leftover", codes)
 
+    def test_cramped_numbered_list_flagged(self):
+        """Régression : le modèle a écrit une liste numérotée sans saut de
+        ligne entre les items (vu réellement, test.dictai.ca 2026-08-18,
+        mistral-small-latest : « 1. Augmentation... 2. Compléter... 3.
+        Traiter... » tout sur une ligne au lieu d'une vraie liste numérotée)."""
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["PLAN"] = (
+            "1. Augmentation de la rispéridone à 0.60 mg PO HS. "
+            "2. Compléter le bilan avec un scan cérébral. "
+            "3. Traiter le déficit en vitamine B12."
+        )
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertTrue(any(i.code == "cramped_numbered_list" for i in result.needs_repair))
+
+    def test_properly_line_broken_numbered_list_not_flagged(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["PLAN"] = "1. Augmentation de la rispéridone.\n2. Compléter le bilan.\n3. Traiter le déficit."
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertFalse(any(i.code == "cramped_numbered_list" for i in result.needs_repair))
+
     def test_filler_variant_not_in_original_examples_is_caught(self):
         """Régression : « non dictée » (invention d'un modèle plus faible,
         test.dictai.ca 2026-08-18) n'était pas dans la liste d'exemples
@@ -332,6 +354,20 @@ class RepairTests(unittest.TestCase):
         complete_mock.assert_called_once()
         self.assertEqual(note.sections["RAISON DE CONSULTATION"], "Suivi de mémoire.")
         self.assertFalse(any(i.code == "placeholder_leftover" for i in result.needs_repair))
+
+    def test_cramped_numbered_list_repaired_via_mocked_llm(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["PLAN"] = "1. Poursuite du suivi. 2. Contrôle dans 3 mois."
+        fake = llm.Completion(
+            text='{"new_value": "1. Poursuite du suivi.\\n2. Contrôle dans 3 mois."}',
+            model="fake", provider="fake",
+        )
+        with mock.patch.object(llm, "complete", return_value=fake) as complete_mock:
+            result = validate_and_repair(note, layout, TRANSCRIPT_FR, model="fake-model")
+        complete_mock.assert_called_once()
+        self.assertIn("\n", note.sections["PLAN"])
+        self.assertFalse(any(i.code == "cramped_numbered_list" for i in result.needs_repair))
 
     def test_grounding_mismatch_falls_back_without_calling_llm(self):
         layout = parse_layout(GENERAL_LAYOUT)

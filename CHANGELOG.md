@@ -3,6 +3,19 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, listes numérotées écrasées sur une ligne
+
+- **Impression/Plan rendus en un seul bloc au lieu d'une liste numérotée**
+  (vu réellement, test.dictai.ca, mistral-small-latest : « 1. X. 2. Y. 3.
+  Z. » sans saut de ligne). La consigne JSON (`note_extraction.py`) ne
+  précisait pas comment encoder plusieurs items dans une valeur de
+  `sections` — précisé : tableau JSON, ou chaîne avec de VRAIS sauts de
+  ligne entre items. Ajout d'un filet mécanique côté validateur
+  (`check_cramped_lists`) qui détecte plusieurs marqueurs « N. » sur une
+  même ligne et déclenche une réparation ciblée.
+
+Testé par `tests/test_note_pipeline.py` (31 cas).
+
 ## 2026-08-18 — branche `selfhosted`, correctifs post-test réel (mistral-small-latest)
 
 - **Rubrique avec contenu propre ET sous-rubrique imbriquée** (ex. MÉDICATION

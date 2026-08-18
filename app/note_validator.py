@@ -222,6 +222,37 @@ def check_html_tags(note: ExtractedNote) -> List[ValidationIssue]:
 
 
 # ---------------------------------------------------------------------------
+# 2bis. Liste numérotée/à puces écrasée sur une seule ligne — jamais auto-fixé
+#       (regrouper les items nécessite de comprendre où ils se coupent).
+# ---------------------------------------------------------------------------
+
+# Deux marqueurs « N. » (ou plus) sur la MÊME ligne : signe qu'un modèle a
+# écrit « 1. X. 2. Y. 3. Z. » à la suite sans saut de ligne entre les items,
+# au lieu d'encoder chaque item séparément (voir note_extraction.py, la
+# consigne de mise en forme JSON). Vu réellement, test.dictai.ca 2026-08-18,
+# mistral-small-latest : Impression/Plan rendus en un seul bloc au lieu
+# d'une liste numérotée.
+_CRAMPED_NUMBERED_LIST_RE = re.compile(r"(?:^|[.!?]\s+)\d+\.\s+\S.*?[.!?]\s+\d+\.\s")
+
+
+def check_cramped_lists(note: ExtractedNote) -> List[ValidationIssue]:
+    issues = []
+    for path, value in _all_leaf_strings(note):
+        for line in value.split("\n"):
+            if _CRAMPED_NUMBERED_LIST_RE.search(line):
+                issues.append(
+                    ValidationIssue(
+                        "needs_repair", "cramped_numbered_list",
+                        "Plusieurs items numérotés (« 1. ... 2. ... ») trouvés sur une seule ligne — "
+                        "doivent être séparés par un vrai saut de ligne, un par item.",
+                        path,
+                    )
+                )
+                break
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # 3. Éléments à valider — présence + cohérence des items
 # ---------------------------------------------------------------------------
 
@@ -421,6 +452,7 @@ def validate(note: ExtractedNote, layout: LayoutSpec, transcript: str, language:
     issues += fix_elements_a_valider_corrections(note)  # auto-fix, mute `note`
     issues += check_placeholder_leftover(note)
     issues += check_html_tags(note)
+    issues += check_cramped_lists(note)
     issues += check_elements_a_valider(note, layout)
     issues += check_epistemic_clauses(note, transcript, language)
     issues += check_grounding(note, transcript)

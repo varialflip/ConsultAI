@@ -126,6 +126,15 @@ Règles spécifiques à cet encodage :
   imbrication que ci-dessus). Omets entièrement une clé si la dictée n'a
   fourni aucun contenu pour cette rubrique — ne mets ni chaîne vide, ni null,
   ni texte de remplissage.
+- MISE EN FORME À L'INTÉRIEUR D'UNE VALEUR DE ``sections`` : si la
+  consigne demande une liste numérotée ou à puces pour une rubrique
+  (Impression, Plan, examen physique...), ENCODE CHAQUE ITEM SÉPARÉMENT —
+  soit un tableau JSON de chaînes (un item par élément), soit une seule
+  chaîne contenant un VRAI retour à la ligne (\n) entre chaque item. Le
+  numéro ou la puce reste du texte (« 1. », « 2. »...), c'est le SAUT DE
+  LIGNE entre les items qui ne doit jamais manquer — n'accole jamais
+  plusieurs items numérotés ou plusieurs paragraphes sur une seule ligne
+  continue.
 - ``elements_a_valider`` : un item par ligne de la future rubrique Éléments à
   valider. Un item à ``correction`` renseignée = lecture retenue avec
   confiance ; ``correction`` absente/null = à confirmer. N'écris jamais la
@@ -162,6 +171,13 @@ Rules specific to this encoding:
 - ``sections``: one key per template section (same headings, same nesting as
   above). Omit a key entirely if the dictation provided no content for that
   section — never an empty string, null, or filler text.
+- FORMATTING INSIDE A ``sections`` VALUE: if the instructions call for a
+  numbered or bulleted list in a section (Impression, Plan, physical
+  exam...), ENCODE EACH ITEM SEPARATELY — either a JSON array of strings
+  (one item per element), or a single string with a REAL line break (\n)
+  between each item. The number or bullet stays as text ("1.", "2."...),
+  it's the LINE BREAK between items that must never be missing — never run
+  multiple numbered items or paragraphs together on one continuous line.
 - ``elements_a_valider``: one item per future line of the Items to Confirm
   section. An item with ``correction`` filled = a confidently resolved
   reading; missing/null ``correction`` = unconfirmed. Never write the final
@@ -289,7 +305,7 @@ def _set_path(note: ExtractedNote, path: str, value: Optional[str]) -> None:
 # incertaine). Le repli déterministe ci-dessous (ajout à Éléments à valider)
 # s'applique dès le premier passage, sans consommer de tentative de
 # réparation.
-_REPAIRABLE_CODES = {"placeholder_leftover", "html_markup"}
+_REPAIRABLE_CODES = {"placeholder_leftover", "html_markup", "cramped_numbered_list"}
 
 
 def _repair_one(issue: ValidationIssue, note: ExtractedNote, transcript: str, *, model: str, provider: Optional[str] = None) -> bool:

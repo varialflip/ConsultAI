@@ -1,0 +1,232 @@
+"""
+tests/test_note_pipeline.py — validateur + rendu, sans appel modèle.
+===================================================================================
+
+``unittest`` (stdlib) plutôt que pytest : pas de dépendance de test dans
+requirements.txt aujourd'hui (voir son commentaire sur l'image légère pour
+NAS), et ce n'est pas ce chantier qui doit l'ajouter.
+
+Lance : ``python3 -m unittest tests.test_note_pipeline -v`` depuis la racine
+du dépôt.
+"""
+
+import copy
+import unittest
+from unittest import mock
+
+from app.default_templates import LOCKED_TEMPLATES
+from app import llm
+from app.note_extraction import build_expected_json_skeleton, validate_and_repair
+from app.note_renderer import render
+from app.note_schema import ElementAValider, ExtractedNote, GroundedField, parse_layout
+from app.note_validator import validate
+
+GENERAL_LAYOUT = next(t for t in LOCKED_TEMPLATES if t["name"] == "Consultation Médicale Générale")["layout_format"]
+GERIATRIE_LAYOUT = next(t for t in LOCKED_TEMPLATES if t["name"] == "Consultation - Gériatrie")["layout_format"]
+EN_LAYOUT = next(t for t in LOCKED_TEMPLATES if t["name"] == "General Medical Consultation")["layout_format"]
+
+TRANSCRIPT_FR = (
+    "Patiente de 78 ans. Raison de consultation : suivi de mémoire. "
+    "Prégabaline 75 mg PO bid. Je crois qu'il s'agit d'une maladie d'Alzheimer débutante. "
+    "Non servi pour le reste."
+)
+
+
+def _base_note() -> ExtractedNote:
+    return ExtractedNote(
+        header_fields={"Lieu de la consultation": "Clinique ABC", "Date de l'évaluation": "2026-08-17"},
+        sections={
+            "RAISON DE CONSULTATION": "Suivi de mémoire.",
+            "MÉDICATION ACTUELLE ET ALLERGIES": "Prégabaline 75 mg PO bid.",
+            "IMPRESSION": "1. Je crois qu'il s'agit d'une maladie d'Alzheimer débutante.",
+            "PLAN": "1. Poursuite du suivi.",
+        },
+        elements_a_valider=[ElementAValider(kind="item", terme_dicte="dose prégabaline", correction="75 mg")],
+        grounded_fields=[
+            GroundedField(field="dose_pregabaline", value="75 mg", source_span="Prégabaline 75 mg PO bid"),
+        ],
+    )
+
+
+class ParseLayoutTests(unittest.TestCase):
+    def test_general_template_headings_and_boilerplate(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        self.assertEqual(layout.title, "CONSULTATION MÉDICALE")
+        self.assertTrue(layout.has_elements_a_valider)
+        self.assertIn("Lieu de la consultation", layout.top_level_fields())
+        headings = [h.label for h in layout.headings()]
+        self.assertIn("MÉDICATION ACTUELLE ET ALLERGIES", headings)
+        self.assertIn("IMPRESSION", headings)
+        self.assertIn("Rédigé à l'aide de la reconnaissance vocale.", layout.literals_of(None))
+
+    def test_en_template_has_no_elements_a_valider(self):
+        layout = parse_layout(EN_LAYOUT)
+        self.assertFalse(layout.has_elements_a_valider)
+
+    def test_geriatrie_nested_subsections(self):
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        allergies = next(h for h in layout.headings() if h.label == "ALLERGIES")
+        self.assertEqual(allergies.parent, "MÉDICATION ACTUELLE")
+        avq = next(e for e in layout.entries if e.kind == "bold_field" and e.label == "AVQ")
+        self.assertEqual(avq.parent, "Autonomie fonctionnelle")
+        labs = next(h for h in layout.headings() if h.label == "Laboratoires")
+        self.assertEqual(labs.parent, "INVESTIGATIONS")
+
+
+class SkeletonTests(unittest.TestCase):
+    def test_skeleton_reflects_nesting(self):
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        skeleton = build_expected_json_skeleton(layout)
+        self.assertIn("ALLERGIES", skeleton["sections"]["MÉDICATION ACTUELLE"])
+        self.assertIn("AVQ", skeleton["sections"]["HISTOIRE SOCIALE ET MILIEU DE VIE"]["Autonomie fonctionnelle"])
+
+
+class ValidatorTests(unittest.TestCase):
+    def test_clean_note_passes(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertEqual(result.blocked, [])
+        self.assertEqual(result.needs_repair, [])
+
+    def test_forbidden_filler_auto_fixed(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["HABITUDES DE VIE"] = "Non servi"
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertNotIn("HABITUDES DE VIE", note.sections)
+        self.assertTrue(any(i.code == "filler_value" for i in result.issues))
+
+    def test_empty_elements_a_valider_is_blocked(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.elements_a_valider = []
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertTrue(any(i.code == "elements_a_valider_empty" for i in result.blocked))
+
+    def test_epistemic_clause_dropped_is_flagged(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["IMPRESSION"] = "1. Maladie d'Alzheimer débutante."  # perd le "je crois"
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertTrue(any(i.code == "epistemic_clause_dropped" for i in result.needs_repair))
+
+    def test_grounding_mismatch_flagged(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.grounded_fields = [GroundedField(field="dose_x", value="500 mg", source_span="ceci n'est pas dans la transcription")]
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertTrue(any(i.code == "grounding_mismatch" for i in result.needs_repair))
+
+    def test_html_and_placeholder_flagged(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["RAISON DE CONSULTATION"] = "Suivi <b>de mémoire</b> {{DATE}}."
+        result = validate(note, layout, TRANSCRIPT_FR)
+        codes = {i.code for i in result.needs_repair}
+        self.assertIn("html_markup", codes)
+        self.assertIn("placeholder_leftover", codes)
+
+
+class RendererTests(unittest.TestCase):
+    def test_render_drops_empty_sections_and_keeps_boilerplate(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        markdown = render(note, layout)
+        self.assertIn("## RAISON DE CONSULTATION", markdown)
+        self.assertNotIn("## HABITUDES DE VIE", markdown)
+        self.assertIn("Rédigé à l'aide de la reconnaissance vocale.", markdown)
+        self.assertIn("**Lieu de la consultation :** Clinique ABC", markdown)
+
+    def test_render_elements_a_valider_grammar(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.elements_a_valider = [
+            ElementAValider(kind="item", terme_dicte="nom du patient : Georges Thhiber", correction="Georges Tibert"),
+            ElementAValider(kind="item", terme_dicte="dose : 2,5 ou 5 mg", correction=None),
+        ]
+        markdown = render(note, layout)
+        self.assertIn("nom du patient : Georges Thhiber → **correction apportée : Georges Tibert**", markdown)
+        self.assertIn("dose : 2,5 ou 5 mg → **à confirmer**", markdown)
+
+    def test_render_geriatrie_nested_fields(self):
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = ExtractedNote(
+            sections={
+                "RAISON DE CONSULTATION": "Évaluation cognitive.",
+                "HISTOIRE SOCIALE ET MILIEU DE VIE": {"Autonomie fonctionnelle": {"AVQ": "Autonome", "Mobilité": "Marche avec canne"}},
+            },
+            elements_a_valider=[ElementAValider(kind="group", texte_groupe="3 dates approximatives non confirmées")],
+        )
+        markdown = render(note, layout)
+        self.assertIn("### Autonomie fonctionnelle", markdown)
+        self.assertIn("**AVQ :** Autonome", markdown)
+        self.assertNotIn("**AVD", markdown)  # non dictée, absente
+        self.assertIn("- 3 dates approximatives non confirmées", markdown)
+
+    def test_render_is_idempotent_deepcopy_safe(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        before = copy.deepcopy(note)
+        render(note, layout)
+        self.assertEqual(note, before)
+
+    def test_render_list_valued_section_becomes_bullets(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["EXAMEN PHYSIQUE"] = ["TA 150/80", "Poids 82 kg"]
+        markdown = render(note, layout)
+        self.assertIn("- TA 150/80", markdown)
+        self.assertIn("- Poids 82 kg", markdown)
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertFalse(any(i.code == "unexpected_value_type" for i in result.issues))
+
+    def test_boilerplate_survives_empty_plan(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        del note.sections["PLAN"]
+        markdown = render(note, layout)
+        self.assertNotIn("## PLAN", markdown)
+        self.assertIn("Rédigé à l'aide de la reconnaissance vocale.", markdown)
+
+    def test_unexpected_type_flagged_not_dropped(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["RAISON DE CONSULTATION"] = 42  # jamais produit par un modèle correct
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertTrue(any(i.code == "unexpected_value_type" for i in result.needs_repair))
+        markdown = render(note, layout)
+        self.assertIn("42", markdown)  # visible, jamais disparu silencieusement
+
+    def test_empty_elements_a_valider_omits_section_rather_than_fabricating(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.elements_a_valider = []
+        markdown = render(note, layout)
+        self.assertNotIn("ÉLÉMENTS À VALIDER", markdown)
+
+
+class RepairTests(unittest.TestCase):
+    def test_placeholder_leftover_repaired_via_mocked_llm(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["RAISON DE CONSULTATION"] = "Suivi {{DATE}} de mémoire."
+        fake = llm.Completion(text='{"new_value": "Suivi de mémoire."}', model="fake", provider="fake")
+        with mock.patch.object(llm, "complete", return_value=fake) as complete_mock:
+            result = validate_and_repair(note, layout, TRANSCRIPT_FR, model="fake-model")
+        complete_mock.assert_called_once()
+        self.assertEqual(note.sections["RAISON DE CONSULTATION"], "Suivi de mémoire.")
+        self.assertFalse(any(i.code == "placeholder_leftover" for i in result.needs_repair))
+
+    def test_grounding_mismatch_falls_back_without_calling_llm(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.grounded_fields = [GroundedField(field="dose_x", value="500 mg", source_span="absent de la dictée")]
+        with mock.patch.object(llm, "complete", side_effect=AssertionError("ne doit jamais être appelé")):
+            result = validate_and_repair(note, layout, TRANSCRIPT_FR, model="fake-model")
+        self.assertTrue(any(e.terme_dicte == "dose_x" for e in note.elements_a_valider))
+        self.assertFalse(any(i.code == "grounding_mismatch" for i in result.needs_repair))
+
+
+if __name__ == "__main__":
+    unittest.main()

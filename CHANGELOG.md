@@ -3,6 +3,20 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-17 — branche `selfhosted` (non publié, non déployé sur `/api/generate`)
+
+- **Nouveau pipeline de structuration en JSON, en parallèle de l'actuel**
+  (`app/note_schema.py`, `note_extraction.py`, `note_validator.py`,
+  `note_renderer.py` — voir README §13). Objectif : rendre mécaniquement
+  vérifiable ce qui dépend aujourd'hui entièrement du respect des consignes
+  par le modèle (grammaire d'Éléments à valider, texte de remplissage,
+  rubriques vides, préservation de la voix à la première personne en
+  Impression/Plan, ancrage des valeurs critiques contre la transcription) —
+  préalable à l'évaluation de modèles de structuration auto-hébergés plus
+  petits que Gemini 2.5 Pro. N'affecte PAS la production : `/api/generate`
+  continue d'appeler `llm.generate_note_stream` sans changement. Testé par
+  `tests/test_note_pipeline.py` (20 cas, aucune clé de fournisseur requise).
+
 ## 2026-08-17 — v2.0.0-beta.66
 
 - **Consigne générale : règles de structure rendues explicites** (beta.66).

@@ -825,7 +825,69 @@ app/
 ├── scheduler.py          tâches quotidiennes (purge, sauvegarde, statistiques)
 ├── changelog.py          nouveautés des 7 derniers jours (page de connexion)
 ├── i18n.py               textes de l'interface (fr / en)
+├── note_schema.py         gabarit -> LayoutSpec ; structure de la note extraite (JSON)
+├── note_extraction.py     transcription -> JSON structuré, réparation ciblée (§13)
+├── note_validator.py      vérifications mécaniques sur le JSON extrait (§13)
+├── note_renderer.py       JSON validé -> markdown final, en code pur (§13)
 ├── templates/index.html  interface et feuille de style d'impression
 ├── templates/login.html  page de connexion (version + nouveautés)
 └── static/app.js         logique du navigateur
 ```
+
+## 13. Pipeline de structuration en JSON (branche `selfhosted`, expérimental)
+
+Nouveau chemin de structuration, pas encore branché sur `/api/generate` :
+l'API en production continue d'utiliser `llm.generate_note_stream` (markdown
+directement). Objectif : rendre mécaniquement vérifiable ce qui, avant,
+dépendait entièrement du respect des consignes par le modèle — utile en
+particulier avec des modèles auto-hébergés plus petits que Gemini 2.5 Pro,
+moins fiables sur le respect strict d'un format.
+
+Trois étapes, chacune dans son module :
+
+1. **`note_extraction.extract_note`** — même consigne générale et même
+   consigne de gabarit qu'aujourd'hui (`default_prompts.py`,
+   `default_templates.py`, inchangées), mais la sortie demandée au modèle est
+   un objet JSON structuré (`app.llm.complete(..., json_mode=True)`, déjà
+   utilisé par `extract_metadata`), pas du markdown. La forme attendue du
+   JSON est dérivée de `note_schema.parse_layout(gabarit.layout_format)` —
+   aucune liste de rubriques codée en dur, un gabarit dupliqué/modifié par un
+   médecin est donc supporté sans changement de code.
+2. **`note_validator.validate`** — vérifie mécaniquement ce que le format
+   JSON permet de vérifier sans modèle : texte de remplissage interdit
+   (auto-retiré), accolades `{{...}}` oubliées, balises HTML, présence et
+   cohérence d'Éléments à valider, préservation de la voix à la première
+   personne en Impression/Plan (« je crois que... »), et ancrage
+   (« grounding ») de chaque valeur critique contre un extrait exact de la
+   transcription.
+3. **`note_extraction.validate_and_repair`** — pour ce qui nécessite un
+   jugement, un appel de réparation CIBLÉ (juste le champ en cause, pas une
+   régénération), plafonné à 2 tentatives ; au-delà, repli déterministe —
+   jamais une nouvelle boucle, jamais un passage silencieux. Un problème
+   d'ancrage (médicament/dose) n'est JAMAIS renvoyé au modèle pour
+   « correction » : il est signalé dans Éléments à valider dès le premier
+   passage (sécurité du patient — voir `_REPAIRABLE_CODES` dans
+   `note_extraction.py`).
+4. **`note_renderer.render`** — JSON validé -> markdown, en code pur, sans
+   appel modèle : la grammaire d'Éléments à valider (« terme dicté →
+   **correction apportée : X** » / « → **à confirmer** ») et le texte fixe du
+   gabarit (ex. « Rédigé à l'aide de la reconnaissance vocale. ») sont
+   produits par ce code, jamais par une consigne que le modèle pourrait mal
+   suivre.
+
+Tests : `tests/test_note_pipeline.py` (`unittest`, sans dépendance
+supplémentaire) — couvre le parsing des quatre gabarits livrés (y compris les
+sous-rubriques imbriquées de « Consultation - Gériatrie »), chaque
+vérification du validateur, le rendu, et `validate_and_repair` avec un
+`app.llm.complete` simulé (aucune clé de fournisseur requise). Lancer :
+```
+python3 -m unittest tests.test_note_pipeline -v
+```
+
+Reste à faire avant tout branchement sur `/api/generate` : décider du
+streaming (le flux actuel envoie des deltas de markdown au fil de l'eau, ce
+qu'un JSON structuré ne permet pas de la même façon), et l'ancrage
+médicament/DIN (Banque de données des produits pharmaceutiques de Santé
+Canada + Liste RAMQ) reste à implémenter — `grounded_fields` couvre déjà
+l'ancrage générique contre la transcription, pas encore la validation contre
+un référentiel de médicaments.

@@ -87,7 +87,13 @@ _DPD_TOOL_GUIDANCE_FR = (
     "(voir la méthode de correction ci-dessus), appelle cet outil AVANT de "
     "trancher entre l'inscrire dans MÉDICATION ACTUELLE ou le renvoyer en "
     "Éléments à valider. Une absence de résultat n'est pas une preuve "
-    "d'erreur — c'est un indice de plus, pas une décision automatique."
+    "d'erreur — c'est un indice de plus, pas une décision automatique. "
+    "Si un passage dicté est ambigu entre UN médicament ou DEUX (par "
+    "exemple deux noms enchaînés sans pause claire), appelle l'outil "
+    "SÉPARÉMENT pour chaque segment candidat avant de les fusionner — un "
+    "segment sans résultat est lui-même un indice qu'il s'agit peut-être "
+    "d'un médicament distinct mal orthographié, pas d'un bruit à absorber "
+    "dans le segment voisin."
 )
 _DPD_TOOL_GUIDANCE_EN = (
     "\n\nTOOL AVAILABLE — verifier_medicament_dpd: for any medication whose "
@@ -95,7 +101,12 @@ _DPD_TOOL_GUIDANCE_EN = (
     "the correction method above), call this tool BEFORE deciding whether "
     "to record it under CURRENT MEDICATIONS or flag it under Items to "
     "verify. No result found is not proof of an error — it's one more "
-    "signal, not an automatic decision."
+    "signal, not an automatic decision. If a dictated passage is ambiguous "
+    "between ONE medication or TWO (for example two names run together "
+    "with no clear pause), call the tool SEPARATELY for each candidate "
+    "segment before merging them — a segment with no result is itself a "
+    "signal it might be a distinct, misspelled medication, not noise to "
+    "fold into its neighbor."
 )
 
 
@@ -320,9 +331,22 @@ def _dpd_kind(type_arg: str) -> str:
     return "ingredient" if str(type_arg or "").strip().lower().startswith("ingred") else "brand"
 
 
+def _add_usage(total: dict, delta: dict) -> None:
+    """Additionne deux ``usage`` (voir ``llm.Completion``/``ToolCompletion``)
+    — plusieurs tours d'appel d'outils consomment chacun des jetons, et rien
+    d'autre ne les additionne pour l'appelant. ``None`` traité comme 0 (un
+    fournisseur qui ne rapporte pas un compteur ne doit pas empêcher
+    d'additionner ceux qu'il rapporte)."""
+    for cle in ("prompt_tokens", "output_tokens", "total_tokens"):
+        valeur = delta.get(cle)
+        if valeur is None:
+            continue
+        total[cle] = (total.get(cle) or 0) + valeur
+
+
 def _extract_note_with_dpd_tool(
     system: str, user: str, *, model: str, temperature: float, max_tokens: int,
-    provider: str, language: str,
+    provider: str, language: str, usage_out: Optional[dict] = None,
 ) -> ExtractedNote:
     """Variante de ``extract_note`` qui donne au modèle un outil d'appel de
     fonction (``verifier_medicament_dpd``) pendant l'extraction — voir
@@ -349,6 +373,8 @@ def _extract_note_with_dpd_tool(
             system, user, model=model, temperature=temperature, max_tokens=max_tokens,
             tools=tools, messages=messages, json_mode=True, provider=provider,
         )
+        if usage_out is not None:
+            _add_usage(usage_out, result.usage)
         if not result.tool_calls:
             final_text = result.text
             break
@@ -400,6 +426,8 @@ def _extract_note_with_dpd_tool(
             system, user, model=model, temperature=temperature, max_tokens=max_tokens,
             tools=None, messages=messages, json_mode=True, provider=provider,
         )
+        if usage_out is not None:
+            _add_usage(usage_out, result.usage)
         final_text = result.text
 
     payload = _parse_json_completion(final_text)
@@ -419,7 +447,12 @@ def extract_note(
     provider: Optional[str] = None,
     temperature: float = 0.15,
     max_tokens: int = 8192,
+    usage_out: Optional[dict] = None,
 ) -> ExtractedNote:
+    """``usage_out``, si fourni, est MUTÉ pour y accumuler les jetons
+    consommés (voir ``llm.Completion.usage``) — jamais dans la valeur de
+    retour, pour ne pas changer le type de retour pour les appelants qui ne
+    s'y intéressent pas (dont les tests existants)."""
     system = build_system_prompt(template_system_instructions, general_prompt, layout, language)
     label = "TRANSCRIPTION" if language != "en" else "TRANSCRIPT"
     user = f"{label} :\n<<<DICTEE\n{transcript.strip()}\nDICTEE>>>"
@@ -429,13 +462,15 @@ def extract_note(
         system += _DPD_TOOL_GUIDANCE_EN if language == "en" else _DPD_TOOL_GUIDANCE_FR
         return _extract_note_with_dpd_tool(
             system, user, model=model, temperature=temperature, max_tokens=max_tokens,
-            provider=resolved_provider, language=language,
+            provider=resolved_provider, language=language, usage_out=usage_out,
         )
 
     result = llm.complete(
         system, user, model=model, temperature=temperature, max_tokens=max_tokens,
         json_mode=True, provider=provider,
     )
+    if usage_out is not None:
+        _add_usage(usage_out, result.usage)
     payload = _parse_json_completion(result.text)
     return ExtractedNote.from_dict(payload)
 

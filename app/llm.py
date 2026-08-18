@@ -270,6 +270,11 @@ class ToolCompletion:
     model: str
     provider: str
     finish_reason: str = ""
+    #: Jetons de CE tour seulement (voir Completion.usage) — l'appelant qui
+    #: fait plusieurs tours (note_extraction._extract_note_with_dpd_tool)
+    #: doit les additionner lui-même, ce module n'a pas la mémoire des tours
+    #: précédents.
+    usage: Dict[str, Optional[int]] = field(default_factory=dict)
 
 
 _clients: Dict[tuple, object] = {}
@@ -2434,6 +2439,7 @@ def _complete_mistral_tools(
     choix = (data.get("choices") or [None])[0] or {}
     message = choix.get("message") or {}
     texte = str(message.get("content") or "")
+    jetons = data.get("usage") or {}
 
     appels: List[ToolCall] = []
     for brut in message.get("tool_calls") or []:
@@ -2454,4 +2460,9 @@ def _complete_mistral_tools(
         model=model,
         provider="mistral",
         finish_reason=str(choix.get("finish_reason") or ""),
+        usage={
+            "prompt_tokens": jetons.get("prompt_tokens"),
+            "output_tokens": jetons.get("completion_tokens"),
+            "total_tokens": jetons.get("total_tokens"),
+        },
     )

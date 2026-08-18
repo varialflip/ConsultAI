@@ -271,6 +271,43 @@ class ValidatorTests(unittest.TestCase):
         self.assertIsNone(item.correction)
         self.assertTrue(any(i.code == "correction_is_meta_word" for i in result.issues))
 
+    def test_duplicate_correction_demoted_to_unconfirmed(self):
+        """Régression réelle (test.dictai.ca 2026-08-18, consultation #9,
+        mistral-small-latest) : « L'ensoprazole 30 Activant 0.5 au coucher au
+        besoin » dicté sans pause claire a été fusionné en UN médicament —
+        « Activant » a été « corrigé » vers « Ésoméprazole », qui figurait
+        déjà comme médicament séparé dans MÉDICATION ACTUELLE. La correction
+        mensongère est démise en à-confirmer plutôt que gardée telle quelle —
+        ne récupère pas le médicament fusionné disparu, mais arrête la note
+        de prétendre que la fusion était correcte."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = _base_note()
+        note.sections["MÉDICATION ACTUELLE"] = {OWN_CONTENT_KEY: "Ésoméprazole 30 mg PO die"}
+        note.elements_a_valider.append(
+            ElementAValider(kind="item", terme_dicte="Activant", correction="Ésoméprazole")
+        )
+        result = validate(note, layout, TRANSCRIPT_FR)
+        item = next(e for e in note.elements_a_valider if e.terme_dicte == "Activant")
+        self.assertIsNone(item.correction)
+        self.assertTrue(any(i.code == "correction_is_duplicate" for i in result.issues))
+
+    def test_two_mishearings_of_same_drug_are_not_flagged_as_duplicate(self):
+        """Régression négative : « Respirone » et « Rispiridone » corrigées
+        toutes deux vers « rispéridone » (vu réellement, même consultation)
+        sont deux mishearings LÉGITIMES du même médicament, pas une fusion —
+        ce cas ne doit JAMAIS être démis. La vérification ne compare la
+        correction qu'au contenu déjà gardé dans ``sections``, jamais aux
+        autres éléments d'Éléments à valider."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = _base_note()
+        note.elements_a_valider.append(ElementAValider(kind="item", terme_dicte="Respirone", correction="rispéridone"))
+        note.elements_a_valider.append(ElementAValider(kind="item", terme_dicte="Rispiridone", correction="rispéridone"))
+        result = validate(note, layout, TRANSCRIPT_FR)
+        for terme in ("Respirone", "Rispiridone"):
+            item = next(e for e in note.elements_a_valider if e.terme_dicte == terme)
+            self.assertEqual(item.correction, "rispéridone")
+        self.assertFalse(any(i.code == "correction_is_duplicate" for i in result.issues))
+
 
 class RendererTests(unittest.TestCase):
     def test_render_drops_empty_sections_and_keeps_boilerplate(self):
@@ -486,11 +523,16 @@ def _tool_call_completion(term: str, kind: str = "marque", call_id: str = "call1
             "function": {"name": "verifier_medicament_dpd", "arguments": json.dumps({"terme": term, "type": kind})},
         }]},
         model="fake", provider="mistral",
+        usage={"prompt_tokens": 100, "output_tokens": 20, "total_tokens": 120},
     )
 
 
 def _final_completion(text: str = _MINIMAL_FINAL_JSON) -> llm.ToolCompletion:
-    return llm.ToolCompletion(text=text, tool_calls=[], raw_message={"role": "assistant", "content": text}, model="fake", provider="mistral")
+    return llm.ToolCompletion(
+        text=text, tool_calls=[], raw_message={"role": "assistant", "content": text},
+        model="fake", provider="mistral",
+        usage={"prompt_tokens": 150, "output_tokens": 80, "total_tokens": 230},
+    )
 
 
 class DpdToolTests(unittest.TestCase):
@@ -510,6 +552,20 @@ class DpdToolTests(unittest.TestCase):
              mock.patch.object(llm, "complete_with_tools", side_effect=AssertionError("ne doit jamais être appelé")):
             extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
         complete_mock.assert_called_once()
+
+    def test_usage_reported_on_plain_path_too(self):
+        """Même régression que test_usage_accumulates_across_tool_rounds,
+        mais pour le chemin SANS outil (réglage désactivé) — extract_note
+        doit rapporter l'usage dans les deux cas."""
+        fake = llm.Completion(
+            text=_MINIMAL_FINAL_JSON, model="fake", provider="mistral",
+            usage={"prompt_tokens": 300, "output_tokens": 50, "total_tokens": 350},
+        )
+        with mock.patch.object(runtime_config, "value", return_value="false"), \
+             mock.patch.object(llm, "complete", return_value=fake):
+            usage: dict = {}
+            extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral", usage_out=usage)
+        self.assertEqual(usage, {"prompt_tokens": 300, "output_tokens": 50, "total_tokens": 350})
 
     def test_regression_no_tools_for_non_mistral_provider(self):
         """Même réglage activé, un fournisseur autre que Mistral doit
@@ -536,6 +592,19 @@ class DpdToolTests(unittest.TestCase):
         tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
         self.assertEqual(len(tool_messages), 1)
         self.assertEqual(tool_messages[0]["tool_call_id"], "call1")
+
+    def test_usage_accumulates_across_tool_rounds(self):
+        """Régression réelle (test.dictai.ca 2026-08-18) : la page
+        statistiques ne montrait aucun jeton pour les générations du
+        pipeline JSON — extract_note ne rapportait jamais l'usage du(des)
+        appel(s) modèle à l'appelant. usage_out doit sommer les jetons de
+        CHAQUE tour d'appel d'outils, pas seulement le dernier."""
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Respirone"), _final_completion()]), \
+             mock.patch.object(note_extraction, "search_drug", return_value=DrugLookup(term="Respirone", found=True)):
+            usage: dict = {}
+            extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral", usage_out=usage)
+        self.assertEqual(usage, {"prompt_tokens": 250, "output_tokens": 100, "total_tokens": 350})
 
     def test_from_dict_never_reads_drug_lookups_from_model(self):
         """Le modèle ne peut jamais s'auto-déclarer « vérifié » — seule

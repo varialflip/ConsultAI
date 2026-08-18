@@ -1017,3 +1017,31 @@ Testé par génération réelle contre la consultation #5 : le modèle a appelé
 l'outil 6 fois (une fois par médicament dicté), 5 correspondances trouvées
 avec DIN, 1 « non trouvé » (Norvask) traité correctement comme un signal —
 pas une erreur, pas un blocage.
+
+**Panne trouvée par ce même outil, 2026-08-18 : deux médicaments dictés sans
+pause fusionnés en un seul.** Consultation #9 : « ...L'ensoprazole 30
+Activant 0.5 au coucher au besoin... » a été fusionné en un seul médicament
+(« Ésoméprazole »), avec une correction mensongère masquant la disparition
+d'« Activant » (vraisemblablement Ativan/lorazépam, une benzodiazépine PRN —
+rien à voir avec un IPP). L'outil BDPP n'avait même jamais été appelé pour ce
+terme : la fusion avait eu lieu en amont, pendant l'extraction elle-même, pas
+pendant la vérification. Corrigé par une règle de consigne explicite contre
+la fusion de deux noms de médicaments adjacents (`JSON_GENERAL_PROMPT_FR/EN`,
+`_DPD_TOOL_GUIDANCE_FR/EN`) et, en filet mécanique,
+`note_validator.fix_elements_a_valider_corrections` démet maintenant en
+« à confirmer » toute correction qui duplique EXACTEMENT un contenu déjà
+gardé ailleurs dans la note (`correction_is_duplicate`) — un signal fort de
+fusion, jamais déclenché par une dose qui recoupe légitimement son propre
+médicament, ni par deux mishearings légitimes du même médicament. Rejoué
+après correctif : « Lorazépam 0,5 mg PO HS PRN » apparaît maintenant comme
+médicament distinct.
+
+**Jetons non rapportés pour le pipeline JSON, corrigé le même jour.** La page
+statistiques n'affichait aucun compte de jetons pour ces générations —
+`main._generate_json_pipeline` codait `usage: {}` en dur, et
+`note_extraction.extract_note` ne remontait l'usage d'aucun appel modèle
+(ni pour le chemin simple, ni pour la boucle d'appel d'outils, qui fait
+plusieurs appels à additionner). `extract_note`/`_extract_note_with_dpd_tool`
+acceptent maintenant un `usage_out` optionnel muté en place ; `llm.ToolCompletion`
+porte désormais aussi `usage`. Vérifié par appel direct de
+`_generate_json_pipeline` : jetons réels rapportés.

@@ -271,11 +271,36 @@ def _normalize_text(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().rstrip(".")).casefold()
 
 
+def _flatten_section_text(value: object) -> str:
+    """Concatène récursivement toutes les valeurs texte d'une structure de
+    ``sections`` (str / List[str] / Dict imbriqué, même forme que parcourt
+    ``note_renderer``) — sert à détecter qu'une « correction » proposée
+    duplique un contenu DÉJÀ conservé ailleurs (voir
+    fix_elements_a_valider_corrections, cas ``correction_is_duplicate``)."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return " ".join(_flatten_section_text(v) for v in value)
+    if isinstance(value, dict):
+        return " ".join(_flatten_section_text(v) for v in value.values())
+    return ""
+
+
 def fix_elements_a_valider_corrections(note: ExtractedNote) -> List[ValidationIssue]:
     """Mute ``note.elements_a_valider`` : retire les auto-corrections « no-op »
     (correction identique au terme dicté — aucune information, seulement du
-    bruit) et démet en « à confirmer » les corrections dont la valeur est
-    elle-même un mot-clé d'incertitude plutôt qu'une lecture réelle."""
+    bruit), démet en « à confirmer » les corrections dont la valeur est
+    elle-même un mot-clé d'incertitude plutôt qu'une lecture réelle, et démet
+    aussi celles qui dupliquent EXACTEMENT un contenu déjà conservé ailleurs
+    dans la note (``sections``) — signal fort que deux éléments dictés
+    distincts (ex. deux médicaments dictés l'un après l'autre sans pause) ont
+    été fusionnés en un seul par erreur (vu réellement, test.dictai.ca,
+    2026-08-18 : « Activant » — vraisemblablement Ativan/lorazépam,
+    médicament distinct — « corrigé » vers « Ésoméprazole », qui figurait
+    déjà comme médicament séparé dans MÉDICATION ACTUELLE). Ne récupère pas
+    l'élément fusionné disparu — juste ce que ce module PEUT garantir : ne
+    jamais laisser une correction mensongère masquer la fusion."""
+    flattened = _normalize_text(_flatten_section_text(note.sections))
     issues: List[ValidationIssue] = []
     kept: List[ElementAValider] = []
     for i, e in enumerate(note.elements_a_valider):
@@ -298,6 +323,24 @@ def fix_elements_a_valider_corrections(note: ExtractedNote) -> List[ValidationIs
                     )
                 )
                 continue  # ne pas conserver cet élément
+            elif (
+                len(_normalize_text(e.correction)) >= 4
+                and not _normalize_text(e.correction)[:1].isdigit()  # une dose ("75 mg") recoupe
+                # légitimement le contenu déjà gardé — ce n'est PAS le signal
+                # de fusion recherché ici, seul un NOM (jamais numérique en
+                # tête) l'est.
+                and _normalize_text(e.correction) in flattened
+            ):
+                issues.append(
+                    ValidationIssue(
+                        "auto_fixed", "correction_is_duplicate",
+                        f"« {e.terme_dicte} » corrigé vers « {e.correction} », qui figure déjà ailleurs dans la "
+                        "note — probable fusion de deux éléments dictés distincts ; traité comme à confirmer "
+                        "plutôt que de garder une correction non fiable.",
+                        f"elements_a_valider[{i}]",
+                    )
+                )
+                e.correction = None
         kept.append(e)
     note.elements_a_valider = kept
     return issues

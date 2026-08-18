@@ -3,6 +3,51 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, deux médicaments fusionnés en un (Ativan disparu), et jetons non rapportés
+
+- **Deux médicaments dictés sans pause fusionnés en un seul** (vu réellement,
+  consultation #9, test.dictai.ca, mistral-small-latest) : « ...Diamicron MR
+  30 L'ensoprazole 30 Activant 0.5 au coucher au besoin... » a été fusionné
+  en un seul médicament « Ésoméprazole », avec une correction mensongère
+  « Activant → correction apportée : Ésoméprazole » — « Activant » est
+  vraisemblablement Ativan (lorazépam), un médicament DISTINCT (benzodiazépine
+  PRN au coucher, rien à voir avec un IPP). Le pipeline de vérification BDPP
+  confirmait déjà le problème : seuls 6 médicaments avaient été soumis à
+  l'outil, jamais 7 — la fusion avait eu lieu avant même l'appel d'outil.
+  Corrigé en deux temps :
+  - **Consigne** (`default_prompts.JSON_GENERAL_PROMPT_FR/EN`, `note_extraction._DPD_TOOL_GUIDANCE_FR/EN`) :
+    règle explicite contre la fusion de deux noms de médicaments dictés sans
+    pause claire, et consigne à l'outil de vérifier chaque segment candidat
+    séparément avant de fusionner.
+  - **Validateur** (`note_validator.fix_elements_a_valider_corrections`,
+    nouveau cas `correction_is_duplicate`) : filet mécanique — si une
+    « correction » proposée duplique EXACTEMENT un contenu déjà gardé
+    ailleurs dans la note, elle est démise en « à confirmer » plutôt que
+    gardée telle quelle. Ne récupère pas le médicament disparu, mais empêche
+    la note de prétendre que la fusion était correcte. Exclut délibérément
+    les valeurs numériques en tête (une dose comme « 75 mg » recoupe
+    légitimement le contenu déjà gardé — ce n'est pas le signal recherché) et
+    ne compare jamais deux éléments d'Éléments à valider entre eux (deux
+    mishearings légitimes du même médicament, ex. « Respirone »/« Rispiridone »
+    → rispéridone, ne doivent jamais être signalés).
+  - Rejoué contre la même consultation après correctif : « Lorazépam 0,5 mg
+    PO HS PRN » apparaît maintenant comme médicament distinct, plus de
+    correction mensongère.
+- **Jetons jamais rapportés pour le pipeline JSON** (la page statistiques
+  n'affichait aucun compte de jetons pour ces générations) : `usage: {}` était
+  codé en dur dans `main._generate_json_pipeline`, et `note_extraction.extract_note`
+  ne remontait l'usage d'aucun appel modèle à l'appelant — ni pour le chemin
+  simple, ni (a fortiori) pour la boucle d'appel d'outils, qui fait PLUSIEURS
+  appels à additionner. Corrigé : `extract_note`/`_extract_note_with_dpd_tool`
+  acceptent un `usage_out` optionnel, muté en place pour accumuler les jetons
+  de chaque tour (`llm.ToolCompletion` gagne aussi un champ `usage`, absent
+  jusqu'ici). Vérifié par appel direct de `main._generate_json_pipeline`
+  contre la consultation #9 : jetons réels rapportés (29985 en entrée, 8117
+  en sortie).
+
+Testé par `tests/test_note_pipeline.py` (53 cas) et par génération/appel
+réels contre la consultation #9.
+
 ## 2026-08-18 — branche `selfhosted`, vérification de médicament par appel d'outil (BDPP Santé Canada)
 
 - **Nouveau réglage `note_lookup_dpd`** (désactivé par défaut, sans effet

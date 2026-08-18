@@ -2479,9 +2479,14 @@ def _generate_json_pipeline(
     layout = parse_layout(template_row.layout_format)
 
     t0 = time.monotonic()
+    # Muté par extract_note (voir sa docstring) : la seule façon de récupérer
+    # les jetons consommés — un modèle n'a lui-même aucun accès à son propre
+    # décompte, ce que ferait de la donnée fabriquée s'il la rapportait.
+    usage: dict = {}
     note = extract_note(
         transcript, layout, template_row.system_instructions, general,
         model=model, language=langue, provider=provider, temperature=temperature,
+        usage_out=usage,
     )
     result_validation = validate_and_repair(
         note, layout, transcript, model=model, language=langue, provider=provider,
@@ -2523,7 +2528,7 @@ def _generate_json_pipeline(
         "model": model,
         "provider": provider,
         "truncated": False,
-        "usage": {},
+        "usage": usage,
         "audio_used": False,
         "transcript_used": True,
         "elapsed_seconds": elapsed_seconds,

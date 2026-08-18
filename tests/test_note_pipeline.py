@@ -73,6 +73,45 @@ class ParseLayoutTests(unittest.TestCase):
         self.assertEqual(labs.parent, "INVESTIGATIONS")
 
 
+CUSTOM_LAYOUT_WITH_INSTRUCTION_PLACEHOLDER = (
+    "# CONSULTATION EN GÉRIATRIE\n"
+    "**Médecin référent :**\n\n"
+    "## IMPRESSION\n"
+    "{{Phrase résumé}}\n"
+    "1. {{Problème 1}}\n"
+    "2. {{Problème 2}}\n"
+    "{{etc.}}\n\n"
+    "## PLAN\n\n"
+    "Rédigé à l'aide de la reconnaissance vocale.\n\n"
+    "## ÉLÉMENTS À VALIDER"
+)
+
+
+class ParseLayoutInstructionTests(unittest.TestCase):
+    """Régression : un gabarit personnalisé (médecin) peut contenir des
+    lignes d'exemple/consigne entre accolades DANS une rubrique — distinctes
+    du texte fixe (boilerplate) qui suit la dernière rubrique de contenu.
+    Voir consultation #6 sur test.dictai.ca, gabarit "Consultation -
+    Gériatrie (FD)" : ces lignes fuitaient telles quelles dans le rendu avant
+    le correctif (kind="instruction")."""
+
+    def test_instruction_placeholder_not_treated_as_boilerplate(self):
+        layout = parse_layout(CUSTOM_LAYOUT_WITH_INSTRUCTION_PLACEHOLDER)
+        self.assertNotIn("{{Phrase résumé}}", layout.literals_of(None))
+        self.assertIn("Rédigé à l'aide de la reconnaissance vocale.", layout.literals_of(None))
+
+    def test_render_never_echoes_instruction_placeholders(self):
+        layout = parse_layout(CUSTOM_LAYOUT_WITH_INSTRUCTION_PLACEHOLDER)
+        note = ExtractedNote(
+            header_fields={"Médecin référent": "Dr Melendez-Pena"},
+            sections={"IMPRESSION": "1. Récidive de cancer pulmonaire.", "PLAN": "Poursuite du suivi."},
+            elements_a_valider=[ElementAValider(kind="item", terme_dicte="x", correction="y")],
+        )
+        markdown = render(note, layout)
+        self.assertNotIn("{{", markdown)
+        self.assertIn("Rédigé à l'aide de la reconnaissance vocale.", markdown)
+
+
 class SkeletonTests(unittest.TestCase):
     def test_skeleton_reflects_nesting(self):
         layout = parse_layout(GERIATRIE_LAYOUT)

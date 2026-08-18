@@ -179,13 +179,17 @@ def extract_note(
     *,
     model: str,
     language: str = "fr",
+    provider: Optional[str] = None,
     temperature: float = 0.15,
     max_tokens: int = 8192,
 ) -> ExtractedNote:
     system = build_system_prompt(template_system_instructions, general_prompt, layout, language)
     label = "TRANSCRIPTION" if language != "en" else "TRANSCRIPT"
     user = f"{label} :\n<<<DICTEE\n{transcript.strip()}\nDICTEE>>>"
-    result = llm.complete(system, user, model=model, temperature=temperature, max_tokens=max_tokens, json_mode=True)
+    result = llm.complete(
+        system, user, model=model, temperature=temperature, max_tokens=max_tokens,
+        json_mode=True, provider=provider,
+    )
     payload = _parse_json_completion(result.text)
     return ExtractedNote.from_dict(payload)
 
@@ -255,7 +259,7 @@ def _set_path(note: ExtractedNote, path: str, value: Optional[str]) -> None:
 _REPAIRABLE_CODES = {"placeholder_leftover", "html_markup"}
 
 
-def _repair_one(issue: ValidationIssue, note: ExtractedNote, transcript: str, *, model: str) -> bool:
+def _repair_one(issue: ValidationIssue, note: ExtractedNote, transcript: str, *, model: str, provider: Optional[str] = None) -> bool:
     """Tente un correctif ciblé pour un seul problème. Retourne True si un
     correctif a été appliqué (pas nécessairement suffisant — la revalidation
     tranche)."""
@@ -275,7 +279,7 @@ def _repair_one(issue: ValidationIssue, note: ExtractedNote, transcript: str, *,
         f"EXTRAIT DE TRANSCRIPTION (référence, ne pas dépasser) :\n<<<\n{excerpt}\n>>>"
     )
     try:
-        result = llm.complete(system, user, model=model, temperature=0.0, max_tokens=512, json_mode=True)
+        result = llm.complete(system, user, model=model, temperature=0.0, max_tokens=512, json_mode=True, provider=provider)
         payload = _parse_json_completion(result.text)
     except Exception as exc:  # noqa: BLE001 — une réparation ratée n'est pas fatale
         logger.warning("Réparation ciblée impossible pour %s : %s", issue.path, exc)
@@ -293,6 +297,7 @@ def validate_and_repair(
     *,
     model: str,
     language: str = "fr",
+    provider: Optional[str] = None,
     max_attempts: int = DEFAULT_MAX_REPAIR_ATTEMPTS,
 ) -> ValidationResult:
     """Valide, répare ce qui peut l'être (plafonné), et applique les replis
@@ -307,7 +312,7 @@ def validate_and_repair(
         if not repairable:
             break
         for issue in repairable:
-            _repair_one(issue, note, transcript, model=model)
+            _repair_one(issue, note, transcript, model=model, provider=provider)
         result = validate(note, layout, transcript, language)
 
     # Replis déterministes pour ce qui reste après le plafond de tentatives —

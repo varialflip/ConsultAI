@@ -35,7 +35,7 @@ _ELEMENTS_A_VALIDER_LABELS = {"ÉLÉMENTS À VALIDER", "ELEMENTS A VALIDER"}
 
 @dataclass
 class LayoutEntry:
-    kind: str  # "title" | "bold_field" | "heading" | "literal"
+    kind: str  # "bold_field" | "heading" | "literal" | "instruction"
     label: str
     level: int = 0  # 2 ou 3 pour "heading" ; 0 sinon
     parent: Optional[str] = None  # libellé de la rubrique englobante, ou None
@@ -53,9 +53,6 @@ class LayoutSpec:
 
     def headings(self) -> List[LayoutEntry]:
         return [e for e in self.entries if e.kind == "heading"]
-
-    def children_of(self, label: Optional[str]) -> List[LayoutEntry]:
-        return [e for e in self.entries if e.parent == label and e.kind != "literal"]
 
     def literals_of(self, label: Optional[str]) -> List[str]:
         return [e.label for e in self.entries if e.kind == "literal" and e.parent == label]
@@ -103,6 +100,18 @@ def parse_layout(layout_format: str) -> LayoutSpec:
         m = _BOLD_FIELD_RE.match(line)
         if m:
             entries.append(LayoutEntry(kind="bold_field", label=m.group(1).strip(), parent=current_parent))
+            continue
+
+        if "{{" in line:
+            # Consigne d'auteur de gabarit (ex. « {{Phrase résumé}} »,
+            # « 1. {{Problème 1}} ») — PAS du texte fixe : c'est un exemple de
+            # forme attendue pour la rubrique en cours, à remplacer par le
+            # contenu clinique ou à supprimer si inconnu (règle du § 4 de la
+            # consigne générale). Ne doit JAMAIS être reproduit tel quel —
+            # ni par le modèle, ni par ce rendu. On le garde seulement comme
+            # indice de forme (voir note_extraction.build_expected_json_skeleton) ;
+            # le rendu (note_renderer) l'ignore complètement.
+            entries.append(LayoutEntry(kind="instruction", label=line, parent=current_parent))
             continue
 
         # Ligne de texte fixe (boilerplate, ex. « Rédigé à l'aide de la

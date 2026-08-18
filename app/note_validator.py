@@ -437,6 +437,37 @@ def check_grounding(note: ExtractedNote, transcript: str, threshold: float = 0.7
     return issues
 
 
+def check_drug_lookups(note: ExtractedNote) -> List[ValidationIssue]:
+    """Visibilité SEULEMENT sur les vérifications médicament par BDPP (voir
+    app.drug_lookup, note_extraction._extract_note_with_dpd_tool) — branche
+    selfhosted, expérimental. Severity ``auto_fixed`` : jamais ``needs_repair``
+    ni ``blocked``.
+
+    Volontairement PAS ajouté à validate() : il n'existe aujourd'hui aucun
+    marqueur fiable « ceci est un médicament » sur ElementAValider.terme_dicte
+    (texte libre) — un vrai classifieur manque, et câbler un heuristique
+    faible directement dans validate() produirait un flux de faux positifs
+    déguisé en vérification sérieuse. Appelé explicitement (voir
+    main._generate_json_pipeline) pour journaliser la couverture, pas pour
+    bloquer quoi que ce soit : une base absente n'est pas une preuve d'erreur
+    (médicament étranger/composé/retiré), et une panne réseau ne doit jamais
+    empêcher la production d'une note."""
+    issues = []
+    verifies = {gl.term.lower() for gl in note.drug_lookups if gl.found and not gl.error}
+    for i, e in enumerate(note.elements_a_valider):
+        if e.kind != "item" or not e.terme_dicte:
+            continue
+        terme = e.terme_dicte.lower()
+        if any(v in terme or terme in v for v in verifies):
+            continue
+        issues.append(ValidationIssue(
+            "auto_fixed", "drug_unverified",
+            f"« {e.terme_dicte} » resté dans Éléments à valider sans vérification BDPP retenue.",
+            f"elements_a_valider[{i}]",
+        ))
+    return issues
+
+
 # ---------------------------------------------------------------------------
 # Point d'entrée
 # ---------------------------------------------------------------------------

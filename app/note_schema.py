@@ -230,11 +230,44 @@ class ElementAValider:
 
 
 @dataclass
+class DrugLookup:
+    """Résultat d'une vérification d'un nom de médicament contre la Base de
+    données sur les produits pharmaceutiques de Santé Canada (voir
+    ``app.drug_lookup``) — branche selfhosted, expérimental.
+
+    TOUJOURS produit par ``note_extraction._extract_note_with_dpd_tool``
+    (le CODE qui a exécuté l'appel d'outil), jamais par le modèle : voir
+    ``ExtractedNote.from_dict`` ci-dessous, qui refuse délibérément de lire
+    cette liste depuis la réponse JSON du modèle. Un modèle qui affirmerait
+    lui-même « vérifié » sans que l'appel ait eu lieu rendrait ce champ
+    inutile comme garantie."""
+
+    term: str
+    found: bool
+    matched_name: Optional[str] = None
+    din: Optional[str] = None
+    source: str = "dpd"
+    error: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "term": self.term,
+            "found": self.found,
+            "matched_name": self.matched_name,
+            "din": self.din,
+            "source": self.source,
+            "error": self.error,
+        }
+
+
+@dataclass
 class ExtractedNote:
     header_fields: Dict[str, str] = field(default_factory=dict)
     sections: Dict[str, SectionValue] = field(default_factory=dict)
     elements_a_valider: List[ElementAValider] = field(default_factory=list)
     grounded_fields: List[GroundedField] = field(default_factory=list)
+    #: Voir DrugLookup ci-dessus — jamais peuplé par from_dict.
+    drug_lookups: List[DrugLookup] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -242,6 +275,7 @@ class ExtractedNote:
             "sections": self.sections,
             "elements_a_valider": [e.to_dict() for e in self.elements_a_valider],
             "grounded_fields": [g.to_dict() for g in self.grounded_fields],
+            "drug_lookups": [dl.to_dict() for dl in self.drug_lookups],
         }
 
     @classmethod
@@ -262,4 +296,5 @@ class ExtractedNote:
         grounded = [
             GroundedField.from_dict(g) for g in (d.get("grounded_fields") or []) if isinstance(g, dict)
         ]
+        # PAS de "drug_lookups" lu ici, volontairement — voir DrugLookup.
         return cls(header_fields=header_fields, sections=sections, elements_a_valider=elements, grounded_fields=grounded)

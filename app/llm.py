@@ -245,6 +245,33 @@ class Completion:
         return "SAFETY" in self.finish_reason.upper() or self.finish_reason == "content_filter"
 
 
+@dataclass
+class ToolCall:
+    """Un appel d'outil demandé par le modèle — voir ``complete_with_tools``."""
+
+    id: str
+    name: str
+    arguments_raw: str  # chaîne JSON brute ; l'appelant décide comment la parser
+
+
+@dataclass
+class ToolCompletion:
+    """Réponse d'un tour d'appel d'outils. Distincte de ``Completion`` : un
+    tour peut ne porter AUCUN texte final, seulement des ``tool_calls`` à
+    exécuter avant de rappeler le modèle."""
+
+    text: str
+    tool_calls: List[ToolCall]
+    #: Message assistant tel quel, renvoyé par le fournisseur — Mistral exige
+    #: de le renvoyer intact (avec ses ``tool_calls`` et leurs ``id``) dans
+    #: l'historique du tour suivant ; le reconstruire à partir des champs
+    #: séparés ci-dessus serait fragile.
+    raw_message: dict
+    model: str
+    provider: str
+    finish_reason: str = ""
+
+
 _clients: Dict[tuple, object] = {}
 
 
@@ -703,6 +730,48 @@ def complete(
     if provider == "custom":
         return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio)
     raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
+
+
+def complete_with_tools(
+    system: str,
+    user: str,
+    *,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    tools: Optional[List[dict]],
+    messages: Optional[List[dict]] = None,
+    json_mode: bool = False,
+    provider: Optional[str] = None,
+) -> ToolCompletion:
+    """
+    Un tour d'appel de modèle qui PEUT porter des ``tools`` (appel de
+    fonction, format OpenAI-compatible) — voir
+    ``note_extraction._extract_note_with_dpd_tool`` (branche selfhosted,
+    expérimental).
+
+    Volontairement une fonction SŒUR de ``complete()``, pas une extension de
+    sa signature : ``complete()`` a un contrat simple (system+user -> texte)
+    dont dépendent six autres fournisseurs, et aucun d'eux n'implémente
+    aujourd'hui l'appel d'outils. Y ajouter des paramètres inutilisés
+    partout ailleurs aurait le même défaut que le paramètre ``audio``
+    (ignoré silencieusement par la plupart des fournisseurs) — mais pour une
+    fonctionnalité encore plus étroite (un seul fournisseur). Un point
+    d'entrée séparé qui refuse proprement les autres fournisseurs est plus
+    honnête.
+
+    ``messages`` permet de poursuivre une conversation multi-tours déjà
+    entamée (le tour précédent + le résultat d'un appel d'outil) ; si
+    absent, un premier tour est construit depuis ``system``/``user`` comme
+    pour ``complete()``.
+    """
+    provider = provider or active_provider()
+    if provider != "mistral":
+        raise GenerationError(
+            f"L'appel d'outils n'est pas pris en charge pour le fournisseur « {provider} »."
+        )
+    max_tokens = _clamp_max_tokens(provider, model, max_tokens)
+    return _complete_mistral_tools(system, user, model, temperature, max_tokens, tools, messages, json_mode)
 
 
 def _translate_error(provider: str, model: str, exc: Exception) -> GenerationError:
@@ -2321,4 +2390,68 @@ def _complete_mistral(
             "output_tokens": jetons.get("completion_tokens"),
             "total_tokens": jetons.get("total_tokens"),
         },
+    )
+
+
+def _complete_mistral_tools(
+    system: str,
+    user: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    tools: Optional[List[dict]],
+    messages: Optional[List[dict]],
+    json_mode: bool,
+) -> ToolCompletion:
+    """Voir ``complete_with_tools``. Reprend la construction de requête et le
+    repli de ``_complete_mistral`` (réessai avec la limite de jetons apprise)
+    — seule la présence de ``tools``/l'historique multi-tours et
+    l'extraction des ``tool_calls`` de la réponse changent."""
+    corps = {
+        "model": model,
+        "messages": messages or [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if tools:
+        corps["tools"] = tools
+        corps["tool_choice"] = "auto"
+    if json_mode:
+        corps["response_format"] = {"type": "json_object"}
+
+    try:
+        data = _mistral_request("POST", "/v1/chat/completions", corps)
+    except GenerationError as exc:
+        limite = _learn_max_tokens("mistral", model, str(exc))
+        if limite is None or limite >= max_tokens:
+            raise
+        corps["max_tokens"] = limite
+        data = _mistral_request("POST", "/v1/chat/completions", corps)
+
+    choix = (data.get("choices") or [None])[0] or {}
+    message = choix.get("message") or {}
+    texte = str(message.get("content") or "")
+
+    appels: List[ToolCall] = []
+    for brut in message.get("tool_calls") or []:
+        fonction = brut.get("function") or {}
+        appel_id = str(brut.get("id") or "")
+        if not appel_id or not fonction.get("name"):
+            continue  # appel malformé : ignoré plutôt que de faire échouer tout le tour
+        appels.append(ToolCall(
+            id=appel_id,
+            name=str(fonction.get("name") or ""),
+            arguments_raw=str(fonction.get("arguments") or "{}"),
+        ))
+
+    return ToolCompletion(
+        text=texte,
+        tool_calls=appels,
+        raw_message=message,
+        model=model,
+        provider="mistral",
+        finish_reason=str(choix.get("finish_reason") or ""),
     )

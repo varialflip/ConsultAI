@@ -107,6 +107,7 @@ from app.llm import GenerationError, extract_metadata, list_available_models
 from app.note_extraction import extract_note, validate_and_repair
 from app.note_renderer import render as render_note
 from app.note_schema import parse_layout
+from app.note_validator import check_drug_lookups
 from app.stt import TranscriptionError, transcribe
 
 configure_logging()
@@ -2499,6 +2500,23 @@ def _generate_json_pipeline(
             len(result_validation.issues), user.username, template_row.name,
             "; ".join(f"{i.severity}/{i.code}:{i.path}" for i in result_validation.issues),
         )
+
+    # Vérification médicament par BDPP (réglage note_lookup_dpd, voir
+    # note_extraction._extract_note_with_dpd_tool) : purement informatif,
+    # journalisé pour visibilité pendant les tests — jamais bloquant.
+    if note.drug_lookups:
+        trouves = sum(1 for dl in note.drug_lookups if dl.found and not dl.error)
+        erreurs = sum(1 for dl in note.drug_lookups if dl.error)
+        logger.info(
+            "[pipeline JSON test] BDPP : %d vérification(s), %d trouvée(s), %d erreur(s) pour %s",
+            len(note.drug_lookups), trouves, erreurs, user.username,
+        )
+        couverture = check_drug_lookups(note)
+        if couverture:
+            logger.info(
+                "[pipeline JSON test] %d médicament(s) resté(s) sans correspondance BDPP : %s",
+                len(couverture), "; ".join(i.path for i in couverture),
+            )
 
     return {
         "markdown": markdown,

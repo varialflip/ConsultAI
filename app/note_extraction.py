@@ -25,14 +25,78 @@ import logging
 import re
 from typing import Optional
 
-from app import llm
+from app import llm, runtime_config
+from app.drug_lookup import search_drug
 from app.note_renderer import OWN_CONTENT_KEY
-from app.note_schema import LIST_STYLE_MARKERS, ElementAValider, ExtractedNote, LayoutSpec
+from app.note_schema import LIST_STYLE_MARKERS, DrugLookup, ElementAValider, ExtractedNote, LayoutSpec
 from app.note_validator import ValidationIssue, ValidationResult, validate
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_REPAIR_ATTEMPTS = 2
+
+# ---------------------------------------------------------------------------
+# Vérification de médicament via outil d'appel de fonction (branche
+# selfhosted, expérimental) — voir _extract_note_with_dpd_tool ci-dessous.
+# ---------------------------------------------------------------------------
+#: Plafonds volontairement serrés : cet appel s'insère dans un chemin DÉJÀ
+#: bloquant/non diffusé en direct (voir main._generate_json_pipeline) — le
+#: médecin attend un seul spinner, pas 8 allers-retours réseau. Au-delà, on
+#: force un dernier tour sans outil plutôt que de laisser la boucle continuer.
+_DPD_TOOL_MAX_ROUNDS = 2
+_DPD_TOOL_MAX_CALLS = 6
+
+_DPD_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "verifier_medicament_dpd",
+        "description": (
+            "Vérifie un nom de médicament (marque ou ingrédient actif) "
+            "contre la Base de données sur les produits pharmaceutiques de "
+            "Santé Canada. À utiliser pour tout médicament dont le nom est "
+            "incertain ou reconstruit par homophonie, avant de trancher. Le "
+            "résultat ne détermine PAS la décision clinique — un médicament "
+            "absent de la base n'est pas forcément une erreur (produit "
+            "étranger, composé en pharmacie, retiré du marché)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "terme": {
+                    "type": "string",
+                    "description": "Nom du médicament tel que retenu, en français.",
+                },
+                "type": {
+                    "type": "string",
+                    "enum": ["marque", "ingredient"],
+                    "description": (
+                        "« marque » pour un nom commercial (ex. Xanax), "
+                        "« ingredient » pour la dénomination commune "
+                        "internationale (ex. létrozole)."
+                    ),
+                },
+            },
+            "required": ["terme", "type"],
+        },
+    },
+}
+
+_DPD_TOOL_GUIDANCE_FR = (
+    "\n\nOUTIL DISPONIBLE — verifier_medicament_dpd : pour tout médicament "
+    "dont le nom est incertain, mal entendu, ou reconstruit par homophonie "
+    "(voir la méthode de correction ci-dessus), appelle cet outil AVANT de "
+    "trancher entre l'inscrire dans MÉDICATION ACTUELLE ou le renvoyer en "
+    "Éléments à valider. Une absence de résultat n'est pas une preuve "
+    "d'erreur — c'est un indice de plus, pas une décision automatique."
+)
+_DPD_TOOL_GUIDANCE_EN = (
+    "\n\nTOOL AVAILABLE — verifier_medicament_dpd: for any medication whose "
+    "name is uncertain, misheard, or reconstructed from a mishearing (see "
+    "the correction method above), call this tool BEFORE deciding whether "
+    "to record it under CURRENT MEDICATIONS or flag it under Items to "
+    "verify. No result found is not proof of an error — it's one more "
+    "signal, not an automatic decision."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +316,98 @@ def _parse_json_completion(text: str) -> dict:
         raise
 
 
+def _dpd_kind(type_arg: str) -> str:
+    return "ingredient" if str(type_arg or "").strip().lower().startswith("ingred") else "brand"
+
+
+def _extract_note_with_dpd_tool(
+    system: str, user: str, *, model: str, temperature: float, max_tokens: int,
+    provider: str, language: str,
+) -> ExtractedNote:
+    """Variante de ``extract_note`` qui donne au modèle un outil d'appel de
+    fonction (``verifier_medicament_dpd``) pendant l'extraction — voir
+    ``app.drug_lookup`` et le réglage ``note_lookup_dpd``. Réservé à Mistral
+    (voir ``llm.complete_with_tools``) : seul fournisseur, aujourd'hui, dont
+    l'appel d'outils est câblé dans ce dépôt.
+
+    Boucle bornée (``_DPD_TOOL_MAX_ROUNDS``/``_DPD_TOOL_MAX_CALLS``) : le
+    modèle peut ignorer l'outil complètement (extraction inchangée), l'appeler
+    plusieurs fois, ou ne jamais rendre de contenu final dans le budget
+    imparti — dans ce dernier cas, un tour de repli SANS outil force une
+    réponse plutôt que de laisser la boucle s'éterniser."""
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    drug_lookups: list[DrugLookup] = []
+    calls_used = 0
+    final_text = ""
+
+    for _ in range(_DPD_TOOL_MAX_ROUNDS):
+        tools = [_DPD_TOOL_SCHEMA] if calls_used < _DPD_TOOL_MAX_CALLS else None
+        result = llm.complete_with_tools(
+            system, user, model=model, temperature=temperature, max_tokens=max_tokens,
+            tools=tools, messages=messages, json_mode=True, provider=provider,
+        )
+        if not result.tool_calls:
+            final_text = result.text
+            break
+
+        messages.append(result.raw_message)
+        for appel in result.tool_calls:
+            if calls_used >= _DPD_TOOL_MAX_CALLS:
+                # Budget épuisé EN COURS de tour : chaque tool_call de ce
+                # message assistant exige quand même une réponse appariée
+                # (protocole Mistral), sinon le tour suivant est malformé.
+                messages.append({
+                    "role": "tool", "tool_call_id": appel.id,
+                    "content": json.dumps({"erreur": "budget de vérifications épuisé"}),
+                })
+                continue
+            calls_used += 1
+            try:
+                arguments = json.loads(appel.arguments_raw)
+            except (json.JSONDecodeError, TypeError):
+                messages.append({
+                    "role": "tool", "tool_call_id": appel.id,
+                    "content": json.dumps({"erreur": "arguments invalides"}),
+                })
+                continue
+            terme = str(arguments.get("terme") or "").strip()
+            if not terme:
+                lookup = None
+            else:
+                lookup = search_drug(terme, kind=_dpd_kind(arguments.get("type", "")), language=language)
+            if lookup is None:
+                messages.append({
+                    "role": "tool", "tool_call_id": appel.id,
+                    "content": json.dumps({"erreur": "terme manquant"}),
+                })
+                continue
+            drug_lookups.append(lookup)
+            messages.append({
+                "role": "tool", "tool_call_id": appel.id,
+                "content": json.dumps({
+                    "trouve": lookup.found,
+                    "nom_correspondant": lookup.matched_name,
+                    "din": lookup.din,
+                }, ensure_ascii=False),
+            })
+    else:
+        # Budget de tours épuisé sans contenu final : un dernier appel SANS
+        # outil force une réponse plutôt que d'abandonner la génération.
+        result = llm.complete_with_tools(
+            system, user, model=model, temperature=temperature, max_tokens=max_tokens,
+            tools=None, messages=messages, json_mode=True, provider=provider,
+        )
+        final_text = result.text
+
+    payload = _parse_json_completion(final_text)
+    note = ExtractedNote.from_dict(payload)
+    note.drug_lookups = drug_lookups
+    return note
+
+
 def extract_note(
     transcript: str,
     layout: LayoutSpec,
@@ -267,6 +423,15 @@ def extract_note(
     system = build_system_prompt(template_system_instructions, general_prompt, layout, language)
     label = "TRANSCRIPTION" if language != "en" else "TRANSCRIPT"
     user = f"{label} :\n<<<DICTEE\n{transcript.strip()}\nDICTEE>>>"
+
+    resolved_provider = provider or llm.active_provider()
+    if resolved_provider == "mistral" and runtime_config.value("note_lookup_dpd") == "true":
+        system += _DPD_TOOL_GUIDANCE_EN if language == "en" else _DPD_TOOL_GUIDANCE_FR
+        return _extract_note_with_dpd_tool(
+            system, user, model=model, temperature=temperature, max_tokens=max_tokens,
+            provider=resolved_provider, language=language,
+        )
+
     result = llm.complete(
         system, user, model=model, temperature=temperature, max_tokens=max_tokens,
         json_mode=True, provider=provider,

@@ -287,6 +287,20 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "false", choices=ON_OFF,
     ),
 
+    # Vérification de médicament par appel d'outil (branche selfhosted,
+    # expérimental) : pendant l'extraction, le modèle peut interroger la
+    # Base de données sur les produits pharmaceutiques de Santé Canada
+    # (voir app/drug_lookup.py, note_extraction._extract_note_with_dpd_tool).
+    # Sans effet SAUF si note_pipeline_json est activé ET le fournisseur
+    # actif est Mistral (seul fournisseur dont l'appel d'outils est câblé
+    # ici) — voir note_extraction.extract_note. Ajoute de la latence réseau
+    # externe à chaque génération (jusqu'à quelques appels DPD). Désactivé
+    # par défaut.
+    Setting(
+        "note_lookup_dpd", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+
     Setting(
         "gemini_api_key", "secret", "group.llm",
         default=lambda: settings.gemini_api_key,

@@ -829,6 +829,7 @@ app/
 ├── note_extraction.py     transcription -> JSON structuré, réparation ciblée (§13)
 ├── note_validator.py      vérifications mécaniques sur le JSON extrait (§13)
 ├── note_renderer.py       JSON validé -> markdown final, en code pur (§13)
+├── drug_lookup.py         client BDPP Santé Canada, vérification médicament (§13)
 ├── templates/index.html  interface et feuille de style d'impression
 ├── templates/login.html  page de connexion (version + nouveautés)
 └── static/app.js         logique du navigateur
@@ -900,13 +901,16 @@ vérification du validateur, le rendu, et `validate_and_repair` avec un
 python3 -m unittest tests.test_note_pipeline -v
 ```
 
-Reste à faire avant tout branchement sur `/api/generate` : décider du
-streaming (le flux actuel envoie des deltas de markdown au fil de l'eau, ce
-qu'un JSON structuré ne permet pas de la même façon), et l'ancrage
-médicament/DIN (Banque de données des produits pharmaceutiques de Santé
-Canada + Liste RAMQ) reste à implémenter — `grounded_fields` couvre déjà
-l'ancrage générique contre la transcription, pas encore la validation contre
-un référentiel de médicaments.
+Branché sur `/api/generate` sans diffusion en direct (voir plus haut) : un
+seul appel bloquant, décision assumée plutôt que laissée en suspens.
+L'ancrage médicament/DIN contre la Banque de données des produits
+pharmaceutiques de Santé Canada est maintenant implémenté (voir « Vérification
+de médicament par appel d'outil » plus bas) — `grounded_fields` couvre
+l'ancrage générique contre la transcription, la vérification BDPP couvre en
+plus l'existence du nom lui-même dans un référentiel de médicaments. La Liste
+RAMQ (couverture d'assurance, distincte de « ce nom est-il un vrai
+médicament ») reste hors périmètre — son format de diffusion (PDF, pas d'API
+propre) rend l'accès programmatique nettement plus coûteux que la BDPP.
 
 Correctifs trouvés en testant deux générations réelles avec un modèle self-hosted-like (`mistral-small-latest`, pas Gemini), 2026-08-18 :
 une rubrique peut désormais avoir SON PROPRE contenu direct EN PLUS de sous-rubriques imbriquées (clé réservée `__contenu__`, `note_renderer.OWN_CONTENT_KEY`) — nécessaire pour que MÉDICATION ACTUELLE + `### ALLERGIES` rende les deux, pas seulement l'un des deux ; les gabarits « Consultation Médicale Générale » et « General Medical Consultation » utilisent maintenant ce même schéma imbriqué (au lieu de « MÉDICATION ACTUELLE ET ALLERGIES » fusionné) ; le filtre de texte de remplissage couvre une famille de formulations plutôt qu'une liste fermée d'exemples ; les corrections aberrantes dans Éléments à valider (identique au terme dicté, ou « à confirmer » écrit comme lecture) sont auto-corrigées.
@@ -966,3 +970,50 @@ le validateur ne couvre pas aujourd'hui les items d'Impression/Plan par
 (médicament, dose, date, nom). Piste de suivi, pas encore implémentée :
 étendre le grounding à Impression/Plan plutôt que de compter sur la seule
 formulation de la consigne pour un modèle plus faible.
+
+**Vérification de médicament par appel d'outil (BDPP Santé Canada), 2026-08-18.**
+Réglage `note_lookup_dpd` (désactivé par défaut, sans effet sauf si le
+pipeline JSON est actif ET le fournisseur est Mistral) : le modèle reçoit un
+outil d'appel de fonction, `verifier_medicament_dpd`
+(`note_extraction._DPD_TOOL_SCHEMA`), qu'il peut invoquer pendant
+l'extraction pour vérifier un nom de médicament incertain contre la Base de
+données sur les produits pharmaceutiques de Santé Canada — API publique, sans
+authentification (`app/drug_lookup.py`, requête `urllib` brute, même
+convention que les fournisseurs Mistral/Cohere existants dans `llm.py`, ne
+lève jamais).
+
+Choix de conception délibéré, décidé par Fred contre la suggestion initiale
+(un contrôle purement déterministe après extraction, sans intervention du
+modèle) : l'appel d'outils permet au modèle de consulter la base **pendant**
+qu'il décide, pas seulement après coup. `llm.py` gagne un point d'entrée SŒUR
+de `complete()` — `complete_with_tools()` — plutôt qu'une extension de sa
+signature : aucun autre fournisseur ne sait aujourd'hui appeler des outils,
+et `complete()` a un contrat simple dont dépendent six branches ; un nouveau
+point d'entrée qui refuse proprement les autres fournisseurs a un impact nul
+sur eux. `note_extraction._extract_note_with_dpd_tool` orchestre une boucle
+bornée (2 tours, 6 appels maximum — le modèle peut ignorer l'outil, l'appeler
+plusieurs fois, ou ne jamais conclure dans le budget imparti, auquel cas un
+dernier tour SANS outil force une réponse).
+
+**La preuve de vérification est écrite par le CODE, jamais par le modèle** :
+`ExtractedNote.drug_lookups` est peuplé par la boucle d'orchestration
+elle-même à partir de ce qu'elle a réellement exécuté — `from_dict()` refuse
+délibérément de lire cette clé depuis la réponse JSON du modèle (même
+principe que `_REPAIRABLE_CODES` excluant les codes de grounding : un modèle
+qui s'auto-déclarerait « vérifié » sans que l'appel ait eu lieu rendrait ce
+champ inutile comme garantie). `note_validator.check_drug_lookups` est
+informatif seulement (`auto_fixed`, journalisé par
+`main._generate_json_pipeline`) — volontairement PAS câblé dans `validate()`,
+faute de classifieur fiable « ceci est un médicament » sur le texte libre
+d'Éléments à valider ; un heuristique faible câblé en dur produirait un flux
+de faux positifs déguisé en vérification sérieuse.
+
+Une absence de correspondance BDPP n'est PAS une preuve d'erreur (médicament
+étranger, composé en pharmacie, retiré du marché) : un signal de plus, jamais
+une décision automatique, jamais renvoyé au modèle pour « correction » —
+même principe de sécurité déjà appliqué à `check_grounding`.
+
+Testé par génération réelle contre la consultation #5 : le modèle a appelé
+l'outil 6 fois (une fois par médicament dicté), 5 correspondances trouvées
+avec DIN, 1 « non trouvé » (Norvask) traité correctement comme un signal —
+pas une erreur, pas un blocage.

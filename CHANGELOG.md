@@ -3,6 +3,50 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, vérification de médicament par appel d'outil (BDPP Santé Canada)
+
+- **Nouveau réglage `note_lookup_dpd`** (désactivé par défaut, sans effet
+  sauf si `note_pipeline_json` est activé ET le fournisseur actif est
+  Mistral) : pendant l'extraction, le modèle reçoit un outil d'appel de
+  fonction `verifier_medicament_dpd` qu'il peut invoquer pour vérifier un
+  nom de médicament incertain contre la Base de données sur les produits
+  pharmaceutiques de Santé Canada (API publique, sans authentification).
+- **Nouveau module `app/drug_lookup.py`** : client `urllib` (même
+  convention que les fournisseurs Mistral/Cohere existants dans `llm.py`,
+  pas de nouvelle dépendance), ne lève jamais — toute panne réseau devient
+  un résultat « non trouvé, en erreur », jamais un échec de génération.
+- **`llm.py` gagne un point d'entrée SŒUR** de `complete()` :
+  `complete_with_tools()` — réservé à Mistral (seul fournisseur dont
+  l'appel d'outils est câblé aujourd'hui), zéro impact sur les six autres
+  fournisseurs qui n'y touchent jamais.
+- **Boucle bornée** dans `note_extraction._extract_note_with_dpd_tool`
+  (2 tours, 6 appels maximum) : le modèle peut ignorer l'outil, l'appeler
+  plusieurs fois, ou ne jamais conclure dans le budget imparti (repli sur
+  un dernier tour sans outil).
+- **La preuve de vérification est écrite par le CODE, jamais par le
+  modèle** : `ExtractedNote.drug_lookups` est peuplé par la boucle
+  d'orchestration elle-même ; `from_dict()` refuse délibérément de lire
+  cette clé depuis la réponse JSON du modèle — un modèle ne peut donc
+  jamais s'auto-déclarer « vérifié » sans que l'appel ait réellement eu
+  lieu.
+- **`note_validator.check_drug_lookups`** : informatif seulement
+  (`severity=auto_fixed`), journalisé par `main._generate_json_pipeline`,
+  volontairement PAS câblé dans `validate()` — aucun classifieur fiable
+  « ceci est un médicament » n'existe pour le texte libre d'Éléments à
+  valider ; un heuristique faible câblé en dur produirait un flux de faux
+  positifs déguisé en vérification sérieuse.
+- Une absence de correspondance BDPP N'EST PAS une preuve d'erreur
+  (médicament étranger, composé en pharmacie, retiré du marché) — jamais
+  bloquant, jamais renvoyé au modèle pour « correction » automatique, même
+  principe de sécurité déjà appliqué à `check_grounding`.
+
+Testé par `tests/test_note_pipeline.py` (49 cas, incluant une vérification
+empirique préalable que `json_mode` et `tools` fonctionnent ensemble sur
+`mistral-small-latest`) et par génération réelle contre la consultation #5 :
+le modèle a appelé l'outil 6 fois (une fois par médicament), 5 correspondances
+BDPP trouvées avec DIN, 1 « non trouvé » traité correctement comme un signal
+et non une erreur.
+
 ## 2026-08-18 — branche `selfhosted`, Médication/Antécédents/Examen rendus en prose au lieu d'une liste
 
 - **Rubriques « liste pointée » ignorées** : Médication actuelle, Antécédents

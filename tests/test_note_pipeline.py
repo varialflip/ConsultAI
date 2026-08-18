@@ -11,15 +11,17 @@ du dépôt.
 """
 
 import copy
+import json
 import unittest
+import urllib.error
 from unittest import mock
 
 from app.default_templates import LOCKED_TEMPLATES
-from app import llm
-from app.note_extraction import build_expected_json_skeleton, validate_and_repair
+from app import drug_lookup, llm, note_extraction, runtime_config
+from app.note_extraction import build_expected_json_skeleton, extract_note, validate_and_repair
 from app.note_renderer import OWN_CONTENT_KEY, render
-from app.note_schema import ElementAValider, ExtractedNote, GroundedField, parse_layout
-from app.note_validator import validate
+from app.note_schema import DrugLookup, ElementAValider, ExtractedNote, GroundedField, parse_layout
+from app.note_validator import check_drug_lookups, validate
 
 GENERAL_LAYOUT = next(t for t in LOCKED_TEMPLATES if t["name"] == "Consultation Médicale Générale")["layout_format"]
 GERIATRIE_LAYOUT = next(t for t in LOCKED_TEMPLATES if t["name"] == "Consultation - Gériatrie")["layout_format"]
@@ -462,6 +464,157 @@ class RepairTests(unittest.TestCase):
             result = validate_and_repair(note, layout, TRANSCRIPT_FR, model="fake-model")
         self.assertTrue(any(e.terme_dicte == "dose_x" for e in note.elements_a_valider))
         self.assertFalse(any(i.code == "grounding_mismatch" for i in result.needs_repair))
+
+
+_MINIMAL_FINAL_JSON = json.dumps({
+    "header_fields": {},
+    "sections": {"RAISON DE CONSULTATION": "Suivi de mémoire."},
+    "elements_a_valider": [],
+    "grounded_fields": [],
+})
+
+
+def _tool_call_completion(term: str, kind: str = "marque", call_id: str = "call1") -> llm.ToolCompletion:
+    return llm.ToolCompletion(
+        text="",
+        tool_calls=[llm.ToolCall(
+            id=call_id, name="verifier_medicament_dpd",
+            arguments_raw=json.dumps({"terme": term, "type": kind}),
+        )],
+        raw_message={"role": "assistant", "content": "", "tool_calls": [{
+            "id": call_id, "type": "function",
+            "function": {"name": "verifier_medicament_dpd", "arguments": json.dumps({"terme": term, "type": kind})},
+        }]},
+        model="fake", provider="mistral",
+    )
+
+
+def _final_completion(text: str = _MINIMAL_FINAL_JSON) -> llm.ToolCompletion:
+    return llm.ToolCompletion(text=text, tool_calls=[], raw_message={"role": "assistant", "content": text}, model="fake", provider="mistral")
+
+
+class DpdToolTests(unittest.TestCase):
+    """Vérification de médicament par appel d'outil (branche selfhosted,
+    expérimental — réglage note_lookup_dpd) : voir
+    note_extraction._extract_note_with_dpd_tool, app.drug_lookup."""
+
+    def _dpd_flag_on(self, key):
+        return "true" if key == "note_lookup_dpd" else ""
+
+    def test_regression_no_tools_when_flag_off(self):
+        """Le chemin existant ne doit RIEN changer quand le réglage est
+        désactivé — même fournisseur Mistral."""
+        fake = llm.Completion(text=_MINIMAL_FINAL_JSON, model="fake", provider="mistral")
+        with mock.patch.object(runtime_config, "value", return_value="false"), \
+             mock.patch.object(llm, "complete", return_value=fake) as complete_mock, \
+             mock.patch.object(llm, "complete_with_tools", side_effect=AssertionError("ne doit jamais être appelé")):
+            extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        complete_mock.assert_called_once()
+
+    def test_regression_no_tools_for_non_mistral_provider(self):
+        """Même réglage activé, un fournisseur autre que Mistral doit
+        continuer d'utiliser complete() — aucune infrastructure d'appel
+        d'outils n'existe pour les autres fournisseurs."""
+        fake = llm.Completion(text=_MINIMAL_FINAL_JSON, model="fake", provider="gemini")
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete", return_value=fake) as complete_mock, \
+             mock.patch.object(llm, "complete_with_tools", side_effect=AssertionError("ne doit jamais être appelé")):
+            extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="gemini")
+        complete_mock.assert_called_once()
+
+    def test_tool_call_executed_and_recorded(self):
+        lookup = DrugLookup(term="Respirone", found=True, matched_name="RISPERDAL", din="00123456")
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Respirone"), _final_completion()]) as tools_mock, \
+             mock.patch.object(note_extraction, "search_drug", return_value=lookup) as search_mock:
+            note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        self.assertEqual(tools_mock.call_count, 2)
+        search_mock.assert_called_once_with("Respirone", kind="brand", language="fr")
+        self.assertEqual(note.drug_lookups, [lookup])
+        # Le résultat de l'outil doit être renvoyé, apparié au bon tool_call_id.
+        second_call_messages = tools_mock.call_args_list[1].kwargs["messages"]
+        tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
+        self.assertEqual(len(tool_messages), 1)
+        self.assertEqual(tool_messages[0]["tool_call_id"], "call1")
+
+    def test_from_dict_never_reads_drug_lookups_from_model(self):
+        """Le modèle ne peut jamais s'auto-déclarer « vérifié » — seule
+        l'orchestration (note_extraction) peut peupler ce champ."""
+        note = ExtractedNote.from_dict({
+            "header_fields": {}, "sections": {}, "elements_a_valider": [],
+            "grounded_fields": [],
+            "drug_lookups": [{"term": "x", "found": True, "matched_name": "FAKE"}],
+        })
+        self.assertEqual(note.drug_lookups, [])
+
+    def test_malformed_tool_arguments_skipped_gracefully(self):
+        bad_call = llm.ToolCompletion(
+            text="", tool_calls=[llm.ToolCall(id="bad", name="verifier_medicament_dpd", arguments_raw="not json")],
+            raw_message={"role": "assistant", "content": ""}, model="fake", provider="mistral",
+        )
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete_with_tools", side_effect=[bad_call, _final_completion()]), \
+             mock.patch.object(note_extraction, "search_drug", side_effect=AssertionError("ne doit jamais être appelé")):
+            note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        self.assertEqual(note.drug_lookups, [])
+        self.assertEqual(note.sections.get("RAISON DE CONSULTATION"), "Suivi de mémoire.")
+
+    def test_round_budget_exhausted_falls_back_to_plain_call(self):
+        """Le modèle qui n'arrête jamais d'appeler l'outil ne doit pas faire
+        boucler l'extraction indéfiniment — un dernier tour SANS outil force
+        une réponse finale."""
+        always_tool_call = _tool_call_completion("Respirone")
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(
+                 llm, "complete_with_tools",
+                 side_effect=[always_tool_call, always_tool_call, _final_completion()],
+             ) as tools_mock, \
+             mock.patch.object(note_extraction, "search_drug", return_value=DrugLookup(term="Respirone", found=False)):
+            extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        self.assertEqual(tools_mock.call_count, 3)  # 2 tours (plafond) + 1 repli sans outil
+        self.assertIsNone(tools_mock.call_args_list[-1].kwargs["tools"])
+
+
+class DrugLookupTests(unittest.TestCase):
+    """app.drug_lookup.search_drug ne doit jamais lever — voir son
+    docstring. Vide le cache du module entre les tests, sinon un terme déjà
+    recherché dans un test précédent renvoie un résultat mis en cache."""
+
+    def setUp(self):
+        drug_lookup._cache.clear()
+
+    def test_network_error_never_raises(self):
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("timeout")):
+            result = drug_lookup.search_drug("termeinexistant1")
+        self.assertFalse(result.found)
+        self.assertTrue(result.error)
+
+    def test_http_error_never_raises(self):
+        exc = urllib.error.HTTPError("url", 500, "erreur serveur", {}, None)
+        with mock.patch("urllib.request.urlopen", side_effect=exc):
+            result = drug_lookup.search_drug("termeinexistant2")
+        self.assertFalse(result.found)
+        self.assertIn("500", result.error)
+
+    def test_empty_result_is_not_found_without_error(self):
+        response = mock.MagicMock()
+        response.read.return_value = b"[]"
+        response.__enter__.return_value = response
+        with mock.patch("urllib.request.urlopen", return_value=response):
+            result = drug_lookup.search_drug("termeinexistant3")
+        self.assertFalse(result.found)
+        self.assertEqual(result.error, "")
+
+    def test_happy_path_extracts_match(self):
+        payload = json.dumps([{"brand_name": "RISPERDAL", "drug_identification_number": "00123456"}]).encode()
+        response = mock.MagicMock()
+        response.read.return_value = payload
+        response.__enter__.return_value = response
+        with mock.patch("urllib.request.urlopen", return_value=response):
+            result = drug_lookup.search_drug("Respirone", kind="brand")
+        self.assertTrue(result.found)
+        self.assertEqual(result.matched_name, "RISPERDAL")
+        self.assertEqual(result.din, "00123456")
 
 
 if __name__ == "__main__":

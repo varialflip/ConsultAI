@@ -1692,6 +1692,26 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "typing effect. For testing only — leave off in production.",
     ),
 
+    "set.note_lookup_dpd.label": (
+        "Vérification médicament — BDPP Santé Canada (test)",
+        "Medication check — Health Canada DPD (test)",
+    ),
+    "set.note_lookup_dpd.help": (
+        "Pendant l'extraction, le modèle peut interroger la Base de données "
+        "sur les produits pharmaceutiques de Santé Canada pour vérifier un "
+        "nom de médicament incertain. Sans effet sauf si « Pipeline JSON "
+        "structuré (test) » est activé ET le fournisseur actif est Mistral. "
+        "Ajoute de la latence réseau externe à chaque génération. Un "
+        "médicament absent de la base n'est pas forcément une erreur — "
+        "réservé aux tests.",
+        "During extraction, the model can query Health Canada's Drug "
+        "Product Database to verify an uncertain medication name. No effect "
+        "unless « Structured JSON pipeline (test) » is enabled AND the "
+        "active provider is Mistral. Adds external network latency to each "
+        "generation. A medication absent from the database isn't "
+        "necessarily an error — for testing only.",
+    ),
+
     # --- Réglages « modèle » : un jeu de trois par fournisseur ---------------
     # Le libellé reste générique (« Modèle », et non « Modèle Gemini ») : un
     # seul fournisseur est visible à la fois, sous son propre sous-onglet — le

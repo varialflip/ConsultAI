@@ -620,6 +620,22 @@ class DpdToolTests(unittest.TestCase):
         resultats = json.loads(tool_messages[0]["content"])["resultats"]
         self.assertEqual({r["terme"] for r in resultats}, {"Respirone", "Norvask"})
 
+    def test_weak_fuzzy_match_reported_as_low_confidence_to_model(self):
+        """Régression réelle (consultation #9) : un match flou modéré
+        (source="dpd_fuzzy_weak", voir DrugLookupTests) doit être signalé
+        au modèle comme confiance "faible" — jamais comme "elevee", qui
+        l'inviterait à écrire une correction confirmée pour un candidat
+        aussi peu fiable que 'Respirone' → 'REPRONEX'."""
+        lookup = DrugLookup(term="Respirone", found=True, matched_name="REPRONEX", source="dpd_fuzzy_weak")
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Respirone"), _final_completion()]) as tools_mock, \
+             mock.patch.object(note_extraction, "search_drug", return_value=lookup):
+            extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        second_call_messages = tools_mock.call_args_list[1].kwargs["messages"]
+        tool_message = next(m for m in second_call_messages if m.get("role") == "tool")
+        resultat = json.loads(tool_message["content"])["resultats"][0]
+        self.assertEqual(resultat["confiance"], "faible")
+
     def test_usage_accumulates_across_tool_rounds(self):
         """Régression réelle (test.dictai.ca 2026-08-18) : la page
         statistiques ne montrait aucun jeton pour les générations du
@@ -788,6 +804,23 @@ class DrugLookupTests(unittest.TestCase):
         self.assertTrue(result.found)
         self.assertEqual(result.matched_name, "ATIVAN")
         self.assertEqual(result.source, "dpd_fuzzy")
+
+    def test_fuzzy_fallback_marks_moderate_match_as_weak_confidence(self):
+        """Régression réelle (consultation #9) : « Respirone » a été
+        rapproché de « REPRONEX » (un médicament de fertilité SANS rapport,
+        ratio ≈ 0,824) et le modèle l'a présenté comme une correction
+        CONFIRMÉE, alors que la vraie réponse (rispéridone) n'était même pas
+        le meilleur candidat par similarité pure de caractères. Un tel match
+        (au-dessus du seuil minimal mais sous le seuil de confiance) doit
+        rester trouvable, mais marqué source="dpd_fuzzy_weak" plutôt que
+        "dpd_fuzzy" — voir note_extraction, qui interdit au modèle de le
+        présenter comme une correction confirmée."""
+        with mock.patch("urllib.request.urlopen", return_value=self._empty_response()), \
+             self._mock_local_index("REPRONEX"):
+            result = drug_lookup.search_drug("Respirone", kind="brand")
+        self.assertTrue(result.found)
+        self.assertEqual(result.matched_name, "REPRONEX")
+        self.assertEqual(result.source, "dpd_fuzzy_weak")
 
     def test_fuzzy_fallback_rejects_dissimilar_candidate(self):
         """Le meilleur candidat de l'extrait local, s'il reste trop

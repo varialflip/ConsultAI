@@ -72,6 +72,18 @@ _BULK_TIMEOUT_SECONDS = 60
 #: doivent passer ; un candidat sans rapport doit échouer — 0.75 sépare
 #: confortablement les cas observés.
 _FUZZY_THRESHOLD = 0.75
+#: Deuxième palier (vu réellement, consultation #9) : « respirone » vs
+#: « REPRONEX » (un médicament de fertilité SANS rapport) obtient 0,824 —
+#: au-dessus de 0,75, mais le modèle l'a alors présenté comme une
+#: correction CONFIRMÉE dans Éléments à valider, alors que la vraie réponse
+#: (rispéridone) n'était même pas le meilleur candidat par similarité pure
+#: de caractères. Les cas vérifiés comme fiables (Norvask/Norvasc,
+#: Activant/Ativan, Monochore/Monocor, Ensoprazole/Lansoprazole) sont tous
+#: ≥ 0,857 ; Repronex reste à 0,824 — ce palier sépare confortablement les
+#: deux. En dessous, un match reste renvoyé (``found=True``) mais avec
+#: ``source="dpd_fuzzy_weak"`` : un candidat à considérer, jamais une
+#: correction à affirmer avec confiance (voir la consigne de l'outil).
+_FUZZY_STRONG_THRESHOLD = 0.83
 
 #: Où vivent les extraits complets mis en cache — /data est déjà le volume
 #: persistant de la base SQLite (voir app/database.py), donc déjà monté et
@@ -181,8 +193,10 @@ def _fuzzy_fallback(term: str, kind: str, language: str) -> DrugLookup:
         if best is None or ratio > best[0]:
             best = (ratio, row)
 
-    if best is not None and best[0] >= _FUZZY_THRESHOLD:
+    if best is not None and best[0] >= _FUZZY_STRONG_THRESHOLD:
         return _build_result(term, best[1], source="dpd_fuzzy")
+    if best is not None and best[0] >= _FUZZY_THRESHOLD:
+        return _build_result(term, best[1], source="dpd_fuzzy_weak")
     return DrugLookup(term=term, found=False)
 
 

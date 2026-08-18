@@ -80,7 +80,17 @@ _DPD_TOOL_SCHEMA = {
                         "properties": {
                             "terme": {
                                 "type": "string",
-                                "description": "Nom du médicament tel que retenu, en français.",
+                                "description": (
+                                    "Le mot TEL QU'IL A ÉTÉ TRANSCRIT/ENTENDU dans la "
+                                    "dictée, PAS une correction que tu aurais déjà "
+                                    "faite toi-même. Si tu as déjà une hypothèse de "
+                                    "correction (ex. tu penses que « Activant » est "
+                                    "en fait Ativan), transmets quand même le terme "
+                                    "TRANSCRIT (« Activant »), jamais ton hypothèse "
+                                    "(« Ativan ») — l'outil cherche la bonne "
+                                    "orthographe justement pour ne PAS dépendre de "
+                                    "ta propre supposition, qui peut être fausse."
+                                ),
                             },
                             "type": {
                                 "type": "string",
@@ -111,7 +121,24 @@ _DPD_TOOL_GUIDANCE_FR = (
     "APPELLE CET OUTIL UNE SEULE FOIS avec la liste complète des médicaments "
     "incertains — jamais un appel par médicament. Une absence de résultat "
     "n'est pas une preuve d'erreur — c'est un indice de plus, pas une "
-    "décision automatique."
+    "décision automatique.\n\nIMPORTANT — transmets le terme TEL QUE "
+    "TRANSCRIT, jamais ta propre correction : si tu as déjà une hypothèse "
+    "(par exemple, tu penses que « Activant » est en réalité Ativan), "
+    "appelle l'outil avec « Activant » (le terme transcrit), PAS avec "
+    "« Ativan » (ton hypothèse). Transmettre directement ta propre "
+    "correction revient à ne rien vérifier du tout — l'outil confirmera "
+    "seulement que TON hypothèse est un vrai médicament, sans jamais tester "
+    "si c'est la BONNE. Le nom retourné par l'outil, pas ta première idée, "
+    "est ce qui doit apparaître dans la note.\n\nChaque résultat porte un "
+    "niveau de « confiance ». « elevee » : traite le nom retourné comme la "
+    "lecture retenue. « faible » : ce n'est qu'un candidat plausible par "
+    "ressemblance de caractères — PAS une correction confirmée. Un "
+    "médicament SANS RAPPORT peut ressembler à ton terme lettre par lettre "
+    "sans être le bon (ex. un médicament de fertilité peut ressembler à un "
+    "antipsychotique par ses lettres, sans aucun rapport clinique). Pour un "
+    "résultat « faible », n'écris JAMAIS « correction apportée » — laisse "
+    "le terme en Éléments à valider comme à confirmer, sans affirmer le nom "
+    "retourné par l'outil comme la solution."
 )
 _DPD_TOOL_GUIDANCE_EN = (
     "\n\nTOOL AVAILABLE — verifier_medicaments_dpd: for any medication whose "
@@ -122,7 +149,23 @@ _DPD_TOOL_GUIDANCE_EN = (
     "RE-READ THE WHOLE NOTE you're drafting and CALL THIS TOOL ONCE with "
     "the complete list of uncertain medications — never one call per "
     "medication. No result found is not proof of an error — it's one more "
-    "signal, not an automatic decision."
+    "signal, not an automatic decision.\n\nIMPORTANT — pass the term AS "
+    "TRANSCRIBED, never your own correction: if you already have a "
+    "hypothesis (for example, you think \"Activant\" is actually Ativan), "
+    "call the tool with \"Activant\" (the transcribed term), NOT with "
+    "\"Ativan\" (your hypothesis). Passing your own correction directly "
+    "means verifying nothing at all — the tool will only confirm that YOUR "
+    "guess is a real medication, never test whether it's the RIGHT one. "
+    "The name the tool returns, not your first guess, is what belongs in "
+    "the note.\n\nEach result carries a confidence level. \"elevee\": treat "
+    "the returned name as the retained reading. \"faible\": it's only a "
+    "plausible candidate by character resemblance — NOT a confirmed "
+    "correction. An UNRELATED medication can resemble your term letter by "
+    "letter without being the right one (e.g. a fertility drug can resemble "
+    "an antipsychotic by spelling alone, with no clinical connection). For "
+    "a \"faible\" result, NEVER write \"correction made\" — leave the term "
+    "under Items to verify as unconfirmed, without asserting the tool's "
+    "returned name as the answer."
 )
 
 
@@ -487,6 +530,15 @@ def _extract_note_with_dpd_tool(
                     "trouve": lookup.found,
                     "nom_correspondant": lookup.matched_name,
                     "din": lookup.din,
+                    # "elevee" (correspondance exacte ou très proche) vs
+                    # "faible" (candidat plausible mais incertain, voir
+                    # source="dpd_fuzzy_weak" dans app.drug_lookup — un
+                    # médicament de fertilité sans rapport a déjà été
+                    # confondu avec un antipsychotique via une similarité
+                    # de caractères trompeuse, consultation #9) : la
+                    # consigne dit explicitement de ne jamais présenter un
+                    # résultat "faible" comme une correction confirmée.
+                    "confiance": "faible" if lookup.source == "dpd_fuzzy_weak" else "elevee",
                 })
 
             messages.append({

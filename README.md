@@ -1073,11 +1073,21 @@ partageant un préfixe. Un résultat de ce repli porte `source="dpd_fuzzy"`
 réelle : `search_drug('Activant')` retrouve maintenant ATIVAN (DIN
 02041413).
 
-**Risque résiduel connu** : le modèle ne transmet pas toujours le terme
-LITTÉRALEMENT dicté à l'outil — rejouer la même consultation après ce
-correctif a montré le modèle transmettre sa propre correction préalable
-(« Activelle », un vrai médicament sans rapport) plutôt que le terme
-entendu, et l'outil confirme alors que cette proposition existe — un
-meilleur outil ne peut rien faire si le terme qu'on lui soumet a déjà été
-« corrigé » par le modèle avant l'appel. Piste de suivi, pas encore
-implémentée : consigne explicite pour transmettre le terme tel que dicté.
+**Corrigé le même jour : terme littéral transmis à l'outil + palier de
+confiance.** Le risque ci-dessus (le modèle transmettait sa propre
+correction — « Activelle » — plutôt que le terme entendu) est traité par
+une consigne explicite dans `_DPD_TOOL_SCHEMA`/`_DPD_TOOL_GUIDANCE_FR/EN` :
+transmettre le terme TEL QUE TRANSCRIT, jamais une hypothèse déjà
+« corrigée ». En rejouant la consultation #9 avec ce correctif, un second
+problème est apparu : « Respirone » a été rapproché de « REPRONEX » (un
+médicament de fertilité SANS rapport, ratio de similarité 0,824) et le
+modèle l'a écrit comme une correction confirmée. `app/drug_lookup.py`
+distingue maintenant deux paliers — `_FUZZY_STRONG_THRESHOLD = 0.83` :
+au-dessus, un match fiable (`source="dpd_fuzzy"`, tous les cas vérifiés
+— Norvask/Norvasc, Activant/Ativan, Ensoprazole/Lansoprazole — sont
+≥ 0,857) ; en dessous (mais toujours au-dessus du seuil minimal 0,75), un
+candidat plausible mais incertain (`source="dpd_fuzzy_weak"`), communiqué
+au modèle comme `confiance: "faible"` avec consigne explicite de ne jamais
+l'écrire comme une correction confirmée. Vérifié par génération réelle :
+`Ativan 0.5 mg PO HS PRN` apparaît maintenant dans MÉDICATION ACTUELLE, et
+`Respirone → à confirmer` (plus de fausse correction vers Repronex).

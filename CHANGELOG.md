@@ -3,6 +3,38 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, terme littéral transmis à l'outil BDPP + palier de confiance flou
+
+Deux correctifs sur le risque résiduel documenté plus tôt la même journée
+(le modèle transmettait parfois sa propre correction à l'outil plutôt que
+le terme réellement transcrit) :
+
+- **Consigne renforcée** (`note_extraction._DPD_TOOL_SCHEMA`/`_DPD_TOOL_GUIDANCE_FR/EN`) :
+  interdiction explicite de transmettre une hypothèse déjà corrigée à
+  l'outil — le terme doit être TEL QUE TRANSCRIT (« Activant », pas
+  « Ativan » même si c'est l'hypothèse du modèle), sans quoi l'outil ne
+  vérifie plus rien, il confirme seulement que la propre supposition du
+  modèle est un vrai médicament.
+- **Palier de confiance dans le repli flou** (`app/drug_lookup.py`,
+  `_FUZZY_STRONG_THRESHOLD = 0.83`) : en rejouant la consultation #9 avec le
+  correctif précédent, un NOUVEAU problème est apparu — « Respirone » a été
+  rapproché de « REPRONEX » (médicament de fertilité SANS rapport, ratio
+  0,824), et le modèle a écrit « correction apportée : Repronex » avec
+  confiance. Les cas vérifiés fiables (Norvask/Norvasc, Activant/Ativan,
+  Monochore/Monocor, Ensoprazole/Lansoprazole) sont tous ≥ 0,857 ; Repronex
+  reste à 0,824 — marge confortable pour séparer les deux. En dessous de ce
+  second seuil, un match reste renvoyé (`found=True`, un candidat reste
+  utile) mais avec `source="dpd_fuzzy_weak"`, communiqué au modèle comme
+  `confiance: "faible"` avec consigne explicite de ne jamais l'écrire comme
+  une correction confirmée.
+
+Vérifié par génération réelle contre la consultation #9 après les deux
+correctifs : `Ativan 0.5 mg PO HS PRN` apparaît maintenant correctement
+dans MÉDICATION ACTUELLE, et `Respirone → à confirmer` (plus de fausse
+correction vers Repronex).
+
+Testé par `tests/test_note_pipeline.py` (65 cas).
+
 ## 2026-08-18 — branche `selfhosted`, repli flou BDPP sur l'extrait complet (pas des préfixes)
 
 Le repli flou livré plus tôt la même journée (raccourcir le terme depuis la

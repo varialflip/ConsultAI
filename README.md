@@ -935,3 +935,21 @@ itérations de gabarit/consigne sur la même dictée sans qu'une régénération
 n'efface la précédente. Jamais lu par le pipeline de génération lui-même,
 jamais activé en production (la table n'existe que sur les bases où ce code
 tourne).
+
+**Consigne dédiée au pipeline JSON, 2026-08-18.** `general_prompt_json_fr`/`_en`
+(réglage à part de « Consigne générale » — jamais un remplacement) : version
+condensée qui ne garde que les décisions de contenu clinique, sans les règles
+de mise en forme désormais imposées par `note_renderer`. Voir
+`default_prompts.JSON_GENERAL_PROMPT_FR/EN` pour le détail et le
+raisonnement. Testée par 3 générations réelles contre la consultation #5
+(mistral-small-latest) comparées via `note_generations` : a corrigé une
+fabrication de diagnostics à partir de valeurs de laboratoire brutes
+(« Hypothyroïdie subclinique », « Anémie légère » — absentes avec la consigne
+d'origine) en ajoutant une règle explicite contre l'inférence diagnostique à
+partir d'un chiffre isolé. **Risque résiduel connu** : un item d'Impression
+non dicté, dérivé d'un chiffre (« nécessite optimisation »), passe encore —
+le validateur ne couvre pas aujourd'hui les items d'Impression/Plan par
+`grounded_fields`, seulement les valeurs identifiées comme critiques
+(médicament, dose, date, nom). Piste de suivi, pas encore implémentée :
+étendre le grounding à Impression/Plan plutôt que de compter sur la seule
+formulation de la consigne pour un modèle plus faible.

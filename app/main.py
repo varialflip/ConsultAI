@@ -2458,10 +2458,14 @@ def _generate_json_pipeline(
         )
     temperature = llm.active_temperature()
     langue = i18n.normalize(template_row.language or runtime_config.language())
-    general = runtime_config.general_prompt(langue)
+    # Consigne DÉDIÉE au pipeline JSON (réglage à part, condensée pour ne
+    # garder que les décisions de contenu — voir default_prompts.py et
+    # README §13), jamais celle de l'ancien pipeline (general_prompt) qui
+    # redemande des règles de mise en forme désormais imposées par le code.
+    general = runtime_config.general_prompt_json(langue)
     # Étiquette d'historique (voir NoteGeneration) : identifie QUELLE consigne
     # a produit cette tentative, pour comparer des itérations après coup.
-    prompt_variant = "baseline"
+    prompt_variant = "json_v1"
 
     transcript = (payload.transcript or "").strip()
     if not transcript:

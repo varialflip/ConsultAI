@@ -3,6 +3,45 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, consigne dédiée au pipeline JSON
+
+- **Nouvelle consigne, réglage à part** : `general_prompt_json_fr`/`_en`
+  (`app.runtime_config`, valeurs par défaut `default_prompts.JSON_GENERAL_PROMPT_FR/EN`).
+  `GENERAL_PROMPT_FR/EN` a été écrite pour l'ancien pipeline (une seule passe
+  LLM → markdown) : le modèle y porte seul des règles de mise en forme
+  maintenant imposées par le code (reproduction exacte des titres,
+  remplacement des `{{...}}`, tableaux Markdown, numérotage, grammaire
+  télégraphique d'Éléments à valider). La nouvelle consigne condensée ne
+  garde QUE les décisions de contenu clinique (§0 proportionnalité, §1
+  aucune invention, §2 correction de la transcription, §3 style/voix
+  dictée, §4 style déclaratif) — jamais un remplacement de la consigne
+  existante, qui reste utilisée par l'ancien pipeline avec sa propre valeur
+  en base (personnalisée sur test.dictai.ca, jamais touchée).
+  `main._generate_json_pipeline` utilise désormais `general_prompt_json`
+  plutôt que `general_prompt`.
+- **Régression trouvée et corrigée AVANT déploiement** (3 générations
+  réelles contre la consultation #5, mistral-small-latest, comparées via
+  `note_generations`) : la première version condensée fabriquait des
+  interprétations cliniques à partir de valeurs numériques brutes non
+  dictées comme telles — « Hypothyroïdie subclinique (TSH 3.22) »,
+  « Anémie légère normocytaire (Hb 129) » — absentes du rendu avec la
+  consigne d'origine. Ajout d'une règle explicite dans § 1 : interdiction
+  d'inférer un diagnostic à partir d'un chiffre isolé (labo, signe vital,
+  score) que le médecin n'a pas lui-même nommé.
+- **Risque résiduel connu, non réglé par la consigne seule** : la 3ᵉ
+  génération (après correctif) ne fabrique plus de diagnostic, mais ajoute
+  encore un item d'Impression non dicté dérivé d'un chiffre (« HbA1c à
+  6.4 % nécessitant optimisation du diabète ») — une violation d'une règle
+  déjà présente dans les DEUX consignes (§1, « aucune recommandation qui ne
+  figure pas dans la dictée »). Le validateur ne l'attrape pas : les items
+  d'Impression ne sont pas actuellement soumis à `grounded_fields`/
+  `check_grounding`, seulement les valeurs identifiées comme critiques
+  (médicament, dose, date, nom). Consigné ici plutôt que masqué — c'est
+  exactement le type de lacune que l'architecture (validateur + gabarit
+  déterministes) est censée combler à terme, pas quelque chose qu'une
+  formulation de consigne peut garantir avec un modèle plus faible. Piste
+  de suivi : étendre le grounding aux items d'Impression/Plan.
+
 ## 2026-08-18 — branche `selfhosted`, numérotage déterministe + historique de génération
 
 - **Impression/Plan rendus avec des puces au lieu d'une liste numérotée**,

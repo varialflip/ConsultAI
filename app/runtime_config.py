@@ -501,6 +501,23 @@ SETTINGS: Tuple[Setting, ...] = (
         placeholder="set.general_prompt.placeholder",
     ),
 
+    # Consigne du pipeline JSON (branche selfhosted, expérimental) — réglage
+    # À PART de general_prompt_fr/en ci-dessus, jamais lu par l'ancien
+    # pipeline. Condensée : ne garde que les décisions de contenu clinique,
+    # sans les règles de mise en forme qu'impose maintenant le code
+    # (note_renderer) — voir le commentaire en tête de
+    # default_prompts.JSON_GENERAL_PROMPT_FR/EN et README §13.
+    Setting(
+        "general_prompt_json_fr", "textarea", "group.prompts",
+        default=lambda: default_prompts.JSON_GENERAL_PROMPT_FR,
+        placeholder="set.general_prompt.placeholder",
+    ),
+    Setting(
+        "general_prompt_json_en", "textarea", "group.prompts",
+        default=lambda: default_prompts.JSON_GENERAL_PROMPT_EN,
+        placeholder="set.general_prompt.placeholder",
+    ),
+
     # --- Sauvegarde -----------------------------------------------------------
     Setting(
         "backup_retention_count", "number", "group.backup",
@@ -604,6 +621,14 @@ def general_prompt(language: str) -> str:
     prévue, sans détection automatique depuis l'audio ni depuis le texte.
     """
     cle = "general_prompt_en" if i18n.normalize(language) == "en" else "general_prompt_fr"
+    return value(cle)
+
+
+def general_prompt_json(language: str) -> str:
+    """Consigne générale du pipeline JSON (branche selfhosted) — voir
+    ``general_prompt`` ci-dessus, même principe mais réglage indépendant
+    (``general_prompt_json_fr``/``_en``)."""
+    cle = "general_prompt_json_en" if i18n.normalize(language) == "en" else "general_prompt_json_fr"
     return value(cle)
 
 

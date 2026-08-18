@@ -2192,6 +2192,35 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "les noms de médicaments.",
         "e.g.: Always spell out drug names. Never abbreviate diagnoses.",
     ),
+
+    "set.general_prompt_json_fr.label": (
+        "Consigne générale — pipeline JSON (fr, test)",
+        "General instruction — JSON pipeline (fr, test)",
+    ),
+    "set.general_prompt_json_fr.help": (
+        "Réglage À PART de « Consigne générale » ci-dessus : utilisé UNIQUEMENT "
+        "quand le pipeline JSON structuré (test) est activé. Condensée : ne "
+        "garde que les décisions de contenu clinique, pas les règles de mise "
+        "en forme (numérotation, grammaire d'Éléments à valider...) qu'impose "
+        "maintenant le code plutôt que cette consigne — voir README §13.",
+        "A SEPARATE setting from « General instruction » above: used ONLY "
+        "when the structured JSON pipeline (test) is enabled. Condensed: "
+        "keeps only clinical-content decisions, not formatting rules "
+        "(numbering, Items-to-verify grammar...) that code now enforces "
+        "instead of this instruction — see README §13.",
+    ),
+    "set.general_prompt_json_en.label": (
+        "Consigne générale — pipeline JSON (en, test)",
+        "General instruction — JSON pipeline (en, test)",
+    ),
+    "set.general_prompt_json_en.help": (
+        "Réglage À PART de « General instruction » ci-dessus : utilisé "
+        "UNIQUEMENT quand le pipeline JSON structuré (test) est activé, pour "
+        "les gabarits en anglais.",
+        "A SEPARATE setting from « General instruction » above: used ONLY "
+        "when the structured JSON pipeline (test) is enabled, for English "
+        "templates.",
+    ),
     "choice.on": ("Activé", "Enabled"),
     "choice.off": ("Désactivé", "Disabled"),
     "choice.reasoning_auto": ("Automatique", "Automatic"),

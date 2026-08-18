@@ -301,6 +301,18 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "false", choices=ON_OFF,
     ),
 
+    # Marques historiques / internationales via RxNorm (NLM/US) — index LOCAL
+    # (voir app/drug_lookup.legacy_match). La release « prescribable » est
+    # téléchargée une fois et indexée comme l'extrait BDPP : AUCUN nom de
+    # médicament ne quitte la machine pendant l'exploitation, d'où l'absence
+    # de flux à déclarer en EFVP. Une marque revenue (ex. « Lopressor »)
+    # s'affiche TOUJOURS « à confirmer », jamais comme une correction.
+    # Activé par défaut — il n'y a pas d'envoi runtime.
+    Setting(
+        "note_lookup_legacy", "choice", "group.llm",
+        default=lambda: "true", choices=ON_OFF,
+    ),
+
     Setting(
         "gemini_api_key", "secret", "group.llm",
         default=lambda: settings.gemini_api_key,

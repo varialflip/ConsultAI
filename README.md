@@ -1091,3 +1091,56 @@ au modèle comme `confiance: "faible"` avec consigne explicite de ne jamais
 l'écrire comme une correction confirmée. Vérifié par génération réelle :
 `Ativan 0.5 mg PO HS PRN` apparaît maintenant dans MÉDICATION ACTUELLE, et
 `Respirone → à confirmer` (plus de fausse correction vers Repronex).
+
+**Couche phonétique française dans le repli BDPP, 2026-08-18.** Le terme
+comparé vient d'un moteur de reconnaissance vocale : ses erreurs sont
+PHONÉTIQUES (homophonie), pas orthographiques — or le repli flou ne
+comparait que des caractères. Il compare maintenant EN PLUS chaque nom à
+une clé **Soundex FR** (`app/phonetic_fr.py` — l'algorithme phonétique
+français « Soundex FR » d'Édouard Bergé, port Python de la lib
+`phonetic-fr`, vendue à l'identique sous licence MIT, **zéro dépendance
+ajoutée**). La clé de tout l'index est calculée une seule fois à la
+construction (quelques secondes) et persistée dans
+`/data/dpd_cache/<kind>_index.json` : la recherche conserve le coût
+d'ailleurs (deux `SequenceMatcher` sur des chaînes courtes).
+
+Le phonétique remplit deux rôles, sous une sécurité stricte :
+- **tie-breaker** — deux candidats au même ratio de caractères (cas réel
+  `Ensoprazole` : 0,870 contre LANSOPRAZOLE et ESOMEPRAZOLE) : la clé
+  phonétique départe (0,952 vs 0,762) et choisit LANSOPRAZOLE, quel que
+  soit l'ordre de l'index ;
+- **rampe de retrouvaille « faible »** — un candidat à faible similarité de
+  caractères (≥ 0,50) mais à clé phonétique très proche (≥ 0,83) devient
+  TROUVABLE en `source="dpd_fuzzy_weak"` (`confiance: "faible"`), jamais
+  au palier « confiance élevée » ;
+- le phonétique ne peut jamais remonter un candidat au palier « confirmé » :
+  « Respirone » reste donc correctement « à confirmer » (REPRONEX domine
+  dans les deux métriques — c'est exactement le rôle de ce palier, le
+  corriger exigerait un signal clinique tiers).
+
+Testé par `tests/test_note_pipeline.py` (`PhoneticLayerTests`, 69 cas au
+total) : égalités de clés du corpus, tie-breaker Ensoprazole → LANSOPRAZOLE,
+non-remontée de Repronex, et rampe de retrouvaille.
+
+**Marques historiques / internationales — RxNorm local, 2026-08-18.** La
+BDPP n'expose que les produits **courants** : une marque retirée du marché
+(ex. `Lopressor`=métoprolol) en est absente, et la dictée d'un tel nom
+retombait sur « introuvable » ou sur un faux candidat (`oppressor →
+suppressor`). Pour les retrouver sans jamais faire sortir de
+données de la machine, `app/drug_lookup.legacy_match` utilise un **index
+RxNorm local** : la release NLM « Current Prescribable Content » (sans
+licence, vérifiée — contient Lopressor, Ativan, Prevacid) est téléchargée
+UNE fois (mensuelle) dans `/data/rxnorm_cache/` et indexée avec la même clé
+Soundex FR + similarité de caractères que la BDPP. Aucun appel réseau
+runtime → **aucun flux à déclarer en EFVP** (voir § 11).
+
+Fusion « choix unique » dans `note_extraction._maybe_legacy` : quand le
+résultat BDPP n'est pas fiable (introuvable ou « faible ») ET que le réglage
+panneau `note_lookup_legacy` est actif (défaut **oui**), la marque
+historique retrouvée remplace le candidat avec `source="rxnorm"`. Une telle
+marque reste **TOUJOURS** `confiance: "faible"` (« à confirmer », sans DIN
+canadien) — elle n'est jamais une « correction apportée » ; une source BDPP
+forte n'est jamais remplacée. Vérifié sur les vraies données : `oppressor →
+Lopressor (à confirmer)`, `norvasquine → Norvasc`, `Certraline →
+SERTRALINE`, `donnépésil → DONEPEZIL`. Testé par `LegacySourceTests`
+(75 cas au total).

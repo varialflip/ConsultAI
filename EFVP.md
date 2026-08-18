@@ -178,6 +178,7 @@ Autres flux :
 | Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (secours Parakeet) |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
+| Vérification de médicament (BDPP + marques historiques RxNorm) | Nom de médicament (pas de données patient) | **Local** — index téléchargés une fois dans `/data/` | **Québec / local — aucun envoi runtime** (ni à Santé Canada, ni aux États-Unis) |
 | Turnstile (captcha) | Données du navigateur, adresse IP | Cloudflare | Hors Canada (données non cliniques) |
 | Image conteneur | — (aucune donnée) | GitHub Container Registry | — |
 

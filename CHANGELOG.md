@@ -3,7 +3,63 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-08-18 — branche `selfhosted`, terme littéral transmis à l'outil BDPP + palier de confiance flou
+## 2026-08-18 — branche `selfhosted`, marques historiques locales (RxNorm)
+
+La BDPP (Santé Canada) n'expose que les produits **courants** : une marque
+retirée du marché s'y voit introuvable et la dictée d'un tel nom retombait
+sur un faux candidat (`oppressor` → `suppressor`, au lieu de **Lopressor**
+= métoprolol). Ajout d'une **source historique locale RxNorm** (NLM/US) —
+release « Current Prescribable Content », sans licence, vérifiée (contient
+Lopressor, Ativan, Prevacid) :
+
+- **Aucun envoi runtime** : la release est téléchargée une fois (mensuelle)
+  dans `/data/rxnorm_cache/` et indexée localement avec la même clé Soundex
+  FR + similarité de caractères que l'extrait BDPP → **zéro flux de données
+  vers les États-Unis**, donc rien à déclarer en EFVP (§ 11).
+- **Fusion « choix unique »** (`note_extraction._maybe_legacy`) : quand le
+  résultat BDPP est introuvable ou « faible », `drug_lookup.legacy_match`
+  remplace le candidat par la marque historique, `source="rxnorm"`. Elle
+  reste **TOUJOURS** `confiance: "faible"` (« à confirmer », jamais une
+  correction apportée) ; une source BDPP forte n'est jamais remplacée.
+- **Réglage** `note_lookup_legacy` (panneau, défaut **oui**) — sans
+  implication vie privée (index local).
+
+Vérifié sur les vraies données : `oppressor → Lopressor`, `norvasquine →
+Norvasc`, `Certraline → SERTRALINE`, `donnépésil → DONEPEZIL` (tous
+« à confirmer »). Testé par `LegacySourceTests` (`tests/test_note_pipeline.py`,
+75 cas au total).
+
+## 2026-08-18 — branche `selfhosted`, couche phonétique française BDPP
+
+Le repli flou de la vérification BDPP rapprochait deux ORTHOGRAPHES ; or le
+terme comparé sort d'un moteur de reconnaissance vocale et ses erreurs sont
+PHONÉTIQUES (« Norvask », « Monochore »…). `app/drug_lookup._fuzzy_fallback`
+compare maintenant chaque nom de l'extrait aussi à sa clé **Soundex FR** —
+`app/phonetic_fr.py`, l'algorithme phonétique français d'Édouard Bergé
+(port Python « Soundex FR » de la lib `phonetic-fr`), vendu à l'identique
+sous licence MIT, **sans nouvelle dépendance** (la lib est pure Python).
+
+Ce second signal ne remplace pas le premier, il le complète, sous une
+sécurité stricte :
+- **tie-breaker** : deux candidats au même ratio de caractères (cas réel
+  `Ensoprazole`, 0,870 contre LANSOPRAZOLE comme ESOMEPRAZOLE — l'ancien
+  code gardait arbitrairement la première entrée de l'index) ; la clé
+  phonétique départe (0,952 vs 0,762) et choisit LANSOPRAZOLE.
+- **rampe de retrouvaille « faible »** : un candidat à faible similarité de
+  caractères (≥ 0,50) mais à clé phonétique très proche (≥ 0,83) devient
+  TROUVABLE en `source="dpd_fuzzy_weak"` (jamais « elevée »).
+- le phonétique ne peut JAMAIS remonter un candidat au palier « confirmé » :
+  « Respirone » reste correctement « à confirmer » (REPRONEX domine dans
+  les deux métriques — le palier faible existe exactement pour ce cas).
+
+Côté coût : la clé de tout l'index est calculée une seule fois à la
+construction (quelques secondes) et persistée dans
+`/data/dpd_cache/<kind>_index.json` — pas d'encodage rejoué à chaque
+génération. La version 2 de l'index ne se migre pas automatiquement, mais
+`_load_local_index` voit son compagnon absent et le reconstruit seul.
+
+Testé par `tests/test_note_pipeline.py` (`PhoneticLayerTests`, 69 cas au
+total — les 65 existants inchangés).
 
 Deux correctifs sur le risque résiduel documenté plus tôt la même journée
 (le modèle transmettait parfois sa propre correction à l'outil plutôt que

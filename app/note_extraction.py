@@ -26,7 +26,7 @@ import re
 from typing import Optional
 
 from app import llm, runtime_config
-from app.drug_lookup import search_drug
+from app.drug_lookup import legacy_match, search_drug
 from app.note_renderer import OWN_CONTENT_KEY
 from app.note_schema import LIST_STYLE_MARKERS, DrugLookup, ElementAValider, ExtractedNote, LayoutSpec
 from app.note_validator import ValidationIssue, ValidationResult, validate
@@ -449,8 +449,29 @@ def verify_medications_post_extraction(note: ExtractedNote, language: str = "fr"
     for gf in note.grounded_fields:
         if gf.kind != "medication" or not gf.value:
             continue
-        drug_lookups.append(search_drug(_medication_name_only(gf.value), kind="brand", language=language))
+        lookup = search_drug(_medication_name_only(gf.value), kind="brand", language=language)
+        drug_lookups.append(_maybe_legacy(lookup, _medication_name_only(gf.value)))
     note.drug_lookups = drug_lookups
+
+
+def _maybe_legacy(lookup: DrugLookup, terme: str) -> DrugLookup:
+    """Fusion « choix unique » avec la source historique RxNorm (voir
+    ``app.drug_lookup.legacy_match``) : se produit UNIQUEMENT quand le
+    résultat BDPP n'est pas fiable (introuvable ou « faible ») ET que le
+    réglage ``note_lookup_legacy`` est actif (défaut : vrai). Une marque
+    historique retrouvée remplace alors le candidat (``source="rxnorm"``),
+    qui reste TOUJOURS ``confiance: "faible"`` — jamais une correction
+    apportée (pas de DIN canadien, source internationale). Une source BDPP
+    « forte » n'est jamais remplacée."""
+    if lookup.found and lookup.source in ("dpd", "dpd_fuzzy"):
+        return lookup
+    if runtime_config.value("note_lookup_legacy") != "true":
+        return lookup
+    try:
+        legacy = legacy_match(terme)
+    except Exception:  # noqa: BLE001 — la source historique ne doit jamais bloquer
+        return lookup
+    return legacy if legacy is not None else lookup
 
 
 def _extract_note_with_dpd_tool(
@@ -524,6 +545,7 @@ def _extract_note_with_dpd_tool(
                     resultats.append({"terme": "", "erreur": "terme manquant"})
                     continue
                 lookup = search_drug(terme, kind=_dpd_kind(demande.get("type", "")), language=language)
+                lookup = _maybe_legacy(lookup, terme)
                 drug_lookups.append(lookup)
                 resultats.append({
                     "terme": terme,
@@ -532,13 +554,14 @@ def _extract_note_with_dpd_tool(
                     "din": lookup.din,
                     # "elevee" (correspondance exacte ou très proche) vs
                     # "faible" (candidat plausible mais incertain, voir
-                    # source="dpd_fuzzy_weak" dans app.drug_lookup — un
-                    # médicament de fertilité sans rapport a déjà été
-                    # confondu avec un antipsychotique via une similarité
-                    # de caractères trompeuse, consultation #9) : la
-                    # consigne dit explicitement de ne jamais présenter un
-                    # résultat "faible" comme une correction confirmée.
-                    "confiance": "faible" if lookup.source == "dpd_fuzzy_weak" else "elevee",
+                    # source="dpd_fuzzy_weak" dans app.drug_lookup ; une
+                    # marque historique source="rxnorm" aussi — un médicament
+                    # de fertilité sans rapport a déjà été confondu avec un
+                    # antipsychotique via une similarité de caractères
+                    # trompeuse, consultation #9) : la consigne dit
+                    # explicitement de ne jamais présenter un résultat
+                    # "faible" comme une correction confirmée.
+                    "confiance": "faible" if lookup.source in ("dpd_fuzzy_weak", "rxnorm") else "elevee",
                 })
 
             messages.append({

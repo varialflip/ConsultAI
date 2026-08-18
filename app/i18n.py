@@ -1711,6 +1711,23 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "generation. A medication absent from the database isn't "
         "necessarily an error — for testing only.",
     ),
+    "set.note_lookup_legacy.label": (
+        "Suggestions marques historiques (RxNorm, local)",
+        "Historical brand suggestions (RxNorm, local)",
+    ),
+    "set.note_lookup_legacy.help": (
+        "Rapproche un terme transcrit contre les marques retirées du marché "
+        "ou internationales (ex. « Lopressor »=métoprolol) — index RxNorm "
+        "téléchargé et indexé localement, comme l'extrait BDPP : aucun nom "
+        "ne quitte la machine (pas de flux à déclarer en EFVP). Une marque "
+        "retrouvée ici reste TOUJOURS « à confirmer », jamais une correction "
+        "apportée.",
+        "Matches a transcribed term against discontinued or international "
+        "brands (e.g. \"Lopressor\"=metoprolol) — a locally downloaded and "
+        "indexed RxNorm set, like the DPD extract: no name leaves the "
+        "machine (nothing to declare in the PIA). A brand found here stays "
+        "\"to confirm\" at all times, never as an applied correction.",
+    ),
 
     # --- Réglages « modèle » : un jeu de trois par fournisseur ---------------
     # Le libellé reste générique (« Modèle », et non « Modèle Gemini ») : un

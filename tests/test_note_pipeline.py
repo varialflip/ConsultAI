@@ -728,6 +728,85 @@ class PostExtractionVerificationTests(unittest.TestCase):
         self.assertEqual(note.drug_lookups, [])
 
 
+class PhoneticLayerTests(unittest.TestCase):
+    """Couche phonétique française du repli flou (app/drug_lookup.py) — la
+    tâche rapproche deux PRONONCIATIONS, pas deux orthographes : le STT se
+    trompe par homophonie (« Norvask », « Ensoprazole »), et la similarité
+    de caractères seule échoue sur ces confusions (voir README § 13)."""
+
+    def setUp(self):
+        drug_lookup._cache.clear()
+        drug_lookup._phonetic_key.cache_clear()
+
+    def _list(self, *names):
+        """Index factice au format produit par _dedupe_by_name (nom +
+        ``_normalized_name`` + ``_phonetic`` précalculés)."""
+        return [
+            {"brand_name": n, "drug_identification_number": f"{i:08d}",
+             "_normalized_name": drug_lookup._normalize_text(n),
+             "_phonetic": drug_lookup._phonetic_key(n)}
+            for i, n in enumerate(names)
+        ]
+
+    def test_phonetic_key_french_substitutions(self):
+        """La clé Soundex FR égalise exactement les paires phonétiques du
+        corpus réel — c'est le signal que les caractères seuls ne donnent pas."""
+        self.assertEqual(drug_lookup._phonetic_key("Norvask"), drug_lookup._phonetic_key("NORVASC"))
+        self.assertEqual(drug_lookup._phonetic_key("Monochore"), drug_lookup._phonetic_key("MONOCOR"))
+        self.assertEqual(drug_lookup._phonetic_key(""), "")
+        # Accents/gestion orthographique gérée par la lib, jamais d'exception.
+        self.assertIsInstance(drug_lookup._phonetic_key("Ésoméprazole"), str)
+        self.assertTrue(drug_lookup._phonetic_key("Ésoméprazole"))
+
+    def test_phonetic_tiebreaker_decides_ensoprazole(self):
+        """Régression réelle (consultation #9) : « Ensoprazole » obtient le
+        MÊME ratio de caractères (0,870) contre LANSOPRAZOLE et ESOMEPRAZOLE
+        — l'ancien code gardait la première entrée de l'index (arbitraire :
+        ici ESOMEPRAZOLE, rangée avant, gagnait). Le tie-breaker phonétique
+        (0,952 vs 0,762) départe et choisit LANSOPRAZOLE, quels que soient
+        l'ordre de l'index."""
+        with mock.patch.object(drug_lookup, "_dpd_query", return_value=[]), \
+             mock.patch.object(drug_lookup, "_load_local_index",
+                               return_value=self._list("ESOMEPRAZOLE", "LANSOPRAZOLE")):
+            result = drug_lookup.search_drug("Ensoprazole")
+        self.assertTrue(result.found)
+        self.assertEqual(result.matched_name, "LANSOPRAZOLE")
+        self.assertEqual(result.source, "dpd_fuzzy")
+
+    def test_phonetic_never_upgrades_respirone_to_strong(self):
+        """Régression réelle (consultation #9) : « Respirone » reste
+        correctement « faible » — REPRONEX (un médicament de fertilité sans
+        rapport) domine DANS LES DEUX métriques (caractères ET phonétique),
+        donc ni l'une ni l'autre ne peut trancher avec confiance : le palier
+        faible interdit au modèle d'écrire « correction apportée » (voir
+        note_extraction : source="dpd_fuzzy_weak" -> confiance "faible")."""
+        with mock.patch.object(drug_lookup, "_dpd_query", return_value=[]), \
+             mock.patch.object(drug_lookup, "_load_local_index",
+                               return_value=self._list("RISPERIDONE", "REPRONEX")):
+            result = drug_lookup.search_drug("Respirone")
+        self.assertTrue(result.found)
+        self.assertEqual(result.matched_name, "REPRONEX")
+        self.assertEqual(result.source, "dpd_fuzzy_weak")
+
+    def test_phonetic_rescue_finds_weak_candidate_only(self):
+        """Rampe de retrouvaille : aucun cas naturel n'a été trouvé dans le
+        corpus (caractères et phonétique restent corrélés sur des vrais
+        noms), donc index ARTIFICIEL — un nom faible en caractères (0,714)
+        dont la clé phonétique égale celle du terme (ratio 1,0). La règle
+        doit le rendre TROUVABLE en « faible », jamais en « élevé »."""
+        row = {
+            "brand_name": "ACTIVEL", "drug_identification_number": "00000042",
+            "_normalized_name": drug_lookup._normalize_text("ACTIVEL"),
+            "_phonetic": drug_lookup._phonetic_key("Actimex"),
+        }
+        with mock.patch.object(drug_lookup, "_dpd_query", return_value=[]), \
+             mock.patch.object(drug_lookup, "_load_local_index", return_value=[row]):
+            result = drug_lookup.search_drug("Actimex")
+        self.assertTrue(result.found)
+        self.assertEqual(result.matched_name, "ACTIVEL")
+        self.assertEqual(result.source, "dpd_fuzzy_weak")
+
+
 class DrugLookupTests(unittest.TestCase):
     """app.drug_lookup.search_drug ne doit jamais lever — voir son
     docstring. Vide le cache du module entre les tests, sinon un terme déjà
@@ -869,6 +948,71 @@ class DrugLookupLocalIndexTests(unittest.TestCase):
         ]
         deduped = drug_lookup._dedupe_by_name(rows)
         self.assertEqual(len(deduped), 2)
+
+
+class LegacySourceTests(unittest.TestCase):
+    """Source historique RxNorm (marques retirées/internationales, voir
+    app/drug_lookup.legacy_match) — index LOCAL téléchargé une fois, aucun
+    envoi runtime vers les USA. Une marque retrouvée ici reste TOUJOURS
+    « faible » (source="rxnorm", jamais une correction apportée)."""
+
+    def setUp(self):
+        drug_lookup._cache.clear()
+        drug_lookup._phonetic_key.cache_clear()
+        drug_lookup._legacy_index = None
+
+    def _rows(self, *names):
+        return [{"name": n, "_normalized_name": drug_lookup._normalize_text(n),
+                 "_phonetic": drug_lookup._phonetic_key(n)} for n in names]
+
+    def test_legacy_match_finds_removed_brand_lopressor(self):
+        """« oppressor » (élision de LOPRESSOR) — la BDPP ne connaît pas la
+        marque retirée ; l'index RxNorm la retrouve, source="rxnorm"."""
+        with mock.patch.object(drug_lookup, "_load_legacy_index", return_value=self._rows("Lopressor", "Losartan")):
+            result = drug_lookup.legacy_match("oppressor")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.matched_name, "Lopressor")
+        self.assertEqual(result.source, "rxnorm")
+        self.assertIsNone(result.din)
+
+    def test_legacy_match_none_below_threshold(self):
+        with mock.patch.object(drug_lookup, "_load_legacy_index", return_value=self._rows("COMPLETELYUNRELATED")):
+            result = drug_lookup.legacy_match("Xyzqwerty")
+        self.assertIsNone(result)
+
+    def test_legacy_match_empty_index_returns_none(self):
+        with mock.patch.object(drug_lookup, "_load_legacy_index", return_value=[]):
+            self.assertIsNone(drug_lookup.legacy_match("oppressor"))
+
+    def test_maybe_legacy_replaces_weak_dpd_candidate(self):
+        """Fusion « choix unique » : BDPP « faible » (suppressor) remplacée
+        par la marque historique (Lopressor) quand note_lookup_legacy est ON."""
+        weak = DrugLookup(term="oppressor", found=True, matched_name="SUPPRESSOR", source="dpd_fuzzy_weak")
+        with mock.patch.object(note_extraction, "search_drug", return_value=weak), \
+             mock.patch.object(runtime_config, "value", side_effect=lambda k: "true" if k == "note_lookup_legacy" else ""), \
+             mock.patch.object(note_extraction, "legacy_match",
+                               return_value=DrugLookup(term="oppressor", found=True, matched_name="Lopressor", source="rxnorm")):
+            result = note_extraction._maybe_legacy(weak, "oppressor")
+        self.assertEqual(result.matched_name, "Lopressor")
+        self.assertEqual(result.source, "rxnorm")
+
+    def test_maybe_legacy_never_replaces_dpd_strong(self):
+        strong = DrugLookup(term="Activant", found=True, matched_name="ATIVAN", source="dpd")
+        with mock.patch.object(note_extraction, "search_drug", return_value=strong), \
+             mock.patch.object(note_extraction, "legacy_match",
+                               side_effect=AssertionError("ne doit jamais être appelé")):
+            result = note_extraction._maybe_legacy(strong, "Activant")
+        self.assertEqual(result.matched_name, "ATIVAN")
+        self.assertEqual(result.source, "dpd")
+
+    def test_maybe_legacy_off_keeps_dpd(self):
+        weak = DrugLookup(term="oppressor", found=True, matched_name="SUPPRESSOR", source="dpd_fuzzy_weak")
+        with mock.patch.object(runtime_config, "value", side_effect=lambda k: "false" if k == "note_lookup_legacy" else ""), \
+             mock.patch.object(note_extraction, "legacy_match",
+                               side_effect=AssertionError("ne doit jamais être appelé")):
+            result = note_extraction._maybe_legacy(weak, "oppressor")
+        self.assertEqual(result.matched_name, "SUPPRESSOR")
+        self.assertEqual(result.source, "dpd_fuzzy_weak")
 
 
 if __name__ == "__main__":

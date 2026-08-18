@@ -91,6 +91,7 @@ from app.auth import (
 from app.config import configure_logging, settings
 from app.database import (
     Consultation,
+    NoteGeneration,
     PricingRate,
     SchedulerState,
     SessionLocal,
@@ -2458,6 +2459,9 @@ def _generate_json_pipeline(
     temperature = llm.active_temperature()
     langue = i18n.normalize(template_row.language or runtime_config.language())
     general = runtime_config.general_prompt(langue)
+    # Étiquette d'historique (voir NoteGeneration) : identifie QUELLE consigne
+    # a produit cette tentative, pour comparer des itérations après coup.
+    prompt_variant = "baseline"
 
     transcript = (payload.transcript or "").strip()
     if not transcript:
@@ -2505,6 +2509,7 @@ def _generate_json_pipeline(
             {"severity": i.severity, "code": i.code, "message": i.message, "path": i.path}
             for i in result_validation.issues
         ],
+        "prompt_variant": prompt_variant,
     }
 
 
@@ -2646,6 +2651,20 @@ async def api_generate(
         output_tokens=result["usage"].get("output_tokens"),
         audio_prompt_tokens=result["usage"].get("audio_prompt_tokens"),
     )
+    # Historique append-only (branche selfhosted seulement, voir NoteGeneration) :
+    # capture CETTE tentative sans toucher generated_markdown/edited_markdown
+    # ci-dessus, pour pouvoir comparer des itérations de gabarit/consigne sans
+    # que la régénération suivante n'efface la précédente.
+    db.flush()
+    db.add(NoteGeneration(
+        consultation_id=consultation.id,
+        pipeline="json" if use_json_pipeline else "markdown",
+        provider=result["provider"],
+        model=result["model"],
+        prompt_variant=result.get("prompt_variant", ""),
+        markdown=result["markdown"],
+        validator_issues_json=json.dumps(result.get("validator_issues", [])),
+    ))
     db.commit()
     db.refresh(consultation)
     live.publish(user.owner_key, "generated", {

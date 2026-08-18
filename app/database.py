@@ -319,6 +319,41 @@ class Consultation(Base):
         return data
 
 
+class NoteGeneration(Base):
+    """
+    Historique append-only des générations (branche ``selfhosted`` seulement).
+
+    ``consultations.generated_markdown``/``edited_markdown`` restent écrasés à
+    chaque régénération — comportement voulu ailleurs dans l'appli (voir le
+    commentaire dans ``main.py`` sur la divergence des deux copies). Cette
+    table n'y change rien : elle capture EN PLUS chaque tentative telle
+    qu'elle est produite, pour comparer des itérations de gabarit/consigne
+    sans que la suivante n'efface la précédente. Purement additive, jamais lue
+    par le pipeline de génération lui-même — outil de mise au point seulement.
+    """
+
+    __tablename__ = "note_generations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    consultation_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("consultations.id"), index=True, nullable=False
+    )
+    # "json" (nouveau pipeline extraction+validateur+rendu) ou "markdown"
+    # (pipeline historique, une seule passe LLM) — voir main.py.
+    pipeline: Mapped[str] = mapped_column(String(20), default="", nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    model: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    # Valeur de la consigne générale utilisée pour cette génération (ex.
+    # "baseline", "json_v1") — sans ça, comparer deux lignes après coup pour
+    # savoir laquelle vient de quelle consigne est impossible.
+    prompt_variant: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    markdown: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Liste JSON des problèmes relevés par note_validator (vide "[]" pour le
+    # pipeline markdown, qui n'a pas de validateur).
+    validator_issues_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Recording(Base):
     """
     Enregistrement audio conservé avec son brouillon.

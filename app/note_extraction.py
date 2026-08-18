@@ -27,7 +27,7 @@ from typing import Optional
 
 from app import llm
 from app.note_renderer import OWN_CONTENT_KEY
-from app.note_schema import ElementAValider, ExtractedNote, LayoutSpec
+from app.note_schema import LIST_STYLE_MARKERS, ElementAValider, ExtractedNote, LayoutSpec
 from app.note_validator import ValidationIssue, ValidationResult, validate
 
 logger = logging.getLogger(__name__)
@@ -46,15 +46,34 @@ def _instruction_hint(layout: LayoutSpec, label: str) -> str:
     « {{Phrase résumé}} », « 1. {{Problème 1}} ») trouvées SOUS cette
     rubrique — jamais reproduites telles quelles (voir note_schema.parse_layout,
     kind="instruction"), mais utiles comme indice de forme à transmettre au
-    modèle plutôt que d'être purement et simplement jetées."""
-    lines = [e.label for e in layout.entries if e.kind == "instruction" and e.parent == label]
+    modèle plutôt que d'être purement et simplement jetées. Les marqueurs de
+    style de liste (LIST_STYLE_MARKERS) sont exclus : ce ne sont pas des
+    exemples de contenu, et LayoutSpec.list_style s'en charge séparément
+    (note_renderer numérote lui-même — le modèle n'a pas à le savoir pour
+    encoder correctement, voir la note ci-dessous)."""
+    lines = [
+        e.label for e in layout.entries
+        if e.kind == "instruction" and e.parent == label and e.label not in LIST_STYLE_MARKERS
+    ]
     return " ".join(lines)
 
 
 def _leaf_placeholder(layout: LayoutSpec, label: str) -> str:
     base = "<contenu de la rubrique, prose ou liste selon la consigne — omettre la clé entière si rien n'a été dicté>"
     hint = _instruction_hint(layout, label)
-    return f"{base} (forme attendue suggérée par le gabarit : {hint})" if hint else base
+    if hint:
+        base = f"{base} (forme attendue suggérée par le gabarit : {hint})"
+    if layout.list_style(label) == "numbered":
+        # Le NUMÉROTAGE lui-même reste toujours fait par note_renderer (voir
+        # LayoutSpec.list_style) — mais le modèle doit encore choisir "un
+        # tableau JSON, un item par élément" plutôt qu'un bloc de prose, sans
+        # quoi il n'y a rien à numéroter.
+        base += (
+            " — cette rubrique attend une liste NUMÉROTÉE : encode-la comme "
+            "un tableau JSON de chaînes, un item distinct par élément (le "
+            "code ajoute les numéros, n'écris pas « 1. », « 2. » toi-même)."
+        )
+    return base
 
 
 def _section_skeleton(layout: LayoutSpec, label: str) -> object:
@@ -126,15 +145,14 @@ Règles spécifiques à cet encodage :
   imbrication que ci-dessus). Omets entièrement une clé si la dictée n'a
   fourni aucun contenu pour cette rubrique — ne mets ni chaîne vide, ni null,
   ni texte de remplissage.
-- MISE EN FORME À L'INTÉRIEUR D'UNE VALEUR DE ``sections`` : si la
-  consigne demande une liste numérotée ou à puces pour une rubrique
-  (Impression, Plan, examen physique...), ENCODE CHAQUE ITEM SÉPARÉMENT —
-  soit un tableau JSON de chaînes (un item par élément), soit une seule
-  chaîne contenant un VRAI retour à la ligne (\n) entre chaque item. Le
-  numéro ou la puce reste du texte (« 1. », « 2. »...), c'est le SAUT DE
-  LIGNE entre les items qui ne doit jamais manquer — n'accole jamais
-  plusieurs items numérotés ou plusieurs paragraphes sur une seule ligne
-  continue.
+- MISE EN FORME À L'INTÉRIEUR D'UNE VALEUR DE ``sections`` : si la rubrique
+  contient plusieurs éléments distincts (Impression, Plan, examen
+  physique...), ENCODE-LA COMME UN TABLEAU JSON DE CHAÎNES, un item par
+  élément — jamais un seul bloc de texte continu. N'écris JAMAIS toi-même
+  un numéro ou une puce au début d'un item (pas de « 1. », pas de « - ») :
+  le code s'en charge à l'affichage, à partir du gabarit. Une rubrique
+  purement narrative (paragraphe suivi, pas une liste d'éléments distincts)
+  reste une simple chaîne de texte.
 - ``elements_a_valider`` : un item par ligne de la future rubrique Éléments à
   valider. Un item à ``correction`` renseignée = lecture retenue avec
   confiance ; ``correction`` absente/null = à confirmer. N'écris jamais la
@@ -171,13 +189,13 @@ Rules specific to this encoding:
 - ``sections``: one key per template section (same headings, same nesting as
   above). Omit a key entirely if the dictation provided no content for that
   section — never an empty string, null, or filler text.
-- FORMATTING INSIDE A ``sections`` VALUE: if the instructions call for a
-  numbered or bulleted list in a section (Impression, Plan, physical
-  exam...), ENCODE EACH ITEM SEPARATELY — either a JSON array of strings
-  (one item per element), or a single string with a REAL line break (\n)
-  between each item. The number or bullet stays as text ("1.", "2."...),
-  it's the LINE BREAK between items that must never be missing — never run
-  multiple numbered items or paragraphs together on one continuous line.
+- FORMATTING INSIDE A ``sections`` VALUE: if a section holds several
+  distinct items (Impression, Plan, physical exam...), ENCODE IT AS A JSON
+  ARRAY OF STRINGS, one item per element — never one continuous block of
+  text. NEVER write a number or bullet yourself at the start of an item
+  (no "1.", no "-"): the code adds it at render time, from the template.
+  A purely narrative section (a running paragraph, not a list of distinct
+  items) stays a plain string.
 - ``elements_a_valider``: one item per future line of the Items to Confirm
   section. An item with ``correction`` filled = a confidently resolved
   reading; missing/null ``correction`` = unconfirmed. Never write the final

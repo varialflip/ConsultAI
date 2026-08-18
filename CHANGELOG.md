@@ -3,6 +3,43 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, numérotage déterministe + historique de génération
+
+- **Impression/Plan rendus avec des puces au lieu d'une liste numérotée**,
+  malgré la correction du cramming la même journée (voir entrée précédente) :
+  le renseignement « numéroté vs à puces » n'existait nulle part dans le
+  schéma — `note_renderer` numérotait toujours en dur avec des tirets. Ajout
+  d'un marqueur de gabarit explicite `{{liste numérotée}}` (voir
+  `note_schema.LIST_STYLE_MARKERS`, `LayoutSpec.list_style`) placé sous
+  IMPRESSION/PLAN dans les quatre gabarits verrouillés (`default_templates.py`)
+  et dans les deux gabarits « (FD) » de test.dictai.ca (patch DB direct, pas
+  de migration : seuls ces deux gabarits en avaient besoin) — jamais déduit du
+  texte libre des consignes, qui n'est pas une source fiable pour une décision
+  de rendu. `note_renderer` numérote désormais lui-même (« 1. », « 2. »...),
+  le modèle n'a plus qu'à choisir « items distincts (tableau JSON) » ou
+  « prose continue (chaîne) ».
+- **Double numérotation** (vu réellement, test.dictai.ca, mistral-small-latest :
+  « 2. 1. Trouble délirant... ») : malgré la consigne de ne jamais écrire de
+  numéro/puce soi-même dans un item de tableau, le modèle le fait parfois
+  quand même. `note_renderer` retire désormais tout marqueur `1.`/`1)`/`-`/`•`
+  en tête d'item AVANT de renuméroter — inconditionnellement, y compris pour
+  les listes à puces (un item qui s'auto-numérote dans une liste à puces est
+  le même bogue).
+- **Historique de génération** (branche `selfhosted` UNIQUEMENT, jamais en
+  production) : nouvelle table additive `note_generations`
+  (`app.database.NoteGeneration`) — une ligne par tentative de génération
+  (pipeline, fournisseur, modèle, variante de consigne, markdown, problèmes
+  du validateur), insérée en plus de (jamais à la place de) l'écrasement
+  habituel de `consultations.generated_markdown`/`edited_markdown`. But :
+  comparer des itérations de gabarit/consigne sans qu'une régénération
+  n'efface la précédente. Purement un outil de mise au point, jamais lu par
+  le pipeline de génération lui-même.
+
+Testé par `tests/test_note_pipeline.py` (36 cas) et par génération réelle
+contre la consultation #5 (test.dictai.ca, gabarit « Consultation - Gériatrie
+(FD) », mistral-small-latest) : PLAN et IMPRESSION rendent maintenant
+« 1. »/« 2. »/« 3. »... proprement, sans double numérotation.
+
 ## 2026-08-18 — branche `selfhosted`, listes numérotées écrasées sur une ligne
 
 - **Impression/Plan rendus en un seul bloc au lieu d'une liste numérotée**

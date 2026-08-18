@@ -295,6 +295,63 @@ class RendererTests(unittest.TestCase):
         result = validate(note, layout, TRANSCRIPT_FR)
         self.assertFalse(any(i.code == "unexpected_value_type" for i in result.issues))
 
+    def test_list_style_numbered_marker_detected_for_impression_and_plan(self):
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        self.assertEqual(layout.list_style("IMPRESSION"), "numbered")
+        self.assertEqual(layout.list_style("PLAN"), "numbered")
+        self.assertEqual(layout.list_style("MÉDICATION ACTUELLE"), "bulleted")
+
+    def test_render_array_valued_plan_is_numbered_not_bulleted(self):
+        """Régression : le gabarit Gériatrie demande une liste NUMÉROTÉE pour
+        PLAN ; le modèle qui encode PLAN comme un tableau JSON (forme
+        maintenant demandée, voir note_extraction._leaf_placeholder) doit
+        obtenir « 1. »/« 2. », pas des puces « - »."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = _base_note()
+        note.sections["PLAN"] = ["Augmentation de la rispéridone.", "Compléter le bilan.", "Traiter le déficit."]
+        markdown = render(note, layout)
+        self.assertIn("1. Augmentation de la rispéridone.", markdown)
+        self.assertIn("2. Compléter le bilan.", markdown)
+        self.assertIn("3. Traiter le déficit.", markdown)
+        self.assertNotIn("- Augmentation de la rispéridone.", markdown)
+
+    def test_render_strips_model_written_numbering_before_renumbering(self):
+        """Régression réelle (consultation #5, test.dictai.ca, mistral-small-
+        latest) : le modèle a écrit ses propres « 1. »/« 2. » DANS certains
+        items d'un tableau JSON malgré la consigne de ne pas le faire, ce qui
+        produisait une double numérotation (« 2. 1. Trouble délirant... »)."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = _base_note()
+        note.sections["IMPRESSION"] = [
+            "Je crois qu'il s'agit d'un trouble délirant tardif.",
+            "1. Trouble délirant tardif avec idées paranoïdes.",
+            "2. Troubles cognitifs légers sans détérioration dégénérative évidente.",
+        ]
+        markdown = render(note, layout)
+        self.assertIn("1. Je crois qu'il s'agit d'un trouble délirant tardif.", markdown)
+        self.assertIn("2. Trouble délirant tardif avec idées paranoïdes.", markdown)
+        self.assertIn("3. Troubles cognitifs légers sans détérioration dégénérative évidente.", markdown)
+        self.assertNotIn("2. 1.", markdown)
+        self.assertNotIn("3. 2.", markdown)
+
+    def test_render_strips_model_written_bullets_in_bulleted_list(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["EXAMEN PHYSIQUE"] = ["- TA 150/80", "• Poids 82 kg"]
+        markdown = render(note, layout)
+        self.assertIn("- TA 150/80", markdown)
+        self.assertIn("- Poids 82 kg", markdown)
+        self.assertNotIn("- - TA", markdown)
+        self.assertNotIn("- • Poids", markdown)
+
+    def test_render_array_valued_medication_stays_bulleted(self):
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = _base_note()
+        note.sections["MÉDICATION ACTUELLE"] = {OWN_CONTENT_KEY: ["Prégabaline 75 mg PO bid.", "Rivaroxaban 20 mg die."]}
+        markdown = render(note, layout)
+        self.assertIn("- Prégabaline 75 mg PO bid.", markdown)
+        self.assertIn("- Rivaroxaban 20 mg die.", markdown)
+
     def test_boilerplate_survives_empty_plan(self):
         layout = parse_layout(GENERAL_LAYOUT)
         note = _base_note()

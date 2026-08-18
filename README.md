@@ -910,3 +910,28 @@ un référentiel de médicaments.
 
 Correctifs trouvés en testant deux générations réelles avec un modèle self-hosted-like (`mistral-small-latest`, pas Gemini), 2026-08-18 :
 une rubrique peut désormais avoir SON PROPRE contenu direct EN PLUS de sous-rubriques imbriquées (clé réservée `__contenu__`, `note_renderer.OWN_CONTENT_KEY`) — nécessaire pour que MÉDICATION ACTUELLE + `### ALLERGIES` rende les deux, pas seulement l'un des deux ; les gabarits « Consultation Médicale Générale » et « General Medical Consultation » utilisent maintenant ce même schéma imbriqué (au lieu de « MÉDICATION ACTUELLE ET ALLERGIES » fusionné) ; le filtre de texte de remplissage couvre une famille de formulations plutôt qu'une liste fermée d'exemples ; les corrections aberrantes dans Éléments à valider (identique au terme dicté, ou « à confirmer » écrit comme lecture) sont auto-corrigées.
+
+**Style de liste (numéroté vs à puces), 2026-08-18.** Une valeur de
+`sections` peut être un tableau JSON (plusieurs items distincts). Le style
+d'affichage — « 1. », « 2. »... ou « - » — est déclaré dans le GABARIT, pas
+deviné du texte des consignes : une instruction `{{liste numérotée}}` (ou
+`{{numbered list}}`) placée juste sous un titre de rubrique
+(`note_schema.LIST_STYLE_MARKERS`, `LayoutSpec.list_style`) marque cette
+rubrique ; par défaut, une liste reste à puces. `note_renderer` fait TOUJOURS
+le numérotage lui-même, et retire d'abord tout marqueur (`1.`, `1)`, `-`,
+`•`) que le modèle aurait écrit lui-même en tête d'item malgré la consigne
+contraire — un modèle plus faible le fait parfois quand même, et sans ce
+nettoyage la note affiche une double numérotation. Les quatre gabarits
+verrouillés portent ce marqueur sous IMPRESSION et PLAN.
+
+**Historique de génération (branche `selfhosted` uniquement), 2026-08-18.**
+Table additive `note_generations` (`app.database.NoteGeneration`) : une ligne
+par tentative de génération (pipeline, fournisseur, modèle, variante de
+consigne — `prompt_variant` —, markdown produit, problèmes du validateur),
+insérée EN PLUS de l'écrasement habituel de
+`consultations.generated_markdown`/`edited_markdown` (qui reste inchangé —
+voir le commentaire dans `main.py`). But : pouvoir comparer plusieurs
+itérations de gabarit/consigne sur la même dictée sans qu'une régénération
+n'efface la précédente. Jamais lu par le pipeline de génération lui-même,
+jamais activé en production (la table n'existe que sur les bases où ce code
+tourne).

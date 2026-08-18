@@ -32,6 +32,19 @@ _HEADING_RE = re.compile(r"^(#{2,3})\s+(.+)$")
 _BOLD_FIELD_RE = re.compile(r"^\*\*(.+?)\s*:\*\*\s*$")
 _ELEMENTS_A_VALIDER_LABELS = {"ÉLÉMENTS À VALIDER", "ELEMENTS A VALIDER"}
 
+#: Marqueurs de style de liste reconnus comme instruction {{...}} placée juste
+#: sous un titre de rubrique (ex. « ## PLAN » suivi de « {{liste numérotée}} »).
+#: Décision de RENDU déterministe (voir LayoutSpec.list_style/note_renderer) —
+#: jamais déduite du texte libre de system_instructions, qui n'est pas fiable
+#: pour une décision de code : l'auteur du gabarit la déclare explicitement,
+#: au même endroit que les autres indices de forme {{...}}.
+LIST_STYLE_MARKERS = {
+    "{{liste numérotée}}": "numbered",
+    "{{numbered list}}": "numbered",
+    "{{liste à puces}}": "bulleted",
+    "{{bulleted list}}": "bulleted",
+}
+
 
 @dataclass
 class LayoutEntry:
@@ -56,6 +69,17 @@ class LayoutSpec:
 
     def literals_of(self, label: Optional[str]) -> List[str]:
         return [e.label for e in self.entries if e.kind == "literal" and e.parent == label]
+
+    def list_style(self, label: str) -> str:
+        """« numbered » si le gabarit porte un marqueur {{liste numérotée}}
+        sous cette rubrique, sinon « bulleted » (comportement historique) —
+        voir LIST_STYLE_MARKERS. Le numérotage lui-même reste toujours fait
+        par note_renderer, jamais par le modèle : ça évite qu'un item sur
+        deux perde son numéro ou que la numérotation reparte à 1."""
+        for e in self.entries:
+            if e.kind == "instruction" and e.parent == label and e.label in LIST_STYLE_MARKERS:
+                return LIST_STYLE_MARKERS[e.label]
+        return "bulleted"
 
 
 def parse_layout(layout_format: str) -> LayoutSpec:

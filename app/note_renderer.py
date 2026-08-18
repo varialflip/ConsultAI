@@ -18,9 +18,19 @@ donc pouvaient être oubliées :
 
 from __future__ import annotations
 
+import re
 from typing import List
 
 from app.note_schema import ElementAValider, ExtractedNote, LayoutSpec
+
+#: Un modèle plus faible écrit parfois lui-même « 1. », « 2) », « - », « • »
+#: au début d'un item de tableau JSON malgré la consigne de ne pas le faire
+#: (voir note_extraction._JSON_FORMAT_INSTRUCTIONS_*) — sans ce nettoyage, un
+#: item numéroté par le modèle ET par ce rendu produit une double
+#: numérotation (« 2. 1. Trouble délirant... »). Retiré inconditionnellement,
+#: y compris pour les listes à puces : un item qui s'auto-numérote dans une
+#: liste à puces est le même bogue.
+_LEADING_LIST_MARKER_RE = re.compile(r"^\s*(?:\d+[.)]|[-•])\s+")
 
 
 def render(note: ExtractedNote, layout: LayoutSpec) -> str:
@@ -72,14 +82,25 @@ def render(note: ExtractedNote, layout: LayoutSpec) -> str:
 OWN_CONTENT_KEY = "__contenu__"
 
 
-def _render_own_content(value: object) -> List[str]:
-    """Rend une valeur de rubrique feuille : prose (str), liste à puces
-    (List[str] — le gabarit demande souvent une « liste pointée », ex.
-    médication, examen physique), ou un type inattendu (nombre, booléen...)
-    qu'on affiche tel quel plutôt que de le faire disparaître silencieusement
-    — une extraction malformée doit être visible, jamais invisible."""
+def _render_own_content(value: object, style: str = "bulleted") -> List[str]:
+    """Rend une valeur de rubrique feuille : prose (str), liste (List[str] —
+    le gabarit demande souvent une « liste pointée » ou « numérotée », ex.
+    médication, plan — voir LayoutSpec.list_style), ou un type inattendu
+    (nombre, booléen...) qu'on affiche tel quel plutôt que de le faire
+    disparaître silencieusement — une extraction malformée doit être
+    visible, jamais invisible. Le numérotage est TOUJOURS fait ici, jamais
+    par le modèle : un item sur deux perdant son numéro, ou une numérotation
+    qui repart à 1, sont des erreurs de modèle que le code ne peut pas
+    laisser passer."""
     if isinstance(value, list):
-        return [f"- {str(item).strip()}" for item in value if str(item).strip()]
+        items = [
+            _LEADING_LIST_MARKER_RE.sub("", str(item).strip()).strip()
+            for item in value if str(item).strip()
+        ]
+        items = [item for item in items if item]
+        if style == "numbered":
+            return [f"{i}. {item}" for i, item in enumerate(items, start=1)]
+        return [f"- {item}" for item in items]
     if isinstance(value, str) and value.strip():
         return [value.strip()]
     if value not in (None, "", [], {}):
@@ -92,6 +113,7 @@ def _render_heading(layout: LayoutSpec, label: str, level: int, container: objec
     les deux à la fois si les deux sont présents ; [] si rien à dire —
     auquel cas l'appelant n'émet PAS le titre non plus (rubrique retirée)."""
     value = container.get(label) if isinstance(container, dict) else None
+    style = layout.list_style(label)
 
     child_headings = [e for e in layout.entries if e.kind == "heading" and e.parent == label]
     child_fields = [e for e in layout.entries if e.kind == "bold_field" and e.parent == label]
@@ -101,7 +123,7 @@ def _render_heading(layout: LayoutSpec, label: str, level: int, container: objec
     if child_headings or child_fields:
         sub_container = value if isinstance(value, dict) else {}
         own_value = sub_container.get(OWN_CONTENT_KEY) if isinstance(sub_container, dict) else None
-        body.extend(_render_own_content(own_value))
+        body.extend(_render_own_content(own_value, style))
 
         for f in child_fields:
             v = sub_container.get(f.label) if isinstance(sub_container, dict) else None
@@ -115,7 +137,7 @@ def _render_heading(layout: LayoutSpec, label: str, level: int, container: objec
                     body.append("")
                 body.extend(sub_body)
     else:
-        body.extend(_render_own_content(value))
+        body.extend(_render_own_content(value, style))
 
     if not body:
         return []

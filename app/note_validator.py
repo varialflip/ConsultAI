@@ -161,8 +161,21 @@ def check_section_types(note: ExtractedNote) -> List[ValidationIssue]:
 # 1. Texte de remplissage interdit — auto-fixé (retrait du champ)
 # ---------------------------------------------------------------------------
 
+# Liste ouverte : un modèle plus faible invente volontiers sa propre
+# formulation plutôt que de reprendre exactement les exemples de la consigne
+# (« Non servi », « Non abordé »...) — élargi après un cas réel où le modèle
+# a écrit « non dictée » en valeur de champ (test.dictai.ca, 2026-08-18).
 _FILLER_RE = re.compile(
-    r"^(non\s+servi|non\s+abord[ée]|n/?a|not\s+addressed|not\s+applicable|—|-)$",
+    r"^("
+    r"non[\s-]+(servi|abord[ée]e?|dict[ée]e?|pr[ée]cis[ée]e?|renseign[ée]e?|"
+    r"sp[ée]cifi[ée]e?|mentionn[ée]e?|fourni[ée]?|disponible|applicable|"
+    r"communiqu[ée]e?)s?"
+    r"|inconnue?s?|non[\s-]+connue?s?|[àa]\s+d[ée]terminer|sans\s+objet"
+    r"|aucune?\s+information|non[\s-]+applicable|n/?[ad]"
+    r"|not[\s-]+(stated|provided|specified|addressed|applicable|available|dictated|mentioned)"
+    r"|unknown|n/?a|none\s+provided|not\s+given"
+    r"|—|-"
+    r")$",
     re.IGNORECASE,
 )
 
@@ -211,6 +224,52 @@ def check_html_tags(note: ExtractedNote) -> List[ValidationIssue]:
 # ---------------------------------------------------------------------------
 # 3. Éléments à valider — présence + cohérence des items
 # ---------------------------------------------------------------------------
+
+# Le modèle écrit parfois « à confirmer » (ou une variante) DANS le champ
+# ``correction`` lui-même, au lieu de le laisser vide — ce qui produit la
+# phrase absurde « → correction apportée : à confirmer » (vu réellement,
+# test.dictai.ca, 2026-08-18, mistral-small-latest). Auto-fixé : équivalent à
+# ne pas avoir renseigné de correction.
+_META_UNCONFIRMED_RE = re.compile(
+    r"^([àa]\s+confirmer|unconfirmed|inconnue?|tbd|\?+|non[\s-]+confirm[ée]e?)$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_text(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip().rstrip(".")).casefold()
+
+
+def fix_elements_a_valider_corrections(note: ExtractedNote) -> List[ValidationIssue]:
+    """Mute ``note.elements_a_valider`` : retire les auto-corrections « no-op »
+    (correction identique au terme dicté — aucune information, seulement du
+    bruit) et démet en « à confirmer » les corrections dont la valeur est
+    elle-même un mot-clé d'incertitude plutôt qu'une lecture réelle."""
+    issues: List[ValidationIssue] = []
+    kept: List[ElementAValider] = []
+    for i, e in enumerate(note.elements_a_valider):
+        if e.kind == "item" and e.correction:
+            if _META_UNCONFIRMED_RE.match(e.correction.strip()):
+                issues.append(
+                    ValidationIssue(
+                        "auto_fixed", "correction_is_meta_word",
+                        f"« {e.correction} » utilisé comme correction au lieu d'une lecture — traité comme à confirmer.",
+                        f"elements_a_valider[{i}]",
+                    )
+                )
+                e.correction = None
+            elif _normalize_text(e.correction) == _normalize_text(e.terme_dicte):
+                issues.append(
+                    ValidationIssue(
+                        "auto_fixed", "correction_is_noop",
+                        f"« {e.terme_dicte} » signalé « corrigé » vers un texte identique — retiré (aucune information).",
+                        f"elements_a_valider[{i}]",
+                    )
+                )
+                continue  # ne pas conserver cet élément
+        kept.append(e)
+    note.elements_a_valider = kept
+    return issues
 
 
 def check_elements_a_valider(note: ExtractedNote, layout: LayoutSpec) -> List[ValidationIssue]:
@@ -359,6 +418,7 @@ def validate(note: ExtractedNote, layout: LayoutSpec, transcript: str, language:
     issues: List[ValidationIssue] = []
     issues += check_section_types(note)
     issues += check_forbidden_filler(note)  # auto-fix, mute `note`
+    issues += fix_elements_a_valider_corrections(note)  # auto-fix, mute `note`
     issues += check_placeholder_leftover(note)
     issues += check_html_tags(note)
     issues += check_elements_a_valider(note, layout)

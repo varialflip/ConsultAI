@@ -17,7 +17,7 @@ from unittest import mock
 from app.default_templates import LOCKED_TEMPLATES
 from app import llm
 from app.note_extraction import build_expected_json_skeleton, validate_and_repair
-from app.note_renderer import render
+from app.note_renderer import OWN_CONTENT_KEY, render
 from app.note_schema import ElementAValider, ExtractedNote, GroundedField, parse_layout
 from app.note_validator import validate
 
@@ -37,7 +37,7 @@ def _base_note() -> ExtractedNote:
         header_fields={"Lieu de la consultation": "Clinique ABC", "Date de l'évaluation": "2026-08-17"},
         sections={
             "RAISON DE CONSULTATION": "Suivi de mémoire.",
-            "MÉDICATION ACTUELLE ET ALLERGIES": "Prégabaline 75 mg PO bid.",
+            "MÉDICATION ACTUELLE": {OWN_CONTENT_KEY: "Prégabaline 75 mg PO bid."},
             "IMPRESSION": "1. Je crois qu'il s'agit d'une maladie d'Alzheimer débutante.",
             "PLAN": "1. Poursuite du suivi.",
         },
@@ -55,8 +55,10 @@ class ParseLayoutTests(unittest.TestCase):
         self.assertTrue(layout.has_elements_a_valider)
         self.assertIn("Lieu de la consultation", layout.top_level_fields())
         headings = [h.label for h in layout.headings()]
-        self.assertIn("MÉDICATION ACTUELLE ET ALLERGIES", headings)
+        self.assertIn("MÉDICATION ACTUELLE", headings)
         self.assertIn("IMPRESSION", headings)
+        allergies = next(h for h in layout.headings() if h.label == "ALLERGIES")
+        self.assertEqual(allergies.parent, "MÉDICATION ACTUELLE")
         self.assertIn("Rédigé à l'aide de la reconnaissance vocale.", layout.literals_of(None))
 
     def test_en_template_has_no_elements_a_valider(self):
@@ -119,6 +121,16 @@ class SkeletonTests(unittest.TestCase):
         self.assertIn("ALLERGIES", skeleton["sections"]["MÉDICATION ACTUELLE"])
         self.assertIn("AVQ", skeleton["sections"]["HISTOIRE SOCIALE ET MILIEU DE VIE"]["Autonomie fonctionnelle"])
 
+    def test_skeleton_offers_own_content_slot_for_container_headings(self):
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        skeleton = build_expected_json_skeleton(layout)
+        self.assertIn(OWN_CONTENT_KEY, skeleton["sections"]["MÉDICATION ACTUELLE"])
+
+    def test_skeleton_folds_instruction_placeholder_into_hint(self):
+        layout = parse_layout(CUSTOM_LAYOUT_WITH_INSTRUCTION_PLACEHOLDER)
+        skeleton = build_expected_json_skeleton(layout)
+        self.assertIn("{{Phrase résumé}}", skeleton["sections"]["IMPRESSION"])
+
 
 class ValidatorTests(unittest.TestCase):
     def test_clean_note_passes(self):
@@ -165,6 +177,47 @@ class ValidatorTests(unittest.TestCase):
         codes = {i.code for i in result.needs_repair}
         self.assertIn("html_markup", codes)
         self.assertIn("placeholder_leftover", codes)
+
+    def test_filler_variant_not_in_original_examples_is_caught(self):
+        """Régression : « non dictée » (invention d'un modèle plus faible,
+        test.dictai.ca 2026-08-18) n'était pas dans la liste d'exemples
+        d'origine de la consigne ; le filtre doit couvrir cette famille de
+        formulations, pas seulement les exemples cités mot pour mot."""
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.header_fields["Date de l'évaluation"] = "non dictée"
+        note.sections["HABITUDES DE VIE"] = "non dictées"
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertNotIn("Date de l'évaluation", note.header_fields)
+        self.assertNotIn("HABITUDES DE VIE", note.sections)
+        self.assertTrue(any(i.code == "filler_value" for i in result.issues))
+
+    def test_noop_self_correction_is_dropped(self):
+        """Régression : une « correction » identique au terme dicté (vu
+        réellement, test.dictai.ca 2026-08-18) n'apporte aucune information —
+        auto-retirée plutôt que présentée au médecin comme un changement."""
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.elements_a_valider.append(
+            ElementAValider(kind="item", terme_dicte="Puis je garde le dossier", correction="Puis je garde le dossier")
+        )
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertFalse(any(e.terme_dicte == "Puis je garde le dossier" for e in note.elements_a_valider))
+        self.assertTrue(any(i.code == "correction_is_noop" for i in result.issues))
+
+    def test_meta_word_as_correction_is_demoted_to_unconfirmed(self):
+        """Régression : le modèle a écrit le mot « à confirmer » DANS le
+        champ correction lui-même (test.dictai.ca 2026-08-18), produisant
+        « → correction apportée : à confirmer ». Démis en à-confirmer réel."""
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.elements_a_valider.append(
+            ElementAValider(kind="item", terme_dicte="Pré-gabalin 16C", correction="à confirmer")
+        )
+        result = validate(note, layout, TRANSCRIPT_FR)
+        item = next(e for e in note.elements_a_valider if e.terme_dicte == "Pré-gabalin 16C")
+        self.assertIsNone(item.correction)
+        self.assertTrue(any(i.code == "correction_is_meta_word" for i in result.issues))
 
 
 class RendererTests(unittest.TestCase):
@@ -243,6 +296,29 @@ class RendererTests(unittest.TestCase):
         note.elements_a_valider = []
         markdown = render(note, layout)
         self.assertNotIn("ÉLÉMENTS À VALIDER", markdown)
+
+    def test_render_own_content_and_subsection_together(self):
+        """Régression : MÉDICATION ACTUELLE a sa propre liste de médicaments
+        ET une sous-rubrique ALLERGIES imbriquée — les deux doivent apparaître,
+        pas seulement l'une ou l'autre. Vu réellement sur test.dictai.ca
+        (2026-08-18, mistral-small-latest) : MÉDICATION ACTUELLE ressortait
+        vide, seule sa sous-rubrique ALLERGIES avait du contenu."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = ExtractedNote(
+            sections={
+                "RAISON DE CONSULTATION": "Suivi.",
+                "MÉDICATION ACTUELLE": {
+                    OWN_CONTENT_KEY: ["Prégabaline 75 mg PO bid", "Rivaroxaban 20 mg"],
+                    "ALLERGIES": "Pénicilline.",
+                },
+            },
+        )
+        markdown = render(note, layout)
+        self.assertIn("## MÉDICATION ACTUELLE", markdown)
+        self.assertIn("- Prégabaline 75 mg PO bid", markdown)
+        self.assertIn("- Rivaroxaban 20 mg", markdown)
+        self.assertIn("### ALLERGIES", markdown)
+        self.assertIn("Pénicilline.", markdown)
 
 
 class RepairTests(unittest.TestCase):

@@ -26,6 +26,7 @@ import re
 from typing import Optional
 
 from app import llm
+from app.note_renderer import OWN_CONTENT_KEY
 from app.note_schema import ElementAValider, ExtractedNote, LayoutSpec
 from app.note_validator import ValidationIssue, ValidationResult, validate
 
@@ -40,14 +41,41 @@ DEFAULT_MAX_REPAIR_ATTEMPTS = 2
 # ---------------------------------------------------------------------------
 
 
+def _instruction_hint(layout: LayoutSpec, label: str) -> str:
+    """Lignes d'exemple/consigne du gabarit entre accolades (ex.
+    « {{Phrase résumé}} », « 1. {{Problème 1}} ») trouvées SOUS cette
+    rubrique — jamais reproduites telles quelles (voir note_schema.parse_layout,
+    kind="instruction"), mais utiles comme indice de forme à transmettre au
+    modèle plutôt que d'être purement et simplement jetées."""
+    lines = [e.label for e in layout.entries if e.kind == "instruction" and e.parent == label]
+    return " ".join(lines)
+
+
+def _leaf_placeholder(layout: LayoutSpec, label: str) -> str:
+    base = "<contenu de la rubrique, prose ou liste selon la consigne — omettre la clé entière si rien n'a été dicté>"
+    hint = _instruction_hint(layout, label)
+    return f"{base} (forme attendue suggérée par le gabarit : {hint})" if hint else base
+
+
 def _section_skeleton(layout: LayoutSpec, label: str) -> object:
     child_headings = [e for e in layout.entries if e.kind == "heading" and e.parent == label]
     child_fields = [e for e in layout.entries if e.kind == "bold_field" and e.parent == label]
-    if child_headings:
-        return {c.label: _section_skeleton(layout, c.label) for c in child_headings}
-    if child_fields:
-        return {f.label: "<valeur dictée, ou omettre la clé si non dictée>" for f in child_fields}
-    return "<contenu de la rubrique, prose ou liste selon la consigne — omettre la clé entière si rien n'a été dicté>"
+    if child_headings or child_fields:
+        skeleton = {}
+        # Cette rubrique peut avoir SON PROPRE contenu direct EN PLUS de ses
+        # sous-rubriques/champs (ex. MÉDICATION ACTUELLE contient sa liste de
+        # médicaments ET une sous-rubrique ALLERGIES) — voir note_renderer.OWN_CONTENT_KEY.
+        skeleton[OWN_CONTENT_KEY] = (
+            "<contenu dicté DIRECTEMENT sous cette rubrique (pas sous une "
+            "sous-rubrique ci-dessous) — omettre la clé entière si rien n'a "
+            "été dicté à ce niveau>"
+        )
+        for c in child_headings:
+            skeleton[c.label] = _section_skeleton(layout, c.label)
+        for f in child_fields:
+            skeleton[f.label] = "<valeur dictée, ou omettre la clé si non dictée>"
+        return skeleton
+    return _leaf_placeholder(layout, label)
 
 
 def build_expected_json_skeleton(layout: LayoutSpec) -> dict:
@@ -56,7 +84,12 @@ def build_expected_json_skeleton(layout: LayoutSpec) -> dict:
         "header_fields": {label: "<valeur dictée, ou omettre la clé>" for label in layout.top_level_fields()},
         "sections": {h.label: _section_skeleton(layout, h.label) for h in top_headings},
         "elements_a_valider": [
-            {"kind": "item", "terme_dicte": "...", "correction": "... (absent/null si à confirmer)"},
+            {
+                "kind": "item", "terme_dicte": "...",
+                "correction": "la lecture corrigée elle-même (ex. « Prégabaline 150 mg ») — "
+                "OMETS CETTE CLÉ ENTIÈREMENT si incertain, n'écris JAMAIS le mot "
+                "« à confirmer » ni « unconfirmed » comme valeur de correction",
+            },
             {"kind": "group", "texte_groupe": "ex. « 5 dates approximatives non confirmées » — seulement si plus de 8 items individuels"},
         ],
         "grounded_fields": [

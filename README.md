@@ -907,3 +907,6 @@ médicament/DIN (Banque de données des produits pharmaceutiques de Santé
 Canada + Liste RAMQ) reste à implémenter — `grounded_fields` couvre déjà
 l'ancrage générique contre la transcription, pas encore la validation contre
 un référentiel de médicaments.
+
+Correctifs trouvés en testant deux générations réelles avec un modèle self-hosted-like (`mistral-small-latest`, pas Gemini), 2026-08-18 :
+une rubrique peut désormais avoir SON PROPRE contenu direct EN PLUS de sous-rubriques imbriquées (clé réservée `__contenu__`, `note_renderer.OWN_CONTENT_KEY`) — nécessaire pour que MÉDICATION ACTUELLE + `### ALLERGIES` rende les deux, pas seulement l'un des deux ; les gabarits « Consultation Médicale Générale » et « General Medical Consultation » utilisent maintenant ce même schéma imbriqué (au lieu de « MÉDICATION ACTUELLE ET ALLERGIES » fusionné) ; le filtre de texte de remplissage couvre une famille de formulations plutôt qu'une liste fermée d'exemples ; les corrections aberrantes dans Éléments à valider (identique au terme dicté, ou « à confirmer » écrit comme lecture) sont auto-corrigées.

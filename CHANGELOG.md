@@ -3,6 +3,37 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, correctifs post-test réel (mistral-small-latest)
+
+- **Rubrique avec contenu propre ET sous-rubrique imbriquée** (ex. MÉDICATION
+  ACTUELLE + ### ALLERGIES) : `note_renderer`/`note_extraction` supposaient
+  qu'une rubrique était SOIT prose SOIT conteneur de sous-rubriques, jamais
+  les deux — MÉDICATION ACTUELLE ressortait vide, seule ALLERGIES avait du
+  contenu. Nouvelle clé réservée `__contenu__` (`note_renderer.OWN_CONTENT_KEY`).
+  Gabarits « Consultation Médicale Générale » et « General Medical
+  Consultation » alignés sur le même schéma imbriqué que Gériatrie
+  (`## MÉDICATION ACTUELLE` / `### ALLERGIES`, plus « MÉDICATION ACTUELLE ET
+  ALLERGIES » fusionné).
+- **Texte de remplissage** : le filtre ne couvrait que les exemples cités mot
+  pour mot dans la consigne (« Non servi »...) ; un modèle plus faible a
+  écrit « non dictée » en valeur de champ, non détecté. Filtre élargi à une
+  famille de formulations plutôt qu'à une liste fermée.
+- **Éléments à valider — corrections aberrantes** : deux cas vus réellement —
+  une « correction » identique au terme dicté (aucune information, bruit
+  pur) et le mot « à confirmer » écrit DANS le champ `correction` lui-même
+  (produisait « → correction apportée : à confirmer »). Les deux sont
+  maintenant auto-corrigés (`fix_elements_a_valider_corrections`).
+- **Indices de forme du gabarit transmis au modèle** : les lignes
+  d'instruction entre accolades (`{{Phrase résumé}}`...), retirées du rendu
+  depuis le dernier correctif, étaient jusque-là purement perdues. Elles
+  alimentent maintenant le schéma JSON envoyé au modèle comme indice de
+  forme pour la rubrique correspondante, au lieu d'être du poids mort.
+
+Testé par `tests/test_note_pipeline.py` (28 cas). Trouvé en testant deux
+générations réelles sur test.dictai.ca avec un modèle self-hosted-like
+(`mistral-small-latest`, pas Gemini) — voir mémoire de session pour le
+détail des deux consultations testées.
+
 ## 2026-08-18 — branche `selfhosted` (non publié, test.dictai.ca uniquement)
 
 - **Pipeline JSON branché sur `/api/generate`, derrière un réglage panneau**

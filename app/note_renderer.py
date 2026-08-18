@@ -63,8 +63,33 @@ def render(note: ExtractedNote, layout: LayoutSpec) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+#: Clé réservée : le contenu dicté DIRECTEMENT sous une rubrique qui a par
+#: ailleurs des sous-rubriques/champs (ex. MÉDICATION ACTUELLE contient sa
+#: propre liste de médicaments ET une sous-rubrique ### ALLERGIES — les deux
+#: à la fois, pas l'un OU l'autre). Improbable en collision avec un vrai
+#: intitulé de rubrique/champ (double soulignement, jamais utilisé dans un
+#: gabarit).
+OWN_CONTENT_KEY = "__contenu__"
+
+
+def _render_own_content(value: object) -> List[str]:
+    """Rend une valeur de rubrique feuille : prose (str), liste à puces
+    (List[str] — le gabarit demande souvent une « liste pointée », ex.
+    médication, examen physique), ou un type inattendu (nombre, booléen...)
+    qu'on affiche tel quel plutôt que de le faire disparaître silencieusement
+    — une extraction malformée doit être visible, jamais invisible."""
+    if isinstance(value, list):
+        return [f"- {str(item).strip()}" for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    if value not in (None, "", [], {}):
+        return [str(value).strip()]
+    return []
+
+
 def _render_heading(layout: LayoutSpec, label: str, level: int, container: object) -> List[str]:
-    """Rend une rubrique et ses sous-rubriques/champs ; [] si rien à dire —
+    """Rend une rubrique — son propre contenu ET ses sous-rubriques/champs,
+    les deux à la fois si les deux sont présents ; [] si rien à dire —
     auquel cas l'appelant n'émet PAS le titre non plus (rubrique retirée)."""
     value = container.get(label) if isinstance(container, dict) else None
 
@@ -73,32 +98,24 @@ def _render_heading(layout: LayoutSpec, label: str, level: int, container: objec
 
     body: List[str] = []
 
-    if child_headings:
+    if child_headings or child_fields:
         sub_container = value if isinstance(value, dict) else {}
+        own_value = sub_container.get(OWN_CONTENT_KEY) if isinstance(sub_container, dict) else None
+        body.extend(_render_own_content(own_value))
+
+        for f in child_fields:
+            v = sub_container.get(f.label) if isinstance(sub_container, dict) else None
+            if isinstance(v, str) and v.strip():
+                body.append(f"**{f.label} :** {v.strip()}")
+
         for child in child_headings:
             sub_body = _render_heading(layout, child.label, child.level, sub_container)
             if sub_body:
                 if body:
                     body.append("")
                 body.extend(sub_body)
-    elif child_fields:
-        sub_container = value if isinstance(value, dict) else {}
-        for f in child_fields:
-            v = sub_container.get(f.label) if isinstance(sub_container, dict) else None
-            if isinstance(v, str) and v.strip():
-                body.append(f"**{f.label} :** {v.strip()}")
     else:
-        # Prose (str), liste à puces (List[str] — le gabarit demande souvent
-        # une « liste pointée », ex. médication, examen physique), ou un
-        # type inattendu (nombre, booléen...) qu'on affiche tel quel plutôt
-        # que de le faire disparaître silencieusement : une extraction
-        # malformée doit être visible, jamais invisible.
-        if isinstance(value, list):
-            body.extend(f"- {str(item).strip()}" for item in value if str(item).strip())
-        elif isinstance(value, str) and value.strip():
-            body.append(value.strip())
-        elif value not in (None, "", [], {}):
-            body.append(str(value).strip())
+        body.extend(_render_own_content(value))
 
     if not body:
         return []

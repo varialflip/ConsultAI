@@ -3,6 +3,49 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, repli flou BDPP sur l'extrait complet (pas des préfixes)
+
+Le repli flou livré plus tôt la même journée (raccourcir le terme depuis la
+fin, réinterroger la BDPP à chaque longueur de préfixe) résolvait
+`Norvask → NORVASC`, mais s'est avéré structurellement incapable de
+retrouver un médicament dont le début diffère : cas réel, consultation #9,
+`Activant` (probablement Ativan/lorazépam, confondu par le modèle avec
+zopiclone) et `Ativan` divergent dès la 2ᵉ lettre (`c` vs `t`) — aucun
+préfixe de l'un n'est un préfixe de l'autre, donc la recherche par préfixe
+ne pouvait JAMAIS le proposer comme candidat, même si leur similarité
+(`SequenceMatcher` ≈ 0,857) est largement au-dessus du seuil de 0,75.
+
+Corrigé en téléchargeant l'extrait COMPLET plutôt que des préfixes : le même
+point de terminaison `drugproduct`/`activeingredient`, appelé SANS
+paramètre de nom, rend l'ENSEMBLE de la base (confirmé empiriquement :
+~58 000 produits / ~121 000 lignes d'ingrédients, ~15-16 Mo chacun en JSON)
+— pas de fichier ZIP à télécharger ni parser. Mis en cache localement sous
+`/data/dpd_cache/` (même volume persistant que la base SQLite), rafraîchi
+si périmé (7 jours), avec repli sur un cache périmé plutôt que rien si le
+téléchargement échoue. Le repli flou compare maintenant le terme contre
+CHAQUE nom de l'extrait (`difflib.SequenceMatcher`), pas seulement ceux
+partageant un préfixe — remplace entièrement l'ancienne boucle de
+raccourcissement, sans régression (tout ce qui était trouvable par préfixe
+le reste).
+
+Vérifié contre l'API réelle : `search_drug('Activant')` retrouve maintenant
+ATIVAN (DIN 02041413) — 0,9 à 2 s par recherche (téléchargement une seule
+fois, puis index en mémoire pour le reste du processus).
+
+**Constat non résolu, trouvé en rejouant la consultation #9 avec l'outil
+amélioré** : le modèle ne transmet pas toujours le terme LITTÉRALEMENT
+dicté à l'outil — il arrive qu'il transmette déjà SA PROPRE correction
+(cette fois : « Activelle », un vrai médicament — patch hormonal —
+totalement différent d'Ativan) avant l'appel, et l'outil confirme alors
+que cette proposition existe, renforçant une mauvaise supposition avec une
+fausse confiance plutôt que de vérifier le terme réellement entendu. Un
+meilleur outil ne peut rien faire si le terme qu'on lui soumet a déjà été
+« corrigé » par le modèle avant l'appel. Piste de suivi, pas encore
+implémentée : consigne explicite pour transmettre le terme TEL QUE DICTÉ,
+jamais une reconstruction personnelle, à l'outil.
+
+Testé par `tests/test_note_pipeline.py` (63 cas).
+
 ## 2026-08-18 — branche `selfhosted`, Laboratoires en liste, Antécédents ≠ social, BDPP flou
 
 Trois problèmes de plus trouvés sur la même consultation #9 :

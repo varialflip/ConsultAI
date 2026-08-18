@@ -18,7 +18,7 @@ from unittest import mock
 
 from app.default_templates import LOCKED_TEMPLATES
 from app import drug_lookup, llm, note_extraction, runtime_config
-from app.note_extraction import build_expected_json_skeleton, extract_note, validate_and_repair
+from app.note_extraction import build_expected_json_skeleton, extract_note, validate_and_repair, verify_medications_post_extraction
 from app.note_renderer import OWN_CONTENT_KEY, render
 from app.note_schema import DrugLookup, ElementAValider, ExtractedNote, GroundedField, parse_layout
 from app.note_validator import check_drug_lookups, validate
@@ -512,16 +512,17 @@ _MINIMAL_FINAL_JSON = json.dumps({
 })
 
 
-def _tool_call_completion(term: str, kind: str = "marque", call_id: str = "call1") -> llm.ToolCompletion:
+def _tool_call_completion(*terms: str, kind: str = "marque", call_id: str = "call1") -> llm.ToolCompletion:
+    """Un seul tool_call listant TOUS les ``terms`` en un seul appel batché
+    (voir note_extraction._DPD_TOOL_SCHEMA, Option A du banc d'essai)."""
+    medicaments = [{"terme": t, "type": kind} for t in terms]
+    args = json.dumps({"medicaments": medicaments})
     return llm.ToolCompletion(
         text="",
-        tool_calls=[llm.ToolCall(
-            id=call_id, name="verifier_medicament_dpd",
-            arguments_raw=json.dumps({"terme": term, "type": kind}),
-        )],
+        tool_calls=[llm.ToolCall(id=call_id, name="verifier_medicaments_dpd", arguments_raw=args)],
         raw_message={"role": "assistant", "content": "", "tool_calls": [{
             "id": call_id, "type": "function",
-            "function": {"name": "verifier_medicament_dpd", "arguments": json.dumps({"terme": term, "type": kind})},
+            "function": {"name": "verifier_medicaments_dpd", "arguments": args},
         }]},
         model="fake", provider="mistral",
         usage={"prompt_tokens": 100, "output_tokens": 20, "total_tokens": 120},
@@ -594,6 +595,31 @@ class DpdToolTests(unittest.TestCase):
         self.assertEqual(len(tool_messages), 1)
         self.assertEqual(tool_messages[0]["tool_call_id"], "call1")
 
+    def test_batched_call_covers_multiple_medications_in_one_round(self):
+        """Option A du banc d'essai coût : le modèle doit pouvoir lister
+        PLUSIEURS médicaments dans UN seul tool_call plutôt qu'un appel par
+        médicament — c'est ce qui évite de réémettre toute la consigne une
+        fois par médicament (voir note_extraction._DPD_TOOL_SCHEMA)."""
+        lookups = {
+            "Respirone": DrugLookup(term="Respirone", found=True, matched_name="RISPERDAL"),
+            "Norvask": DrugLookup(term="Norvask", found=True, matched_name="NORVASC", source="dpd_fuzzy"),
+        }
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Respirone", "Norvask"), _final_completion()]) as tools_mock, \
+             mock.patch.object(note_extraction, "search_drug", side_effect=lambda terme, **kw: lookups[terme]) as search_mock:
+            note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        self.assertEqual(tools_mock.call_count, 2)  # un seul aller-retour d'outil, pas un par médicament
+        self.assertEqual(search_mock.call_count, 2)
+        self.assertEqual(
+            sorted(note.drug_lookups, key=lambda dl: dl.term),
+            sorted(lookups.values(), key=lambda dl: dl.term),
+        )
+        second_call_messages = tools_mock.call_args_list[1].kwargs["messages"]
+        tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
+        self.assertEqual(len(tool_messages), 1)  # une seule réponse d'outil pour les deux médicaments
+        resultats = json.loads(tool_messages[0]["content"])["resultats"]
+        self.assertEqual({r["terme"] for r in resultats}, {"Respirone", "Norvask"})
+
     def test_usage_accumulates_across_tool_rounds(self):
         """Régression réelle (test.dictai.ca 2026-08-18) : la page
         statistiques ne montrait aucun jeton pour les générations du
@@ -645,6 +671,47 @@ class DpdToolTests(unittest.TestCase):
         self.assertIsNone(tools_mock.call_args_list[-1].kwargs["tools"])
 
 
+class PostExtractionVerificationTests(unittest.TestCase):
+    """Option B du banc d'essai (voir plan de session) : vérification
+    médicament SANS appel d'outil, en code pur, à partir de
+    grounded_fields[*].kind == "medication"."""
+
+    def setUp(self):
+        drug_lookup._cache.clear()
+
+    def test_only_medication_kind_fields_are_looked_up(self):
+        note = ExtractedNote(grounded_fields=[
+            GroundedField(field="med1", value="Norvasc", source_span="Norvask 10", kind="medication"),
+            GroundedField(field="dose1", value="10 mg", source_span="10 mg", kind="dose"),
+            GroundedField(field="name1", value="Georges Carrière", source_span="Georges Carrière", kind="name"),
+        ])
+        with mock.patch.object(note_extraction, "search_drug", return_value=DrugLookup(term="Norvasc", found=True)) as search_mock:
+            verify_medications_post_extraction(note, "fr")
+        search_mock.assert_called_once_with("Norvasc", kind="brand", language="fr")
+        self.assertEqual(len(note.drug_lookups), 1)
+
+    def test_dose_stripped_when_model_still_combines_name_and_dose(self):
+        """Régression réelle (banc d'essai, consultation #9) : malgré la
+        consigne demandant le nom seul pour kind="medication", le modèle a
+        mis « Norvask 10 mg PO die » en entier dans value — recherche
+        inutile puisqu'aucune BDPP ne connaît cette chaîne complète. Le
+        nom doit être isolé AVANT l'appel, pas laissé tel quel."""
+        note = ExtractedNote(grounded_fields=[
+            GroundedField(field="med1", value="Norvask 10 mg PO die", source_span="Norvask 10", kind="medication"),
+        ])
+        with mock.patch.object(note_extraction, "search_drug", return_value=DrugLookup(term="Norvask", found=True)) as search_mock:
+            verify_medications_post_extraction(note, "fr")
+        search_mock.assert_called_once_with("Norvask", kind="brand", language="fr")
+
+    def test_no_medication_kind_fields_is_a_noop(self):
+        note = ExtractedNote(grounded_fields=[
+            GroundedField(field="date1", value="2026-08-18", source_span="18 août 2026", kind="date"),
+        ])
+        with mock.patch.object(note_extraction, "search_drug", side_effect=AssertionError("ne doit jamais être appelé")):
+            verify_medications_post_extraction(note, "fr")
+        self.assertEqual(note.drug_lookups, [])
+
+
 class DrugLookupTests(unittest.TestCase):
     """app.drug_lookup.search_drug ne doit jamais lever — voir son
     docstring. Vide le cache du module entre les tests, sinon un terme déjà
@@ -687,56 +754,88 @@ class DrugLookupTests(unittest.TestCase):
         self.assertEqual(result.din, "00123456")
         self.assertEqual(result.source, "dpd")
 
+    def _mock_local_index(self, *brand_names):
+        """L'index flou en mémoire, comme le produirait _dedupe_by_name —
+        court-circuite le téléchargement/cache disque pour ces tests."""
+        rows = [{"brand_name": n, "drug_identification_number": f"{i:08d}",
+                  "_normalized_name": drug_lookup._normalize_text(n)}
+                for i, n in enumerate(brand_names)]
+        return mock.patch.object(drug_lookup, "_load_local_index", return_value=rows)
+
     def test_fuzzy_fallback_resolves_norvask_to_norvasc(self):
         """Régression réelle (test.dictai.ca 2026-08-18, consultation #9) :
         confirmé contre l'API réelle que « Norvask » (k) ne retrouve rien
-        pour NORVASC (c), mais un préfixe plus court comme « Norva » le
-        retrouve — la recherche BDPP est un filtre préfixe, pas une
-        correspondance floue. search_drug doit faire ce raccourcissement
-        elle-même plutôt que d'attendre que le modèle y pense."""
-        candidates_payload = json.dumps([
-            {"brand_name": "NORVASC", "drug_identification_number": "00878901"},
-        ]).encode()
-
-        def fake_urlopen(request, timeout=None):
-            response = mock.MagicMock()
-            response.__enter__.return_value = response
-            if "brandname=Norva&" in request.full_url:
-                response.read.return_value = candidates_payload
-            else:
-                response.read.return_value = b"[]"
-            return response
-
-        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        pour NORVASC (c) — la recherche BDPP est un filtre préfixe, pas une
+        correspondance floue. Le repli flou compare contre l'EXTRAIT LOCAL
+        COMPLET, pas seulement des préfixes partagés."""
+        with mock.patch("urllib.request.urlopen", return_value=self._empty_response()), \
+             self._mock_local_index("NORVASC"):
             result = drug_lookup.search_drug("Norvask", kind="brand", language="en")
         self.assertTrue(result.found)
         self.assertEqual(result.matched_name, "NORVASC")
-        self.assertEqual(result.din, "00878901")
+        self.assertEqual(result.source, "dpd_fuzzy")
+
+    def test_fuzzy_fallback_finds_match_with_no_shared_prefix(self):
+        """Régression réelle (consultation #9) : « Activant » (probablement
+        Ativan/lorazépam) et « Ativan » divergent dès la 2ᵉ lettre — aucun
+        préfixe de l'un n'est un préfixe de l'autre, donc une approche par
+        préfixe ne peut JAMAIS proposer Ativan comme candidat, même si leur
+        similarité (≈0,86) est largement au-dessus du seuil. L'extrait
+        local complet, comparé terme à terme, le retrouve."""
+        with mock.patch("urllib.request.urlopen", return_value=self._empty_response()), \
+             self._mock_local_index("ATIVAN", "ACTIFED", "ACTIVATED CHARCOAL"):
+            result = drug_lookup.search_drug("Activant", kind="brand", language="fr")
+        self.assertTrue(result.found)
+        self.assertEqual(result.matched_name, "ATIVAN")
         self.assertEqual(result.source, "dpd_fuzzy")
 
     def test_fuzzy_fallback_rejects_dissimilar_candidate(self):
-        """Un candidat trouvé à un préfixe raccourci mais sans rapport avec
-        le terme original (ratio de similarité trop bas) ne doit jamais être
+        """Le meilleur candidat de l'extrait local, s'il reste trop
+        dissemblable (ratio de similarité trop bas), ne doit jamais être
         accepté comme une correction plausible."""
-        calls = {"n": 0}
-        candidates_payload = json.dumps([
-            {"brand_name": "COMPLETELYUNRELATED", "drug_identification_number": "00000000"},
-        ]).encode()
-
-        def fake_urlopen(request, timeout=None):
-            response = mock.MagicMock()
-            response.__enter__.return_value = response
-            calls["n"] += 1
-            response.read.return_value = b"[]" if calls["n"] == 1 else candidates_payload
-            return response
-
-        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        with mock.patch("urllib.request.urlopen", return_value=self._empty_response()), \
+             self._mock_local_index("COMPLETELYUNRELATED"):
             result = drug_lookup.search_drug("Xyzqwerty", kind="brand")
         self.assertFalse(result.found)
-        # Le premier préfixe qui rend des candidats arrête le raccourcissement
-        # (un seul appel exact + un seul appel flou), même si le candidat est
-        # ensuite rejeté par le seuil de similarité.
-        self.assertEqual(calls["n"], 2)
+
+    def test_fuzzy_fallback_degrades_gracefully_without_local_index(self):
+        """Aucun extrait local disponible (jamais téléchargé avec succès) :
+        repli sur found=False, jamais une exception."""
+        with mock.patch("urllib.request.urlopen", return_value=self._empty_response()), \
+             mock.patch.object(drug_lookup, "_load_local_index", return_value=[]):
+            result = drug_lookup.search_drug("Norvask", kind="brand")
+        self.assertFalse(result.found)
+        self.assertEqual(result.error, "")
+
+    @staticmethod
+    def _empty_response():
+        response = mock.MagicMock()
+        response.read.return_value = b"[]"
+        response.__enter__.return_value = response
+        return response
+
+
+class DrugLookupLocalIndexTests(unittest.TestCase):
+    """app.drug_lookup._load_local_index : cache disque + téléchargement de
+    l'extrait complet, jamais dans le chemin d'une recherche exacte réussie."""
+
+    def setUp(self):
+        drug_lookup._local_index.clear()
+
+    def test_download_failure_falls_back_to_empty_index(self):
+        with mock.patch.object(drug_lookup, "_fetch_full_dataset", side_effect=OSError("timeout")), \
+             mock.patch("os.path.exists", return_value=False):
+            index = drug_lookup._load_local_index("brand", "fr")
+        self.assertEqual(index, [])
+
+    def test_dedupe_by_normalized_name(self):
+        rows = [
+            {"brand_name": "NORVASC", "drug_identification_number": "1"},
+            {"brand_name": "norvasc", "drug_identification_number": "2"},  # doublon (casse)
+            {"brand_name": "CRESTOR", "drug_identification_number": "3"},
+        ]
+        deduped = drug_lookup._dedupe_by_name(rows)
+        self.assertEqual(len(deduped), 2)
 
 
 if __name__ == "__main__":

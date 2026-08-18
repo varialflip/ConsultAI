@@ -1047,15 +1047,37 @@ porte désormais aussi `usage`. Vérifié par appel direct de
 `_generate_json_pipeline` : jetons réels rapportés.
 
 **La recherche BDPP fait un filtre préfixe, pas une correspondance floue —
-`search_drug` le compense elle-même, 2026-08-18.** Confirmé contre l'API
-réelle : `Norvask` (tel que dicté/mal transcrit) ne retrouve rien pour
-`NORVASC` (la vraie marque), mais un préfixe plus court comme `Norva` le
-retrouve — la recherche `brandname` compare des sous-chaînes/préfixes, pas
-des sons ni une distance d'édition. `app/drug_lookup.search_drug` fait
-maintenant ce raccourcissement en interne : si le terme exact échoue, elle
-rétrécit depuis la fin jusqu'au premier préfixe qui rend des candidats, les
-classe par similarité au terme ORIGINAL (`difflib.SequenceMatcher`, même
-technique que `note_validator._best_match_ratio`), et retient le meilleur au
-dessus de 0,75. Un résultat de ce repli porte `source="dpd_fuzzy"` (contre
-`"dpd"` pour une correspondance exacte), pour rester distinguable dans les
-journaux et `note_generations`.
+`search_drug` compare maintenant contre l'extrait COMPLET, pas des préfixes,
+2026-08-18.** Une première version raccourcissait le terme depuis la fin et
+réinterrogeait la BDPP à chaque longueur de préfixe — résolvait `Norvask →
+NORVASC` (préfixe commun `Norva`), mais s'est avérée structurellement
+incapable de retrouver un médicament dont le DÉBUT diffère : cas réel,
+consultation #9, `Activant` (probablement Ativan/lorazépam) et `Ativan`
+divergent dès la 2ᵉ lettre, donc aucun préfixe de l'un n'est un préfixe de
+l'autre — la recherche par préfixe ne pouvait jamais le proposer comme
+candidat, même si leur similarité (`difflib.SequenceMatcher` ≈ 0,857) est
+largement au-dessus du seuil de 0,75.
+
+Corrigé en téléchargeant l'extrait COMPLET plutôt que des préfixes : le même
+point de terminaison `drugproduct`/`activeingredient`, appelé SANS
+paramètre de nom, rend l'ENSEMBLE de la base (~58 000 produits / ~121 000
+lignes d'ingrédients, ~15-16 Mo chacun en JSON — pas de fichier ZIP à
+télécharger ni parser). Mis en cache sous `/data/dpd_cache/` (même volume
+persistant que la base SQLite), rafraîchi si périmé (7 jours), avec repli
+sur un cache périmé plutôt que rien si le téléchargement échoue, et sur
+`found=False` si aucun extrait n'est jamais disponible — jamais une
+exception. Le repli flou (`app/drug_lookup._fuzzy_fallback`) compare
+maintenant le terme contre CHAQUE nom de l'extrait, pas seulement ceux
+partageant un préfixe. Un résultat de ce repli porte `source="dpd_fuzzy"`
+(contre `"dpd"` pour une correspondance exacte). Vérifié contre l'API
+réelle : `search_drug('Activant')` retrouve maintenant ATIVAN (DIN
+02041413).
+
+**Risque résiduel connu** : le modèle ne transmet pas toujours le terme
+LITTÉRALEMENT dicté à l'outil — rejouer la même consultation après ce
+correctif a montré le modèle transmettre sa propre correction préalable
+(« Activelle », un vrai médicament sans rapport) plutôt que le terme
+entendu, et l'outil confirme alors que cette proposition existe — un
+meilleur outil ne peut rien faire si le terme qu'on lui soumet a déjà été
+« corrigé » par le modèle avant l'appel. Piste de suivi, pas encore
+implémentée : consigne explicite pour transmettre le terme tel que dicté.

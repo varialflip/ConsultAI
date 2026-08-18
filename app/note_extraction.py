@@ -46,67 +46,83 @@ DEFAULT_MAX_REPAIR_ATTEMPTS = 2
 _DPD_TOOL_MAX_ROUNDS = 2
 _DPD_TOOL_MAX_CALLS = 6
 
+#: Option A du banc d'essai coût/exactitude (voir plan de session) : UN seul
+#: appel listant TOUS les médicaments incertains de la note, plutôt qu'un
+#: appel par médicament — l'API Mistral étant sans état, chaque tour
+#: réémet tout le contexte accumulé ; un appel par médicament fait payer la
+#: consigne complète (longue) une fois par médicament plutôt qu'une fois
+#: pour toute la note.
 _DPD_TOOL_SCHEMA = {
     "type": "function",
     "function": {
-        "name": "verifier_medicament_dpd",
+        "name": "verifier_medicaments_dpd",
         "description": (
-            "Vérifie un nom de médicament (marque ou ingrédient actif) "
-            "contre la Base de données sur les produits pharmaceutiques de "
-            "Santé Canada. À utiliser pour tout médicament dont le nom est "
-            "incertain ou reconstruit par homophonie, avant de trancher. Le "
-            "résultat ne détermine PAS la décision clinique — un médicament "
-            "absent de la base n'est pas forcément une erreur (produit "
-            "étranger, composé en pharmacie, retiré du marché)."
+            "Vérifie une LISTE de noms de médicaments (marque ou ingrédient "
+            "actif) contre la Base de données sur les produits "
+            "pharmaceutiques de Santé Canada — en UN seul appel listant TOUS "
+            "les médicaments incertains de la note entière (Médication "
+            "actuelle, Plan, HMA, Impression...), jamais un appel par "
+            "médicament. À utiliser pour tout médicament dont le nom est "
+            "incertain ou reconstruit par homophonie, avant de trancher, où "
+            "qu'il apparaisse dans la note. Le résultat ne détermine PAS la "
+            "décision clinique — un médicament absent de la base n'est pas "
+            "forcément une erreur (produit étranger, composé en pharmacie, "
+            "retiré du marché)."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "terme": {
-                    "type": "string",
-                    "description": "Nom du médicament tel que retenu, en français.",
-                },
-                "type": {
-                    "type": "string",
-                    "enum": ["marque", "ingredient"],
-                    "description": (
-                        "« marque » pour un nom commercial (ex. Xanax), "
-                        "« ingredient » pour la dénomination commune "
-                        "internationale (ex. létrozole)."
-                    ),
+                "medicaments": {
+                    "type": "array",
+                    "description": "Tous les médicaments incertains de la note, en une seule liste.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "terme": {
+                                "type": "string",
+                                "description": "Nom du médicament tel que retenu, en français.",
+                            },
+                            "type": {
+                                "type": "string",
+                                "enum": ["marque", "ingredient"],
+                                "description": (
+                                    "« marque » pour un nom commercial (ex. Xanax), "
+                                    "« ingredient » pour la dénomination commune "
+                                    "internationale (ex. létrozole)."
+                                ),
+                            },
+                        },
+                        "required": ["terme", "type"],
+                    },
                 },
             },
-            "required": ["terme", "type"],
+            "required": ["medicaments"],
         },
     },
 }
 
 _DPD_TOOL_GUIDANCE_FR = (
-    "\n\nOUTIL DISPONIBLE — verifier_medicament_dpd : pour tout médicament "
+    "\n\nOUTIL DISPONIBLE — verifier_medicaments_dpd : pour tout médicament "
     "dont le nom est incertain, mal entendu, ou reconstruit par homophonie "
-    "(voir la méthode de correction ci-dessus), appelle cet outil AVANT de "
-    "trancher entre l'inscrire dans MÉDICATION ACTUELLE ou le renvoyer en "
-    "Éléments à valider. Une absence de résultat n'est pas une preuve "
-    "d'erreur — c'est un indice de plus, pas une décision automatique. "
-    "Si un passage dicté est ambigu entre UN médicament ou DEUX (par "
-    "exemple deux noms enchaînés sans pause claire), appelle l'outil "
-    "SÉPARÉMENT pour chaque segment candidat avant de les fusionner — un "
-    "segment sans résultat est lui-même un indice qu'il s'agit peut-être "
-    "d'un médicament distinct mal orthographié, pas d'un bruit à absorber "
-    "dans le segment voisin."
+    "(voir la méthode de correction ci-dessus), quelle que soit la rubrique "
+    "où il apparaît (Médication actuelle, Plan, HMA, Impression...), "
+    "vérifie-le avant de trancher entre le corriger ou le renvoyer en "
+    "Éléments à valider. RELIS TOUTE LA NOTE en cours de rédaction et "
+    "APPELLE CET OUTIL UNE SEULE FOIS avec la liste complète des médicaments "
+    "incertains — jamais un appel par médicament. Une absence de résultat "
+    "n'est pas une preuve d'erreur — c'est un indice de plus, pas une "
+    "décision automatique."
 )
 _DPD_TOOL_GUIDANCE_EN = (
-    "\n\nTOOL AVAILABLE — verifier_medicament_dpd: for any medication whose "
+    "\n\nTOOL AVAILABLE — verifier_medicaments_dpd: for any medication whose "
     "name is uncertain, misheard, or reconstructed from a mishearing (see "
-    "the correction method above), call this tool BEFORE deciding whether "
-    "to record it under CURRENT MEDICATIONS or flag it under Items to "
-    "verify. No result found is not proof of an error — it's one more "
-    "signal, not an automatic decision. If a dictated passage is ambiguous "
-    "between ONE medication or TWO (for example two names run together "
-    "with no clear pause), call the tool SEPARATELY for each candidate "
-    "segment before merging them — a segment with no result is itself a "
-    "signal it might be a distinct, misspelled medication, not noise to "
-    "fold into its neighbor."
+    "the correction method above), wherever it appears in the note "
+    "(Current medications, Plan, HPI, Impression...), verify it before "
+    "deciding whether to correct it or flag it under Items to verify. "
+    "RE-READ THE WHOLE NOTE you're drafting and CALL THIS TOOL ONCE with "
+    "the complete list of uncertain medications — never one call per "
+    "medication. No result found is not proof of an error — it's one more "
+    "signal, not an automatic decision."
 )
 
 
@@ -206,6 +222,7 @@ def build_expected_json_skeleton(layout: LayoutSpec) -> dict:
                 "value": "valeur retenue, ou null si aucune valeur fiable",
                 "source_span": "extrait EXACT de la transcription dont cette valeur est tirée",
                 "note": "",
+                "kind": "catégorie : « medication », « dose », « date », « name » (nom propre), « diagnostic », ou « other »",
             }
         ],
     }
@@ -250,9 +267,17 @@ Règles spécifiques à cet encodage :
 - ``grounded_fields`` : pour CHAQUE valeur critique que tu affirmes dans
   ``sections`` (médicament, dose, date, nom propre, diagnostic, chiffre,
   résultat), ajoute une entrée ici avec ``source_span`` = l'extrait EXACT
-  (mots identiques) de la transcription qui justifie cette valeur. C'est ce
-  qui permet de vérifier mécaniquement que tu n'inventes rien — un champ
-  sans ``source_span`` correspondant sera rejeté.
+  (mots identiques) de la transcription qui justifie cette valeur, ET
+  ``kind`` = sa catégorie (« medication », « dose », « date », « name »,
+  « diagnostic », « other ») — un médicament mentionné dans N'IMPORTE
+  QUELLE rubrique (Médication actuelle, Plan, HMA, Impression...) reçoit
+  toujours ``kind: "medication"``, pas seulement ceux de la liste de
+  médicaments. Pour ``kind: "medication"``, ``value`` est LE NOM DU
+  MÉDICAMENT SEUL (marque ou ingrédient actif, ex. « Norvask », jamais
+  « Norvask 10 mg PO die ») — la dose/fréquence n'y a pas sa place, une
+  vérification externe du nom en dépend. C'est ce qui permet de vérifier
+  mécaniquement que tu n'inventes rien — un champ sans ``source_span``
+  correspondant sera rejeté.
 - N'inclus AUCUN texte hors de l'objet JSON — pas de phrase d'introduction,
   pas de bloc ```markdown, uniquement le JSON.
 """
@@ -292,9 +317,15 @@ Rules specific to this encoding:
 - ``grounded_fields``: for EVERY critical value you assert in ``sections``
   (medication, dose, date, proper name, diagnosis, number, result), add an
   entry here with ``source_span`` = the EXACT excerpt (identical wording)
-  from the transcript that justifies it. This is what lets the value be
-  mechanically checked — a value with no matching ``source_span`` will be
-  rejected.
+  from the transcript that justifies it, AND ``kind`` = its category
+  ("medication", "dose", "date", "name", "diagnostic", "other") — a
+  medication mentioned in ANY section (Current medications, Plan, HPI,
+  Impression...) always gets ``kind: "medication"``, not only the ones in
+  the medication list. For ``kind: "medication"``, ``value`` is THE
+  MEDICATION NAME ALONE (brand or active ingredient, e.g. "Norvasc", never
+  "Norvasc 10 mg daily") — dose/frequency has no place there, an external
+  name check depends on it. This is what lets the value be mechanically
+  checked — a value with no matching ``source_span`` will be rejected.
 - Include NO text outside the JSON object — no introduction, no ```markdown
   fence, only the JSON.
 """
@@ -344,6 +375,41 @@ def _add_usage(total: dict, delta: dict) -> None:
         total[cle] = (total.get(cle) or 0) + valeur
 
 
+_LEADING_NAME_RE = re.compile(r"^[^\d]+")
+
+
+def _medication_name_only(value: str) -> str:
+    """Repli si le modèle a malgré tout mis nom+dose dans ``value`` (la
+    consigne demande le nom seul pour ``kind: "medication"``, mais rien ne
+    garantit qu'un modèle plus faible s'y tienne à chaque fois — même
+    principe que partout ailleurs cette session : le code ne doit pas
+    dépendre uniquement d'une consigne pour un résultat déterministe) : ne
+    garde que ce qui précède le premier chiffre — une dose commence presque
+    toujours par un chiffre, jamais un nom de médicament."""
+    match = _LEADING_NAME_RE.match(value)
+    name = (match.group(0) if match else value).strip(" ,.;:-")
+    return name or value.strip()
+
+
+def verify_medications_post_extraction(note: ExtractedNote, language: str = "fr") -> None:
+    """Option B du banc d'essai coût/exactitude (voir plan de session,
+    alternative à ``_extract_note_with_dpd_tool``) : vérifie chaque
+    médicament identifié par ``grounded_fields[*].kind == "medication"``
+    contre la BDPP, en CODE PUR — aucun appel modèle supplémentaire. La
+    décision « ceci est un médicament, et son nom est incertain » a déjà été
+    prise par le modèle en remplissant ``grounded_fields`` pendant
+    l'extraction normale (voir _JSON_FORMAT_INSTRUCTIONS_FR/EN) ; ce code se
+    limite à vérifier le NOM contre Santé Canada. Mute ``note.drug_lookups``
+    — même contrat que la variante par appel d'outil, pour que
+    ``note_validator``/``main.py`` n'aient pas à savoir laquelle a tourné."""
+    drug_lookups: list[DrugLookup] = []
+    for gf in note.grounded_fields:
+        if gf.kind != "medication" or not gf.value:
+            continue
+        drug_lookups.append(search_drug(_medication_name_only(gf.value), kind="brand", language=language))
+    note.drug_lookups = drug_lookups
+
+
 def _extract_note_with_dpd_tool(
     system: str, user: str, *, model: str, temperature: float, max_tokens: int,
     provider: str, language: str, usage_out: Optional[dict] = None,
@@ -381,16 +447,6 @@ def _extract_note_with_dpd_tool(
 
         messages.append(result.raw_message)
         for appel in result.tool_calls:
-            if calls_used >= _DPD_TOOL_MAX_CALLS:
-                # Budget épuisé EN COURS de tour : chaque tool_call de ce
-                # message assistant exige quand même une réponse appariée
-                # (protocole Mistral), sinon le tour suivant est malformé.
-                messages.append({
-                    "role": "tool", "tool_call_id": appel.id,
-                    "content": json.dumps({"erreur": "budget de vérifications épuisé"}),
-                })
-                continue
-            calls_used += 1
             try:
                 arguments = json.loads(appel.arguments_raw)
             except (json.JSONDecodeError, TypeError):
@@ -399,25 +455,43 @@ def _extract_note_with_dpd_tool(
                     "content": json.dumps({"erreur": "arguments invalides"}),
                 })
                 continue
-            terme = str(arguments.get("terme") or "").strip()
-            if not terme:
-                lookup = None
-            else:
-                lookup = search_drug(terme, kind=_dpd_kind(arguments.get("type", "")), language=language)
-            if lookup is None:
+            demandes = arguments.get("medicaments")
+            if not isinstance(demandes, list):
                 messages.append({
                     "role": "tool", "tool_call_id": appel.id,
-                    "content": json.dumps({"erreur": "terme manquant"}),
+                    "content": json.dumps({"erreur": "champ 'medicaments' manquant ou invalide"}),
                 })
                 continue
-            drug_lookups.append(lookup)
-            messages.append({
-                "role": "tool", "tool_call_id": appel.id,
-                "content": json.dumps({
+
+            resultats = []
+            for demande in demandes:
+                if calls_used >= _DPD_TOOL_MAX_CALLS:
+                    # Budget épuisé EN COURS de liste : chaque médicament
+                    # demandé dans CE tool_call doit quand même apparaître
+                    # dans la réponse (sinon le modèle ne sait pas lesquels
+                    # ont été traités), mais sans lookup réel au-delà du budget.
+                    terme_brut = str((demande or {}).get("terme") or "")
+                    resultats.append({"terme": terme_brut, "erreur": "budget de vérifications épuisé"})
+                    continue
+                if not isinstance(demande, dict):
+                    continue
+                calls_used += 1
+                terme = str(demande.get("terme") or "").strip()
+                if not terme:
+                    resultats.append({"terme": "", "erreur": "terme manquant"})
+                    continue
+                lookup = search_drug(terme, kind=_dpd_kind(demande.get("type", "")), language=language)
+                drug_lookups.append(lookup)
+                resultats.append({
+                    "terme": terme,
                     "trouve": lookup.found,
                     "nom_correspondant": lookup.matched_name,
                     "din": lookup.din,
-                }, ensure_ascii=False),
+                })
+
+            messages.append({
+                "role": "tool", "tool_call_id": appel.id,
+                "content": json.dumps({"resultats": resultats}, ensure_ascii=False),
             })
     else:
         # Budget de tours épuisé sans contenu final : un dernier appel SANS

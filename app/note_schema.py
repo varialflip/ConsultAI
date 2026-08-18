@@ -176,15 +176,28 @@ SectionValue = Union[str, List[str], Dict[str, "SectionValue"]]
 class GroundedField:
     """Une valeur critique (médicament, dose, date, nom, diagnostic...)
     avec l'extrait exact de la transcription dont elle est tirée — voir
-    note_validator.check_grounding."""
+    note_validator.check_grounding.
+
+    ``kind`` (2026-08-18, banc d'essai Option B) : catégorie explicite
+    (« medication » | « dose » | « date » | « name » | « diagnostic » |
+    « other ») que le modèle renseigne lui-même. Sans ce marqueur, rien ne
+    permet de filtrer après coup « lesquelles de ces valeurs critiques sont
+    des médicaments » — exactement le problème déjà rencontré avec
+    ``note_validator.check_drug_lookups`` (aucun classifieur fiable sur du
+    texte libre). Optionnel/rétrocompatible : une valeur vide ne casse rien,
+    juste exclue d'un filtre par ``kind``."""
 
     field: str
     value: Optional[str]
     source_span: Optional[str]
     note: str = ""
+    kind: str = ""
 
     def to_dict(self) -> dict:
-        return {"field": self.field, "value": self.value, "source_span": self.source_span, "note": self.note}
+        return {
+            "field": self.field, "value": self.value, "source_span": self.source_span,
+            "note": self.note, "kind": self.kind,
+        }
 
     @classmethod
     def from_dict(cls, d: dict) -> "GroundedField":
@@ -193,6 +206,7 @@ class GroundedField:
             value=(str(d["value"]).strip() if d.get("value") not in (None, "") else None),
             source_span=(str(d["source_span"]).strip() if d.get("source_span") else None),
             note=str(d.get("note", "")).strip(),
+            kind=str(d.get("kind", "")).strip().lower(),
         )
 
 

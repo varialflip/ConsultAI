@@ -70,16 +70,26 @@ class LayoutSpec:
     def literals_of(self, label: Optional[str]) -> List[str]:
         return [e.label for e in self.entries if e.kind == "literal" and e.parent == label]
 
+    def explicit_list_style(self, label: str) -> Optional[str]:
+        """« numbered »/« bulleted » SEULEMENT si le gabarit porte un
+        marqueur {{...}} explicite sous cette rubrique (voir
+        LIST_STYLE_MARKERS) ; ``None`` sinon — distinct de ``list_style``,
+        qui retombe sur « bulleted » par défaut pour le RENDU. Cette
+        distinction sert à ``note_extraction`` : ne pousser le modèle vers un
+        encodage en tableau JSON que pour les rubriques où l'auteur du
+        gabarit l'a demandé explicitement, jamais par défaut."""
+        for e in self.entries:
+            if e.kind == "instruction" and e.parent == label and e.label in LIST_STYLE_MARKERS:
+                return LIST_STYLE_MARKERS[e.label]
+        return None
+
     def list_style(self, label: str) -> str:
         """« numbered » si le gabarit porte un marqueur {{liste numérotée}}
         sous cette rubrique, sinon « bulleted » (comportement historique) —
         voir LIST_STYLE_MARKERS. Le numérotage lui-même reste toujours fait
         par note_renderer, jamais par le modèle : ça évite qu'un item sur
         deux perde son numéro ou que la numérotation reparte à 1."""
-        for e in self.entries:
-            if e.kind == "instruction" and e.parent == label and e.label in LIST_STYLE_MARKERS:
-                return LIST_STYLE_MARKERS[e.label]
-        return "bulleted"
+        return self.explicit_list_style(label) or "bulleted"
 
 
 def parse_layout(layout_format: str) -> LayoutSpec:

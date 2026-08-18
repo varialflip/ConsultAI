@@ -131,6 +131,34 @@ class SkeletonTests(unittest.TestCase):
         skeleton = build_expected_json_skeleton(layout)
         self.assertIn("{{Phrase résumé}}", skeleton["sections"]["IMPRESSION"])
 
+    def test_skeleton_nudges_bulleted_array_for_marked_leaf_sections(self):
+        """Régression : Médication/Antécédents/Examen étaient rendus en
+        prose (chaîne, virgules) plutôt qu'en liste malgré la consigne
+        « liste pointée » du gabarit — le modèle n'avait aucun indice
+        explicite l'invitant à choisir un tableau JSON plutôt qu'une
+        chaîne. Voir LayoutSpec.explicit_list_style / note_extraction._list_style_nudge."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        skeleton = build_expected_json_skeleton(layout)
+        self.assertIn("liste À PUCES", skeleton["sections"]["ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX"])
+        self.assertIn("liste À PUCES", skeleton["sections"]["MÉDICATION ACTUELLE"][OWN_CONTENT_KEY])
+        self.assertIn("liste À PUCES", skeleton["sections"]["EXAMEN OBJECTIF"])
+
+    def test_skeleton_does_not_nudge_unmarked_sections(self):
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        skeleton = build_expected_json_skeleton(layout)
+        self.assertNotIn("liste À PUCES", skeleton["sections"]["HABITUDES DE VIE"])
+        self.assertNotIn("liste NUMÉROTÉE", skeleton["sections"]["HABITUDES DE VIE"])
+
+    def test_explicit_list_style_distinguishes_marked_from_default(self):
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        self.assertEqual(layout.explicit_list_style("MÉDICATION ACTUELLE"), "bulleted")
+        self.assertEqual(layout.explicit_list_style("IMPRESSION"), "numbered")
+        self.assertIsNone(layout.explicit_list_style("HABITUDES DE VIE"))
+        # list_style() (utilisé par le RENDU) retombe quand même sur "bulleted"
+        # par défaut — seul explicit_list_style() (utilisé pour la CONSIGNE)
+        # fait la distinction.
+        self.assertEqual(layout.list_style("HABITUDES DE VIE"), "bulleted")
+
 
 class ValidatorTests(unittest.TestCase):
     def test_clean_note_passes(self):

@@ -922,7 +922,20 @@ le numérotage lui-même, et retire d'abord tout marqueur (`1.`, `1)`, `-`,
 `•`) que le modèle aurait écrit lui-même en tête d'item malgré la consigne
 contraire — un modèle plus faible le fait parfois quand même, et sans ce
 nettoyage la note affiche une double numérotation. Les quatre gabarits
-verrouillés portent ce marqueur sous IMPRESSION et PLAN.
+verrouillés portent ce marqueur sous IMPRESSION et PLAN, et (depuis le
+correctif ci-dessous) `{{liste à puces}}` sous ANTÉCÉDENTS MÉDICAUX ET
+CHIRURGICAUX, MÉDICATION ACTUELLE et EXAMEN OBJECTIF/PHYSIQUE.
+
+Le marqueur ne sert pas qu'au RENDU (numéroté/puces) : `note_extraction`
+s'en sert aussi pour NUDGER le modèle vers un encodage en tableau JSON
+(`_list_style_nudge`, `LayoutSpec.explicit_list_style` — distinct de
+`list_style`, qui retombe sur « bulleted » par défaut pour le rendu
+seulement). Sans ce nudge explicite, un modèle plus faible rend une rubrique
+« liste pointée » en PROSE À VIRGULES au lieu d'un tableau (vu réellement :
+Médication, Antécédents et Examen rendus en une seule phrase malgré la
+consigne du gabarit) — la seule mention « liste pointée » dans la consigne de
+gabarit ne suffit pas, il faut aussi que le schéma JSON transmis au modèle le
+demande explicitement pour CETTE rubrique précise.
 
 **Historique de génération (branche `selfhosted` uniquement), 2026-08-18.**
 Table additive `note_generations` (`app.database.NoteGeneration`) : une ligne

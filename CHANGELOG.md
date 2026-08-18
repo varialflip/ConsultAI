@@ -3,6 +3,35 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, Médication/Antécédents/Examen rendus en prose au lieu d'une liste
+
+- **Rubriques « liste pointée » ignorées** : Médication actuelle, Antécédents
+  médicaux et Examen (objectif/physique) demandent toutes une « liste pointée »
+  dans la consigne du gabarit, mais le modèle rendait ces rubriques en une
+  seule phrase à virgules (ex. « Norvask 10, Crestor 20, Monocor 2,5... »)
+  plutôt qu'en tableau JSON — même défaut que le bogue Impression/Plan corrigé
+  plus tôt (le numérotage), mais côté puces cette fois : rien n'indiquait
+  explicitement au modèle, au niveau du schéma JSON, que CETTE rubrique voulait
+  un tableau plutôt qu'une chaîne.
+- **Correctif, même mécanisme que {{liste numérotée}}** : marqueur
+  `{{liste à puces}}`/`{{bulleted list}}` (déjà reconnu par
+  `note_schema.LIST_STYLE_MARKERS`, jusqu'ici seulement utilisé pour
+  « numbered ») ajouté sous ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX, MÉDICATION
+  ACTUELLE et EXAMEN OBJECTIF/PHYSIQUE dans les quatre gabarits verrouillés et
+  les deux gabarits « (FD) » de test.dictai.ca. Nouvelle distinction
+  `LayoutSpec.explicit_list_style` (marqueur présent ou non) vs `list_style`
+  (retombe sur « bulleted » par défaut, pour le RENDU seulement) : la consigne
+  au modèle — « encode-la comme un tableau JSON » — ne s'ajoute que pour les
+  rubriques explicitement marquées, jamais par défaut sur toutes les rubriques
+  à contenu libre.
+- Consignes des gabarits corrigées en même temps : « Antécédents médicaux et
+  chirurgicaux » ne mentionnait nulle part « liste pointée » (contrairement à
+  Médication et Examen) — ajouté.
+
+Testé par `tests/test_note_pipeline.py` (39 cas) et par génération réelle
+contre la consultation #5 (mistral-small-latest) : Antécédents, Médication et
+Examen objectif rendent maintenant chacun en liste à puces.
+
 ## 2026-08-18 — branche `selfhosted`, consigne dédiée au pipeline JSON
 
 - **Nouvelle consigne, réglage à part** : `general_prompt_json_fr`/`_en`

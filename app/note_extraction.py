@@ -58,22 +58,36 @@ def _instruction_hint(layout: LayoutSpec, label: str) -> str:
     return " ".join(lines)
 
 
+def _list_style_nudge(layout: LayoutSpec, label: str) -> str:
+    """Rappel explicite d'encodage en tableau JSON — SEULEMENT quand le
+    gabarit porte un marqueur {{...}} explicite pour cette rubrique (voir
+    LayoutSpec.explicit_list_style) : jamais par défaut, sans quoi la
+    moindre rubrique retomberait sur « bulleted » (défaut de rendu) et
+    recevrait la consigne à tort. Le numérotage/les puces eux-mêmes restent
+    toujours faits par note_renderer, jamais par le modèle — ça évite qu'un
+    item sur deux perde son marqueur ou que la numérotation reparte à 1."""
+    style = layout.explicit_list_style(label)
+    if style == "numbered":
+        return (
+            " — cette rubrique attend une liste NUMÉROTÉE : encode-la comme "
+            "un tableau JSON de chaînes, un item distinct par élément (le "
+            "code ajoute les numéros, n'écris pas « 1. », « 2. » toi-même)."
+        )
+    if style == "bulleted":
+        return (
+            " — cette rubrique attend une liste À PUCES : encode-la comme "
+            "un tableau JSON de chaînes, un item distinct par élément (le "
+            "code ajoute les puces, n'écris pas « - » toi-même)."
+        )
+    return ""
+
+
 def _leaf_placeholder(layout: LayoutSpec, label: str) -> str:
     base = "<contenu de la rubrique, prose ou liste selon la consigne — omettre la clé entière si rien n'a été dicté>"
     hint = _instruction_hint(layout, label)
     if hint:
         base = f"{base} (forme attendue suggérée par le gabarit : {hint})"
-    if layout.list_style(label) == "numbered":
-        # Le NUMÉROTAGE lui-même reste toujours fait par note_renderer (voir
-        # LayoutSpec.list_style) — mais le modèle doit encore choisir "un
-        # tableau JSON, un item par élément" plutôt qu'un bloc de prose, sans
-        # quoi il n'y a rien à numéroter.
-        base += (
-            " — cette rubrique attend une liste NUMÉROTÉE : encode-la comme "
-            "un tableau JSON de chaînes, un item distinct par élément (le "
-            "code ajoute les numéros, n'écris pas « 1. », « 2. » toi-même)."
-        )
-    return base
+    return base + _list_style_nudge(layout, label)
 
 
 def _section_skeleton(layout: LayoutSpec, label: str) -> object:
@@ -87,7 +101,7 @@ def _section_skeleton(layout: LayoutSpec, label: str) -> object:
         skeleton[OWN_CONTENT_KEY] = (
             "<contenu dicté DIRECTEMENT sous cette rubrique (pas sous une "
             "sous-rubrique ci-dessous) — omettre la clé entière si rien n'a "
-            "été dicté à ce niveau>"
+            "été dicté à ce niveau>" + _list_style_nudge(layout, label)
         )
         for c in child_headings:
             skeleton[c.label] = _section_skeleton(layout, c.label)

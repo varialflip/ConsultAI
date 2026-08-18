@@ -1045,3 +1045,17 @@ plusieurs appels à additionner). `extract_note`/`_extract_note_with_dpd_tool`
 acceptent maintenant un `usage_out` optionnel muté en place ; `llm.ToolCompletion`
 porte désormais aussi `usage`. Vérifié par appel direct de
 `_generate_json_pipeline` : jetons réels rapportés.
+
+**La recherche BDPP fait un filtre préfixe, pas une correspondance floue —
+`search_drug` le compense elle-même, 2026-08-18.** Confirmé contre l'API
+réelle : `Norvask` (tel que dicté/mal transcrit) ne retrouve rien pour
+`NORVASC` (la vraie marque), mais un préfixe plus court comme `Norva` le
+retrouve — la recherche `brandname` compare des sous-chaînes/préfixes, pas
+des sons ni une distance d'édition. `app/drug_lookup.search_drug` fait
+maintenant ce raccourcissement en interne : si le terme exact échoue, elle
+rétrécit depuis la fin jusqu'au premier préfixe qui rend des candidats, les
+classe par similarité au terme ORIGINAL (`difflib.SequenceMatcher`, même
+technique que `note_validator._best_match_ratio`), et retient le meilleur au
+dessus de 0,75. Un résultat de ce repli porte `source="dpd_fuzzy"` (contre
+`"dpd"` pour une correspondance exacte), pour rester distinguable dans les
+journaux et `note_generations`.

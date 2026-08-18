@@ -3,6 +3,41 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, Laboratoires en liste, Antécédents ≠ social, BDPP flou
+
+Trois problèmes de plus trouvés sur la même consultation #9 :
+
+- **`### Laboratoires` toujours rendu en un seul paragraphe**, malgré le
+  correctif de la même journée pour Médication/Antécédents/Examen : le
+  marqueur `{{liste à puces}}` n'avait jamais été ajouté sous CETTE
+  sous-rubrique précise. Ajouté dans le gabarit verrouillé « Consultation -
+  Gériatrie » (`default_templates.py`) et le gabarit « (FD) » de test.dictai.ca.
+- **« Divorce » classé sous `ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX`** : dicté
+  immédiatement après des antécédents médicaux sans transition
+  (« ...trauma crânien... Il a un divorcé. »), le modèle a continué
+  d'alimenter la même rubrique au lieu de reclasser par contenu. Le statut
+  civil/la situation familiale n'est pas un antécédent médical ou
+  chirurgical. Consigne renforcée dans les gabarits « Consultation Médicale
+  Générale », « General Medical Consultation », « Consultation - Gériatrie »
+  et le gabarit « (FD) » : exclut explicitement le statut civil, qui va sous
+  Histoire sociale même dicté sans transition marquée. Aucun correctif
+  mécanique proposé ici — reclasser du contenu narratif entre rubriques
+  exige de comprendre le sens, ce qu'un validateur ne fait pas.
+- **La recherche BDPP est un filtre préfixe, pas une correspondance floue**
+  (confirmé empiriquement contre l'API réelle) : `Norvask` (k, tel que
+  dicté/mal transcrit) ne retrouve RIEN pour `NORVASC` (c, la vraie marque),
+  alors qu'un préfixe plus court comme `Norva` le retrouve. `app/drug_lookup.search_drug`
+  fait maintenant ce raccourcissement elle-même — repli flou qui rétrécit le
+  terme depuis la fin jusqu'au premier préfixe qui rend des candidats, les
+  classe par similarité au terme ORIGINAL (`difflib.SequenceMatcher`, même
+  technique que `note_validator._best_match_ratio` pour le grounding), et
+  retient le meilleur si le ratio dépasse 0,75. Un résultat trouvé ainsi
+  porte `source="dpd_fuzzy"` plutôt que `"dpd"`, pour rester distinguable.
+  Vérifié contre l'API réelle : `search_drug("Norvask")` retrouve maintenant
+  NORVASC (DIN 00878901) dès le premier préfixe raccourci.
+
+Testé par `tests/test_note_pipeline.py` (55 cas).
+
 ## 2026-08-18 — branche `selfhosted`, deux médicaments fusionnés en un (Ativan disparu), et jetons non rapportés
 
 - **Deux médicaments dictés sans pause fusionnés en un seul** (vu réellement,

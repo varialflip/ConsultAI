@@ -18,6 +18,22 @@ absent de cette base. C'est un signal, jamais une décision automatique — voir
 Convention : requête brute via ``urllib.request`` (stdlib), comme
 ``llm._mistral_request``/``_cohere_request`` — pas de nouvelle dépendance
 pour un point de terminaison qui ne prend qu'un seul appel HTTP.
+
+REPLI FLOU (2026-08-18)
+------------------------
+Confirmé empiriquement contre l'API réelle : la recherche ``brandname`` est
+un simple filtre préfixe/sous-chaîne, PAS une correspondance floue ni
+phonétique — ``Norvask`` (k) ne retrouve rien pour ``NORVASC`` (c), qui
+diverge avant la fin d'un préfixe commun, alors qu'un préfixe plus court
+comme ``Norva`` retrouve bien les 3 DIN de NORVASC. Plutôt que d'espérer que
+le modèle réessaie lui-même avec un préfixe plus court (fragile — la leçon
+déjà tirée deux fois cette session, listes numérotées puis fusion de
+médicaments), ``search_drug`` le fait lui-même : si la recherche exacte est
+vide, elle raccourcit le terme depuis la fin jusqu'à obtenir des candidats,
+puis les classe par similarité au terme ORIGINAL (``difflib.SequenceMatcher``
+— même technique que ``note_validator._best_match_ratio`` pour le
+grounding). Un résultat trouvé ainsi porte ``source="dpd_fuzzy"`` plutôt que
+``"dpd"``, pour rester distinguable dans les journaux/``note_generations``.
 """
 
 from __future__ import annotations
@@ -27,7 +43,8 @@ import logging
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Dict, Tuple
+from difflib import SequenceMatcher
+from typing import Dict, Optional, Tuple
 
 from app.note_schema import DrugLookup
 from app.note_validator import _normalize_text
@@ -41,6 +58,15 @@ _DPD_API = "https://health-products.canada.ca/api/drug"
 #: tolère pour un appel modèle complet.
 _TIMEOUT_SECONDS = 5
 
+#: En dessous de cette longueur de préfixe, le repli flou abandonne — un
+#: préfixe trop court (« Nor ») retrouverait un flot de médicaments sans
+#: rapport plutôt qu'une correction plausible.
+_FUZZY_MIN_PREFIX = 4
+#: "norvask" vs "norvasc" (ratio ≈ 0.86) doit passer ; un candidat sans
+#: rapport doit échouer — 0.75 sépare confortablement les deux dans les cas
+#: observés.
+_FUZZY_THRESHOLD = 0.75
+
 
 #: Cache mémoire, durée de vie du processus — clé (genre, terme normalisé).
 #: Les résultats en erreur ne sont JAMAIS mis en cache : une panne réseau
@@ -52,6 +78,39 @@ _ENDPOINTS = {
     "brand": ("drugproduct/", "brandname"),
     "ingredient": ("activeingredient/", "ingredientname"),
 }
+
+
+class _DpdQueryError(Exception):
+    """Panne réseau/HTTP/JSON d'un appel brut — jamais laissée remonter
+    au-delà de ``search_drug``, qui la transforme en ``DrugLookup(error=...)``."""
+
+
+def _dpd_query(term: str, kind: str, language: str) -> list:
+    """Un seul appel HTTP brut. Retourne toujours une liste (vide si la BDPP
+    n'a rien trouvé) ; lève ``_DpdQueryError`` sur tout échec — distingue
+    ainsi « recherché, rien trouvé » de « la recherche elle-même a échoué »,
+    ce qu'une liste vide seule ne permettrait pas."""
+    path, param = _ENDPOINTS[kind]
+    query = urllib.parse.urlencode({param: term, "lang": language, "type": "json"})
+    url = f"{_DPD_API}/{path}?{query}"
+    try:
+        request = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as reponse:
+            payload = json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise _DpdQueryError(f"HTTP {exc.code}") from exc
+    except Exception as exc:  # noqa: BLE001 — réseau/JSON/temps mort
+        raise _DpdQueryError(str(exc)) from exc
+    return payload if isinstance(payload, list) else []
+
+
+def _candidate_name(candidate: dict) -> str:
+    return str(candidate.get("brand_name") or candidate.get("ingredient_name") or "").strip()
+
+
+def _build_result(term: str, candidate: dict, *, source: str) -> DrugLookup:
+    din = str(candidate.get("drug_identification_number") or "").strip() or None
+    return DrugLookup(term=term, found=True, matched_name=_candidate_name(candidate) or None, din=din, source=source)
 
 
 def search_drug(term: str, *, kind: str = "brand", language: str = "fr") -> DrugLookup:
@@ -70,31 +129,52 @@ def search_drug(term: str, *, kind: str = "brand", language: str = "fr") -> Drug
     if cached is not None:
         return cached
 
-    path, param = _ENDPOINTS[kind]
-    query = urllib.parse.urlencode({param: term, "lang": language, "type": "json"})
-    url = f"{_DPD_API}/{path}?{query}"
-
     try:
-        request = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as reponse:
-            payload = json.loads(reponse.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        logger.warning("Recherche BDPP échouée pour « %s » (%s) : HTTP %s", term, kind, exc.code)
-        return DrugLookup(term=term, found=False, error=f"HTTP {exc.code}")
-    except Exception as exc:  # noqa: BLE001 — réseau/JSON/temps mort, jamais fatal ici
+        candidates = _dpd_query(term, kind, language)
+    except _DpdQueryError as exc:
         logger.warning("Recherche BDPP échouée pour « %s » (%s) : %s", term, kind, exc)
         return DrugLookup(term=term, found=False, error=str(exc))
 
-    if not isinstance(payload, list) or not payload:
-        result = DrugLookup(term=term, found=False)
+    if candidates:
+        result = _build_result(term, candidates[0], source="dpd")
         _cache[cache_key] = result
         return result
 
-    premier = payload[0] if isinstance(payload[0], dict) else {}
-    matched_name = str(
-        premier.get("brand_name") or premier.get("ingredient_name") or ""
-    ).strip() or None
-    din = str(premier.get("drug_identification_number") or "").strip() or None
-    result = DrugLookup(term=term, found=True, matched_name=matched_name, din=din)
+    result = _fuzzy_fallback(term, kind, language)
     _cache[cache_key] = result
     return result
+
+
+def _fuzzy_fallback(term: str, kind: str, language: str) -> DrugLookup:
+    """Voir le commentaire de module. Raccourcit ``term`` depuis la fin
+    jusqu'au premier préfixe qui rend des candidats, les classe par
+    similarité au terme ORIGINAL, retourne le meilleur si assez proche."""
+    normalized_term = _normalize_text(term)
+    best: Optional[Tuple[float, dict]] = None
+
+    cut = len(term)
+    while cut > _FUZZY_MIN_PREFIX:
+        cut -= 1
+        prefix = term[:cut]
+        try:
+            prefix_candidates = _dpd_query(prefix, kind, language)
+        except _DpdQueryError as exc:
+            # La recherche exacte a déjà réussi (liste vide, pas une panne) —
+            # une panne PENDANT le repli n'annule pas ce "non trouvé" légitime,
+            # elle interrompt juste la tentative d'amélioration.
+            logger.warning("Repli flou BDPP interrompu pour « %s » (%s) : %s", term, kind, exc)
+            break
+        if not prefix_candidates:
+            continue
+        for candidate in prefix_candidates:
+            name = _candidate_name(candidate)
+            if not name:
+                continue
+            ratio = SequenceMatcher(None, normalized_term, _normalize_text(name)).ratio()
+            if best is None or ratio > best[0]:
+                best = (ratio, candidate)
+        break  # premier préfixe qui rend des candidats : on s'arrête là
+
+    if best is not None and best[0] >= _FUZZY_THRESHOLD:
+        return _build_result(term, best[1], source="dpd_fuzzy")
+    return DrugLookup(term=term, found=False)

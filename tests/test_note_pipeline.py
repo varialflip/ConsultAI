@@ -144,6 +144,7 @@ class SkeletonTests(unittest.TestCase):
         self.assertIn("liste À PUCES", skeleton["sections"]["ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX"])
         self.assertIn("liste À PUCES", skeleton["sections"]["MÉDICATION ACTUELLE"][OWN_CONTENT_KEY])
         self.assertIn("liste À PUCES", skeleton["sections"]["EXAMEN OBJECTIF"])
+        self.assertIn("liste À PUCES", skeleton["sections"]["INVESTIGATIONS"]["Laboratoires"])
 
     def test_skeleton_does_not_nudge_unmarked_sections(self):
         layout = parse_layout(GERIATRIE_LAYOUT)
@@ -684,6 +685,58 @@ class DrugLookupTests(unittest.TestCase):
         self.assertTrue(result.found)
         self.assertEqual(result.matched_name, "RISPERDAL")
         self.assertEqual(result.din, "00123456")
+        self.assertEqual(result.source, "dpd")
+
+    def test_fuzzy_fallback_resolves_norvask_to_norvasc(self):
+        """Régression réelle (test.dictai.ca 2026-08-18, consultation #9) :
+        confirmé contre l'API réelle que « Norvask » (k) ne retrouve rien
+        pour NORVASC (c), mais un préfixe plus court comme « Norva » le
+        retrouve — la recherche BDPP est un filtre préfixe, pas une
+        correspondance floue. search_drug doit faire ce raccourcissement
+        elle-même plutôt que d'attendre que le modèle y pense."""
+        candidates_payload = json.dumps([
+            {"brand_name": "NORVASC", "drug_identification_number": "00878901"},
+        ]).encode()
+
+        def fake_urlopen(request, timeout=None):
+            response = mock.MagicMock()
+            response.__enter__.return_value = response
+            if "brandname=Norva&" in request.full_url:
+                response.read.return_value = candidates_payload
+            else:
+                response.read.return_value = b"[]"
+            return response
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = drug_lookup.search_drug("Norvask", kind="brand", language="en")
+        self.assertTrue(result.found)
+        self.assertEqual(result.matched_name, "NORVASC")
+        self.assertEqual(result.din, "00878901")
+        self.assertEqual(result.source, "dpd_fuzzy")
+
+    def test_fuzzy_fallback_rejects_dissimilar_candidate(self):
+        """Un candidat trouvé à un préfixe raccourci mais sans rapport avec
+        le terme original (ratio de similarité trop bas) ne doit jamais être
+        accepté comme une correction plausible."""
+        calls = {"n": 0}
+        candidates_payload = json.dumps([
+            {"brand_name": "COMPLETELYUNRELATED", "drug_identification_number": "00000000"},
+        ]).encode()
+
+        def fake_urlopen(request, timeout=None):
+            response = mock.MagicMock()
+            response.__enter__.return_value = response
+            calls["n"] += 1
+            response.read.return_value = b"[]" if calls["n"] == 1 else candidates_payload
+            return response
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = drug_lookup.search_drug("Xyzqwerty", kind="brand")
+        self.assertFalse(result.found)
+        # Le premier préfixe qui rend des candidats arrête le raccourcissement
+        # (un seul appel exact + un seul appel flou), même si le candidat est
+        # ensuite rejeté par le seuil de similarité.
+        self.assertEqual(calls["n"], 2)
 
 
 if __name__ == "__main__":

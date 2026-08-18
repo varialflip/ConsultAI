@@ -1144,3 +1144,31 @@ forte n'est jamais remplacée. Vérifié sur les vraies données : `oppressor �
 Lopressor (à confirmer)`, `norvasquine → Norvasc`, `Certraline →
 SERTRALINE`, `donnépésil → DONEPEZIL`. Testé par `LegacySourceTests`
 (75 cas au total).
+
+**Médicament mentionné en narratif absent de la liste, 2026-08-18.** Vu
+réellement, consultation #10 : une phrase de liste dicte 7 médicaments, mais
+l'HMA mentionne séparément l'initiation d'un antipsychotique (rispéridone)
+et le Plan en titre la dose (« j'augmente la rispéridone à 0,60 »). MÉDICATION
+ACTUELLE ne reprenait que les 7 médicaments de la phrase de liste — un
+médicament activement ajusté restait invisible de la liste, noyé dans le
+narratif. Deux corrections :
+
+- **Consigne d'extraction** (`app/default_prompts.py`,
+  `JSON_GENERAL_PROMPT_FR`/`EN`, et les gabarits verrouillés dans
+  `app/default_templates.py`) : MÉDICATION ACTUELLE doit refléter TOUTE la
+  dictée, pas seulement une phrase de liste explicite — tout médicament
+  décrit comme pris, initié, ajusté ou cessé n'importe où (HMA, Plan) doit y
+  figurer avec sa dose à jour, dans les limites de la règle « aucune
+  invention » (jamais un médicament seulement essayé-puis-cessé, ni une
+  hypothèse).
+- **Backstop déterministe** (`app/note_validator.check_medication_omitted_from_list`,
+  appelé depuis `main._generate_json_pipeline` comme `check_drug_lookups`) :
+  signale — visibilité seulement, jamais bloquant, jamais d'insertion de
+  contenu dans une section — un médicament que le CODE a vérifié auprès de
+  la BDPP/RxNorm (`note.drug_lookups`) mais absent du texte de la section
+  médication (comparaison insensible aux accents, via `_strip_accents`).
+
+Vérifié par génération réelle (rejeu direct de la consultation #10) :
+MÉDICATION ACTUELLE contient maintenant « Rispéridone 0,5 mg PO HS », et le
+backstop ne remonte plus rien pour ce cas. Testé par
+`MedicationOmittedFromListTests` (80 cas au total).

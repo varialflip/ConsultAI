@@ -21,7 +21,7 @@ from app import drug_lookup, llm, note_extraction, runtime_config
 from app.note_extraction import build_expected_json_skeleton, extract_note, validate_and_repair, verify_medications_post_extraction
 from app.note_renderer import OWN_CONTENT_KEY, render
 from app.note_schema import DrugLookup, ElementAValider, ExtractedNote, GroundedField, parse_layout
-from app.note_validator import check_drug_lookups, validate
+from app.note_validator import check_drug_lookups, check_medication_omitted_from_list, validate
 
 GENERAL_LAYOUT = next(t for t in LOCKED_TEMPLATES if t["name"] == "Consultation Médicale Générale")["layout_format"]
 GERIATRIE_LAYOUT = next(t for t in LOCKED_TEMPLATES if t["name"] == "Consultation - Gériatrie")["layout_format"]
@@ -1013,6 +1013,55 @@ class LegacySourceTests(unittest.TestCase):
             result = note_extraction._maybe_legacy(weak, "oppressor")
         self.assertEqual(result.matched_name, "SUPPRESSOR")
         self.assertEqual(result.source, "dpd_fuzzy_weak")
+
+
+class MedicationOmittedFromListTests(unittest.TestCase):
+    """Régression réelle (test.dictai.ca, consultation #10, 2026-08-18) : la
+    rispéridone était initiée en HMA et titrée en Plan (« j'augmente la
+    rispéridone à 0,60 ») mais n'a jamais été ajoutée à MÉDICATION ACTUELLE —
+    seule une phrase de liste explicite y avait été reprise. Voir
+    note_validator.check_medication_omitted_from_list."""
+
+    def test_verified_drug_absent_from_list_is_flagged(self):
+        note = _base_note()
+        note.drug_lookups = [
+            DrugLookup(term="Rispiridone", found=True, matched_name="RISPERIDONE", source="dpd_fuzzy"),
+        ]
+        issues = check_medication_omitted_from_list(note)
+        self.assertTrue(any(i.code == "medication_missing_from_list" for i in issues))
+
+    def test_verified_drug_present_in_list_is_not_flagged(self):
+        note = _base_note()
+        note.sections["MÉDICATION ACTUELLE"] = {OWN_CONTENT_KEY: "Rispéridone 0,60 mg PO HS"}
+        note.drug_lookups = [
+            DrugLookup(term="Rispiridone", found=True, matched_name="RISPERIDONE", source="dpd_fuzzy"),
+        ]
+        issues = check_medication_omitted_from_list(note)
+        self.assertFalse(any(i.code == "medication_missing_from_list" for i in issues))
+
+    def test_matched_name_present_even_if_literal_term_differs(self):
+        note = _base_note()
+        note.sections["MÉDICATION ACTUELLE"] = {OWN_CONTENT_KEY: "RISPERIDONE 0,60 mg PO HS"}
+        note.drug_lookups = [
+            DrugLookup(term="Respirone", found=True, matched_name="RISPERIDONE", source="dpd_fuzzy_weak"),
+        ]
+        issues = check_medication_omitted_from_list(note)
+        self.assertFalse(any(i.code == "medication_missing_from_list" for i in issues))
+
+    def test_no_medication_section_never_raises(self):
+        note = _base_note()
+        del note.sections["MÉDICATION ACTUELLE"]
+        note.drug_lookups = [DrugLookup(term="Rispiridone", found=True, matched_name="RISPERIDONE", source="dpd_fuzzy")]
+        issues = check_medication_omitted_from_list(note)
+        self.assertEqual(issues, [])
+
+    def test_english_section_key_also_checked(self):
+        note = _base_note()
+        del note.sections["MÉDICATION ACTUELLE"]
+        note.sections["CURRENT MEDICATIONS"] = {OWN_CONTENT_KEY: "Metformin 500 mg PO BID"}
+        note.drug_lookups = [DrugLookup(term="Risperidone", found=True, matched_name="RISPERIDONE", source="dpd")]
+        issues = check_medication_omitted_from_list(note)
+        self.assertTrue(any(i.code == "medication_missing_from_list" for i in issues))
 
 
 if __name__ == "__main__":

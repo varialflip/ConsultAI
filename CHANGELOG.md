@@ -3,6 +3,35 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted`, médicament mentionné en narratif absent de la liste
+
+Vu réellement, test.dictai.ca, consultation #10 : la dictée liste 7
+médicaments en une phrase explicite, mais mentionne SÉPARÉMENT en HMA
+l'initiation de la rispéridone et sa titration dans le Plan (« j'augmente
+la rispéridone à 0,60 »). MÉDICATION ACTUELLE ne reprenait que les 7
+médicaments de la phrase de liste — la rispéridone, un antipsychotique
+activement ajusté, restait invisible de la liste, visible seulement noyée
+dans le narratif.
+
+- **Consigne d'extraction** (`app/default_prompts.py`,
+  `JSON_GENERAL_PROMPT_FR`/`EN`) : MÉDICATION ACTUELLE doit désormais
+  refléter TOUTE la dictée, pas seulement une phrase de liste explicite —
+  tout médicament décrit comme pris/initié/ajusté/cessé n'importe où (HMA,
+  Plan) doit y figurer avec sa dose à jour. Même ajout dans les gabarits
+  verrouillés (`app/default_templates.py`, Consultation Médicale Générale
+  FR/EN + Consultation - Gériatrie), rafraîchis au démarrage.
+- **Backstop déterministe** (`app/note_validator.check_medication_omitted_from_list`) :
+  signale (visibilité seulement, jamais bloquant, jamais d'insertion de
+  contenu) un médicament que le CODE a vérifié auprès de la BDPP/RxNorm
+  (`note.drug_lookups`) mais qui n'apparaît nulle part dans le texte de la
+  section médication (comparaison insensible aux accents). Appelé depuis
+  `main._generate_json_pipeline`, journalisé comme `check_drug_lookups`.
+
+Vérifié par génération réelle (rejeu direct de la consultation #10,
+`run_pipeline_v2.py`) : MÉDICATION ACTUELLE contient maintenant
+« Rispéridone 0,5 mg PO HS », et le backstop ne remonte aucun problème
+(correctement, puisqu'elle y figure). 80 tests.
+
 ## 2026-08-18 — branche `selfhosted`, marques historiques locales (RxNorm)
 
 La BDPP (Santé Canada) n'expose que les produits **courants** : une marque

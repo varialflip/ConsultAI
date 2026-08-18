@@ -107,7 +107,7 @@ from app.llm import GenerationError, extract_metadata, list_available_models
 from app.note_extraction import extract_note, validate_and_repair
 from app.note_renderer import render as render_note
 from app.note_schema import parse_layout
-from app.note_validator import check_drug_lookups
+from app.note_validator import check_drug_lookups, check_medication_omitted_from_list
 from app.stt import TranscriptionError, transcribe
 
 configure_logging()
@@ -2521,6 +2521,12 @@ def _generate_json_pipeline(
             logger.info(
                 "[pipeline JSON test] %d médicament(s) resté(s) sans correspondance BDPP : %s",
                 len(couverture), "; ".join(i.path for i in couverture),
+            )
+        omis = check_medication_omitted_from_list(note)
+        if omis:
+            logger.warning(
+                "[pipeline JSON test] %d médicament(s) vérifié(s) mais absent(s) de la liste médication pour %s : %s",
+                len(omis), user.username, "; ".join(i.message for i in omis),
             )
 
     return {

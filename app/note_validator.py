@@ -511,6 +511,57 @@ def check_drug_lookups(note: ExtractedNote) -> List[ValidationIssue]:
     return issues
 
 
+#: Clé de section médication selon la langue du gabarit (voir
+#: app/default_templates.py) — les deux gabarits verrouillés FR utilisent
+#: « MÉDICATION ACTUELLE », le gabarit EN utilise « CURRENT MEDICATIONS ».
+_MEDICATION_SECTION_KEYS = ("MÉDICATION ACTUELLE", "CURRENT MEDICATIONS")
+
+
+def check_medication_omitted_from_list(note: ExtractedNote) -> List[ValidationIssue]:
+    """Visibilité SEULEMENT (comme check_drug_lookups, dont ce contrôle
+    partage le champ ``note.drug_lookups``) : signale un médicament que le
+    CODE a vérifié auprès de la BDPP (jamais le modèle qui l'affirme lui-même
+    — voir DrugLookup) mais qui n'apparaît nulle part dans le texte de la
+    section médication. Cas réel, test.dictai.ca, consultation #10,
+    2026-08-18 : la rispéridone était initiée en HMA et titrée en Plan
+    (« j'augmente la rispéridone à 0,60 ») mais n'a jamais été ajoutée à
+    MÉDICATION ACTUELLE — seule une phrase de liste explicite avait été
+    reprise, laissant un médicament activement ajusté invisible de la liste.
+
+    Volontairement PAS ajouté à validate() (même raison que
+    check_drug_lookups) : n'insère jamais de contenu dans une section —
+    fabriquer une dose/fréquence que le modèle n'a pas explicitement extraite
+    violerait la règle « aucune invention ». Appelé explicitement pour
+    journaliser, laissant le médecin voir l'avertissement dans l'UI."""
+    med_text = ""
+    for key in _MEDICATION_SECTION_KEYS:
+        if key in note.sections:
+            med_text = _strip_accents(_normalize_text(_flatten_section_text(note.sections[key])))
+            break
+    if not med_text:
+        return []
+
+    issues: List[ValidationIssue] = []
+    seen: set = set()
+    for gl in note.drug_lookups:
+        if not gl.term:
+            continue
+        term_norm = _strip_accents(_normalize_text(gl.term))
+        if not term_norm or term_norm in seen:
+            continue
+        name_norm = _strip_accents(_normalize_text(gl.matched_name)) if gl.matched_name else ""
+        if term_norm in med_text or (name_norm and name_norm in med_text):
+            continue
+        seen.add(term_norm)
+        issues.append(ValidationIssue(
+            "auto_fixed", "medication_missing_from_list",
+            f"« {gl.term} » vérifié auprès de la BDPP mais absent de la section médication — "
+            "probablement mentionné seulement dans une section narrative (HMA, Plan).",
+            "sections[MÉDICATION ACTUELLE]",
+        ))
+    return issues
+
+
 # ---------------------------------------------------------------------------
 # Point d'entrée
 # ---------------------------------------------------------------------------

@@ -103,6 +103,9 @@ from app.database import (
 )
 from app.dictation import DictationError, SequenceMismatch, SessionNotFound
 from app.llm import GenerationError, extract_metadata, list_available_models
+from app.note_extraction import extract_note, validate_and_repair
+from app.note_renderer import render as render_note
+from app.note_schema import parse_layout
 from app.stt import TranscriptionError, transcribe
 
 configure_logging()
@@ -2422,6 +2425,89 @@ def _generate_and_publish(
     return result
 
 
+def _generate_json_pipeline(
+    user: Principal,
+    payload: GenerateIn,
+    template_row: TemplateModel,
+    model_name: Optional[str],
+) -> dict:
+    """
+    Chemin alternatif (réglage panneau ``note_pipeline_json``) : extraction
+    JSON structurée + validation/réparation + rendu pur, SANS diffusion en
+    direct (voir app/note_extraction.py, note_validator.py, note_renderer.py
+    — aucun appel modèle n'y produit de markdown directement). Un seul appel
+    bloquant, pas de morceaux ``live.publish("generation_chunk")`` : inutile
+    ici, et app/static/app.js s'en passe déjà très bien (la réponse JSON
+    finale de /api/generate reste la seule source de vérité appliquée à
+    l'éditeur).
+
+    Réservé aux tests (branche selfhosted) : pas de gestion de l'audio seul
+    (``bypass_stt``/``send_audio``) ni du contexte/instructions ponctuelles
+    (``_build_context_lines``/``payload.extra_instructions``) — ces deux
+    chemins n'ont pas d'équivalent dans note_extraction.extract_note
+    aujourd'hui. Une consultation qui en dépend doit rester sur le pipeline
+    par défaut (réglage désactivé).
+    """
+    provider = llm.active_provider()
+    model = model_name or llm.active_model()
+    if not model:
+        raise GenerationError(
+            f"Aucun modèle configuré pour {provider}. Panneau d'administration "
+            "→ Modèle de langage."
+        )
+    temperature = llm.active_temperature()
+    langue = i18n.normalize(template_row.language or runtime_config.language())
+    general = runtime_config.general_prompt(langue)
+
+    transcript = (payload.transcript or "").strip()
+    if not transcript:
+        raise GenerationError(
+            "La transcription est vide : le pipeline JSON (test) ne gère pas "
+            "encore l'audio seul — désactivez « Pipeline JSON structuré (test) » "
+            "ou fournissez une transcription."
+        )
+
+    layout = parse_layout(template_row.layout_format)
+
+    t0 = time.monotonic()
+    note = extract_note(
+        transcript, layout, template_row.system_instructions, general,
+        model=model, language=langue, provider=provider, temperature=temperature,
+    )
+    result_validation = validate_and_repair(
+        note, layout, transcript, model=model, language=langue, provider=provider,
+    )
+    if result_validation.blocked:
+        details = "; ".join(i.message for i in result_validation.blocked)
+        raise GenerationError(
+            f"La note n'a pas pu être finalisée automatiquement : {details}"
+        )
+    markdown = render_note(note, layout)
+    elapsed_seconds = round(time.monotonic() - t0, 2)
+
+    if result_validation.issues:
+        logger.info(
+            "[pipeline JSON test] %d problème(s) relevé(s) pour %s (gabarit « %s ») : %s",
+            len(result_validation.issues), user.username, template_row.name,
+            "; ".join(f"{i.severity}/{i.code}:{i.path}" for i in result_validation.issues),
+        )
+
+    return {
+        "markdown": markdown,
+        "model": model,
+        "provider": provider,
+        "truncated": False,
+        "usage": {},
+        "audio_used": False,
+        "transcript_used": True,
+        "elapsed_seconds": elapsed_seconds,
+        "validator_issues": [
+            {"severity": i.severity, "code": i.code, "message": i.message, "path": i.path}
+            for i in result_validation.issues
+        ],
+    }
+
+
 @app.post("/api/generate")
 async def api_generate(
     payload: GenerateIn,
@@ -2459,17 +2545,23 @@ async def api_generate(
             payload.consultation_id, active_provider,
         )
 
+    use_json_pipeline = runtime_config.value("note_pipeline_json") == "true"
     try:
-        result = await run_in_threadpool(
-            _generate_and_publish,
-            user,
-            payload,
-            template_row,
-            model_name,
-            audio_payload,
-            generation_seq,
-            request.headers.get("x-consultai-tab", ""),
-        )
+        if use_json_pipeline:
+            result = await run_in_threadpool(
+                _generate_json_pipeline, user, payload, template_row, model_name,
+            )
+        else:
+            result = await run_in_threadpool(
+                _generate_and_publish,
+                user,
+                payload,
+                template_row,
+                model_name,
+                audio_payload,
+                generation_seq,
+                request.headers.get("x-consultai-tab", ""),
+            )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -2582,6 +2674,7 @@ async def api_generate(
         "consultation_id": consultation.id,
         "template_name": template_row.name,
         "metadata": metadata,
+        "validator_issues": result.get("validator_issues", []),
     }
 
 

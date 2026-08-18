@@ -1678,6 +1678,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.llm_provider.label": ("Fournisseur", "Provider"),
     "set.llm_provider.help": ("", ""),
 
+    "set.note_pipeline_json.label": (
+        "Pipeline JSON structuré (test)",
+        "Structured JSON pipeline (test)",
+    ),
+    "set.note_pipeline_json.help": (
+        "Chemin alternatif expérimental : extraction JSON validée et réparée "
+        "avant rendu, au lieu du markdown généré directement. Pas d'effet "
+        "d'affichage en direct (pas de flux caractère par caractère). Réservé "
+        "aux tests — laisser désactivé en production.",
+        "Experimental alternate path: validated/repaired JSON extraction "
+        "before rendering, instead of directly-generated markdown. No live "
+        "typing effect. For testing only — leave off in production.",
+    ),
+
     # --- Réglages « modèle » : un jeu de trois par fournisseur ---------------
     # Le libellé reste générique (« Modèle », et non « Modèle Gemini ») : un
     # seul fournisseur est visible à la fois, sous son propre sous-onglet — le

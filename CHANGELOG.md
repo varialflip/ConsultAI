@@ -3,6 +3,22 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-18 — branche `selfhosted` (non publié, test.dictai.ca uniquement)
+
+- **Pipeline JSON branché sur `/api/generate`, derrière un réglage panneau**
+  (`note_pipeline_json`, Modèle de langage, désactivé par défaut).
+  `api_generate` choisit entre le pipeline JSON (`_generate_json_pipeline`,
+  `app/main.py`) et l'ancien pipeline markdown (`_generate_and_publish`)
+  selon ce réglage — production inchangée (l'image prod ne porte pas ce
+  code). Trouvé et corrigé en testant sur une vraie dictée avant ce
+  branchement : une fuite des consignes de gabarit entre accolades
+  (ex. `{{Phrase résumé}}`) dans le rendu (`note_schema.parse_layout`
+  distingue maintenant `kind="instruction"` de `kind="literal"`). Limites
+  connues, hors périmètre pour l'instant : pas d'audio seul, pas de
+  contexte/instructions ponctuelles, pas de jetons d'usage remontés pour ce
+  chemin (voir README §13).
+
+
 ## 2026-08-17 — branche `selfhosted` (non publié, non déployé sur `/api/generate`)
 
 - **Nouveau pipeline de structuration en JSON, en parallèle de l'actuel**

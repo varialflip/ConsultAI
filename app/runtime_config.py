@@ -276,6 +276,17 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "gemini", choices=LLM_PROVIDERS,
     ),
 
+    # Chemin alternatif de structuration (branche selfhosted, expérimental) :
+    # extraction JSON validée/réparée puis rendue en code (app/note_extraction.py,
+    # note_validator.py, note_renderer.py), au lieu du markdown généré
+    # directement. Pas de diffusion en direct (voir main.py, _generate_json_pipeline).
+    # Désactivé par défaut : ne change RIEN au comportement existant tant que
+    # personne ne l'active depuis le panneau.
+    Setting(
+        "note_pipeline_json", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+
     Setting(
         "gemini_api_key", "secret", "group.llm",
         default=lambda: settings.gemini_api_key,

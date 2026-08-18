@@ -836,12 +836,28 @@ app/
 
 ## 13. Pipeline de structuration en JSON (branche `selfhosted`, expérimental)
 
-Nouveau chemin de structuration, pas encore branché sur `/api/generate` :
-l'API en production continue d'utiliser `llm.generate_note_stream` (markdown
+Chemin de structuration alternatif à `llm.generate_note_stream` (markdown
 directement). Objectif : rendre mécaniquement vérifiable ce qui, avant,
 dépendait entièrement du respect des consignes par le modèle — utile en
 particulier avec des modèles auto-hébergés plus petits que Gemini 2.5 Pro,
 moins fiables sur le respect strict d'un format.
+
+**Branché sur `/api/generate`**, derrière le réglage panneau (Modèle de
+langage) « Pipeline JSON structuré (test) » (`note_pipeline_json`,
+désactivé par défaut — voir `app/runtime_config.py`) : `api_generate`
+choisit `_generate_json_pipeline` ou l'ancien `_generate_and_publish`
+selon ce réglage (`app/main.py`). Pas de diffusion en direct pour ce
+chemin (un seul appel bloquant, pas de flux caractère par caractère —
+le front-end s'en accommode déjà). Persistance, `extract_metadata` et
+journalisation d'usage restent inchangés pour les deux chemins. La
+réponse gagne un champ `validator_issues` (ce que le validateur a relevé)
+pour observer le pipeline pendant les tests.
+
+Limites connues de ce branchement (pas un défaut caché — juste hors
+périmètre pour l'instant) : pas d'audio seul (`bypass_stt`/`send_audio`),
+pas de contexte/instructions ponctuelles (`extra_instructions`), pas de
+jetons d'usage remontés (`usage: {}` côté réponse). Une consultation qui
+dépend de l'un de ces chemins doit rester sur le réglage par défaut.
 
 Trois étapes, chacune dans son module :
 

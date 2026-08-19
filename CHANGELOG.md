@@ -3,6 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — v2.0.0-beta.72
+
+- **Cohere : budget de raisonnement réglable dans le panneau** (beta.72).
+  Nouveau réglage **« Budget de raisonnement (jetons) »** (`cohere_llm_
+  thinking_budget`, défaut **1024**), sous Modèle de langage → Cohere. Il est
+  envoyé comme `thinking.token_budget` à la mise en forme de la note (validé à
+  l'API : la famille command-a l'accepte, à condition de rester sous le budget
+  de sortie — l'application y ramène la valeur). 0 = défaut du modèle. JAMAIS
+  envoyé à la relecture des métadonnées (tâche mécanique, même règle que
+  DeepSeek/Qwen). Un modèle ancien refusant le champ est rejoué sans lui, la
+  note est produite quand même.
+
 ## 2026-08-19 — v2.0.0-beta.71
 
 - **Cohere : note vide « MAX_TOKENS » corrigée** (beta.71). Les modèles de la

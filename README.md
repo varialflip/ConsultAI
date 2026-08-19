@@ -203,6 +203,9 @@ QWEN_OMNI_API_KEY=
 QWEN_OMNI_BASE_URL=            # documentation DashScope
 # Cohere et Mistral : pas de variable propre, COHERE_API_KEY / MISTRAL_API_KEY
 # ci-dessus servent aux deux usages
+# Budget de raisonnement Cohere (thinking.token_budget) à la mise en forme —
+# 0 = défaut du modèle ; non envoyé à la relecture des métadonnées
+COHERE_LLM_THINKING_BUDGET=1024
 ```
 
 > **Cohere, Mistral et OpenAI n'ont qu'une clé pour deux usages** :

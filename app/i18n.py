@@ -1891,6 +1891,23 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "accept it: the setting is then ignored and the note is produced "
         "anyway.",
     ),
+    "set.cohere_llm_thinking_budget.label": (
+        "Budget de raisonnement (jetons)",
+        "Thinking budget (tokens)",
+    ),
+    "set.cohere_llm_thinking_budget.help": (
+        "Budget de jetons accordé au raisonnement du modèle (thinking."
+        "token_budget) lors de la mise en forme. Les modèles command-a "
+        "raisonnent ; un budget trop bas produit une note vide « MAX_TOKENS » "
+        "constatée en production. 0 = défaut du modèle. Doit rester sous le "
+        "budget de sortie. Non envoyé à la relecture des métadonnées (tâche "
+        "mécanique).",
+        "Token budget given to the model's thinking (thinking.token_budget) "
+        "when formatting the note. command-a models reason; a budget too low "
+        "produced an empty 'MAX_TOKENS' note seen in production. 0 = model "
+        "default. Must stay below the output budget. Not sent to the "
+        "metadata re-read (a mechanical task).",
+    ),
 
     "set.mistral_llm_model.label": ("Modèle", "Model"),
     "set.mistral_llm_model.help": (

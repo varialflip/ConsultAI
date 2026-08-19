@@ -2211,6 +2211,26 @@ def _cohere_request(method: str, path: str, payload: Optional[dict] = None) -> d
         raise GenerationError(f"Erreur Cohere : {exc}") from exc
 
 
+def _cohere_thinking_budget(max_tokens: int) -> Optional[int]:
+    """
+    Budget de raisonnement Cohere (`thinking.token_budget`), réglé dans le
+    panneau (``cohere_llm_thinking_budget``, défaut 1024).
+
+    Renvoie ``None`` quand le réglage est absent, vide ou à 0 — le champ
+    ``thinking`` n'est alors pas envoyé et le modèle choisit. Sinon le budget
+    demandé, ramené sous ``max_tokens`` : l'API refuse un budget de raisonnement
+    supérieur au budget de sortie (constaté : « thinking.token_budget must be
+    less than or equal to max_tokens »).
+    """
+    try:
+        valeur = int(float(runtime_config.value("cohere_llm_thinking_budget") or 0))
+    except (TypeError, ValueError):
+        return None
+    if valeur <= 0:
+        return None
+    return min(valeur, max_tokens)
+
+
 def _complete_cohere(
     system: str,
     user: str,
@@ -2232,17 +2252,47 @@ def _complete_cohere(
     if json_mode:
         # Employé par la relecture des métadonnées, qui attend un objet JSON.
         corps["response_format"] = {"type": "json_object"}
+    else:
+        # Mise en forme de la note : la famille command-a raisonne, et un
+        # budget de raisonnement borné évite la note vide « MAX_TOKENS ». JAMAIS
+        # en mode JSON : la relecture des métadonnées est une tâche mécanique,
+        # le raisonnement n'y a pas sa place (même règle que DeepSeek/Qwen).
+        budget_thinking = _cohere_thinking_budget(max_tokens)
+        if budget_thinking is not None:
+            corps["thinking"] = {"token_budget": budget_thinking}
 
     try:
         data = _cohere_request("POST", "/v2/chat", corps)
     except GenerationError as exc:
-        # Le refus porte la limite exacte : on la retient et on réessaie, plutôt
-        # que de renvoyer au médecin une erreur qu'il ne peut pas corriger.
-        limite = _learn_max_tokens("cohere", model, str(exc))
-        if limite is None or limite >= max_tokens:
-            raise
-        corps["max_tokens"] = limite
-        data = _cohere_request("POST", "/v2/chat", corps)
+        # Une famille de modèles plus ancienne peut ne pas connaître le champ
+        # « thinking » : on le retire et on réessaie — la note est produite
+        # quand même, le budget de raisonnement devient alors le défaut du
+        # modèle. Sinon, le refus porte la limite exacte : on la retient et on
+        # réessaie, plutôt que de renvoyer au médecin une erreur qu'il ne peut
+        # pas corriger.
+        message = str(exc)
+        if "thinking" in message.lower() and "thinking" in corps:
+            logger.info(
+                "Modèle Cohere %s : « thinking » refusé (%s) — champ retiré.",
+                model, message[:140],
+            )
+            corps.pop("thinking", None)
+            try:
+                data = _cohere_request("POST", "/v2/chat", corps)
+            except GenerationError as exc2:
+                exc = exc2
+                message = str(exc)
+                limite = _learn_max_tokens("cohere", model, message)
+                if limite is None or limite >= max_tokens:
+                    raise
+                corps["max_tokens"] = limite
+                data = _cohere_request("POST", "/v2/chat", corps)
+        else:
+            limite = _learn_max_tokens("cohere", model, message)
+            if limite is None or limite >= max_tokens:
+                raise
+            corps["max_tokens"] = limite
+            data = _cohere_request("POST", "/v2/chat", corps)
 
     # Le texte arrive en blocs typés : on ne concatène que les blocs « text ».
     # Un bloc d'un autre type — appel d'outil, citation — n'a rien à faire dans

@@ -357,6 +357,10 @@ SETTINGS: Tuple[Setting, ...] = (
         "cohere_llm_temperature", "number", "group.llm",
         default=lambda: str(settings.gemini_temperature),
     ),
+    Setting(
+        "cohere_llm_thinking_budget", "number", "group.llm",
+        default=lambda: "1024",
+    ),
 
     Setting(
         "mistral_llm_model", "text", "group.llm",

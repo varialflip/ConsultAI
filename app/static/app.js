@@ -122,7 +122,7 @@
    * Le compte à rebours est suspendu pendant le glissé — disparaître sous le
    * doigt serait pire qu'une notification qui s'attarde.
    */
-  function toast(message, type = 'info', durationMs = 4500) {
+  function toast(message, type = 'info', durationMs = 4500, singleLine = false) {
     const palette = {
       info: 'bg-slate-800',
       success: 'toast-success',
@@ -133,8 +133,12 @@
     el.className = `${palette[type] || palette.info} text-white text-sm pl-4 pr-2 py-2 rounded-lg
                     shadow-lg max-w-md transition-opacity duration-300 flex items-center gap-2`;
     const text = document.createElement('span');
-    text.className = 'flex-1';
+    // ``singleLine`` : le message tient sur une ligne, tronqué par des points
+    // de suspension (ex. « Brouillon chargé », dont le titre peut être long) —
+    // sur mobile, un toast sur deux lignes déborde du cadre compact.
+    text.className = singleLine ? 'flex-1 truncate' : 'flex-1';
     text.textContent = message;
+    text.title = singleLine ? message : '';
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'shrink-0 -mr-1 p-1 rounded text-white/70 hover:text-white';
@@ -258,9 +262,9 @@
    * donc pas de voile plein écran : on fond le texte en gris pâle
    * (`.gen-pane`) et on affiche le toast de progression unifié en mode
    * indéterminé — d'abord « Connexion au modèle… », basculé en « La note se
-   * génère… » à la réception de l'événement `generation_started` (le serveur
-   * ne l'envoie que lorsqu'il sait que le fournisseur LLM a bien reçu la
-   * requête), sinon dès le premier morceau `generation_chunk`.
+   * génère… » dès que le serveur a fini d'envoyer la requête au fournisseur
+   * LLM (événement `generation_started`), sinon dès le premier morceau
+   * `generation_chunk`.
    */
   function setGenerating(active) {
     $('previewPane').classList.toggle('gen-pane', active);
@@ -662,16 +666,22 @@
   function showProgressToast(message) {
     if (progressToast) progressToast.dismiss();
 
+    // Structure commune desktop/mobile (le CSS `#toastZone .progress-*` de
+    // index.html pilote la mise en page) :
+    //  - desktop : deux rangées — la ligne (spinner + message + %) puis la
+    //    piste pleine largeur dessous ;
+    //  - mobile : UNE SEULE ligne compacte — la piste fine est ensuite
+    //    alignée à droite après le texte, pour garder un toast bas.
     const el = document.createElement('div');
-    el.className = 'bg-slate-800 text-white text-sm pl-4 pr-3 py-2.5 rounded-lg shadow-lg '
-      + 'max-w-md flex flex-col gap-1.5 transition-opacity duration-300';
+    el.className = 'progress-toast bg-slate-800 text-white text-sm pl-3 pr-3 py-2 rounded-lg '
+      + 'shadow-lg max-w-md transition-opacity duration-300';
     const ligne = document.createElement('div');
-    ligne.className = 'flex items-center gap-2';
+    ligne.className = 'progress-line flex items-center gap-2 min-w-0';
     const spinner = document.createElement('span');
     spinner.className = 'spinner';
     spinner.setAttribute('aria-hidden', 'true');
     const texte = document.createElement('span');
-    texte.className = 'flex-1';
+    texte.className = 'flex-1 truncate';
     texte.textContent = message;
     const pct = document.createElement('span');
     pct.className = 'shrink-0 text-xs text-white/80 tabular-nums';
@@ -679,7 +689,7 @@
     ligne.append(spinner, texte, pct);
 
     const piste = document.createElement('div');
-    piste.className = 'h-1.5 w-full rounded-full bg-white/20 overflow-hidden';
+    piste.className = 'progress-piste h-1.5 rounded-full bg-white/20 overflow-hidden';
     const remplissage = document.createElement('div');
     remplissage.className = 'h-full rounded-full bg-emerald-400 transition-[width] duration-500 ease-out';
     // Indéterminé par défaut (pulsation) : la plupart des opérations n'ont
@@ -3479,7 +3489,7 @@
       state.transcriptLanguage = draft.stt_language || '';
       setSaveStatus(T('save.loaded_at', { date: formatDateTime(draft.updated_at) }));
       $('draftsModal').classList.add('hidden');
-      toast(T('drafts.loaded', { title: draft.title }), 'success');
+      toast(T('drafts.loaded', { title: draft.title }), 'success', 4500, true);
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -5707,11 +5717,12 @@
   }
 
   /**
-   * Le serveur a acquis que le fournisseur LLM a bien reçu la requête (il ne
-   * publie cet événement qu'à ce moment-là, pas au lancement interne). Le toast
-   * de génération bascule de « Connexion au modèle… » à « La note se génère… ».
-   * Le premier morceau `generation_chunk` bascule aussi (garde-fou si cet
-   * événement se perd), donc ne rien faire ici n'est jamais bloquant.
+   * Le serveur a fini d'envoyer la requête au fournisseur LLM (ConsultAI
+   * n'exécute pas le modèle : le signal part à la soumission de l'appel, pas
+   * au lancement interne). Le toast de génération bascule de « Connexion au
+   * modèle… » à « La note se génère… ». Le premier morceau `generation_chunk`
+   * bascule aussi (garde-fou si cet événement se perd), donc ne rien faire
+   * ici n'est jamais bloquant.
    */
   function onGenerationStarted(evt) {
     if (!pendingGenerate) return;

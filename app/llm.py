@@ -1013,6 +1013,15 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
             _gemini_pause_retry(tentative, exc, "génération en flux")
             continue
 
+        # La requête a été lancée vers Gemini (config acceptée, flux ouvert) :
+        # c'est le moment où l'on a fini d'envoyer le prompt à l'API. On
+        # bascule l'interface sur « La note se génère… » ici, et non au premier
+        # contenu — Gemini n'acquitte pas avant, mais le départ de la requête
+        # suffit (l'appelant borne à un unique « generation_started », voir
+        # _generate_and_publish).
+        if on_stream_started is not None:
+            on_stream_started()
+
         full: List[str] = []
         candidates = None
         usage_metadata = None
@@ -1026,11 +1035,6 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
                 for piece in (getattr(chunk, "parts", None) or []):
                     part = getattr(piece, "text", None) or ""
                     if part:
-                        # Premier contenu reçu : c'est la seule preuve que le
-                        # serveur Gemini a bien reçu la requête (le SDK ne rend
-                        # aucun acquittement avant du contenu).
-                        if on_stream_started is not None and not deja_diffuse:
-                            on_stream_started()
                         full.append(part)
                         deja_diffuse = True
                         yield part

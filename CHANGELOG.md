@@ -3,6 +3,24 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — v2.0.0-beta.68
+
+- **Toasts — position et compacité ajustées** (beta.68). Sur **mobile**, la
+  zone de toasts redescend au plus près du bord : le toast recouvre au pire la
+  barre de confidentialité, jamais les boutons « Retranscrire » / « Mettre en
+  forme » qui lui sont au-dessus. Le **toast de progression devient une seule
+  ligne compacte** : la piste fine est alignée à droite du texte au lieu
+  d'être en dessous — hauteur réduite. Sur **desktop**, la zone reste relevée
+  pour dégager le pied de la note structurée, la barre d'info et le pied de
+  page. Le toast « Brouillon chargé » tient désormais sur une ligne (titre
+  tronqué avec points de suspension, texte complet en infobulle).
+- **`generation_started` plus tôt pour Gemini** (beta.68). L'événement est
+  désormais publié **dès que la requête a été finie d'envoyer à l'API** — pour
+  Gemini au lancement du flux (`generate_content_stream`), au lieu d'attendre
+  le premier contenu reçu. Le toast de génération bascule donc en « La note
+  se génère… » sans la latence du premier jeton. (OpenAI-compatible et
+  Anthropic le publiaient déjà à la création du flux.)
+
 ## 2026-08-19 — v2.0.0-beta.67
 
 - **Harmonisation de tous les états « en cours » en un toast unique**

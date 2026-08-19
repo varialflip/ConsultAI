@@ -548,10 +548,11 @@ fichier (§ 7.4) en bénéficie aussi.
 > — déterministe quand un avancement réel existe (`transcription_progress`),
 > indéterminée sinon, sans jamais afficher de faux pourcentage. La génération
 > s'appuie en outre sur l'événement SSE `generation_started`, publié par le
-> serveur **uniquement lorsqu'il sait que le fournisseur LLM a bien reçu la
-> requête** : le toast passe alors de « Connexion au modèle… » à « La note se
-> génère… » (ou dès le premier morceau `generation_chunk` si l'événement se
-> perd). Plus aucun voile plein écran bloquant.
+> serveur dès qu'il a fini d'envoyer la requête au fournisseur LLM (ConsultAI
+> n'exécute pas le modèle : le signal part à la soumission de l'appel, pas au
+> lancement interne) : le toast passe alors de « Connexion au modèle… » à
+> « La note se génère… » (ou dès le premier morceau `generation_chunk` si
+> l'événement se perd). Plus aucun voile plein écran bloquant.
 
 > Rien de tout cela n'est automatique. Retranscrire écrase du texte que le
 > médecin a pu déjà corriger à la main.

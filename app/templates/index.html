@@ -278,6 +278,30 @@
     }
     @keyframes gen-spin { to { transform: rotate(360deg); } }
 
+    /* Toast de progression (voir showProgressToast, app.js) :
+       - desktop : deux rangées — ligne (spinner + message + %) puis piste
+         pleine largeur dessous ;
+       - mobile : UNE SEULE ligne compacte, la piste fine alignée à droite du
+         texte — un toast aussi bas que possible, qui ne déborde pas. */
+    .progress-toast { display: flex; flex-direction: column; gap: 0.4rem; }
+    .progress-piste { width: 100%; }
+    @media (max-width: 639px) {
+      .progress-toast { flex-direction: row; align-items: center; gap: 0.6rem; }
+      .progress-line { flex: 1; }
+      .progress-piste { width: 5rem; flex: none; }
+    }
+
+    /* Position des toasts dans la fenêtre.
+       - mobile : bas, au plus près du bord — le toast recouvre au pire la
+         barre de confidentialité, jamais les boutons « Retranscrire » /
+         « Mettre en forme » (qui lui sont au-dessus) ;
+       - desktop : relevé pour dégager le pied de la note structurée, la
+         barre d'info et le pied de page confidentialité. */
+    #toastZone { bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+    @media (min-width: 640px) {
+      #toastZone { bottom: max(4.25rem, calc(env(safe-area-inset-bottom) + 3.75rem)); }
+    }
+
     /* Le texte d'aide (placeholder) de la transcription adopte la même
        apparence que le message « La note structurée apparaît ici… » du
        panneau de droite — couleur, italique, ET taille : le textarea fixe
@@ -1293,8 +1317,7 @@
      zone. Légèrement relevé du bas pour ne pas recouvrir le pied de la note
      structurée. -->
 <div id="toastZone" class="no-print fixed left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-50
-                           flex flex-col gap-2 items-stretch sm:items-end"
-     style="bottom: max(calc(1rem + 0.95rem), calc(env(safe-area-inset-bottom) + 0.95rem))"></div>
+                           flex flex-col gap-2 items-stretch sm:items-end"></div>
 
 <script>
   window.CONSULTAI = {

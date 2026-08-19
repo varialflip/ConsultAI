@@ -3,6 +3,10 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — v2.0.0-beta.73
+
+- **Toast desktop relevé de 6 px de plus** (beta.73).
+
 ## 2026-08-19 — v2.0.0-beta.72
 
 - **Cohere : budget de raisonnement réglable dans le panneau** (beta.72).

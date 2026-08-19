@@ -372,6 +372,11 @@ L'application ne collecte plus l'identité du patient :
   conservées, vides).
 - Les notes générées sont donc dénominalisées à la source ; l'identification du patient
   se fait au moment du versement au dossier médical, en dehors de l'application.
+- Depuis la consolidation des consignes (2026-08-19), la règle « ne jamais transcrire
+  un nom de patient ni un numéro de dossier » est énoncée dans la **consigne générale**
+  (section RÔLE), appliquée à toutes les notes et tous les gabarits — auparavant elle
+  ne figurait que dans un seul gabarit livré. Aucun changement de collecte ni de
+  stockage : renforcement de l'énoncé, pas de nouvelle donnée.
 - Les métadonnées restantes (`consultation_date`, `reason`, `requester`,
   `accompanied_by`) ne permettent pas d'identifier un patient.
 

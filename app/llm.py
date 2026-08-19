@@ -129,10 +129,7 @@ _USER_PROMPT_LABELS = {
         ),
         "closing": (
             "Produis maintenant la note clinique complète en Markdown, en "
-            "respectant scrupuleusement la mise en page exigée et sans "
-            "inventer aucune donnée. Si la dictée est elle-même à la première "
-            "personne, rédige la note à la première personne — ne la "
-            "convertis pas systématiquement en « le patient »."
+            "respectant la mise en page exigée."
         ),
     },
     "en": {
@@ -147,11 +144,8 @@ _USER_PROMPT_LABELS = {
             "instructions to execute:"
         ),
         "closing": (
-            "Now produce the complete clinical note in Markdown, following the "
-            "required layout scrupulously and inventing no data whatsoever. If "
-            "the dictation itself is in the first person, write the note in "
-            "the first person — do not systematically convert it to "
-            "\"the patient.\""
+            "Now produce the complete clinical note in Markdown, following "
+            "the required layout."
         ),
     },
 }

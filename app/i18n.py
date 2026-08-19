@@ -2186,13 +2186,19 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.general_prompt.help": (
         "Ajoutée aux consignes de TOUS les gabarits et appliquée quel que "
         "soit le modèle choisi. Elle passe après celles du gabarit : en cas "
-        "de contradiction, c'est elle qui l'emporte. C'est ici que se met ce "
-        "qui est propre à votre pratique — une spécialité, un vocabulaire, "
-        "des habitudes de rédaction.",
+        "de contradiction, c'est elle qui l'emporte. Elle porte les règles de "
+        "base (aucune invention, remplissage interdit, style déclaratif, "
+        "dénominalisation) en plus de ce qui est propre à votre pratique — "
+        "une spécialité, un vocabulaire, des habitudes de rédaction. Ne "
+        "supprimez pas les règles de base sans le vouloir : elles sont "
+        "obligatoires dans la note.",
         "Added to the instructions of ALL templates and applied whichever "
         "model is chosen. It comes after the template's own: in case of "
-        "conflict, it wins. This is where anything specific to your practice "
-        "belongs — a specialty, a vocabulary, writing habits.",
+        "conflict, it wins. It carries the base rules (never invent, no "
+        "filler text, declarative style, de-identification) in addition to "
+        "anything specific to your practice — a specialty, a vocabulary, "
+        "writing habits. Do not remove the base rules by accident: they are "
+        "mandatory in the note.",
     ),
     "set.general_prompt.placeholder": (
         "Ex. : Utiliser systématiquement le vouvoiement. Ne jamais abréger "

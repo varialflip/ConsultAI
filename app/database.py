@@ -1421,6 +1421,71 @@ def migrate_general_prompt_structure(db: Session) -> int:
     return touches
 
 
+#: Empreintes des consignes générales LIVRÉES avant la consolidation de
+#: 2026-08-19 (répétitions retirées : règles transversales concentrées dans la
+#: consigne, sections renumérotées 0 à 4, dénominalisation énoncée dans le
+#: RÔLE). Même mécanique que les migrations précédentes : on ne remplace la
+#: valeur en base que si elle est encore EXACTEMENT le défaut livré, pour ne
+#: jamais écraser une consigne personnalisée. Vérifié le 2026-08-19 contre
+#: ``default_prompts`` : la copie en base des deux langues était strictement
+#: identique au module avant l'édition.
+_OLD_GENERAL_PROMPT_SHA6 = {
+    "general_prompt_fr": "25b08dc8b317a75a862794d569e448371171ac77dafc0dd37b110b51601e0e4e",
+    "general_prompt_en": "a644f8e5bf797e79dbae205d23f2e130f1eb5409747630a22601486c7510688e",
+}
+
+
+def migrate_general_prompt_consolidation(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la version consolidée.
+
+    Supprime les répétitions accumulées : les règles transversales (aucune
+    invention, remplissage interdit, style déclaratif et ellipse du sujet,
+    raisonnement clinique préservé, première personne d'Impression/Plan, voix
+    dictée) ne sont plus énoncées qu'une seule fois, en sections 0 à 4 ; la
+    vérification finale est fondue dans la section 1, le style déclaratif dans
+    la section 3. La règle de dénominalisation (jamais de nom de patient ni de
+    numéro de dossier) est désormais énoncée dans le RÔLE, pour toutes les
+    notes et non plus seulement dans un gabarit.
+
+    La consigne générale est éditable et vit en base (elle surcharge le module
+    ``default_prompts``) : corriger le module seul laisserait l'installation en
+    service avec l'ancien texte. Comme pour les migrations précédentes, la
+    valeur n'est remplacée que si elle est encore EXACTEMENT le défaut livré
+    (comparaison par empreinte) ; une consigne personnalisée est laissée
+    intacte et signalée au journal. Les gabarits, eux, se rafraîchissent seuls
+    (``seed_locked_templates``) : les règles transversales n'y vivent plus.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA6.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : consolidation ignorée "
+                "(laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : consolidation des règles "
+            "(répétitions retirées, dénominalisation dans le RÔLE).",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Groupes livrés. « admins » ouvre le panneau d'administration, « users » ne
 #: donne accès qu'à ses propres consultations.
 _SYSTEM_GROUPS = (
@@ -1688,6 +1753,7 @@ def init_db() -> None:
         migrate_general_prompt_a_confirmer(db)
         migrate_general_prompt_final_section(db)
         migrate_general_prompt_structure(db)
+        migrate_general_prompt_consolidation(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

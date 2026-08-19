@@ -3,6 +3,23 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — v2.0.0-beta.74
+
+- **Consolidation des consignes du modèle** (beta.74) — la consigne générale
+  (français/anglais) est resserrée : les règles transversales (aucune
+  invention, remplissage interdit, rubrique vide supprimée, style déclaratif
+  et ellipse du sujet, raisonnement clinique préservé, première personne
+  d'Impression/Plan, voix dictée, « Éléments à valider ») ne sont plus
+  répétées ni dans les gabarits, ni à plusieurs endroits de la consigne.
+  Sections renumérotées § 0 à § 4. Les gabarits livrés ne portent plus que
+  leur carte de rubriques ; la consigne générale, placée après eux, reste
+  prioritaire en cas de conflit. La dénominalisation (« jamais de nom de
+  patient ni de numéro de dossier ») est désormais énoncée dans le RÔLE,
+  pour toutes les notes et tous les gabarits. Aucun garde-fou clinique n'a
+  été retiré. La consigne en base n'est mise à jour que si elle est encore
+  le défaut livré (une version personnalisée par le médecin est laissée
+  intacte).
+
 ## 2026-08-19 — v2.0.0-beta.73
 
 - **Toast desktop relevé de 6 px de plus** (beta.73).

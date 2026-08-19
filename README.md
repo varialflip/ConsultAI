@@ -874,7 +874,8 @@ Trois étapes, chacune dans son module :
    JSON permet de vérifier sans modèle : texte de remplissage interdit
    (auto-retiré), accolades `{{...}}` oubliées, balises HTML, présence et
    cohérence d'Éléments à valider, préservation de la voix à la première
-   personne en Impression/Plan (« je crois que... »), et ancrage
+   personne en Impression/Plan (« je crois que... », et toute action factuelle
+   dictée au « je » — jamais reformulée à l'impersonnel), et ancrage
    (« grounding ») de chaque valeur critique contre un extrait exact de la
    transcription.
 3. **`note_extraction.validate_and_repair`** — pour ce qui nécessite un
@@ -976,30 +977,51 @@ Réglage `note_lookup_dpd` (désactivé par défaut, sans effet sauf si le
 pipeline JSON est actif ET le fournisseur sait appeler des outils — Mistral
 ou le point de terminaison personnalisé compatible OpenAI, ex. DeepSeek via
 OpenRouter) : le modèle reçoit un
-outil d'appel de fonction, `verifier_medicament_dpd`
-(`note_extraction._DPD_TOOL_SCHEMA`), qu'il peut invoquer pendant
-l'extraction pour vérifier un nom de médicament incertain contre la Base de
+outil d'appel de fonction, `verifier_medicaments_dpd`
+(`note_extraction._DPD_TOOL_SCHEMA`), que le modèle peut invoquer en passe 1
+pour vérifier un nom de médicament incertain contre la Base de
 données sur les produits pharmaceutiques de Santé Canada — API publique, sans
 authentification (`app/drug_lookup.py`, requête `urllib` brute, même
 convention que les fournisseurs Mistral/Cohere existants dans `llm.py`, ne
 lève jamais).
 
 Choix de conception délibéré, décidé par Fred contre la suggestion initiale
-(un contrôle purement déterministe après extraction, sans intervention du
-modèle) : l'appel d'outils permet au modèle de consulter la base **pendant**
-qu'il décide, pas seulement après coup. `llm.py` gagne un point d'entrée SŒUR
-de `complete()` — `complete_with_tools()` — plutôt qu'une extension de sa
-signature : seuls les fournisseurs qui le savent faire (Mistral, et le point
-de terminaison personnalisé via `_complete_openai_tools`) appellent des
-outils, et `complete()` garde un contrat simple dont dépendent six branches.
-`note_extraction._extract_note_with_dpd_tool` orchestre une boucle
-bornée (2 tours, 6 appels maximum — le modèle peut ignorer l'outil, l'appeler
-plusieurs fois, ou ne jamais conclure dans le budget imparti, auquel cas un
-dernier tour SANS outil force une réponse).
+(une vérification purement déterministe après extraction, sans intervention du
+modèle) : l'appel d'outils permet au modèle de faire vérifier les noms pénalisés
+par la reconnaissance vocale. `llm.py` gagne un point d'entrée SŒUR de
+`complete()` — `complete_with_tools()` (paramètre `tool_choice` : `"auto"` par
+défaut, `"required"` pour forcer un appel d'outil) — plutôt qu'une extension
+de sa signature : seuls Mistral et le point de terminaison personnalisé
+(via `_complete_openai_tools`) appellent des outils, et `complete()` garde un
+contrat simple dont dépendent six branches.
+
+**PIPELINE EN 2 TEMPS (`note_extraction._extract_note_with_dpd_tool`,
+2026-08-19)** — plutôt que de demander au modèle de trancher pendant
+l'extraction (sous le prompt d'extraction complet, plusieurs candidats
+auto-hébergés ignorent l'outil), la vérification est coupée dans un appel
+étroit séparé :
+
+1. **Passe 1 — repérage & vérification.** Un système court (`_DPD_PASS1_SYSTEM_*`)
+   force le modèle à repérer TOUS les médicaments de la dictée et à appeler
+   `verifier_medicaments_dpd` **une seule fois** avec la liste complète
+   (`tool_choice="required"`). En **code pur**, on trie alors les résultats :
+   les correspondances fiables (source `dpd`/`dpd_fuzzy`, sauf cas « seulement
+   plus précis » où le terme dicté est déjà le bon — ex. « metformine » →
+   « Chlorhydrate de metformine ») sont **substituées** dans la transcription
+   (termes les plus longs d'abord) ; les candidats faibles (repli
+   `dpd_fuzzy_weak`/RxNorm) sont isolés.
+2. **Passe 2 — rédaction.** L'extraction JSON normale tourne sur la
+   transcription corrigée, avec une consigne annexe (`_weak_note`) demandant
+   de laisser les candidats faibles en **Éléments à valider** (« à confirmer »),
+   jamais corrigés ni affirmés.
+
+Une panne — ou l'absence d'appel d'outil, fréquente chez les candidats
+auto-hébergés (Qwen, Lagunda…, voir CHANGELOG) — **ne bloque jamais la passe 2**
+: la note est alors produite sur la transcription brute.
 
 **La preuve de vérification est écrite par le CODE, jamais par le modèle** :
-`ExtractedNote.drug_lookups` est peuplé par la boucle d'orchestration
-elle-même à partir de ce qu'elle a réellement exécuté — `from_dict()` refuse
+`ExtractedNote.drug_lookups` est peuplé par la passe 1 elle-même à partir de
+ce qu'elle a réellement exécuté — `from_dict()` refuse
 délibérément de lire cette clé depuis la réponse JSON du modèle (même
 principe que `_REPAIRABLE_CODES` excluant les codes de grounding : un modèle
 qui s'auto-déclarerait « vérifié » sans que l'appel ait eu lieu rendrait ce
@@ -1028,8 +1050,8 @@ d'« Activant » (vraisemblablement Ativan/lorazépam, une benzodiazépine PRN �
 rien à voir avec un IPP). L'outil BDPP n'avait même jamais été appelé pour ce
 terme : la fusion avait eu lieu en amont, pendant l'extraction elle-même, pas
 pendant la vérification. Corrigé par une règle de consigne explicite contre
-la fusion de deux noms de médicaments adjacents (`JSON_GENERAL_PROMPT_FR/EN`,
-`_DPD_TOOL_GUIDANCE_FR/EN`) et, en filet mécanique,
+ la fusion de deux noms de médicaments adjacents (règle contre la fusion de
+ deux noms adjacents dans `JSON_GENERAL_PROMPT_FR/EN`) et, en filet mécanique,
 `note_validator.fix_elements_a_valider_corrections` démet maintenant en
 « à confirmer » toute correction qui duplique EXACTEMENT un contenu déjà
 gardé ailleurs dans la note (`correction_is_duplicate`) — un signal fort de
@@ -1042,8 +1064,7 @@ médicament distinct.
 statistiques n'affichait aucun compte de jetons pour ces générations —
 `main._generate_json_pipeline` codait `usage: {}` en dur, et
 `note_extraction.extract_note` ne remontait l'usage d'aucun appel modèle
-(ni pour le chemin simple, ni pour la boucle d'appel d'outils, qui fait
-plusieurs appels à additionner). `extract_note`/`_extract_note_with_dpd_tool`
+(ni pour le chemin simple, ni pour le pipeline 2 temps, qui fait deux appels à additionner). `extract_note`/`_extract_note_with_dpd_tool`
 acceptent maintenant un `usage_out` optionnel muté en place ; `llm.ToolCompletion`
 porte désormais aussi `usage`. Vérifié par appel direct de
 `_generate_json_pipeline` : jetons réels rapportés.
@@ -1095,9 +1116,9 @@ réelle : `search_drug('Activant')` retrouve maintenant ATIVAN (DIN
 **Corrigé le même jour : terme littéral transmis à l'outil + palier de
 confiance.** Le risque ci-dessus (le modèle transmettait sa propre
 correction — « Activelle » — plutôt que le terme entendu) est traité par
-une consigne explicite dans `_DPD_TOOL_SCHEMA`/`_DPD_TOOL_GUIDANCE_FR/EN` :
-transmettre le terme TEL QUE TRANSCRIT, jamais une hypothèse déjà
-« corrigée ». En rejouant la consultation #9 avec ce correctif, un second
+une consigne explicite dans `_DPD_TOOL_SCHEMA` et le système de la passe 1
+(`_DPD_PASS1_SYSTEM_*`) : transmettre le terme TEL QUE TRANSCRIT, jamais une
+hypothèse déjà « corrigée ». En rejouant la consultation #9 avec ce correctif, un second
 problème est apparu : « Respirone » a été rapproché de « REPRONEX » (un
 médicament de fertilité SANS rapport, ratio de similarité 0,824) et le
 modèle l'a écrit comme une correction confirmée. `app/drug_lookup.py`

@@ -26,7 +26,7 @@ import re
 from typing import Optional
 
 from app import llm, runtime_config
-from app.drug_lookup import legacy_match, search_drug
+from app.drug_lookup import _strip_dose_suffix, is_superset_match, legacy_match, search_drug
 from app.note_renderer import OWN_CONTENT_KEY
 from app.note_schema import LIST_STYLE_MARKERS, DrugLookup, ElementAValider, ExtractedNote, LayoutSpec
 from app.note_validator import ValidationIssue, ValidationResult, validate
@@ -38,13 +38,24 @@ DEFAULT_MAX_REPAIR_ATTEMPTS = 2
 # ---------------------------------------------------------------------------
 # Vérification de médicament via outil d'appel de fonction (branche
 # selfhosted, expérimental) — voir _extract_note_with_dpd_tool ci-dessous.
-# ---------------------------------------------------------------------------
-#: Plafonds volontairement serrés : cet appel s'insère dans un chemin DÉJÀ
-#: bloquant/non diffusé en direct (voir main._generate_json_pipeline) — le
-#: médecin attend un seul spinner, pas 8 allers-retours réseau. Au-delà, on
-#: force un dernier tour sans outil plutôt que de laisser la boucle continuer.
-_DPD_TOOL_MAX_ROUNDS = 2
-_DPD_TOOL_MAX_CALLS = 6
+#
+# PIPELINE EN 2 TEMPS (recherche self-hosting 2026-08-19) : plutôt que de
+# demander au modèle de trancher pendant l'extraction (il ignore souvent
+# l'outil sous le prompt d'extraction complet), on COUPE la vérification dans
+# un appel étroit séparé :
+#   Passe 1 — repérage + vérification : un système court force le modèle à
+#   repérer TOUS les médicaments de la dictée et à appeler
+#   verifier_medicaments_dpd UNE SEULE FOIS avec la liste complète
+#   (tool_choice="required"). Le code substitue ensuite DÉTERMINISTIQUEMENT
+#   les résultats fiables (dpd/dpd_fuzzy, sauf « seulement plus précis »)
+#   dans la transcription, et isole les candidats faibles.
+#   Passe 2 — rédaction : l'extraction JSON normale tourne sur la
+#   transcription corrigée, avec une consigne annexe demandant de laisser
+#   les candidats faibles en Éléments à valider.
+# Le fournisseur n'a pas à faire d'appel d'outil fiable sous le prompt
+# d'extraction complet — c'est ce qui faisait défaut aux candidats
+# auto-hébergés (Qwen, Lagunda, Mistral-small…).
+_DPD_TOOL_SUBSTITUTION_SOURCES = ("dpd", "dpd_fuzzy")
 
 #: Option A du banc d'essai coût/exactitude (voir plan de session) : UN seul
 #: appel listant TOUS les médicaments incertains de la note, plutôt qu'un
@@ -111,62 +122,54 @@ _DPD_TOOL_SCHEMA = {
     },
 }
 
-_DPD_TOOL_GUIDANCE_FR = (
-    "\n\nOUTIL DISPONIBLE — verifier_medicaments_dpd : pour tout médicament "
-    "dont le nom est incertain, mal entendu, ou reconstruit par homophonie "
-    "(voir la méthode de correction ci-dessus), quelle que soit la rubrique "
-    "où il apparaît (Médication actuelle, Plan, HMA, Impression...), "
-    "vérifie-le avant de trancher entre le corriger ou le renvoyer en "
-    "Éléments à valider. RELIS TOUTE LA NOTE en cours de rédaction et "
-    "APPELLE CET OUTIL UNE SEULE FOIS avec la liste complète des médicaments "
-    "incertains — jamais un appel par médicament. Une absence de résultat "
-    "n'est pas une preuve d'erreur — c'est un indice de plus, pas une "
-    "décision automatique.\n\nIMPORTANT — transmets le terme TEL QUE "
-    "TRANSCRIT, jamais ta propre correction : si tu as déjà une hypothèse "
-    "(par exemple, tu penses que « Activant » est en réalité Ativan), "
-    "appelle l'outil avec « Activant » (le terme transcrit), PAS avec "
-    "« Ativan » (ton hypothèse). Transmettre directement ta propre "
-    "correction revient à ne rien vérifier du tout — l'outil confirmera "
-    "seulement que TON hypothèse est un vrai médicament, sans jamais tester "
-    "si c'est la BONNE. Le nom retourné par l'outil, pas ta première idée, "
-    "est ce qui doit apparaître dans la note.\n\nChaque résultat porte un "
-    "niveau de « confiance ». « elevee » : traite le nom retourné comme la "
-    "lecture retenue. « faible » : ce n'est qu'un candidat plausible par "
-    "ressemblance de caractères — PAS une correction confirmée. Un "
-    "médicament SANS RAPPORT peut ressembler à ton terme lettre par lettre "
-    "sans être le bon (ex. un médicament de fertilité peut ressembler à un "
-    "antipsychotique par ses lettres, sans aucun rapport clinique). Pour un "
-    "résultat « faible », n'écris JAMAIS « correction apportée » — laisse "
-    "le terme en Éléments à valider comme à confirmer, sans affirmer le nom "
-    "retourné par l'outil comme la solution."
+_DPD_PASS1_SYSTEM_FR = (
+    "Tu es un assistant clinique. Voici une dictée médicale transcrite "
+    "automatiquement (reconnaissance vocale : des noms de médicaments "
+    "peuvent être mal orthographiés ou reconstruits par homophonie).\n\n"
+    "Ta SEULE tâche : repérer TOUS les noms de médicaments mentionnés dans "
+    "cette dictée, où qu'ils apparaissent (liste de médication, plan, "
+    "histoire, impression...), et appeler l'outil verifier_medicaments_dpd "
+    "UNE SEULE FOIS, avec la liste COMPLÈTE de tous ces médicaments — y "
+    "compris ceux qui semblent déjà correctement orthographiés (la "
+    "reconnaissance vocale peut se tromper même sur un nom qui a l'air "
+    "correct). Pour chaque terme, transmets-le TEL QU'IL A ÉTÉ TRANSCRIT, "
+    "jamais une correction de ton cru — c'est justement à l'outil de "
+    "trouver la bonne orthographe. N'écris AUCUN autre texte : appelle "
+    "uniquement l'outil."
 )
-_DPD_TOOL_GUIDANCE_EN = (
-    "\n\nTOOL AVAILABLE — verifier_medicaments_dpd: for any medication whose "
-    "name is uncertain, misheard, or reconstructed from a mishearing (see "
-    "the correction method above), wherever it appears in the note "
-    "(Current medications, Plan, HPI, Impression...), verify it before "
-    "deciding whether to correct it or flag it under Items to verify. "
-    "RE-READ THE WHOLE NOTE you're drafting and CALL THIS TOOL ONCE with "
-    "the complete list of uncertain medications — never one call per "
-    "medication. No result found is not proof of an error — it's one more "
-    "signal, not an automatic decision.\n\nIMPORTANT — pass the term AS "
-    "TRANSCRIBED, never your own correction: if you already have a "
-    "hypothesis (for example, you think \"Activant\" is actually Ativan), "
-    "call the tool with \"Activant\" (the transcribed term), NOT with "
-    "\"Ativan\" (your hypothesis). Passing your own correction directly "
-    "means verifying nothing at all — the tool will only confirm that YOUR "
-    "guess is a real medication, never test whether it's the RIGHT one. "
-    "The name the tool returns, not your first guess, is what belongs in "
-    "the note.\n\nEach result carries a confidence level. \"elevee\": treat "
-    "the returned name as the retained reading. \"faible\": it's only a "
-    "plausible candidate by character resemblance — NOT a confirmed "
-    "correction. An UNRELATED medication can resemble your term letter by "
-    "letter without being the right one (e.g. a fertility drug can resemble "
-    "an antipsychotic by spelling alone, with no clinical connection). For "
-    "a \"faible\" result, NEVER write \"correction made\" — leave the term "
-    "under Items to verify as unconfirmed, without asserting the tool's "
-    "returned name as the answer."
+_DPD_PASS1_SYSTEM_EN = (
+    "You are a clinical assistant. Here is an automatically transcribed "
+    "medical dictation (speech recognition: drug names may be misspelled or "
+    "rebuilt from a mishearing).\n\n"
+    "Your ONLY task: spot EVERY drug name mentioned in this dictation, "
+    "wherever it appears (medication list, plan, history, impression...), "
+    "and call the verifier_medicaments_dpd tool ONCE with the COMPLETE list "
+    "of all those medications — including those that already look correctly "
+    "spelled (speech recognition can garble even a name that looks right). "
+    "For each term, pass it AS TRANSCRIBED, never a correction of your own — "
+    "finding the right spelling is exactly the tool's job. Write NO other "
+    "text: only call the tool."
 )
+
+
+def _weak_note(termes_faibles: list, language: str) -> str:
+    """Consigne annexe de la passe 2 : les termes vérifiés dont la
+    correspondance BDPP n'est pas fiable doivent rester en Éléments à
+    valider (« à confirmer »), jamais corrigés ni affirmés. Vide si aucun."""
+    if not termes_faibles:
+        return ""
+    lignes = "\n".join(f"- « {t} »" for t in termes_faibles)
+    if language == "en":
+        return (
+            "\n\nTerms checked with NO reliable BDPP match — leave them under "
+            "Items to verify as \"to confirm\", never corrected, never stated "
+            "as a substitution:\n" + lignes
+        )
+    return (
+        "\n\nTermes vérifiés SANS correspondance fiable BDPP — à laisser en "
+        "Éléments à valider (« à confirmer »), jamais corrigés, jamais "
+        "affirmés comme une substitution :\n" + lignes
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -401,10 +404,6 @@ def _parse_json_completion(text: str) -> dict:
         raise
 
 
-def _dpd_kind(type_arg: str) -> str:
-    return "ingredient" if str(type_arg or "").strip().lower().startswith("ingred") else "brand"
-
-
 def _add_usage(total: dict, delta: dict) -> None:
     """Additionne deux ``usage`` (voir ``llm.Completion``/``ToolCompletion``)
     — plusieurs tours d'appel d'outils consomment chacun des jetons, et rien
@@ -475,112 +474,92 @@ def _maybe_legacy(lookup: DrugLookup, terme: str) -> DrugLookup:
 
 
 def _extract_note_with_dpd_tool(
-    system: str, user: str, *, model: str, temperature: float, max_tokens: int,
+    system: str, transcript: str, *, model: str, temperature: float, max_tokens: int,
     provider: str, language: str, usage_out: Optional[dict] = None,
 ) -> ExtractedNote:
-    """Variante de ``extract_note`` qui donne au modèle un outil d'appel de
-    fonction (``verifier_medicament_dpd``) pendant l'extraction — voir
-    ``app.drug_lookup`` et le réglage ``note_lookup_dpd``. Câblé pour Mistral et
-    pour le point de terminaison personnalisé compatible OpenAI (``custom`` —
-    DeepSeek via OpenRouter, serveur local…) : ``llm.complete_with_tools``
-    connaît ces deux fournisseurs.
+    """PIPELINE 2 TEMPS de vérification médicament BDPP (réglage
+    ``note_lookup_dpd``, branche selfhosted, expérimental) — voir
+    ``app.drug_lookup``.
 
-    Boucle bornée (``_DPD_TOOL_MAX_ROUNDS``/``_DPD_TOOL_MAX_CALLS``) : le
-    modèle peut ignorer l'outil complètement (extraction inchangée), l'appeler
-    plusieurs fois, ou ne jamais rendre de contenu final dans le budget
-    imparti — dans ce dernier cas, un tour de repli SANS outil force une
-    réponse plutôt que de laisser la boucle s'éterniser."""
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
+    Passe 1 — repérage & vérification : un appel étroit
+    (``_DPD_PASS1_SYSTEM_*``, `tool_choice="required"`) force le modèle à
+    repérer TOUS les médicaments de la dictée et à appeler
+    ``verifier_medicaments_dpd`` en une fois. En CODE PUR on trie ensuite :
+    les correspondances fiables (source ``dpd``/``dpd_fuzzy``, sauf cas
+    « seulement plus précis » où le terme dicté est déjà le bon) sont
+    SUBSTITUÉES dans la transcription ; les candidats faibles sont annexés à
+    la consigne de la passe 2 pour rester en Éléments à valider.
+
+    Passe 2 — rédaction : l'extraction JSON normale tourne sur la
+    transcription corrigée, plus la consigne annexe.
+
+    Une panne ou une absence d'appel d'outil en passe 1 ne bloque jamais la
+    passe 2 (la note est produite sur la transcription brute) — c'est ce qui
+    rend le chemin robuste aux candidats auto-hébergés qui n'émettent pas de
+    tool_call sous le prompt d'extraction complet. ``llm.complete_with_tools``
+    couvre Mistral et le point de terminaison personnalisé (``custom``)."""
+    pass1_system = _DPD_PASS1_SYSTEM_EN if language == "en" else _DPD_PASS1_SYSTEM_FR
+    pass1_user = f"DICTÉE :\n<<<\n{transcript.strip()}\n>>>"
+    label = "TRANSCRIPTION" if language != "en" else "TRANSCRIPT"
+
+    substituted = transcript
+    weak_terms: list = []
     drug_lookups: list[DrugLookup] = []
-    calls_used = 0
-    final_text = ""
-
-    for _ in range(_DPD_TOOL_MAX_ROUNDS):
-        tools = [_DPD_TOOL_SCHEMA] if calls_used < _DPD_TOOL_MAX_CALLS else None
+    try:
         result = llm.complete_with_tools(
-            system, user, model=model, temperature=temperature, max_tokens=max_tokens,
-            tools=tools, messages=messages, json_mode=True, provider=provider,
+            pass1_system, pass1_user, model=model, temperature=temperature,
+            max_tokens=max_tokens, tools=[_DPD_TOOL_SCHEMA],
+            tool_choice="required", provider=provider,
         )
         if usage_out is not None:
             _add_usage(usage_out, result.usage)
-        if not result.tool_calls:
-            final_text = result.text
-            break
-
-        messages.append(result.raw_message)
+        substitutions: list = []
         for appel in result.tool_calls:
             try:
                 arguments = json.loads(appel.arguments_raw)
             except (json.JSONDecodeError, TypeError):
-                messages.append({
-                    "role": "tool", "tool_call_id": appel.id,
-                    "content": json.dumps({"erreur": "arguments invalides"}),
-                })
                 continue
             demandes = arguments.get("medicaments")
             if not isinstance(demandes, list):
-                messages.append({
-                    "role": "tool", "tool_call_id": appel.id,
-                    "content": json.dumps({"erreur": "champ 'medicaments' manquant ou invalide"}),
-                })
                 continue
-
-            resultats = []
             for demande in demandes:
-                if calls_used >= _DPD_TOOL_MAX_CALLS:
-                    # Budget épuisé EN COURS de liste : chaque médicament
-                    # demandé dans CE tool_call doit quand même apparaître
-                    # dans la réponse (sinon le modèle ne sait pas lesquels
-                    # ont été traités), mais sans lookup réel au-delà du budget.
-                    terme_brut = str((demande or {}).get("terme") or "")
-                    resultats.append({"terme": terme_brut, "erreur": "budget de vérifications épuisé"})
-                    continue
                 if not isinstance(demande, dict):
                     continue
-                calls_used += 1
                 terme = str(demande.get("terme") or "").strip()
                 if not terme:
-                    resultats.append({"terme": "", "erreur": "terme manquant"})
                     continue
-                lookup = search_drug(terme, kind=_dpd_kind(demande.get("type", "")), language=language)
+                kind = "ingredient" if demande.get("type") == "ingredient" else "brand"
+                lookup = search_drug(terme, kind=kind, language=language)
                 lookup = _maybe_legacy(lookup, terme)
-                drug_lookups.append(lookup)
-                resultats.append({
-                    "terme": terme,
-                    "trouve": lookup.found,
-                    "nom_correspondant": lookup.matched_name,
-                    "din": lookup.din,
-                    # "elevee" (correspondance exacte ou très proche) vs
-                    # "faible" (candidat plausible mais incertain, voir
-                    # source="dpd_fuzzy_weak" dans app.drug_lookup ; une
-                    # marque historique source="rxnorm" aussi — un médicament
-                    # de fertilité sans rapport a déjà été confondu avec un
-                    # antipsychotique via une similarité de caractères
-                    # trompeuse, consultation #9) : la consigne dit
-                    # explicitement de ne jamais présenter un résultat
-                    # "faible" comme une correction confirmée.
-                    "confiance": "faible" if lookup.source in ("dpd_fuzzy_weak", "rxnorm") else "elevee",
-                })
-
-            messages.append({
-                "role": "tool", "tool_call_id": appel.id,
-                "content": json.dumps({"resultats": resultats}, ensure_ascii=False),
-            })
-    else:
-        # Budget de tours épuisé sans contenu final : un dernier appel SANS
-        # outil force une réponse plutôt que d'abandonner la génération.
-        result = llm.complete_with_tools(
-            system, user, model=model, temperature=temperature, max_tokens=max_tokens,
-            tools=None, messages=messages, json_mode=True, provider=provider,
+                if lookup.found:
+                    drug_lookups.append(lookup)
+                matche = lookup.matched_name or ""
+                if (
+                    lookup.found
+                    and lookup.source in _DPD_TOOL_SUBSTITUTION_SOURCES
+                    and not is_superset_match(terme, matche)
+                ):
+                    substitutions.append((terme, _strip_dose_suffix(matche).strip()))
+                elif lookup.found:
+                    weak_terms.append(terme)
+        # Substitution déterministe — les termes les PLUS LONGS d'abord pour
+        # ne pas remplacer un préfixe avant son terme complet.
+        for terme, propre in sorted(substitutions, key=lambda x: -len(x[0])):
+            substituted, _ = re.compile(re.escape(terme), re.IGNORECASE).subn(propre, substituted)
+    except Exception:  # noqa: BLE001 — la vérification ne doit jamais bloquer la note
+        logger.exception(
+            "Passe 1 (vérification BDPP) échouée — note produite sur la transcription non substituée"
         )
-        if usage_out is not None:
-            _add_usage(usage_out, result.usage)
-        final_text = result.text
 
-    payload = _parse_json_completion(final_text)
+    weak_note = _weak_note(weak_terms, language)
+    user = f"{label} :\n<<<DICTEE\n{substituted.strip()}\nDICTEE>>>"
+    result = llm.complete(
+        system + weak_note, user, model=model, temperature=temperature,
+        max_tokens=max_tokens, json_mode=True, provider=provider,
+    )
+    if usage_out is not None:
+        _add_usage(usage_out, result.usage)
+    payload = _parse_json_completion(result.text)
     note = ExtractedNote.from_dict(payload)
     note.drug_lookups = drug_lookups
     return note
@@ -610,11 +589,12 @@ def extract_note(
     resolved_provider = provider or llm.active_provider()
     # Branche selfhosted : l'appel d'outils est câblé pour Mistral et pour le
     # point de terminaison personnalisé compatible OpenAI (DeepSeek via
-    # OpenRouter, serveur local…) — voir llm.complete_with_tools.
+    # OpenRouter, serveur local…) — voir llm.complete_with_tools. Le pipeline
+    # 2 temps (repérage/vérification BDPP puis rédaction) est activé par
+    # note_lookup_dpd.
     if resolved_provider in ("mistral", "custom") and runtime_config.value("note_lookup_dpd") == "true":
-        system += _DPD_TOOL_GUIDANCE_EN if language == "en" else _DPD_TOOL_GUIDANCE_FR
         return _extract_note_with_dpd_tool(
-            system, user, model=model, temperature=temperature, max_tokens=max_tokens,
+            system, transcript, model=model, temperature=temperature, max_tokens=max_tokens,
             provider=resolved_provider, language=language, usage_out=usage_out,
         )
 

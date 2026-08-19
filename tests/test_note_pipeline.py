@@ -191,7 +191,29 @@ class ValidatorTests(unittest.TestCase):
         note = _base_note()
         note.sections["IMPRESSION"] = "1. Maladie d'Alzheimer débutante."  # perd le "je crois"
         result = validate(note, layout, TRANSCRIPT_FR)
-        self.assertTrue(any(i.code == "epistemic_clause_dropped" for i in result.needs_repair))
+        self.assertTrue(any(i.code == "dictated_first_person_dropped" for i in result.needs_repair))
+
+    def test_factual_first_person_plan_dropped_is_flagged(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["PLAN"] = "1. Augmentation de la rispéridone à 0,60 mg PO au coucher."  # perd le "j'augmente"
+        transcript = (
+            "Suivi de mémoire. J'augmente la rispéridone à 0,60 mg PO au coucher. "
+            "Je crois qu'il s'agit d'une maladie d'Alzheimer débutante."
+        )
+        result = validate(note, layout, transcript)
+        self.assertTrue(any(i.code == "dictated_first_person_dropped" for i in result.needs_repair))
+
+    def test_first_person_factual_preserved_not_flagged(self):
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["PLAN"] = "1. J'augmente la rispéridone à 0,60 mg PO au coucher."
+        transcript = (
+            "Suivi de mémoire. J'augmente la rispéridone à 0,60 mg PO au coucher. "
+            "Je crois qu'il s'agit d'une maladie d'Alzheimer débutante."
+        )
+        result = validate(note, layout, transcript)
+        self.assertNotIn("dictated_first_person_dropped", {i.code for i in result.needs_repair})
 
     def test_grounding_mismatch_flagged(self):
         layout = parse_layout(GENERAL_LAYOUT)
@@ -308,6 +330,96 @@ class ValidatorTests(unittest.TestCase):
             item = next(e for e in note.elements_a_valider if e.terme_dicte == terme)
             self.assertEqual(item.correction, "rispéridone")
         self.assertFalse(any(i.code == "correction_is_duplicate" for i in result.issues))
+
+    def test_confirmed_correction_applied_to_body_when_term_still_present(self):
+        """Régression réelle (test.dictai.ca 2026-08-19, consultation #7,
+        mistral-small-latest) : Éléments à valider annonçait « ange droite »
+        corrigé en « hanche droite », mais ANTÉCÉDENTS gardait encore « ange
+        droite » telle quelle — la correction était affichée sans jamais être
+        appliquée au corps de la note. Les deux occurrences dans la même
+        phrase doivent être remplacées."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = _base_note()
+        note.sections["ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX"] = (
+            "Fracture de l'ange droite en 2024 avec TFN de l'ange droite."
+        )
+        note.elements_a_valider.append(
+            ElementAValider(kind="item", terme_dicte="ange droite", correction="hanche droite")
+        )
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertEqual(
+            note.sections["ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX"],
+            "Fracture de l'hanche droite en 2024 avec TFN de l'hanche droite.",
+        )
+        self.assertTrue(any(i.code == "elements_a_valider_correction_applied" for i in result.issues))
+
+    def test_confirmed_correction_applied_to_header_fields(self):
+        """Même bug que ci-dessus mais le terme dicté vit dans un champ
+        d'en-tête plutôt que dans ``sections``."""
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.header_fields["Lieu de la consultation"] = "Clinique du Vieux-Ange"
+        note.elements_a_valider.append(
+            ElementAValider(kind="item", terme_dicte="Vieux-Ange", correction="Vieux-Longueuil")
+        )
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertEqual(note.header_fields["Lieu de la consultation"], "Clinique du Vieux-Longueuil")
+        self.assertTrue(any(i.code == "elements_a_valider_correction_applied" for i in result.issues))
+
+    def test_correction_not_found_in_body_is_silent_noop(self):
+        """Le terme dicté a pu être paraphrasé, ou le modèle avait déjà écrit
+        la bonne lecture dans le corps : aucune correspondance trouvée =
+        aucune mutation, aucun signalement — pas une erreur."""
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        before = copy.deepcopy(note.sections)
+        note.elements_a_valider.append(
+            ElementAValider(kind="item", terme_dicte="terme absent du corps", correction="peu importe")
+        )
+        result = validate(note, layout, TRANSCRIPT_FR)
+        self.assertEqual(note.sections, before)
+        self.assertFalse(any(i.code == "elements_a_valider_correction_applied" for i in result.issues))
+
+    def test_short_term_correction_guarded_against_corruption(self):
+        """Garde-fou : un terme dicté trop court (une seule lettre) ne doit
+        jamais être substitué globalement — risque de corrompre tout le
+        texte (identifié sur le prototype de substitution médicaments,
+        2026-08-19, où un terme fuzzy-matché réduit à « L » aurait pu
+        remplacer chaque « l » du texte)."""
+        layout = parse_layout(GENERAL_LAYOUT)
+        note = _base_note()
+        note.sections["RAISON DE CONSULTATION"] = "Elle vient pour L, dit-elle."
+        before = note.sections["RAISON DE CONSULTATION"]
+        note.elements_a_valider.append(ElementAValider(kind="item", terme_dicte="L", correction="Placidyl"))
+        validate(note, layout, TRANSCRIPT_FR)
+        self.assertEqual(note.sections["RAISON DE CONSULTATION"], before)
+
+    def test_word_boundary_prevents_partial_word_corruption(self):
+        """« ange » ne doit remplacer que le mot entier « ange », jamais la
+        sous-chaîne à l'intérieur d'un autre mot (« mélange »)."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = _base_note()
+        note.sections["ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX"] = "Un mélange d'ange droite."
+        note.elements_a_valider.append(ElementAValider(kind="item", terme_dicte="ange", correction="hanche"))
+        validate(note, layout, TRANSCRIPT_FR)
+        self.assertEqual(
+            note.sections["ANTÉCÉDENTS MÉDICAUX ET CHIRURGICAUX"], "Un mélange d'hanche droite."
+        )
+
+    def test_demoted_correction_not_applied_to_body(self):
+        """La démotion d'une correction suspectée de fusion (voir
+        ``test_duplicate_correction_demoted_to_unconfirmed``) doit gagner
+        AVANT que cette vérification-ci n'agisse : si « Activant » est
+        littéralement présent ailleurs dans le corps, il ne doit PAS être
+        substitué par une correction déjà jugée non fiable."""
+        layout = parse_layout(GERIATRIE_LAYOUT)
+        note = _base_note()
+        note.sections["MÉDICATION ACTUELLE"] = {OWN_CONTENT_KEY: "Ésoméprazole 30 mg PO die\nActivant 0,5 mg au coucher"}
+        note.elements_a_valider.append(
+            ElementAValider(kind="item", terme_dicte="Activant", correction="Ésoméprazole")
+        )
+        validate(note, layout, TRANSCRIPT_FR)
+        self.assertIn("Activant", note.sections["MÉDICATION ACTUELLE"][OWN_CONTENT_KEY])
 
 
 class RendererTests(unittest.TestCase):
@@ -529,10 +641,11 @@ def _tool_call_completion(*terms: str, kind: str = "marque", call_id: str = "cal
     )
 
 
-def _final_completion(text: str = _MINIMAL_FINAL_JSON) -> llm.ToolCompletion:
-    return llm.ToolCompletion(
-        text=text, tool_calls=[], raw_message={"role": "assistant", "content": text},
-        model="fake", provider="mistral",
+def _completion(text: str = _MINIMAL_FINAL_JSON) -> llm.Completion:
+    """Réponse de la PASSE 2 (rédaction) — un ``llm.Completion`` classique
+    rendant la note JSON, avec un usage propre à cette passe."""
+    return llm.Completion(
+        text=text, model="fake", provider="mistral", finish_reason="stop",
         usage={"prompt_tokens": 150, "output_tokens": 80, "total_tokens": 230},
     )
 
@@ -581,69 +694,79 @@ class DpdToolTests(unittest.TestCase):
         complete_mock.assert_called_once()
 
     def test_tool_call_executed_and_recorded(self):
-        lookup = DrugLookup(term="Respirone", found=True, matched_name="RISPERDAL", din="00123456")
+        """Pipeline 2 temps : la passe 1 fait UN appel étroit au tool BDPP
+        (repérage des médicaments), la passe 2 rédige la note ; les
+        vérifications retenues alimentent note.drug_lookups."""
+        lookup = DrugLookup(term="Respirone", found=True, matched_name="RISPERDAL", din="00123456", source="dpd")
         with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
-             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Respirone"), _final_completion()]) as tools_mock, \
+             mock.patch.object(llm, "complete_with_tools", return_value=_tool_call_completion("Respirone")) as tools_mock, \
+             mock.patch.object(llm, "complete", return_value=_completion()) as complete_mock, \
              mock.patch.object(note_extraction, "search_drug", return_value=lookup) as search_mock:
             note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
-        self.assertEqual(tools_mock.call_count, 2)
+        self.assertEqual(tools_mock.call_count, 1)  # un seul appel, pas de boucle
+        self.assertEqual(tools_mock.call_args.kwargs["tool_choice"], "required")
+        self.assertIsNone(tools_mock.call_args.kwargs.get("messages"))
         search_mock.assert_called_once_with("Respirone", kind="brand", language="fr")
         self.assertEqual(note.drug_lookups, [lookup])
-        # Le résultat de l'outil doit être renvoyé, apparié au bon tool_call_id.
-        second_call_messages = tools_mock.call_args_list[1].kwargs["messages"]
-        tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
-        self.assertEqual(len(tool_messages), 1)
-        self.assertEqual(tool_messages[0]["tool_call_id"], "call1")
+        complete_mock.assert_called_once()  # passe 2
 
     def test_batched_call_covers_multiple_medications_in_one_round(self):
-        """Option A du banc d'essai coût : le modèle doit pouvoir lister
-        PLUSIEURS médicaments dans UN seul tool_call plutôt qu'un appel par
-        médicament — c'est ce qui évite de réémettre toute la consigne une
-        fois par médicament (voir note_extraction._DPD_TOOL_SCHEMA)."""
+        """La passe 1 énumère PLUSIEURS médicaments dans UN SEUL tool_call
+        (voir note_extraction._DPD_TOOL_SCHEMA) — un aller, sans boucle de
+        rappel, un lookup BDPP par terme."""
         lookups = {
-            "Respirone": DrugLookup(term="Respirone", found=True, matched_name="RISPERDAL"),
+            "Respirone": DrugLookup(term="Respirone", found=True, matched_name="RISPERDAL", source="dpd"),
             "Norvask": DrugLookup(term="Norvask", found=True, matched_name="NORVASC", source="dpd_fuzzy"),
         }
         with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
-             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Respirone", "Norvask"), _final_completion()]) as tools_mock, \
+             mock.patch.object(llm, "complete_with_tools", return_value=_tool_call_completion("Respirone", "Norvask")) as tools_mock, \
+             mock.patch.object(llm, "complete", return_value=_completion()), \
              mock.patch.object(note_extraction, "search_drug", side_effect=lambda terme, **kw: lookups[terme]) as search_mock:
             note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
-        self.assertEqual(tools_mock.call_count, 2)  # un seul aller-retour d'outil, pas un par médicament
+        self.assertEqual(tools_mock.call_count, 1)
         self.assertEqual(search_mock.call_count, 2)
         self.assertEqual(
             sorted(note.drug_lookups, key=lambda dl: dl.term),
             sorted(lookups.values(), key=lambda dl: dl.term),
         )
-        second_call_messages = tools_mock.call_args_list[1].kwargs["messages"]
-        tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
-        self.assertEqual(len(tool_messages), 1)  # une seule réponse d'outil pour les deux médicaments
-        resultats = json.loads(tool_messages[0]["content"])["resultats"]
-        self.assertEqual({r["terme"] for r in resultats}, {"Respirone", "Norvask"})
 
-    def test_weak_fuzzy_match_reported_as_low_confidence_to_model(self):
+    def test_weak_fuzzy_match_not_substituted_and_flagged_in_pass2(self):
         """Régression réelle (consultation #9) : un match flou modéré
-        (source="dpd_fuzzy_weak", voir DrugLookupTests) doit être signalé
-        au modèle comme confiance "faible" — jamais comme "elevee", qui
-        l'inviterait à écrire une correction confirmée pour un candidat
-        aussi peu fiable que 'Respirone' → 'REPRONEX'."""
+        (source="dpd_fuzzy_weak") n'est PAS une correction confirmée — la
+        passe 2 reçoit le terme en consigne annexe (Éléments à valider), et la
+        transcription n'est JAMAIS réécrite avec le candidat 'REPRONEX'."""
         lookup = DrugLookup(term="Respirone", found=True, matched_name="REPRONEX", source="dpd_fuzzy_weak")
         with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
-             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Respirone"), _final_completion()]) as tools_mock, \
+             mock.patch.object(llm, "complete_with_tools", return_value=_tool_call_completion("Respirone")), \
+             mock.patch.object(llm, "complete", return_value=_completion()) as complete_mock, \
              mock.patch.object(note_extraction, "search_drug", return_value=lookup):
             extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
-        second_call_messages = tools_mock.call_args_list[1].kwargs["messages"]
-        tool_message = next(m for m in second_call_messages if m.get("role") == "tool")
-        resultat = json.loads(tool_message["content"])["resultats"][0]
-        self.assertEqual(resultat["confiance"], "faible")
+        system2, user2 = complete_mock.call_args.args
+        self.assertIn("Respirone", system2)  # listé dans la consigne annexe
+        self.assertNotIn("REPRONEX", user2)  # non substitué dans la dictée
 
-    def test_usage_accumulates_across_tool_rounds(self):
-        """Régression réelle (test.dictai.ca 2026-08-18) : la page
-        statistiques ne montrait aucun jeton pour les générations du
-        pipeline JSON — extract_note ne rapportait jamais l'usage du(des)
-        appel(s) modèle à l'appelant. usage_out doit sommer les jetons de
-        CHAQUE tour d'appel d'outils, pas seulement le dernier."""
+    def test_superset_salt_match_not_substituted(self):
+        """Résultat « seulement plus précis » (ex. metformine -> Chlorhydrate
+        de metformine) : le terme dicté est déjà le bon — pas de substitution,
+        mais le médicament reste compté comme vérifié (drug_lookups)."""
+        lookup = DrugLookup(term="Metformine", found=True, matched_name="Chlorhydrate de metformine", source="dpd")
         with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
-             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Respirone"), _final_completion()]), \
+             mock.patch.object(llm, "complete_with_tools", return_value=_tool_call_completion("Metformine", kind="ingredient")), \
+             mock.patch.object(llm, "complete", return_value=_completion()) as complete_mock, \
+             mock.patch.object(note_extraction, "search_drug", return_value=lookup) as search_mock:
+            note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        search_mock.assert_called_once_with("Metformine", kind="ingredient", language="fr")
+        self.assertEqual(note.drug_lookups, [lookup])
+        system2, user2 = complete_mock.call_args.args
+        self.assertNotIn("Chlorhydrate de metformine", user2)  # le terme dicté est conservé
+
+    def test_usage_accumulates_across_both_passes(self):
+        """Régression réelle (test.dictai.ca 2026-08-18) : la page statistiques
+        ne montrait aucun jeton pour le pipeline JSON — usage_out doit sommer
+        l'usage de LA PASSE 1 (outil) ET de la passe 2 (rédaction)."""
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete_with_tools", return_value=_tool_call_completion("Respirone")), \
+             mock.patch.object(llm, "complete", return_value=_completion()), \
              mock.patch.object(note_extraction, "search_drug", return_value=DrugLookup(term="Respirone", found=True)):
             usage: dict = {}
             extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral", usage_out=usage)
@@ -665,26 +788,40 @@ class DpdToolTests(unittest.TestCase):
             raw_message={"role": "assistant", "content": ""}, model="fake", provider="mistral",
         )
         with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
-             mock.patch.object(llm, "complete_with_tools", side_effect=[bad_call, _final_completion()]), \
+             mock.patch.object(llm, "complete_with_tools", return_value=bad_call), \
+             mock.patch.object(llm, "complete", return_value=_completion()), \
              mock.patch.object(note_extraction, "search_drug", side_effect=AssertionError("ne doit jamais être appelé")):
             note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
         self.assertEqual(note.drug_lookups, [])
         self.assertEqual(note.sections.get("RAISON DE CONSULTATION"), "Suivi de mémoire.")
 
-    def test_round_budget_exhausted_falls_back_to_plain_call(self):
-        """Le modèle qui n'arrête jamais d'appeler l'outil ne doit pas faire
-        boucler l'extraction indéfiniment — un dernier tour SANS outil force
-        une réponse finale."""
-        always_tool_call = _tool_call_completion("Respirone")
+    def test_no_tool_call_ignored_note_produced_from_pass2(self):
+        """Un candidat auto-hébergé qui n'émet PAS de tool_call en passe 1 ne
+        bloque pas la note : la passe 2 tourne sur la transcription brute,
+        sans drug_lookups ni consigne annexe."""
+        waved = llm.ToolCompletion(
+            text="", tool_calls=[], raw_message={"role": "assistant", "content": ""},
+            model="fake", provider="mistral",
+        )
         with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
-             mock.patch.object(
-                 llm, "complete_with_tools",
-                 side_effect=[always_tool_call, always_tool_call, _final_completion()],
-             ) as tools_mock, \
-             mock.patch.object(note_extraction, "search_drug", return_value=DrugLookup(term="Respirone", found=False)):
-            extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
-        self.assertEqual(tools_mock.call_count, 3)  # 2 tours (plafond) + 1 repli sans outil
-        self.assertIsNone(tools_mock.call_args_list[-1].kwargs["tools"])
+             mock.patch.object(llm, "complete_with_tools", return_value=waved) as tools_mock, \
+             mock.patch.object(llm, "complete", return_value=_completion()) as complete_mock, \
+             mock.patch.object(note_extraction, "search_drug", side_effect=AssertionError("ne doit jamais être appelé")):
+            note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        self.assertEqual(tools_mock.call_count, 1)
+        self.assertEqual(note.drug_lookups, [])
+        self.assertEqual(note.sections.get("RAISON DE CONSULTATION"), "Suivi de mémoire.")
+
+    def test_pass1_failure_still_produces_note(self):
+        """Une panne réseau/HTTP en passe 1 (bien réelle sur les candidats
+        auto-hébergés) ne doit jamais faire échouer la génération — la passe 2
+        tourne sur la transcription brute."""
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete_with_tools", side_effect=RuntimeError("panne fournisseur")), \
+             mock.patch.object(llm, "complete", return_value=_completion()) as complete_mock:
+            note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="mistral")
+        self.assertEqual(note.drug_lookups, [])
+        complete_mock.assert_called_once()
 
     def test_complete_with_tools_accepts_custom_provider(self):
         """Le point de terminaison personnalisé compatible OpenAI (DeepSeek
@@ -697,10 +834,11 @@ class DpdToolTests(unittest.TestCase):
         with mock.patch.object(llm, "_complete_openai_tools", return_value=sentinel) as tools_mock:
             result = llm.complete_with_tools(
                 "sys", "user", model="m", temperature=0.1, max_tokens=100,
-                tools=[{"type": "function", "function": {"name": "verifier_medicament_dpd", "parameters": {"type": "object", "properties": {}}}}], messages=None, json_mode=True, provider="custom",
+                tools=[{"type": "function", "function": {"name": "verifier_medicament_dpd", "parameters": {"type": "object", "properties": {}}}}], messages=None, json_mode=True, tool_choice="required", provider="custom",
             )
         self.assertIs(result, sentinel)
         self.assertEqual(tools_mock.call_args.kwargs["provider"], "custom")
+        self.assertEqual(tools_mock.call_args.kwargs["tool_choice"], "required")
         self.assertEqual(tools_mock.call_args[0][5][0]["function"]["name"], "verifier_medicament_dpd")
 
     def test_complete_with_tools_still_refuses_unsupported_provider(self):
@@ -710,18 +848,19 @@ class DpdToolTests(unittest.TestCase):
                 tools=None, messages=None, json_mode=True, provider="cohere",
             )
 
-    def test_custom_provider_enters_dpd_tool_loop(self):
-        """Avec note_lookup_dpd activé, le fournisseur `custom` doit passer
-        par l'appel d'outils (comme Mistral), pas par complete() simple."""
-        lookup = DrugLookup(term="Activant", found=True, matched_name="ATIVAN", din="02041413", source="dpd_fuzzy")
+    def test_custom_provider_enters_two_pass_pipeline(self):
+        """Avec note_lookup_dpd activé, le fournisseur `custom` passe par le
+        pipeline 2 temps (comme Mistral), pas par complete() simple."""
+        lookup = DrugLookup(term="Activant", found=True, matched_name="Ativant", din="02041413", source="dpd_fuzzy")
         with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
-             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Activant"), _final_completion()]) as tools_mock, \
+             mock.patch.object(llm, "complete_with_tools", return_value=_tool_call_completion("Activant")) as tools_mock, \
+             mock.patch.object(llm, "complete", return_value=_completion()), \
              mock.patch.object(note_extraction, "search_drug", return_value=lookup):
             note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="custom")
-        self.assertEqual(tools_mock.call_count, 2)
+        self.assertEqual(tools_mock.call_count, 1)
         self.assertEqual(note.drug_lookups, [lookup])
-        self.assertEqual(tools_mock.call_args_list[0].kwargs["provider"], "custom")
-        self.assertEqual(tools_mock.call_args_list[0].kwargs["tools"][0]["function"]["name"], "verifier_medicaments_dpd")
+        self.assertEqual(tools_mock.call_args.kwargs["provider"], "custom")
+        self.assertEqual(tools_mock.call_args.kwargs["tools"][0]["function"]["name"], "verifier_medicaments_dpd")
 
 
 class PostExtractionVerificationTests(unittest.TestCase):

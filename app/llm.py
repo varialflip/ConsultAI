@@ -747,6 +747,7 @@ def complete_with_tools(
     tools: Optional[List[dict]],
     messages: Optional[List[dict]] = None,
     json_mode: bool = False,
+    tool_choice: str = "auto",
     provider: Optional[str] = None,
 ) -> ToolCompletion:
     """
@@ -754,6 +755,10 @@ def complete_with_tools(
     fonction, format OpenAI-compatible) — voir
     ``note_extraction._extract_note_with_dpd_tool`` (branche selfhosted,
     expérimental).
+
+    ``tool_choice`` — ``"auto"`` par défaut, ``"required"`` pour forcer au
+    moins un appel d'outil (pass 1 du pipeline 2 temps : le modèle DOIT
+    énumérer les médicaments et les vérifier, il ne peut pas y renoncer).
 
     Volontairement une fonction SŒUR de ``complete()``, pas une extension de
     sa signature : ``complete()`` a un contrat simple (system+user -> texte)
@@ -775,13 +780,13 @@ def complete_with_tools(
         # Un point de terminaison personnalisé compatible OpenAI (DeepSeek,
         # autres serveurs auto-hébergés) expose l'appel d'outils au format
         # OpenAI — voir _complete_openai_tools.
-        return _complete_openai_tools(system, user, model, temperature, max_tokens, tools, messages, json_mode, provider="custom")
+        return _complete_openai_tools(system, user, model, temperature, max_tokens, tools, messages, json_mode, tool_choice=tool_choice, provider="custom")
     if provider != "mistral":
         raise GenerationError(
             f"L'appel d'outils n'est pas pris en charge pour le fournisseur « {provider} »."
         )
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
-    return _complete_mistral_tools(system, user, model, temperature, max_tokens, tools, messages, json_mode)
+    return _complete_mistral_tools(system, user, model, temperature, max_tokens, tools, messages, json_mode, tool_choice=tool_choice)
 
 
 def _translate_error(provider: str, model: str, exc: Exception) -> GenerationError:
@@ -1250,7 +1255,9 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         if provider == "qwen_omni":
             # Même raison que la version non-streaming : le raisonnement de Qwen
             # y gaspille des jetons sur cette tâche mécanique.
-            kwargs["enable_thinking"] = False
+            # Passé par ``extra_body`` : ``enable_thinking`` n'est pas un paramètre
+            # du SDK OpenAI, qui refuse les arguments inconnus en kwargs directs.
+            kwargs.setdefault("extra_body", {})["enable_thinking"] = False
 
     if provider == "custom":
         effort = _custom_reasoning_effort()
@@ -1769,7 +1776,9 @@ def _complete_qwen_omni(system, user, model, temperature, max_tokens, json_mode,
         # mécanique : le raisonnement de Qwen y gaspille des centaines de
         # jetons et peut faire déborder ``max_tokens``, renvoyant une réponse
         # vide. On le coupe, comme le ``thinking_budget=0`` côté Gemini.
-        kwargs["enable_thinking"] = False
+        # Passé par ``extra_body`` : ``enable_thinking`` n'est pas un paramètre
+        # du SDK OpenAI, qui refuse les arguments inconnus en kwargs directs.
+        kwargs.setdefault("extra_body", {})["enable_thinking"] = False
 
     try:
         response = _call_tolerant(client.chat.completions.create, kwargs)
@@ -2412,6 +2421,7 @@ def _complete_mistral_tools(
     tools: Optional[List[dict]],
     messages: Optional[List[dict]],
     json_mode: bool,
+    tool_choice: str = "auto",
 ) -> ToolCompletion:
     """Voir ``complete_with_tools``. Reprend la construction de requête et le
     repli de ``_complete_mistral`` (réessai avec la limite de jetons apprise)
@@ -2428,7 +2438,7 @@ def _complete_mistral_tools(
     }
     if tools:
         corps["tools"] = tools
-        corps["tool_choice"] = "auto"
+        corps["tool_choice"] = tool_choice
     if json_mode:
         corps["response_format"] = {"type": "json_object"}
 
@@ -2482,6 +2492,7 @@ def _complete_openai_tools(
     tools: Optional[List[dict]],
     messages: Optional[List[dict]],
     json_mode: bool,
+    tool_choice: str = "auto",
     provider: str = "custom",
 ) -> ToolCompletion:
     """
@@ -2517,7 +2528,7 @@ def _complete_openai_tools(
     }
     if tools:
         corps["tools"] = tools
-        corps["tool_choice"] = "auto"
+        corps["tool_choice"] = tool_choice
     if json_mode and not tools:
         corps["response_format"] = {"type": "json_object"}
     if provider == "custom":

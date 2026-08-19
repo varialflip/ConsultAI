@@ -123,6 +123,25 @@ def _set_leaf(note: ExtractedNote, path: str) -> None:
         parent.pop(parts[-1], None)
 
 
+def _set_leaf_value(note: ExtractedNote, path: str, new_value: str) -> None:
+    """Écrit ``new_value`` au chemin donné — même résolution que ``_set_leaf``,
+    mais assigne au lieu de retirer (voir ``fix_elements_a_valider_not_applied``)."""
+    m = _INDEX_RE.match(path)
+    if m:
+        container = _get_container(note, m.group(1))
+        idx = int(m.group(2))
+        if isinstance(container, list) and 0 <= idx < len(container):
+            container[idx] = new_value
+        return
+    parts = path.split(".")
+    if parts[0] == "header_fields":
+        note.header_fields[parts[1]] = new_value
+        return
+    parent = _get_container(note, ".".join(parts[:-1]))
+    if isinstance(parent, dict):
+        parent[parts[-1]] = new_value
+
+
 # ---------------------------------------------------------------------------
 # 1bis. Type de valeur inattendu (ni str, ni liste de str, ni dict) — jamais
 #       fait disparaître silencieusement, toujours signalé.
@@ -346,6 +365,58 @@ def fix_elements_a_valider_corrections(note: ExtractedNote) -> List[ValidationIs
     return issues
 
 
+_MIN_TERME_CORRECTION_LEN = 3
+
+
+def fix_elements_a_valider_not_applied(note: ExtractedNote) -> List[ValidationIssue]:
+    """Applique dans le corps de la note (``sections``/``header_fields``) les
+    corrections déjà actées dans Éléments à valider, quand le terme dicté y
+    figure encore tel quel (vu réellement, test.dictai.ca, 2026-08-19 :
+    « ange droite » listé « corrigé » vers « hanche droite » dans Éléments à
+    valider, mais toujours « ange droite » dans ANTÉCÉDENTS ; même chose pour
+    « 11 livres » → « 5 kg » resté « 11 livres » dans HMA). Le modèle traite
+    ``sections`` et ``elements_a_valider`` comme deux sorties indépendantes
+    sans rien qui les force à s'accorder ; cette fonction rend l'accord réel
+    plutôt que de faire confiance au JSON produit.
+
+    Tourne APRÈS ``fix_elements_a_valider_corrections`` (jamais avant) :
+    celle-ci peut démettre une correction en ``None`` (mot-clé méta, no-op,
+    fusion suspectée) ; l'appliquer en premier substituerait dans le corps une
+    lecture invalidée une ligne plus loin — la note serait alors « corrigée »
+    silencieusement avec une valeur non fiable. En tournant en second, cette
+    fonction n'agit que sur les corrections qui ont déjà survécu à ce tri.
+
+    Ignore tout terme trop court ou sans lettre (garde-fou : un candidat d'une
+    seule lettre substitué globalement corromprait le texte — risque identifié
+    sur le prototype de substitution médicaments du 2026-08-19, qui n'a pas ce
+    garde-fou). Aucune correspondance trouvée nulle part = no-op silencieux,
+    pas une erreur (le terme a pu être paraphrasé, ou déjà écrit correct)."""
+    issues: List[ValidationIssue] = []
+    for i, e in enumerate(note.elements_a_valider):
+        if not e.is_confirmed_reading:
+            continue
+        terme = e.terme_dicte.strip()
+        if len(terme) < _MIN_TERME_CORRECTION_LEN or not any(c.isalpha() for c in terme):
+            continue
+        pattern = re.compile(r"\b" + re.escape(terme) + r"\b", re.IGNORECASE)
+        applied = False
+        for path, value in _all_leaf_strings(note):
+            new_value, n = pattern.subn(e.correction, value)
+            if n:
+                _set_leaf_value(note, path, new_value)
+                applied = True
+        if applied:
+            issues.append(
+                ValidationIssue(
+                    "auto_fixed", "elements_a_valider_correction_applied",
+                    f"« {terme} » remplacé par « {e.correction} » dans le corps de la note — la correction "
+                    "indiquée dans Éléments à valider n'était pas reflétée dans le texte.",
+                    f"elements_a_valider[{i}]",
+                )
+            )
+    return issues
+
+
 def check_elements_a_valider(note: ExtractedNote, layout: LayoutSpec) -> List[ValidationIssue]:
     if not layout.has_elements_a_valider:
         return []
@@ -368,17 +439,10 @@ def check_elements_a_valider(note: ExtractedNote, layout: LayoutSpec) -> List[Va
 
 
 # ---------------------------------------------------------------------------
-# 4. Clause épistémique (Impression / Plan) — préservation du « je crois »
+# 4. Voix dictée à la première personne (Impression / Plan) — préservation de
+#    la forme dictée (clause épistémique comme action factuelle)
 # ---------------------------------------------------------------------------
 
-_EPISTEMIC_MARKERS_FR = [
-    "je crois", "je pense", "je considère", "j'estime", "je soupçonne",
-    "il me semble", "à mon avis", "je retiens que", "je privilégie", "je doute que",
-]
-_EPISTEMIC_MARKERS_EN = [
-    "i believe", "i think", "i consider", "i suspect", "it seems to me",
-    "in my opinion", "i favor", "i doubt that",
-]
 _EPISTEMIC_SCOPE_SECTIONS = ("IMPRESSION", "PLAN")
 
 
@@ -390,9 +454,18 @@ def _split_sentences(text: str) -> List[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if s.strip()]
 
 
-def _has_marker(sentence: str, markers: List[str]) -> bool:
-    normalized = _strip_accents(sentence.lower())
-    return any(m in normalized for m in markers)
+def _first_person_pattern(language: str):
+    """Marqueurs grammaticaux de la première personne du singulier, par langue.
+
+    La consigne (§ 3) veut qu'Impression et Plan reproduisent la forme dictée :
+    une phrase dictée au « je » — épistémique (« je crois… ») OU factuelle
+    (« j'augmente la rispéridone… ») — doit rester au « je », jamais être
+    réduite à un énoncé nominal/impératif ni convertie à la troisième personne.
+    Ce contrôle vérifie que la phrase rendue dans Impression/Plan a conservé la
+    première personne quand la phrase correspondante de la dictée l'emploie."""
+    if language == "en":
+        return re.compile(r"\bi\b|\bi'(?:m|ve|ll|d|am)\b", re.IGNORECASE)
+    return re.compile(r"\bje\b|\bj'", re.IGNORECASE)
 
 
 def _jaccard(a: str, b: str) -> float:
@@ -403,10 +476,10 @@ def _jaccard(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
-def check_epistemic_clauses(note: ExtractedNote, transcript: str, language: str = "fr") -> List[ValidationIssue]:
-    markers = _EPISTEMIC_MARKERS_EN if language == "en" else _EPISTEMIC_MARKERS_FR
-    hedge_sentences = [s for s in _split_sentences(transcript) if _has_marker(s, markers)]
-    if not hedge_sentences:
+def check_dictated_first_person(note: ExtractedNote, transcript: str, language: str = "fr") -> List[ValidationIssue]:
+    pattern = _first_person_pattern(language)
+    voiced_sentences = [s for s in _split_sentences(transcript) if pattern.search(s)]
+    if not voiced_sentences:
         return []
 
     rendered_sentences: List[str] = []
@@ -416,17 +489,17 @@ def check_epistemic_clauses(note: ExtractedNote, transcript: str, language: str 
             rendered_sentences.extend(_split_sentences(text))
 
     issues: List[ValidationIssue] = []
-    for hedge in hedge_sentences:
+    for voiced in voiced_sentences:
         best_sentence, best_score = None, 0.0
         for candidate in rendered_sentences:
-            score = _jaccard(hedge, candidate)
+            score = _jaccard(voiced, candidate)
             if score > best_score:
                 best_sentence, best_score = candidate, score
-        if best_sentence is not None and best_score > 0.3 and not _has_marker(best_sentence, markers):
+        if best_sentence is not None and best_score > 0.3 and not pattern.search(best_sentence):
             issues.append(
                 ValidationIssue(
-                    "needs_repair", "epistemic_clause_dropped",
-                    f"Le médecin dicte une opinion à la première personne (« {hedge[:80]} ») mais la phrase "
+                    "needs_repair", "dictated_first_person_dropped",
+                    f"Le médecin dicte à la première personne (« {voiced[:80]} ») mais la phrase "
                     f"correspondante dans Impression/Plan (« {best_sentence[:80]} ») ne la préserve pas.",
                     "sections.IMPRESSION|PLAN",
                 )
@@ -575,10 +648,11 @@ def validate(note: ExtractedNote, layout: LayoutSpec, transcript: str, language:
     issues += check_section_types(note)
     issues += check_forbidden_filler(note)  # auto-fix, mute `note`
     issues += fix_elements_a_valider_corrections(note)  # auto-fix, mute `note`
+    issues += fix_elements_a_valider_not_applied(note)  # auto-fix, mute `note`
     issues += check_placeholder_leftover(note)
     issues += check_html_tags(note)
     issues += check_cramped_lists(note)
     issues += check_elements_a_valider(note, layout)
-    issues += check_epistemic_clauses(note, transcript, language)
+    issues += check_dictated_first_person(note, transcript, language)
     issues += check_grounding(note, transcript)
     return ValidationResult(issues=issues)

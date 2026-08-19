@@ -3,6 +3,138 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — branche `selfhosted`, vérification médicament BDPP : pipeline en 2 temps
+
+Le chemin `note_lookup_dpd` (vérification par appel d'outil pendant
+l'extraction) est remplacé par un **pipeline en 2 temps**, plus robuste aux
+candidats auto-hébergés (Qwen, Lagunda, Mistral-small… qui n'émettent pas de
+tool_call fiable sous le prompt d'extraction complet — voir le banc
+d'essai/session Claude Code du 2026-08-19).
+
+- **Passe 1 — repérage & vérification** (`note_extraction._DPD_PASS1_SYSTEM_*`,
+  `tool_choice="required"`) : un appel étroit force la liste COMPLÈTE des
+  médicaments de la dictée, transmis tels que transcrits, en UN SEUL appel à
+  `verifier_medicaments_dpd`. En code pur : les correspondances fiables
+  (`dpd`/`dpd_fuzzy`, sauf « seulement plus précis ») sont substituées dans la
+  transcription (termes les plus longs d'abord) ; les candidats faibles
+  (`dpd_fuzzy_weak`/RxNorm) sont isolés.
+- **Passe 2 — rédaction** : l'extraction JSON normale tourne sur la
+  transcription corrigée, avec une consigne annexe (`_weak_note`) laissant les
+  candidats faibles en Éléments à valider (« à confirmer »), jamais corrigés.
+- **Résilience** : une panne ou une absence de tool_call en passe 1 ne bloque
+  jamais la passe 2 (note sur la transcription brute). Les `drug_lookups`
+  restent écrits par le code, jamais par le modèle.
+- `llm.complete_with_tools` gagne un paramètre `tool_choice` (`"auto"` défaut,
+  `"required"`) porté par `_complete_mistral_tools` et `_complete_openai_tools`.
+- Suppression de la boucle bornée (`_DPD_TOOL_MAX_ROUNDS/CALLS`) et des
+  consignes `_DPD_TOOL_GUIDANCE_FR/EN` (devenues caduques).
+
+Tests : `DpdToolTests` réécrits pour le 2 temps (substitution forte, faible →
+consigne annexe, « seulement plus précis » non substitué, usage sommé sur les
+deux passes, panne/absence de tool_call → passe 2 intacte, fournisseur custom).
+
+## 2026-08-19 — branche `selfhosted`, liste des brouillons en 500 : purge bloquée par l'historique de générations
+
+`GET /api/consultations` répondait 500 (vu réellement, test.dictai.ca
+2026-08-19). L'endpoint purge d'abord les consultations périmées
+(`purge_expired_consultations`), et cette purge échouait sur une
+`sqlite3.IntegrityError` : la table `note_generations` porte une contrainte de
+clé étrangère vers `consultations.id`, mais ni la purge de rétention ni la
+suppression manuelle d'un brouillon ne supprimaient cet historique append-only
+des générations. Le DELETE de la consultation arrivait donc avant celui de
+l'historique et le COMMIT cassait — sur 10 consultations générées d'un coup,
+toute la liste des brouillons tombait.
+
+- Nouveau `_delete_consultation_cascade` (`app/main.py`) : supprime les
+  enregistrements audio, puis l'historique de générations, puis la
+  consultation. L'effacement de `note_generations` est exécuté IMMÉDIATEMENT
+  (`db.execute(delete(...))`) — l'unité de travail de SQLAlchemy n'ordonnait
+  pas « enfants avant parent » dans ce cas, le DELETE de la consultation
+  partait avant celui de l'historique et la contrainte sautait.
+- Branche sur les deux chemins : purge de rétention et
+  `DELETE /api/consultations/{id}`.
+
+## 2026-08-19 — branche `selfhosted`, Plan/Impression : la voix dictée au « je » s'impose aussi aux actions factuelles
+
+Le rendu du PLAN basculait parfois à l'impersonnel (« Augmentation de la
+rispéridone à 0,60 mg PO au coucher. ») alors que la dictée était à la
+première personne (« J'augmente la rispéridone à 0,60 ») — malgré une consigne
+qui demandait déjà de transcrire telle quelle. Vu réellement sur
+test.dictai.ca 2026-08-19 : l'action factuelle au « je » reformulée en énoncé
+nominal, et l'action « Je traite de façon symptomatique » supprimée du plan.
+
+- **Consigne** : contre-exemples explicites ajoutés dans les six emplacements
+  qui portent la règle de voix — `app/default_prompts.py` (`GENERAL_PROMPT_FR/EN`
+  au § 3 Plan et `JSON_GENERAL_PROMPT_FR/EN`) et les gabarits verrouillés
+  Gériatrie / Suivi - Gériatrie (`app/default_templates.py`) : « J'augmente la
+  rispéridone à 0,60 » reste tel quel, jamais « Augmentation de la
+  rispéridone… » ni « Il augmente… ». Une action dictée au « je » ne doit être
+  ni reformulée en infinitif/nominal/impératif ni supprimée.
+- **Contrôle fusionné** : `check_epistemic_clauses` devient
+  `check_dictated_first_person` (`app/note_validator.py`) — la vérification
+  s'étend de la seule clause épistémique à toute phrase dictée à la première
+  personne dont l'équivalent rendu dans Impression/Plan a perdu le « je/j' »
+  (code `dictated_first_person_dropped`).
+- Migration en base : `migrate_general_prompt_plan_voice`
+  (`app/database.py`, `_OLD_GENERAL_PROMPT_SHA6`) pour porter le nouveau texte
+  dans les copies en base des consignes (générales + JSON), sans toucher aux
+  consignes personnalisées.
+
+Tests : 2 nouveaux cas dans `ValidatorTests` (action factuelle au « je » déclarée
+puis perdue → flaggé ; conservée → non flaggé), le test épistémique existant
+est conservé (code mis à jour).
+
+## 2026-08-19 — branche `selfhosted`, correction non appliquée au corps + médecin référent confondu
+
+Deux bugs réels trouvés en testant des modèles candidats pour un futur
+self-hosting (mistral-small-latest, indépendant du modèle — reproduit sur
+transcription texte propre, sans bruit STT) :
+
+- **Correction annoncée, jamais appliquée au corps.** Le modèle produisait
+  un élément dans Éléments à valider (« ange droite → correction apportée :
+  hanche droite ») sans jamais réécrire le terme dans la section concernée
+  (ANTÉCÉDENTS gardait « ange droite »). Vu deux fois dans une même note
+  (aussi « 11 livres » → « 5 kg » resté en livres dans HMA). `sections` et
+  `elements_a_valider` sont deux sorties JSON indépendantes sans rien qui
+  force leur accord. Nouveau `fix_elements_a_valider_not_applied`
+  (`app/note_validator.py`) : pour chaque correction confirmée
+  (`is_confirmed_reading`), substitue `terme_dicte` → `correction` partout
+  où le terme apparaît encore tel quel dans `sections`/`header_fields`
+  (limite de mots, insensible à la casse, garde-fou longueur minimale de 3
+  caractères + au moins une lettre contre la corruption par terme trop
+  court). Tourne APRÈS `fix_elements_a_valider_corrections` dans `validate()`
+  pour ne jamais appliquer une correction déjà démise comme non fiable.
+  Aucune correspondance trouvée = no-op silencieux (terme paraphrasé ou déjà
+  correct dans le corps), pas une erreur.
+- **Médecin référent confondu avec un spécialiste mentionné plus loin.**
+  Transcription nommant plusieurs médecins (le vrai demandeur, cité
+  explicitement en début de dictée : « à la demande de Catherine Folly, son
+  médecin de famille » ; un neurologue cité plus loin dans le récit à propos
+  d'une conclusion passée) → le champ « Médecin référent » recevait le nom
+  du spécialiste, pas du demandeur réel. Le grounding ne peut pas attraper
+  ce cas (le nom erroné est réellement dans la transcription — erreur
+  d'attribution de rôle, pas une invention). Correctif de consigne
+  uniquement, dans les quatre emplacements de `app/default_prompts.py`
+  (`GENERAL_PROMPT_FR/EN`, `JSON_GENERAL_PROMPT_FR/EN`) : nouvelle règle de
+  désambiguïsation explicite juste après la règle anti-invention existante.
+  Premier essai en vérification réelle : le spécialiste n'était plus retenu,
+  mais le champ recevait « CRDS » (sigle du service demandeur) plutôt que
+  « Catherine Folly » (le médecin nommé dans la même phrase) — la consigne
+  autorisait « (ou l'organisme) » sans ordre de priorité. Resserré : quand un
+  service ET le nom du médecin qui a fait la demande via ce service sont
+  tous deux dictés, retenir le nom du médecin, le service n'étant un repli
+  que si aucun médecin n'est nommé. Reconfirmé sur deux générations
+  consécutives (consultation #11, transcription réelle) : « Médecin référent »
+  ET « Médecin de famille » résolvent tous deux correctement à « Catherine
+  Folly ».
+
+Tests : 6 nouveaux cas dans `ValidatorTests`
+(`tests/test_note_pipeline.py`), reproduisant les deux cas réels ci-dessus
+plus les garde-fous (terme trop court, limite de mots, non-interférence
+avec la démotion de fusion existante). Vérification bout-en-bout sur
+transcriptions réelles (`extract_note` + `validate_and_repair`,
+mistral-small-latest) pour les deux bugs.
+
 ## 2026-08-19 — branche `selfhosted`, appel d'outils ouvert au point de terminaison personnalisé + banc DeepSeek V4 Flash
 
 `llm.complete_with_tools` accepte maintenant le fournisseur `custom`

@@ -1456,6 +1456,68 @@ def migrate_general_prompt_structure(db: Session) -> int:
     return touches
 
 
+#: Empreintes des consignes LIVRÉES avant le renforcement de la préservation de
+#: la première personne en Impression/Plan (actions factuelles comprises, et
+#: non plus seulement les clauses épistémiques « je crois… ») — voir
+#: ``migrate_general_prompt_plan_voice``. Même mécanique que les migrations
+#: précédentes : on ne remplace la valeur en base que si elle est encore
+#: EXACTEMENT le défaut livré, pour ne jamais écraser une consigne
+#: personnalisée. Vérifié le 2026-08-19 contre ``default_prompts`` : la copie
+#: en base des quatre langues/canaux était strictement identique au module
+#: avant l'édition.
+_OLD_GENERAL_PROMPT_SHA6 = {
+    "general_prompt_fr": "2e1d12ed91969db6fc1386b181cbe0beffa2bc656049866f1b945ad0f4e5f199",
+    "general_prompt_en": "a8facbde18da5cb3759ee7c5d104513838f4d9662d43519b3e19a8803ce97756",
+    "general_prompt_json_fr": "8eb2c05aade1b2256bf49dcb982f19ebfadae292c7b27467c35bcba4e956c5ce",
+    "general_prompt_json_en": "33ffb801155816341c22c50ecabe18c91f35c7c05dbee76cc04a91d5fe7fe0c6",
+}
+
+
+def migrate_general_prompt_plan_voice(db: Session) -> int:
+    """Porte dans les consignes EN BASE la préservation de la première personne
+    en Impression/Plan étendue aux actions factuelles.
+
+    Le modèle rendait parfois le PLAN à l'impersonnel (« Augmentation de la
+    rispéridone… ») alors que la dictée était au « je » (« J'augmente la
+    rispéridone… »), et ce malgré une consigne qui demandait déjà de transcrire
+    idem. Le § 3 est renforcé de contre-exemples explicites (mêmes pour le
+    canal JSON). Comme pour les migrations précédentes, la valeur n'est
+    remplacée que si elle est encore EXACTEMENT le défaut livré (comparaison
+    par empreinte) ; une consigne personnalisée est laissée intacte et signalée
+    au journal.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA6.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : migration « voix première personne » "
+                "ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        est_json = cle.endswith(("_json_fr", "_json_en"))
+        source = default_prompts.JSON_PROMPTS if est_json else default_prompts.PROMPTS
+        nouveau = source.get("fr" if cle.endswith(("_fr", "_json_fr")) else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : première personne conservée en "
+            "Impression/Plan (clause épistémique et action factuelle).",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Groupes livrés. « admins » ouvre le panneau d'administration, « users » ne
 #: donne accès qu'à ses propres consultations.
 _SYSTEM_GROUPS = (
@@ -1723,6 +1785,7 @@ def init_db() -> None:
         migrate_general_prompt_a_confirmer(db)
         migrate_general_prompt_final_section(db)
         migrate_general_prompt_structure(db)
+        migrate_general_prompt_plan_voice(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

@@ -1697,18 +1697,26 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Medication check — Health Canada DPD (test)",
     ),
     "set.note_lookup_dpd.help": (
-        "Pendant l'extraction, le modèle peut interroger la Base de données "
-        "sur les produits pharmaceutiques de Santé Canada pour vérifier un "
-        "nom de médicament incertain. Sans effet sauf si « Pipeline JSON "
-        "structuré (test) » est activé ET le fournisseur actif est Mistral. "
-        "Ajoute de la latence réseau externe à chaque génération. Un "
-        "médicament absent de la base n'est pas forcément une erreur — "
+        "Vérifie les médicaments contre la BDPP Santé Canada en 2 temps : "
+        "passe 1, un appel étroit demande au modèle la liste complète des "
+        "médicaments et les fait vérifier (outil verifier_medicaments_dpd), "
+        "les correspondances fiables sont substituées dans la transcription ; "
+        "passe 2, la note est rédigée sur la transcription corrigée, les "
+        "candidats faibles étant laissés en Éléments à valider. Sans effet "
+        "sauf si « Pipeline JSON structuré (test) » est activé ET le "
+        "fournisseur actif est Mistral ou le point de terminaison personnalisé. "
+        "Ajoute un second appel modèle à chaque génération (latence et coût). "
+        "Un médicament absent de la base n'est pas forcément une erreur — "
         "réservé aux tests.",
-        "During extraction, the model can query Health Canada's Drug "
-        "Product Database to verify an uncertain medication name. No effect "
-        "unless « Structured JSON pipeline (test) » is enabled AND the "
-        "active provider is Mistral. Adds external network latency to each "
-        "generation. A medication absent from the database isn't "
+        "Checks medications against Health Canada's Drug Product Database in "
+        "2 passes: pass 1, a narrow call asks the model for the complete "
+        "medication list and has it verified (verifier_medicaments_dpd tool), "
+        "reliable matches are substituted into the transcript; pass 2, the "
+        "note is drafted on the corrected transcript, weak candidates being "
+        "left under Items to verify. No effect unless « Structured JSON "
+        "pipeline (test) » is enabled AND the active provider is Mistral or "
+        "the custom endpoint. Adds a second model call to each generation "
+        "(latency and cost). A medication absent from the database isn't "
         "necessarily an error — for testing only.",
     ),
     "set.note_lookup_legacy.label": (

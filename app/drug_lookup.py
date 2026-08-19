@@ -97,7 +97,7 @@ from typing import Dict, List, Optional, Tuple
 
 from app import phonetic_fr
 from app.note_schema import DrugLookup
-from app.note_validator import _normalize_text
+from app.note_validator import _normalize_text, _strip_accents
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +241,44 @@ def _build_result(term: str, candidate: dict, *, source: str) -> DrugLookup:
     return DrugLookup(term=term, found=True, matched_name=_candidate_name(candidate) or None, din=din, source=source)
 
 
+#: La recherche EXACTE de la BDPP (``_dpd_query``) est en réalité un filtre
+#: PRÉFIXE côté serveur : un terme comme « vitamine d » renvoie TOUTES les
+#: entrées qui commencent par ce préfixe (Vitamine D, Vitamine D3, Vitamine
+#: D (Huile de foie de morue)...), sans ordre garanti par pertinence — cas
+#: réel vérifié : « Vitamine D (Huile de foie de morue) » arrive premier dans
+#: la réponse alors qu'une entrée « Vitamine D » strictement identique au
+#: terme dicté existe plus loin dans la même liste. Prendre ``candidates[0]``
+#: sans comparaison revient à laisser l'ordre de retour de l'API choisir un
+#: produit différent (huile de foie de morue) à la place du terme dicté.
+def _pick_exact_candidate(term: str, candidates: list) -> dict:
+    """Parmi une liste de candidats exacts/préfixes, préfère celui dont le
+    nom normalisé est IDENTIQUE au terme recherché ; à défaut (aucune entrée
+    ne correspond mot pour mot — vrai préfixe partiel), garde le premier
+    résultat de l'API comme avant."""
+    target = _strip_accents(_normalize_text(term))
+    for candidate in candidates:
+        if _strip_accents(_normalize_text(_candidate_name(candidate))) == target:
+            return candidate
+    return candidates[0]
+
+
+#: Distingue une VRAIE correction (le terme dicté ne ressemble au nom retenu
+#: que par ORTHOGRAPHE/PHONÉTIQUE — ex. « Norvask » -> NORVASC) d'une simple
+#: dénomination BDPP plus complète pour le MÊME médicament (ex. « metformine »
+#: -> « Chlorhydrate de metformine », « solifénacine » -> « Succinate de
+#: solifénacine ») : la BDPP nomme ses ingrédients par leur forme saline
+#: complète, mais le médecin a dicté le bon mot — rien n'a été mal entendu.
+#: Voir ``note_extraction._extract_note_with_dpd_tool`` (pass 1) : quand ceci
+#: est vrai, la substitution déterministe N'est PAS appliquée — la note garde
+#: le terme TEL QUE DICTÉ, pas le nom BDPP plus long.
+def is_superset_match(term: str, matched_name: Optional[str]) -> bool:
+    if not matched_name:
+        return False
+    t = _strip_accents(_normalize_text(term))
+    n = _strip_accents(_normalize_text(matched_name))
+    return bool(t) and t in n
+
+
 def search_drug(term: str, *, kind: str = "brand", language: str = "fr") -> DrugLookup:
     """Cherche ``term`` dans la BDPP. Ne lève JAMAIS d'exception : tout échec
     (réseau, temps mort, JSON illisible, genre inconnu) devient
@@ -264,7 +302,7 @@ def search_drug(term: str, *, kind: str = "brand", language: str = "fr") -> Drug
         return DrugLookup(term=term, found=False, error=str(exc))
 
     if candidates:
-        result = _build_result(term, candidates[0], source="dpd")
+        result = _build_result(term, _pick_exact_candidate(term, candidates), source="dpd")
         _cache[cache_key] = result
         return result
 

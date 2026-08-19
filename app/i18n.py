@@ -770,6 +770,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Sélectionnez un gabarit de consultation.",
         "Select a consultation template.",
     ),
+    "generate.connecting": (
+        "Connexion au modèle…",
+        "Connecting to model…",
+    ),
     "generate.streaming": (
         "La note se génère…",
         "Generating the note…",
@@ -2189,8 +2193,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
 
     # --- Chargement et diagnostic ------------------------------------------
     "app.load_failed": ("Chargement impossible : {error}", "Loading failed: {error}"),
-    "app.busy_default": ("Traitement en cours…", "Working…"),
-    "app.dont_close": ("Ne fermez pas cette fenêtre.", "Do not close this window."),
     "toast.dismiss": ("Fermer", "Dismiss"),
     "net.unreachable": (
         "Serveur injoignable. Vérifiez votre connexion réseau.",

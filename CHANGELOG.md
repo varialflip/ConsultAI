@@ -3,6 +3,30 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — v2.0.0-beta.67
+
+- **Harmonisation de tous les états « en cours » en un toast unique**
+  (beta.67). Génération (`genIndicator`/`genBar`), transcription et
+  retranscription, fin de dictée, reprise et uploads partageaient des
+  apparences divergentes (pastille-spinner, barre balayante mobile, voile
+  plein écran `busyOverlay`, barre avec pourcentage pour la transcription).
+  Tout est désormais un **toast de progression identique** : une ligne (spinner
+  harmonisé 16 px + message + pourcentage à droite s'il est connu) et une
+  **piste fine** — déterministe pour la transcription/upload (avancement réel
+  du serveur), indéterminée sinon, sans jamais afficher de faux pourcentage.
+  Le voile plein écran bloquant est supprimé. Sur desktop, la zone de toasts
+  est légèrement relevée pour ne plus couvrir le pied de la note structurée ;
+  sur mobile, la barre cinq fois aller-retour est remplacée par ce toast
+  compact d'une ligne.
+- **Événement SSE `generation_started`** : le serveur ne le publie QUE
+  lorsqu'il sait que le fournisseur LLM a bien reçu la requête (jamais au
+  lancement interne — ConsultAI n'exécute pas le modèle). Le toast de
+  génération passe de « Connexion au modèle… » à « La note se génère… » à la
+  réception de ce signal (ou dès le premier morceau `generation_chunk`, si
+  l'événement s'est perdu). Point d'acquittement par fournisseur :
+  OpenAI-compatible et Anthropic dès que `create(stream=True)` revient sans
+  erreur, Gemini au premier contenu reçu.
+
 ## 2026-08-17 — v2.0.0-beta.66
 
 - **Consigne générale : règles de structure rendues explicites** (beta.66).

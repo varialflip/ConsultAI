@@ -2350,6 +2350,26 @@ def _generate_and_publish(
     suivant, et la réponse JSON finale remplace de toute façon le tout par le
     texte définitif.
     """
+    # Signal « generation_started » : N'EST publié QUE lorsque le fournisseur
+    # LLM accuse réception de la requête (transmis par ``on_stream_started``,
+    # voir llm) — jamais au lancement interne. ConsultAI n'exécute pas le
+    # modèle : le fait d'avoir commencé à préparer l'appel ne prouve rien. Le
+    # garde ``is_current`` évite d'annoncer un départ pour un flux supplanté,
+    # et le drapeau borne à un seul départ par tentative.
+    started = {"done": False}
+
+    def _publish_started() -> None:
+        if started["done"] or not _generation_guard.is_current(
+            payload.consultation_id, generation_seq
+        ):
+            return
+        started["done"] = True
+        live.publish(user.owner_key, "generation_started", {
+            "consultation_id": payload.consultation_id,
+            "generation_token": payload.generation_token,
+            "origin_tab": origin_tab,
+        })
+
     generator = llm.generate_note_stream(
         payload.transcript,
         template_row.system_instructions,
@@ -2359,6 +2379,7 @@ def _generate_and_publish(
         model_name,
         template_row.language,
         audio_payload,
+        on_stream_started=_publish_started,
     )
 
     raw = ""

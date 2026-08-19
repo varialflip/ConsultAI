@@ -252,69 +252,31 @@
     .accent-tab { background-color: var(--color-accent); color: #fff; }
     .accent-badge { background-color: var(--color-accent-bg-subtle); color: var(--color-accent); }
     .accent-dot { background-color: var(--color-accent-border); }
-    .accent-spinner { border-top-color: var(--color-accent-border); }
     .toast-success { background-color: var(--color-accent); }
 
     /* ---------------------------------------------------------------
-       GÉNÉRATION EN DIRECT — témoins et fond temporaires
-       Pendant la mise en forme, le voile plein écran est remplacé par :
-       - un fond gris pâle sur la zone du texte en cours de génération
-         (.gen-pane, retiré dès que la note définitive est en place) ;
-       - une pastille compacte posée sur le panneau de transcription
-         (#genIndicator, grand écran) ;
-       - une barre horizontale animée centrée sur la portion encore vide
-         de l'aperçu (#genBar, mobile). Sa position verticale est calculée
-         par positionGenBar() (app.js) à chaque morceau reçu.
+       GÉNÉRATION EN DIRECT — fond temporaire
+       Pendant la mise en forme, on fond la zone du texte généré en gris
+       pâle (.gen-pane, retiré dès que la note définitive est en place) et on
+       affiche le toast de progression unifié (voir app.js, showProgressToast),
+       commun à la génération, la transcription, la retranscription et toutes
+       les opérations longues. `.spinner` en est le spinner unique et harmonisé.
        --------------------------------------------------------------- */
     .gen-pane { background-color: #f8fafc; }
 
-    #genIndicator {
-      position: absolute;
-      top: 3rem;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 30;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 1rem;
-      border-radius: 9999px;
-      border: 1px solid #e2e8f0;
-      background: rgba(255, 255, 255, 0.95);
-      box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.35);
-    }
-    #genIndicator.hidden { display: none; }
-    #genIndicator .spin {
+    /* Spinner harmonisé de l'application — le seul utilisé pour tous les
+       états « en cours ». Créé dynamiquement dans showProgressToast (app.js) ;
+       ce motif ring est la reprise stylistique de l'ancien témoin de
+       génération, désormais partagé partout. */
+    .spinner {
       width: 1rem;
       height: 1rem;
       border-radius: 9999px;
-      border: 2px solid #e2e8f0;
-      border-top-color: var(--color-accent-border);
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      border-top-color: #fff;
       animation: gen-spin 0.9s linear infinite;
     }
     @keyframes gen-spin { to { transform: rotate(360deg); } }
-
-    /* Barre mobile : courte (40 % de la largeur), centrée horizontalement,
-       et dont l'animation la fait balayer de gauche à droite. La hauteur
-       (top) est pilotée par positionGenBar() pour rester au centre de la
-       portion de l'aperçu qui ne contient pas encore de texte. */
-    #genBar {
-      position: absolute;
-      height: 5px;
-      width: 40%;
-      left: 50%;
-      border-radius: 9999px;
-      background: var(--color-accent-border);
-      box-shadow: 0 0 10px var(--color-accent-border);
-      opacity: 0.85;
-      pointer-events: none;
-      animation: gen-sweep 1.3s ease-in-out infinite;
-    }
-    #genBar.hidden { display: none; }
-    @keyframes gen-sweep {
-      0%, 100% { transform: translateX(calc(-50% - 3.5rem)); }
-      50%      { transform: translateX(calc(-50% + 3.5rem)); }
-    }
 
     /* Le texte d'aide (placeholder) de la transcription adopte la même
        apparence que le message « La note structurée apparaît ici… » du
@@ -678,13 +640,9 @@
     <!-- PANNEAU : transcription brute -->
     <section id="paneDictee" data-pane="dictee"
              class="relative flex-1 min-h-0 overflow-hidden bg-white lg:rounded-xl lg:border border-slate-200 lg:shadow-sm flex flex-col">
-      <!-- Témoin de génération (grand écran) : posé SUR ce panneau pour que le
-           panneau de la note, où le texte défile en direct, reste dégagé.
-           Affiché/masqué par setGenerating() (app.js). -->
-      <div id="genIndicator" class="no-print hidden" role="status" aria-live="polite">
-        <span class="spin"></span>
-        <span class="text-xs font-medium text-slate-600">{{ t('generate.streaming') }}</span>
-      </div>
+      <!-- Le progrès de la génération s'affiche désormais dans le toast unifié (#toastZone),
+           commun à la génération, la transcription, la retranscription et les opérations longues ;
+           le panneau de la note, où le texte défile en direct, reste dégagé. -->
       <!-- items-end, et non items-center : les deux en-têtes partagent la même
            rangée (subgrid plus haut), et l'œil compare les DEUX rangées de
            boutons. C'est donc leur ligne du bas qui doit concorder, pas le
@@ -840,11 +798,9 @@
                     prose-headings:font-semibold prose-h1:text-lg prose-h2:text-base prose-h2:uppercase
                     prose-h2:tracking-wide prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-1
                     prose-h3:text-sm prose-h3:italic prose-table:text-xs">
-          <!-- Témoin horizontal mobile : vit DANS l'aperçu (position absolue
-               dans son défilement) et est remis en place par renderMarkdown()
-               après chaque réécriture du contenu. Affiché/masqué par
-               setGenerating(), positionné par positionGenBar() (app.js). -->
-          <div id="genBar" class="hidden" role="status" aria-hidden="true"></div>
+          <!-- Le progrès de la génération s'affiche dans le toast unifié
+               (#toastZone) ; le texte, lui, défile ici en direct pendant que
+               le serveur diffuse les morceaux de la note. -->
           <p class="text-slate-400 italic">{{ t('note.empty') }}</p>
         </div>
 
@@ -1329,19 +1285,16 @@
 </div>
 
 <!-- ===================================================================
-     VOILE DE CHARGEMENT + NOTIFICATIONS
-     =================================================================== -->
-<div id="busyOverlay" class="no-print hidden fixed inset-0 z-50 bg-slate-900/40 grid place-items-center p-6">
-  <div class="bg-white rounded-xl px-8 py-6 shadow-2xl text-center max-w-sm">
-    <div class="w-10 h-10 mx-auto mb-3 border-[3px] border-slate-200 accent-spinner rounded-full animate-spin"></div>
-    <p id="busyMessage" class="text-sm font-medium text-slate-700">{{ t('app.busy_default') }}</p>
-    <p class="text-xs text-slate-400 mt-1">{{ t('app.dont_close') }}</p>
-  </div>
-</div>
-
+     NOTIFICATIONS
+     Toutes les opérations longues (génération, transcription,
+     retranscription, fin de dictée, reprise, upload) s'affichent désormais
+     dans le toast unifié créé par showProgressToast() (app.js) — plus aucun
+     voile plein écran. Des toast classiques (≠ progression) partagent la même
+     zone. Légèrement relevé du bas pour ne pas recouvrir le pied de la note
+     structurée. -->
 <div id="toastZone" class="no-print fixed left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-50
                            flex flex-col gap-2 items-stretch sm:items-end"
-     style="bottom: max(1rem, env(safe-area-inset-bottom))"></div>
+     style="bottom: max(calc(1rem + 0.95rem), calc(env(safe-area-inset-bottom) + 0.95rem))"></div>
 
 <script>
   window.CONSULTAI = {

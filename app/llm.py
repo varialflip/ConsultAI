@@ -35,7 +35,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from app import i18n, runtime_config
 from app.config import COHERE_DEFAULT_LLM_MODEL, MISTRAL_DEFAULT_LLM_MODEL, settings
@@ -942,7 +942,7 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     )
 
 
-def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None):
+def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None, on_stream_started=None):
     """
     Version en continu de ``_complete_gemini`` : rend chaque fragment de texte
     au fil de l'eau, puis rend un ``Completion`` complet (usage, motif d'arrêt)
@@ -1026,6 +1026,11 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
                 for piece in (getattr(chunk, "parts", None) or []):
                     part = getattr(piece, "text", None) or ""
                     if part:
+                        # Premier contenu reçu : c'est la seule preuve que le
+                        # serveur Gemini a bien reçu la requête (le SDK ne rend
+                        # aucun acquittement avant du contenu).
+                        if on_stream_started is not None and not deja_diffuse:
+                            on_stream_started()
                         full.append(part)
                         deja_diffuse = True
                         yield part
@@ -1073,7 +1078,7 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     )
 
 
-def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode):
+def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, on_stream_started=None):
     """
     Version en continu de ``_complete_anthropic``. ``create(stream=True)``
     renvoie un objet itérable ; ``get_final_message()`` fournit en fin de flux
@@ -1095,6 +1100,12 @@ def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode):
     except Exception as exc:
         logger.exception("Échec de l'appel Anthropic (flux)")
         raise _translate_error("Anthropic", model, exc) from exc
+
+    # Même point d'acquittement que OpenAI-compatible : ``create(stream=True)``
+    # a déjà émis la requête et reçu les en-têtes — le serveur LLM a donc bien
+    # reçu la requête. Voir ``_stream_openai_like``.
+    if on_stream_started is not None:
+        on_stream_started()
 
     full: List[str] = []
     try:
@@ -1133,7 +1144,7 @@ def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode):
     )
 
 
-def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=None):
+def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=None, on_stream_started=None):
     """
     Version en continu de ``_complete_openai``/``_complete_qwen_omni``.
 
@@ -1209,6 +1220,14 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         else:
             logger.exception("Échec de l'appel %s (flux)", label)
             raise _translate_error(label, model, exc) from exc
+
+    # ``create(stream=True)`` de ce fournisseur envoie la requête HTTP ET lit
+    # les en-têtes de réponse dans l'appel lui-même : revenir sans exception
+    # ici, c'est la certitude que le serveur LLM a bien reçu la requête. C'est
+    # LE point où publier « generation_started » (jamais au lancement interne
+    # — ConsultAI n'exécute pas le modèle).
+    if on_stream_started is not None:
+        on_stream_started()
 
     full: List[str] = []
     finish_reason = ""
@@ -1287,6 +1306,7 @@ def complete_stream(
     json_mode: bool = False,
     provider: Optional[str] = None,
     audio: Optional[Tuple[bytes, str]] = None,
+    on_stream_started: Optional[Callable[[], None]] = None,
 ):
     """
     Version en continu de ``complete()``.
@@ -1295,6 +1315,10 @@ def complete_stream(
     ``Completion`` complet via ``StopIteration.value`` (l'appelant le récupère
     en terminant la boucle ``next()``). Cohere/Mistral retombent sur
     ``complete()`` : un seul fragment, même contrat.
+
+    ``on_stream_started`` est invoqué, au plus une fois, DÈS que le fournisseur
+    a accusé réception de la requête (voir ``_stream_*``) — le seul moment
+    légitime pour signaler à l'interface que « l'appel LLM a réellement parti ».
     """
     provider = provider or active_provider()
     if provider == "custom":
@@ -1302,15 +1326,15 @@ def complete_stream(
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
 
     if provider == "gemini":
-        gen = _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio)
+        gen = _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio, on_stream_started=on_stream_started)
     elif provider == "anthropic":
-        gen = _stream_anthropic(system, user, model, temperature, max_tokens, json_mode)
+        gen = _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, on_stream_started=on_stream_started)
     elif provider == "openai":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=audio)
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=audio, on_stream_started=on_stream_started)
     elif provider == "custom":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio)
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio, on_stream_started=on_stream_started)
     elif provider == "qwen_omni":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio)
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio, on_stream_started=on_stream_started)
     elif provider in ("cohere", "mistral"):
         completion = complete(
             system, user, model=model, temperature=temperature,
@@ -1334,6 +1358,7 @@ def generate_note_stream(
     model: Optional[str] = None,
     language: Optional[str] = None,
     audio: Optional[Tuple[bytes, str]] = None,
+    on_stream_started: Optional[Callable[[], None]] = None,
 ):
     """
     Version en continu de ``generate_note``.
@@ -1344,6 +1369,11 @@ def generate_note_stream(
     le même dictionnaire que ``generate_note``. Le nettoyage final s'applique
     une seule fois, à la fin, sur le texte complet : l'écran remplace alors le
     texte brut par la version définitive.
+
+    ``on_stream_started`` est transmis au flux : appelé au plus une fois dès
+    que le fournisseur LLM a accusé réception de la requête (ConsultAI ne
+    l'exécute pas — le signal est celui de l'acquittement réel, pas du
+    lancement interne).
     """
     provider = active_provider()
     opts = audio_settings(provider)
@@ -1396,6 +1426,7 @@ def generate_note_stream(
             max_tokens=budget,
             provider=provider,
             audio=audio_to_send,
+            on_stream_started=on_stream_started,
         )
 
         # Rend le texte brut accumulé ; conserve le Completion final. Le

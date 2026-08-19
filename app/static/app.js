@@ -161,7 +161,7 @@
       }
     };
     // ``durationMs <= 0`` rend le toast persistant : il ne part que par la
-    // croix, le glissé ou un dismiss() explicite (voir showTranscriptionProgress).
+    // croix, le glissé ou un dismiss() explicite (voir showProgressToast).
     timer = durationMs > 0 ? setTimeout(dismiss, durationMs) : null;
     close.addEventListener('click', () => dismiss());
 
@@ -253,53 +253,25 @@
     action.addEventListener('click', () => { dismiss(); onAction(); });
   }
 
-  /** Voile bloquant pendant les traitements longs (STT, Gemini). */
-  function setBusy(active, message) {
-    $('busyMessage').textContent = message || T('app.busy_default');
-    $('busyOverlay').classList.toggle('hidden', !active);
-  }
-
   /**
-   * État « génération en cours » — remplace le voile plein écran, qui
-   * cacherait le texte en cours de génération, par un témoin discret :
-   *  - grand écran : pastille posée sur le panneau de transcription (le
-   *    panneau de la note reste libre, le texte y défile) ;
-   *  - mobile : barre horizontale animée, centrée sur la portion encore vide
-   *    de l'aperçu (voir positionGenBar).
-   * Le fond du texte généré passe temporairement en gris pâle, le temps que
-   * le résultat soit confirmé par la réponse finale de /api/generate.
+   * État « génération en cours » — la note arrive en direct dans l'aperçu,
+   * donc pas de voile plein écran : on fond le texte en gris pâle
+   * (`.gen-pane`) et on affiche le toast de progression unifié en mode
+   * indéterminé — d'abord « Connexion au modèle… », basculé en « La note se
+   * génère… » à la réception de l'événement `generation_started` (le serveur
+   * ne l'envoie que lorsqu'il sait que le fournisseur LLM a bien reçu la
+   * requête), sinon dès le premier morceau `generation_chunk`.
    */
   function setGenerating(active) {
     $('previewPane').classList.toggle('gen-pane', active);
     $('markdownEditor').classList.toggle('gen-pane', active);
-
-    const isMobile = window.matchMedia('(max-width: 1023px)').matches;
-    // Gardes : les éléments peuvent manquer dans un DOM d'un cache périmé —
-    // l'affichage du témoin n'est jamais une raison de faire échouer l'UI.
-    const indicator = $('genIndicator');
-    const bar = $('genBar');
-    if (indicator) indicator.classList.toggle('hidden', !active || isMobile);
-    if (bar) bar.classList.toggle('hidden', !active || !isMobile);
-    if (active && isMobile) positionGenBar();
-  }
-
-  /**
-   * Place la barre horizontale mobile au centre vertical de la portion vide
-   * de l'aperçu — entre la fin du texte déjà généré et le bas de la zone
-   * visible. Le texte défilant en bas (on suit toujours la fin), la portion
-   * vide est ce qui sépare la dernière ligne du bas du cadre.
-   */
-  function positionGenBar() {
-    const pane = $('previewPane');
-    const bar = $('genBar');
-    if (!bar) return;
-    const viewportBottom = pane.scrollTop + pane.clientHeight;
-    if (viewportBottom <= 0 || pane.clientHeight <= 0) return;
-    // Le vide visible commence après le texte déjà rendu, ou au haut du cadre
-    // si tout est déjà rempli (le témoin se rabat alors sur le bord inférieur).
-    const emptyTop = Math.min(pane.scrollHeight, viewportBottom);
-    const center = (emptyTop + viewportBottom) / 2;
-    bar.style.top = `${Math.max(0, center - bar.offsetHeight / 2)}px`;
+    if (active) {
+      state.genStarted = false;
+      showProgressToast(T('generate.connecting'));
+    } else if (progressToast) {
+      progressToast.dismiss();
+      progressToast = null;
+    }
   }
 
   /**
@@ -461,10 +433,12 @@
   let pendingRetranscribe = null;
   let pendingTranscribe = null;
 
-  // Barre de progression d'une transcription en cours (import ou
-  // retranscription), alimentée par les événements SSE « transcription_progress »
-  // publiés pendant l'appel bloquant. ``null`` hors de toute transcription.
-  let transcriptionProgress = null;
+  // Toast de progression d'une opération en cours (génération, transcription,
+  // retranscription, fin de dictée, reprise, upload) : un seul à la fois.
+  // ``null`` hors de toute opération longue. Génération et transcription
+  // changent de message/état au fil des événements SSE (« generation_chunk »,
+  // « generation_started », « transcription_progress »).
+  let progressToast = null;
 
   // État du rendu en continu de la génération (hors ``state`` : ce n'est pas
   // une donnée du brouillon, seulement l'accumulation des morceaux du flux
@@ -669,36 +643,50 @@
   }
 
   /**
-   * Barre de progression d'une transcription en cours (import ou
-   * retranscription).
+   * Toast de progression d'une opération en cours — le même, identique, pour
+   * la génération, la transcription, la retranscription, la fin de dictée, la
+   * reprise et les uploads (harmonisation voulue de tous les états « en
+   * cours » de l'application).
    *
-   * L'appel HTTP reste bloquant — le texte final revient dans la réponse —
-   * mais le serveur publie son avancement en direct (événement SSE
-   * « transcription_progress », endpoint personnalisé découpé) : la barre est
-   * indéterminée (pulsation) avant le premier événement, déterministe ensuite
-   * (pourcentage de l'audio déjà traité). Retourne ``{ dismiss, setPercent }``.
+   * Une ligne : spinner harmonisé (16 px), message, et le pourcentage à droite
+   * quand il est connu. Une piste fine dessous — déterministe (remplissage
+   * émeraude) quand le serveur publie un avancement réel (transcription,
+   * endpoints découpés), indéterminée (pulsation) sinon, sans jamais afficher
+   * de faux pourcentage.
+   *
+   * Persistant : aucun toast à durée fixe ne doit expirer avant le résultat —
+   * on le retire par le ``{ dismiss }`` renvoyé (ou la croix), dès que
+   * l'opération se termine. ``setPercent(null)`` met la piste en indéterminée,
+   * ``setMessage`` change le libellé en vol (phases de la génération).
    */
-  function showTranscriptionProgress(message) {
-    if (transcriptionProgress) transcriptionProgress.dismiss();
+  function showProgressToast(message) {
+    if (progressToast) progressToast.dismiss();
 
     const el = document.createElement('div');
-    el.className = 'bg-slate-800 text-white text-sm pl-4 pr-3 py-3 rounded-lg shadow-lg '
-      + 'max-w-md flex flex-col gap-2 transition-opacity duration-300';
+    el.className = 'bg-slate-800 text-white text-sm pl-4 pr-3 py-2.5 rounded-lg shadow-lg '
+      + 'max-w-md flex flex-col gap-1.5 transition-opacity duration-300';
     const ligne = document.createElement('div');
-    ligne.className = 'flex items-center justify-between gap-2';
+    ligne.className = 'flex items-center gap-2';
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner';
+    spinner.setAttribute('aria-hidden', 'true');
     const texte = document.createElement('span');
     texte.className = 'flex-1';
     texte.textContent = message;
     const pct = document.createElement('span');
     pct.className = 'shrink-0 text-xs text-white/80 tabular-nums';
     pct.textContent = '';
-    ligne.append(texte, pct);
+    ligne.append(spinner, texte, pct);
 
     const piste = document.createElement('div');
     piste.className = 'h-1.5 w-full rounded-full bg-white/20 overflow-hidden';
     const remplissage = document.createElement('div');
     remplissage.className = 'h-full rounded-full bg-emerald-400 transition-[width] duration-500 ease-out';
-    remplissage.style.width = '0%';
+    // Indéterminé par défaut (pulsation) : la plupart des opérations n'ont
+    // pas d'avancement connu. Un appareil « déterministe » l'écrase ensuite
+    // via ``setPercent(valeur)`` (transcription, upload).
+    remplissage.style.width = '100%';
+    remplissage.style.animation = 'pulse-rec 1.5s ease-in-out infinite';
     piste.appendChild(remplissage);
     el.append(ligne, piste);
     $('toastZone').appendChild(el);
@@ -713,7 +701,7 @@
     const setPercent = (value) => {
       if (value == null) {
         // Durée inconnue (aucun événement encore, ou fournisseur sans
-        // découpage) : barre indéterminée, pas de faux pourcentage.
+        // découpage) : piste indéterminée, pas de faux pourcentage.
         pct.textContent = '…';
         remplissage.style.width = '100%';
         remplissage.style.animation = 'pulse-rec 1.5s ease-in-out infinite';
@@ -724,8 +712,9 @@
       remplissage.style.width = `${borne}%`;
       pct.textContent = `${Math.round(borne)} %`;
     };
-    transcriptionProgress = { dismiss, setPercent };
-    return transcriptionProgress;
+    const setMessage = (m) => { texte.textContent = m; };
+    progressToast = { dismiss, setPercent, setMessage };
+    return progressToast;
   }
 
   /**
@@ -735,11 +724,11 @@
    * final par « consultation_patched ».
    */
   function onTranscriptionProgress(evt) {
-    if (!transcriptionProgress) return;
+    if (!progressToast) return;
     const payload = JSON.parse(evt.data);
     if (payload.consultation_id != null
         && String(payload.consultation_id) !== String(state.consultationId)) return;
-    transcriptionProgress.setPercent(payload.percent);
+    progressToast.setPercent(payload.percent);
   }
 
   /**
@@ -771,7 +760,7 @@
     // Barre persistante : la retranscription d'un long enregistrement peut
     // prendre plusieurs minutes, aucun toast à durée fixe ne doit expirer
     // avant le résultat (le serveur publie l'avancement par SSE).
-    const bar = showTranscriptionProgress(T('retranscribe.running', { langue }));
+    const bar = showProgressToast(T('retranscribe.running', { langue }));
     try {
       const data = await api(`/api/consultations/${state.consultationId}/retranscribe`, {
         method: 'POST', signal: controller.signal,
@@ -812,7 +801,7 @@
     } finally {
       if (pendingRetranscribe === controller) {
         pendingRetranscribe = null;
-        transcriptionProgress = null;
+        progressToast = null;
       }
     }
   }
@@ -1698,7 +1687,7 @@
       return false;
     }
 
-    setBusy(true, T('dictation.finishing'));
+    const finishToast = showProgressToast(T('dictation.finishing'));
     try {
       if (!dictation.sessionId) {
         // La session n'a jamais pu être ouverte : tout est encore local, on
@@ -1724,7 +1713,7 @@
       refreshRecoveryBanner();
       return false;
     } finally {
-      setBusy(false);
+      finishToast.dismiss();
       resetDictationState();
     }
   }
@@ -1977,7 +1966,7 @@
    */
   async function peekStoredSession(entry) {
     if (!entry.server) return;
-    setBusy(true, T('recovery.peeking'));
+    const busy = showProgressToast(T('recovery.peeking'));
     try {
       if (entry.localId) {
         const chunks = await audioStore.chunks(entry.localId);
@@ -1992,7 +1981,7 @@
     } catch (err) {
       toast(T('recovery.resume_failed', { error: err.message }), 'error', 12000);
     } finally {
-      setBusy(false);
+      busy.dismiss();
       refreshRecoveryBanner();
     }
   }
@@ -2003,7 +1992,7 @@
    * la consultation d'origine.
    */
   async function finishStoredSession(entry) {
-    setBusy(true, T('recovery.resuming'));
+    const busy = showProgressToast(T('recovery.resuming'));
     try {
       if (entry.server) {
         // Le serveur a déjà une partie de l'audio : on ne lui renvoie que la
@@ -2025,7 +2014,7 @@
     } catch (err) {
       toast(T('recovery.resume_failed', { error: err.message }), 'error', 12000);
     } finally {
-      setBusy(false);
+      busy.dismiss();
       refreshRecoveryBanner();
     }
   }
@@ -2051,13 +2040,19 @@
       },
     });
 
+    const upload = showProgressToast(
+      T('recovery.uploading', { current: 1, total: chunks.length }),
+    );
     for (const row of chunks) {
-      setBusy(true, T('recovery.uploading', { current: row.seq + 1, total: chunks.length }));
+      upload.setPercent(((row.seq + 1) / chunks.length) * 100);
       await postChunk(session.session_id, row.seq, row.blob, dictationConfig.chunkSeconds * 1000);
     }
 
-    setBusy(true, T('transcribe.busy_short'));
+    // L'avancement n'est plus connu : piste indéterminée jusqu'à la réponse.
+    upload.setMessage(T('transcribe.busy_short'));
+    upload.setPercent(null);
     const result = await api(`/api/dictation/${session.session_id}/finish`, { method: 'POST' });
+    upload.dismiss();
     await bestEffort(() => audioStore.remove(localId), 'nettoyage');
 
     if (options.silent && result.consultation_id === state.consultationId) {
@@ -2170,7 +2165,7 @@
     // Barre de progression persistante (alimentée par SSE pendant l'appel
     // bloquant) au lieu du voile plein écran : l'import d'un long fichier
     // peut durer plusieurs minutes.
-    const bar = showTranscriptionProgress(T('transcribe.busy', { size: megabytes }));
+    const bar = showProgressToast(T('transcribe.busy', { size: megabytes }));
 
     try {
       // Le brouillon existe avant l'envoi : si le navigateur se ferme pendant
@@ -2221,8 +2216,9 @@
     } finally {
       if (pendingTranscribe === controller) {
         pendingTranscribe = null;
-        transcriptionProgress = null;
-        setBusy(false);
+        // bar.dismiss() a déjà retiré le toast (succès ou échec) ; on libère
+        // juste la référence pour que la prochaine opération reparte de zéro.
+        progressToast = null;
       }
     }
   }
@@ -2290,8 +2286,7 @@
 
     // Le voile plein écran laisserait le texte généré invisible : à la place
     // on force la vue « Aperçu » (où le texte défilera en direct) et on pose
-    // un témoin discret — pastille sur le panneau de transcription sur grand
-    // écran, barre horizontale dans l'aperçu sur mobile. Une note déjà
+    // le toast de progression unifié (connexion → génération). Une note déjà
     // présente est effacée pour laisser place à la nouvelle, qui arrivera en
     // streaming (et l'ancienne est restituée si la génération échoue). Un
     // clic de régénération repart aussi d'un flux de rendu vierge.
@@ -2730,18 +2725,11 @@
   function renderMarkdown() {
     const markdown = $('markdownEditor').value;
     const pane = $('previewPane');
-    // #genBar est capturé AVANT le rendu : innerHTML le retire du document,
-    // et document.getElementById ne le retrouverait plus après — ce qui
-    // faisait passer null à appendChild (crash « Parameter 1 not node »).
-    const bar = $('genBar');
     if (!markdown.trim()) {
       pane.innerHTML = `<p class="text-slate-400 italic">${esc(T('note.empty'))}</p>`;
     } else {
       pane.innerHTML = markdownToHtml(markdown);
     }
-    // #genBar vit DANS l'aperçu (positionnement absolu dans son défilement)
-    // mais ``innerHTML`` l'efface à chaque rendu : on le remet en place.
-    if (bar && !pane.contains(bar)) pane.appendChild(bar);
   }
 
   /**
@@ -5719,6 +5707,24 @@
   }
 
   /**
+   * Le serveur a acquis que le fournisseur LLM a bien reçu la requête (il ne
+   * publie cet événement qu'à ce moment-là, pas au lancement interne). Le toast
+   * de génération bascule de « Connexion au modèle… » à « La note se génère… ».
+   * Le premier morceau `generation_chunk` bascule aussi (garde-fou si cet
+   * événement se perd), donc ne rien faire ici n'est jamais bloquant.
+   */
+  function onGenerationStarted(evt) {
+    if (!pendingGenerate) return;
+    const payload = JSON.parse(evt.data || '{}');
+    if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    state.genStarted = true;
+    if (progressToast && progressToast.setMessage) {
+      progressToast.setMessage(T('generate.streaming'));
+    }
+  }
+
+  /**
    * Un morceau du texte de la note, diffusé par le serveur pendant que
    * /api/generate attend encore. Le flux porte soit des DELTAS (texte nouveau
    * depuis le morceau précédent), soit — toutes les ~1 s et toujours à la fin
@@ -5733,6 +5739,14 @@
     const payload = JSON.parse(evt.data || '{}');
     if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
+
+    // Le premier morceau de texte est LA preuve que le modèle a répondu : il
+    // bascule le toast en phase « génération » même si l'événement dédié
+    // `generation_started` s'est perdu (file SSE saturée, reconnexion).
+    if (!state.genStarted && progressToast && progressToast.setMessage) {
+      state.genStarted = true;
+      progressToast.setMessage(T('generate.streaming'));
+    }
 
     if (payload.type === 'snapshot' || !payload.type) {
       // Snapshot (ou ancien format, texte complet) : remplace tout.
@@ -5797,7 +5811,6 @@
     } else {
       const pane = $('previewPane');
       pane.scrollTop = pane.scrollHeight;
-      positionGenBar();
     }
   }
 
@@ -5863,6 +5876,7 @@
     liveSource.addEventListener('recording_deleted', onSyncRecording);
     liveSource.addEventListener('generated', onSyncGeneratedOrPatched);
     liveSource.addEventListener('generation_chunk', onGenerationChunk);
+    liveSource.addEventListener('generation_started', onGenerationStarted);
     liveSource.addEventListener('transcription_progress', onTranscriptionProgress);
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);
     liveSource.addEventListener('consultation_created', onSyncConsultationCreated);
@@ -5877,13 +5891,6 @@
     // Date du jour pré-remplie : c'est le cas de très loin le plus fréquent,
     // et une valeur déjà présente n'est jamais écrasée par l'extraction.
     $('metaDate').value = new Date().toISOString().slice(0, 10);
-
-    // Rotation / changement de fenêtre pendant une génération : le témoin
-    // adapté (pastille grand écran vs barre mobile) est re-évalué et la barre
-    // mobile recalculée pour rester centrée sur la portion vide.
-    window.addEventListener('resize', () => {
-      if (state.generationToken !== null) setGenerating(true);
-    });
 
     // --- Enregistrement ---
     $('btnRecord').addEventListener('click', startRecording);

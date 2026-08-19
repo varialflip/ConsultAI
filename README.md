@@ -536,10 +536,22 @@ La retranscription ne touche pas la note déjà mise en forme, et n'a lieu que s
 réponse affirmative : c'est un appel facturé de plus, sur toute la durée de
 l'enregistrement. Elle exige que l'audio ait été conservé — ce qui est le cas
 par défaut (§ 11). L'appel reste bloquant — le texte complet revient en une
-réponse — mais une **barre de progression** (événements SSE
+réponse — mais le **toast de progression** (événements SSE
 `transcription_progress`, alimentée pendant le découpage du point de
 terminaison personnalisé) montre l'avancement en temps réel ; l'import de
 fichier (§ 7.4) en bénéficie aussi.
+
+> Tous les états « en cours » de l'application — génération, transcription
+> et retranscription, fin de dictée, reprise et uploads — partagent le **même
+> toast de progression** (`showProgressToast`, app.js) : une ligne (spinner
+> harmonisé + message + pourcentage à droite s'il est connu) et une piste fine
+> — déterministe quand un avancement réel existe (`transcription_progress`),
+> indéterminée sinon, sans jamais afficher de faux pourcentage. La génération
+> s'appuie en outre sur l'événement SSE `generation_started`, publié par le
+> serveur **uniquement lorsqu'il sait que le fournisseur LLM a bien reçu la
+> requête** : le toast passe alors de « Connexion au modèle… » à « La note se
+> génère… » (ou dès le premier morceau `generation_chunk` si l'événement se
+> perd). Plus aucun voile plein écran bloquant.
 
 > Rien de tout cela n'est automatique. Retranscrire écrase du texte que le
 > médecin a pu déjà corriger à la main.

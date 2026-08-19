@@ -69,7 +69,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
 from markupsafe import Markup
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -2882,6 +2882,33 @@ def patch_consultation(
     return consultation.to_dict(include_body=False)
 
 
+def _delete_consultation_cascade(db: Session, consultation: Consultation) -> int:
+    """Supprime tout ce qui dépend du brouillon avant le brouillon lui-même.
+
+    ``recordings.delete_for_consultation`` retire les fichiers audio et leurs
+    lignes ; ``note_generations`` (NoteGeneration, historique append-only des
+    générations) porte une contrainte de clé étrangère sur
+    ``consultations.id``. Sans purge de cette table, la suppression du brouillon
+    — purge de rétention ou suppression manuelle — fait échouer le COMMIT sur
+    une IntegrityError (vu réellement, test.dictai.ca 2026-08-19 : la liste des
+    brouillons répondait 500 parce que la purge de rétention tombait sur des
+    consultations générées).
+
+    Renvoie le nombre d'enregistrements audio supprimés.
+    """
+    removed = recordings.delete_for_consultation(db, consultation.id)
+    # Suppression IMMÉDIATE (émission du DELETE là et maintenant) : l'unité de
+    # travail de SQLAlchemy n'a pas garanti ici l'ordre « enfants avant parent »
+    # entre note_generations et consultations — sans cette exécution anticipée,
+    # le DELETE de la consultation arrivait avant celui de l'historique et le
+    # COMMIT échouait sur la contrainte de clé étrangère.
+    db.execute(
+        delete(NoteGeneration).where(NoteGeneration.consultation_id == consultation.id)
+    )
+    db.delete(consultation)
+    return removed
+
+
 def purge_expired_consultations(db: Session) -> int:
     """
     Supprime les dossiers dont la dernière modification dépasse le délai de
@@ -2895,8 +2922,7 @@ def purge_expired_consultations(db: Session) -> int:
     cutoff = utcnow() - timedelta(hours=hours)
     rows = db.scalars(select(Consultation).where(Consultation.updated_at < cutoff)).all()
     for consultation in rows:
-        recordings.delete_for_consultation(db, consultation.id)
-        db.delete(consultation)
+        _delete_consultation_cascade(db, consultation)
     if rows:
         db.commit()
         logger.info(
@@ -2915,8 +2941,7 @@ def delete_consultation(consultation_id: int, request: Request, db: Session = De
     """
     user = current_user(request)
     consultation = _get_owned_consultation(db, consultation_id, user)
-    removed = recordings.delete_for_consultation(db, consultation_id)
-    db.delete(consultation)
+    removed = _delete_consultation_cascade(db, consultation)
     db.commit()
     logger.info(
         "Consultation %d supprimée par %s (%d enregistrement(s))",

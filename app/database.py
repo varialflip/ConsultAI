@@ -1421,52 +1421,42 @@ def migrate_general_prompt_structure(db: Session) -> int:
     return touches
 
 
-#: Empreintes des consignes générales LIVRÉES avant la consolidation de
-#: 2026-08-19 (répétitions retirées : règles transversales concentrées dans la
-#: consigne, sections renumérotées 0 à 4, dénominalisation énoncée dans le
-#: RÔLE). Même mécanique que les migrations précédentes : on ne remplace la
-#: valeur en base que si elle est encore EXACTEMENT le défaut livré, pour ne
-#: jamais écraser une consigne personnalisée. Vérifié le 2026-08-19 contre
-#: ``default_prompts`` : la copie en base des deux langues était strictement
-#: identique au module avant l'édition.
-_OLD_GENERAL_PROMPT_SHA6 = {
-    "general_prompt_fr": "25b08dc8b317a75a862794d569e448371171ac77dafc0dd37b110b51601e0e4e",
-    "general_prompt_en": "a644f8e5bf797e79dbae205d23f2e130f1eb5409747630a22601486c7510688e",
+#: Empreintes des consignes générales portées par la consolidation de
+#: 2026-08-19 (v2.0.0-beta.74), ANNULÉE le même jour : une régression de
+#: style a été constatée à la génération, et la consolidation est retirée.
+#: Cette migration remet la valeur en base sur le défaut livré (l'ancien
+#: texte, de nouveau dans ``default_prompts``) UNIQUEMENT si elle est encore
+#: EXACTEMENT le texte consolidé — une consigne personnalisée par le médecin
+#: depuis n'est jamais écrasée.
+_OLD_GENERAL_PROMPT_SHA6_UNDO = {
+    "general_prompt_fr": "b30deb6dc36c8ac4ac23083b9b7d22b522d2764dd823f75e248f583f63494230",
+    "general_prompt_en": "b5abf69ac51e1751a912473e0ab6d367f40b62db7d62c14bdafe30f56fe122be",
 }
 
 
-def migrate_general_prompt_consolidation(db: Session) -> int:
+def migrate_general_prompt_undo_consolidation(db: Session) -> int:
     """
-    Porte dans la consigne générale EN BASE la version consolidée.
+    Annule la consolidation de la consigne générale EN BASE.
 
-    Supprime les répétitions accumulées : les règles transversales (aucune
-    invention, remplissage interdit, style déclaratif et ellipse du sujet,
-    raisonnement clinique préservé, première personne d'Impression/Plan, voix
-    dictée) ne sont plus énoncées qu'une seule fois, en sections 0 à 4 ; la
-    vérification finale est fondue dans la section 1, le style déclaratif dans
-    la section 3. La règle de dénominalisation (jamais de nom de patient ni de
-    numéro de dossier) est désormais énoncée dans le RÔLE, pour toutes les
-    notes et non plus seulement dans un gabarit.
-
-    La consigne générale est éditable et vit en base (elle surcharge le module
-    ``default_prompts``) : corriger le module seul laisserait l'installation en
-    service avec l'ancien texte. Comme pour les migrations précédentes, la
-    valeur n'est remplacée que si elle est encore EXACTEMENT le défaut livré
+    La consolidation (v2.0.0-beta.74) a produit une régression de style à la
+    génération (voix dictée non respectée) et a été revertée du code. La
+    consigne générale est éditable et vit en base : retirer le code seul
+    laisserait l'installation en service avec le texte consolidé. La valeur
+    n'est remplacée que si elle est encore EXACTEMENT le texte consolidé
     (comparaison par empreinte) ; une consigne personnalisée est laissée
-    intacte et signalée au journal. Les gabarits, eux, se rafraîchissent seuls
-    (``seed_locked_templates``) : les règles transversales n'y vivent plus.
+    intacte et signalée au journal.
     """
     import hashlib
 
     touches = 0
-    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA6.items():
+    for cle, consolidee in _OLD_GENERAL_PROMPT_SHA6_UNDO.items():
         row = db.get(AppSetting, cle)
         if row is None or not row.value.strip():
             continue
-        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+        if hashlib.sha256(row.value.encode()).hexdigest() != consolidee:
             logger.info(
-                "Consigne « %s » personnalisée : consolidation ignorée "
-                "(laissez-la telle quelle).",
+                "Consigne « %s » personnalisée : annulation de la consolidation "
+                "ignorée (laissez-la telle quelle).",
                 cle,
             )
             continue
@@ -1477,8 +1467,7 @@ def migrate_general_prompt_consolidation(db: Session) -> int:
         row.updated_by = "migration"
         touches += 1
         logger.info(
-            "Consigne « %s » mise à jour : consolidation des règles "
-            "(répétitions retirées, dénominalisation dans le RÔLE).",
+            "Consigne « %s » rétablie : consolidation (beta.74) annulée.",
             cle,
         )
     if touches:
@@ -1753,7 +1742,7 @@ def init_db() -> None:
         migrate_general_prompt_a_confirmer(db)
         migrate_general_prompt_final_section(db)
         migrate_general_prompt_structure(db)
-        migrate_general_prompt_consolidation(db)
+        migrate_general_prompt_undo_consolidation(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

@@ -86,6 +86,7 @@ import io
 import json
 import logging
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -211,6 +212,30 @@ def _candidate_name(candidate: dict) -> str:
     return str(candidate.get("brand_name") or candidate.get("ingredient_name") or "").strip()
 
 
+#: La BDPP fusionne souvent la force/forme dans ``brand_name`` lui-même —
+#: ``MONOCOR   -(5MG)``, ``PLACIDYL CAP 200MG``, ``COLCHICINE TAB 0.6MG`` —
+#: alors que le terme transcrit ne porte que le nom (la dose est dictée à
+#: part). Comparé tel quel, ce suffixe dilue le ratio de caractères : cas
+#: réel, ``Monochore`` contre ``MONOCOR   -(5MG)`` ne fait que 0,609 (sous le
+#: seuil), alors que ``ONCCOR`` (nom propre, sans suffixe, DIN 02230207 —
+#: un médicament SANS RAPPORT) obtient 0,667 et l'emporte par défaut. Contre
+#: le nom nettoyé ``MONOCOR``, le ratio grimpe à 0,875 — au-dessus du palier
+#: fort. Le nom AFFICHÉ (``matched_name``, via ``_candidate_name`` sur la
+#: ligne brute) reste intact ; seul l'index de comparaison utilise le nom
+#: nettoyé.
+_DOSE_SUFFIX_RE = re.compile(
+    r"\s*[-(]*\s*"
+    r"(?:CAP|TAB|INJ|LIQ|SOLN|SYRUP|SR|MR|XR|ER|CR|CHEWABLE(?:\s+TBS)?|FILMTAB|DPS)?\s*"
+    r"\d+(?:[.,]\d+)?\s*(?:MG|MCG|G|ML|MEQ|UI|IU|%)(?:/ML)?\)?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_dose_suffix(name: str) -> str:
+    cleaned = _DOSE_SUFFIX_RE.sub("", name).strip()
+    return cleaned or name
+
+
 def _build_result(term: str, candidate: dict, *, source: str) -> DrugLookup:
     din = str(candidate.get("drug_identification_number") or "").strip() or None
     return DrugLookup(term=term, found=True, matched_name=_candidate_name(candidate) or None, din=din, source=source)
@@ -289,7 +314,7 @@ def _fuzzy_fallback(term: str, kind: str, language: str) -> DrugLookup:
         if not name_norm:
             continue
         char_ratio = SequenceMatcher(None, normalized_term, name_norm).ratio()
-        row_phonetic = row.get("_phonetic") or _phonetic_key(_candidate_name(row))
+        row_phonetic = row.get("_phonetic") or _phonetic_key(_strip_dose_suffix(_candidate_name(row)))
         phon_ratio = SequenceMatcher(None, term_phonetic, row_phonetic).ratio()
 
         if char_ratio >= _FUZZY_STRONG_THRESHOLD:
@@ -358,9 +383,10 @@ def _dedupe_by_name(rows: list) -> List[dict]:
             continue
         key = _normalize_text(name)
         if key not in seen:
+            comparable = _strip_dose_suffix(name)
             row = dict(row)
-            row["_normalized_name"] = key
-            row["_phonetic"] = _phonetic_key(name)
+            row["_normalized_name"] = _normalize_text(comparable)
+            row["_phonetic"] = _phonetic_key(comparable)
             seen[key] = row
     return list(seen.values())
 

@@ -686,6 +686,43 @@ class DpdToolTests(unittest.TestCase):
         self.assertEqual(tools_mock.call_count, 3)  # 2 tours (plafond) + 1 repli sans outil
         self.assertIsNone(tools_mock.call_args_list[-1].kwargs["tools"])
 
+    def test_complete_with_tools_accepts_custom_provider(self):
+        """Le point de terminaison personnalisé compatible OpenAI (DeepSeek
+        via OpenRouter, serveur local…) route vers _complete_openai_tools —
+        pas de refus comme pour un fournisseur sans appel d'outils."""
+        sentinel = llm.ToolCompletion(
+            text="", tool_calls=[], raw_message={"role": "assistant", "content": ""},
+            model="m", provider="custom",
+        )
+        with mock.patch.object(llm, "_complete_openai_tools", return_value=sentinel) as tools_mock:
+            result = llm.complete_with_tools(
+                "sys", "user", model="m", temperature=0.1, max_tokens=100,
+                tools=[{"type": "function", "function": {"name": "verifier_medicament_dpd", "parameters": {"type": "object", "properties": {}}}}], messages=None, json_mode=True, provider="custom",
+            )
+        self.assertIs(result, sentinel)
+        self.assertEqual(tools_mock.call_args.kwargs["provider"], "custom")
+        self.assertEqual(tools_mock.call_args[0][5][0]["function"]["name"], "verifier_medicament_dpd")
+
+    def test_complete_with_tools_still_refuses_unsupported_provider(self):
+        with self.assertRaises(llm.GenerationError):
+            llm.complete_with_tools(
+                "s", "u", model="m", temperature=0.1, max_tokens=100,
+                tools=None, messages=None, json_mode=True, provider="cohere",
+            )
+
+    def test_custom_provider_enters_dpd_tool_loop(self):
+        """Avec note_lookup_dpd activé, le fournisseur `custom` doit passer
+        par l'appel d'outils (comme Mistral), pas par complete() simple."""
+        lookup = DrugLookup(term="Activant", found=True, matched_name="ATIVAN", din="02041413", source="dpd_fuzzy")
+        with mock.patch.object(runtime_config, "value", side_effect=self._dpd_flag_on), \
+             mock.patch.object(llm, "complete_with_tools", side_effect=[_tool_call_completion("Activant"), _final_completion()]) as tools_mock, \
+             mock.patch.object(note_extraction, "search_drug", return_value=lookup):
+            note = extract_note(TRANSCRIPT_FR, parse_layout(GENERAL_LAYOUT), "", "", model="fake-model", provider="custom")
+        self.assertEqual(tools_mock.call_count, 2)
+        self.assertEqual(note.drug_lookups, [lookup])
+        self.assertEqual(tools_mock.call_args_list[0].kwargs["provider"], "custom")
+        self.assertEqual(tools_mock.call_args_list[0].kwargs["tools"][0]["function"]["name"], "verifier_medicaments_dpd")
+
 
 class PostExtractionVerificationTests(unittest.TestCase):
     """Option B du banc d'essai (voir plan de session) : vérification

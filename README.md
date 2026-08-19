@@ -973,7 +973,9 @@ formulation de la consigne pour un modèle plus faible.
 
 **Vérification de médicament par appel d'outil (BDPP Santé Canada), 2026-08-18.**
 Réglage `note_lookup_dpd` (désactivé par défaut, sans effet sauf si le
-pipeline JSON est actif ET le fournisseur est Mistral) : le modèle reçoit un
+pipeline JSON est actif ET le fournisseur sait appeler des outils — Mistral
+ou le point de terminaison personnalisé compatible OpenAI, ex. DeepSeek via
+OpenRouter) : le modèle reçoit un
 outil d'appel de fonction, `verifier_medicament_dpd`
 (`note_extraction._DPD_TOOL_SCHEMA`), qu'il peut invoquer pendant
 l'extraction pour vérifier un nom de médicament incertain contre la Base de
@@ -987,10 +989,10 @@ Choix de conception délibéré, décidé par Fred contre la suggestion initiale
 modèle) : l'appel d'outils permet au modèle de consulter la base **pendant**
 qu'il décide, pas seulement après coup. `llm.py` gagne un point d'entrée SŒUR
 de `complete()` — `complete_with_tools()` — plutôt qu'une extension de sa
-signature : aucun autre fournisseur ne sait aujourd'hui appeler des outils,
-et `complete()` a un contrat simple dont dépendent six branches ; un nouveau
-point d'entrée qui refuse proprement les autres fournisseurs a un impact nul
-sur eux. `note_extraction._extract_note_with_dpd_tool` orchestre une boucle
+signature : seuls les fournisseurs qui le savent faire (Mistral, et le point
+de terminaison personnalisé via `_complete_openai_tools`) appellent des
+outils, et `complete()` garde un contrat simple dont dépendent six branches.
+`note_extraction._extract_note_with_dpd_tool` orchestre une boucle
 bornée (2 tours, 6 appels maximum — le modèle peut ignorer l'outil, l'appeler
 plusieurs fois, ou ne jamais conclure dans le budget imparti, auquel cas un
 dernier tour SANS outil force une réponse).
@@ -1045,6 +1047,23 @@ plusieurs appels à additionner). `extract_note`/`_extract_note_with_dpd_tool`
 acceptent maintenant un `usage_out` optionnel muté en place ; `llm.ToolCompletion`
 porte désormais aussi `usage`. Vérifié par appel direct de
 `_generate_json_pipeline` : jetons réels rapportés.
+
+**Appel d'outils ouvert au point de terminaison personnalisé, 2026-08-19** :
+`llm.complete_with_tools` accepte maintenant le fournisseur `custom`
+(compatible OpenAI, ex. DeepSeek via OpenRouter, serveur local auto-hébergé)
+via un nouvel `llm._complete_openai_tools`, qui rejette `response_format`
+« json_object » pendant les tours d'appel d'outil (le forcer empêcherait le
+modèle d'émettre un `tool_call`) et transmet `reasoning.effort` (réglage
+`custom_llm_reasoning_effort`) sur les tours d'outil mais pas sur le tour
+final JSON. `note_extraction.extract_note` ouvre le même chemin à Mistral et
+à `custom`. **Banc d'essai 2026-08-19, instance de test (dictée Carrière,
+consultations 5/9/10)** : DeepSeek V4 Flash (`~deepseek/deepseek-v4-flash-latest`,
+raisonnement `minimal`) a produit trois notes valides (0 `validator_issues`),
+appelé l'outil BDPP (`Activant → ATIVAN` DIN 02041413 dans les trois passes,
+`L'ensoprazole → Lansoprazole`, fusion corrigée), pour ~18 400 tokens d'entrée
+et ~9-12 500 de sortie, ~0,01 $/consultation — soit ~40 % de tokens d'entrée
+en moins que la référence Mistral sur les mêmes dictées. Détails :
+`/tmp/opencode/bench/out/BENCHMARK_REPORT-deepseek.md`.
 
 **La recherche BDPP fait un filtre préfixe, pas une correspondance floue —
 `search_drug` compare maintenant contre l'extrait COMPLET, pas des préfixes,

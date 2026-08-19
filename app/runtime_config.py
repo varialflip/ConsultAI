@@ -292,8 +292,9 @@ SETTINGS: Tuple[Setting, ...] = (
     # Base de données sur les produits pharmaceutiques de Santé Canada
     # (voir app/drug_lookup.py, note_extraction._extract_note_with_dpd_tool).
     # Sans effet SAUF si note_pipeline_json est activé ET le fournisseur
-    # actif est Mistral (seul fournisseur dont l'appel d'outils est câblé
-    # ici) — voir note_extraction.extract_note. Ajoute de la latence réseau
+    # actif sait appeler des outils (Mistral ou le point de terminaison
+    # personnalisé compatible OpenAI, ex. DeepSeek via OpenRouter) — voir
+    # note_extraction.extract_note. Ajoute de la latence réseau
     # externe à chaque génération (jusqu'à quelques appels DPD). Désactivé
     # par défaut.
     Setting(

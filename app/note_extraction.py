@@ -480,9 +480,10 @@ def _extract_note_with_dpd_tool(
 ) -> ExtractedNote:
     """Variante de ``extract_note`` qui donne au modèle un outil d'appel de
     fonction (``verifier_medicament_dpd``) pendant l'extraction — voir
-    ``app.drug_lookup`` et le réglage ``note_lookup_dpd``. Réservé à Mistral
-    (voir ``llm.complete_with_tools``) : seul fournisseur, aujourd'hui, dont
-    l'appel d'outils est câblé dans ce dépôt.
+    ``app.drug_lookup`` et le réglage ``note_lookup_dpd``. Câblé pour Mistral et
+    pour le point de terminaison personnalisé compatible OpenAI (``custom`` —
+    DeepSeek via OpenRouter, serveur local…) : ``llm.complete_with_tools``
+    connaît ces deux fournisseurs.
 
     Boucle bornée (``_DPD_TOOL_MAX_ROUNDS``/``_DPD_TOOL_MAX_CALLS``) : le
     modèle peut ignorer l'outil complètement (extraction inchangée), l'appeler
@@ -607,7 +608,10 @@ def extract_note(
     user = f"{label} :\n<<<DICTEE\n{transcript.strip()}\nDICTEE>>>"
 
     resolved_provider = provider or llm.active_provider()
-    if resolved_provider == "mistral" and runtime_config.value("note_lookup_dpd") == "true":
+    # Branche selfhosted : l'appel d'outils est câblé pour Mistral et pour le
+    # point de terminaison personnalisé compatible OpenAI (DeepSeek via
+    # OpenRouter, serveur local…) — voir llm.complete_with_tools.
+    if resolved_provider in ("mistral", "custom") and runtime_config.value("note_lookup_dpd") == "true":
         system += _DPD_TOOL_GUIDANCE_EN if language == "en" else _DPD_TOOL_GUIDANCE_FR
         return _extract_note_with_dpd_tool(
             system, user, model=model, temperature=temperature, max_tokens=max_tokens,

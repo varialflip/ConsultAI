@@ -3,6 +3,38 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — branche `selfhosted`, appel d'outils ouvert au point de terminaison personnalisé + banc DeepSeek V4 Flash
+
+`llm.complete_with_tools` accepte maintenant le fournisseur `custom`
+(compatible OpenAI) via un nouvel `_complete_openai_tools` : le
+`response_format` « json_object » est écarté pendant les tours d'appel
+d'outil (le forcer empêcherait le modèle d'émettre un `tool_call` — vérifié
+contre `~deepseek/deepseek-v4-flash-latest` sur OpenRouter), et
+`reasoning.effort` (réglage `custom_llm_reasoning_effort`) est transmis sur
+les tours d'outil mais pas sur le tour final JSON (même règle que
+`_complete_openai`). `note_extraction.extract_note` ouvre donc la
+vérification de médicament par appel d'outil BDPP (`note_lookup_dpd`) à
+Mistral ET au fournisseur `custom`.
+
+Banc d'essai, instance de TEST uniquement (dictée Carrière, consultations
+5/9/10) : DeepSeek V4 Flash (`~deepseek/deepseek-v4-flash-latest`),
+`custom_llm_reasoning_effort=minimal`, JSON pipeline + outil DPD.
+
+- 3/3 notes valides (0 `validator_issues`, rien de bloqué).
+- Outil BDPP réellement appelé : `Activant → ATIVAN` (DIN 02041413) dans les
+  trois passes — le cas critique du chantier, confondu en amont par Mistral
+  — retrouvé correctement, MÉDICATION ACTUELLE avec Ativan/Lorazépam distinct
+  des IPP, plus de fusion.
+- Coût : ~18 400 tokens d'entrée / ~9-12 500 de sortie, ~0,01 $/consultation,
+  soit ~40 % de tokens d'entrée en moins que la référence Mistral
+  (29 985 / 39 337 en entrée sur les cid 9/10).
+
+Écarts à surveiller (revue clinique requise avant décision) : dans une passe
+un « Monochore » reste littéral en MÉDICATION ACTUELLE (faible confiance
+BDPP, correctement non confirmé) ; cid 10 la dose « 0,60 » du Plan apparaît
+dans MÉDICATION ACTUELLE. Rapport :
+`/tmp/opencode/bench/out/BENCHMARK_REPORT-deepseek.md`.
+
 ## 2026-08-18 — branche `selfhosted`, médicament mentionné en narratif absent de la liste
 
 Vu réellement, test.dictai.ca, consultation #10 : la dictée liste 7

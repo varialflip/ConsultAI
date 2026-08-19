@@ -771,6 +771,11 @@ def complete_with_tools(
     pour ``complete()``.
     """
     provider = provider or active_provider()
+    if provider == "custom":
+        # Un point de terminaison personnalisé compatible OpenAI (DeepSeek,
+        # autres serveurs auto-hébergés) expose l'appel d'outils au format
+        # OpenAI — voir _complete_openai_tools.
+        return _complete_openai_tools(system, user, model, temperature, max_tokens, tools, messages, json_mode, provider="custom")
     if provider != "mistral":
         raise GenerationError(
             f"L'appel d'outils n'est pas pris en charge pour le fournisseur « {provider} »."
@@ -2465,4 +2470,114 @@ def _complete_mistral_tools(
             "output_tokens": jetons.get("completion_tokens"),
             "total_tokens": jetons.get("total_tokens"),
         },
+    )
+
+
+def _complete_openai_tools(
+    system: str,
+    user: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    tools: Optional[List[dict]],
+    messages: Optional[List[dict]],
+    json_mode: bool,
+    provider: str = "custom",
+) -> ToolCompletion:
+    """
+    Équivalent de ``_complete_mistral_tools`` pour un point de terminaison
+    personnalisé compatible OpenAI (DeepSeek via OpenRouter, serveur local…),
+    voir ``complete_with_tools``.
+
+    Deux écarts assumés avec la variante OpenAI classique (``_complete_openai``) :
+
+    * ``response_format`` ``json_object`` n'est mis QUE sur le dernier tour,
+      jamais en présence de ``tools`` : forcer du JSON pendant un tour d'appel
+      d'outil empêcherait le modèle d'émettre un ``tool_call`` (vérifié contre
+      ``~deepseek/deepseek-v4-flash-latest`` sur OpenRouter).
+    * ``reasoning.effort`` (fournisseur ``custom`` uniquement) est envoyé sur
+      les tours d'outil — c'est là qu'un raisonnement minimal aide à décider
+      quoi vérifier — mais pas sur le tour final en mode JSON, où il produirait
+      des réponses hors format (même règle que ``_complete_openai``).
+
+    L'historique multi-tours ``messages`` est renvoyé tel quel ; l'appelant
+    (``note_extraction._extract_note_with_dpd_tool``) y ajoute chaque tour
+    assistant + la réponse d'outil avant de rappeler.
+    """
+    client = get_client(provider)
+    label = "Point de terminaison personnalisé"
+    corps = {
+        "model": model,
+        "messages": messages or [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": temperature,
+        "max_completion_tokens": max(max_tokens, _custom_max_tokens()),
+    }
+    if tools:
+        corps["tools"] = tools
+        corps["tool_choice"] = "auto"
+    if json_mode and not tools:
+        corps["response_format"] = {"type": "json_object"}
+    if provider == "custom":
+        effort = _custom_reasoning_effort()
+        # Jamais en mode JSON (tour final sans outil) — même règle que
+        # ``_complete_openai`` : un raisonnement y produit des réponses hors JSON.
+        if effort and not (json_mode and not tools):
+            corps.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
+
+    try:
+        response = _call_tolerant(client.chat.completions.create, corps)
+    except Exception as exc:
+        logger.exception("Échec de l'appel %s", label)
+        raise _translate_error(label, model, exc) from exc
+
+    choix = (getattr(response, "choices", None) or [None])[0]
+    message = getattr(choix, "message", None) or {}
+    texte = str(getattr(message, "content", "") or "")
+    jetons = getattr(response, "usage", None)
+    usage = {
+        "prompt_tokens": getattr(jetons, "prompt_tokens", None),
+        "output_tokens": getattr(jetons, "completion_tokens", None),
+        "total_tokens": getattr(jetons, "total_tokens", None),
+    } if jetons else {}
+    details = getattr(jetons, "completion_tokens_details", None) if jetons else None
+    raisonnement = getattr(details, "reasoning_tokens", None) if details else None
+    if raisonnement is not None:
+        usage["reasoning_tokens"] = raisonnement
+
+    appels: List[ToolCall] = []
+    tool_calls_bruts = []
+    for brut in getattr(message, "tool_calls", None) or []:
+        fonction = getattr(brut, "function", None)
+        if fonction is None:
+            continue
+        appel_id = str(getattr(brut, "id", "") or "")
+        nom = str(getattr(fonction, "name", "") or "")
+        args = str(getattr(fonction, "arguments", "") or "")
+        if not appel_id or not nom:
+            continue
+        appels.append(ToolCall(id=appel_id, name=nom, arguments_raw=args))
+        tool_calls_bruts.append({
+            "id": appel_id,
+            "type": "function",
+            "function": {"name": nom, "arguments": args},
+        })
+
+    # Le SDK OpenAI renvoie un objet, pas un dict : on reconstruit un message
+    # assistant PLAIN (dict) à relancer tel quel au tour suivant, comme
+    # ``_complete_mistral_tools`` renvoyait l'objet JSON brut de l'API.
+    raw_message = {"role": "assistant", "content": ""}
+    if tool_calls_bruts:
+        raw_message["tool_calls"] = tool_calls_bruts
+
+    return ToolCompletion(
+        text=texte,
+        tool_calls=appels,
+        raw_message=raw_message,
+        model=model,
+        provider=provider,
+        finish_reason=str(getattr(choix, "finish_reason", "") or ""),
+        usage=usage,
     )

@@ -552,7 +552,9 @@ fichier (§ 7.4) en bénéficie aussi.
 > n'exécute pas le modèle : le signal part à la soumission de l'appel, pas au
 > lancement interne) : le toast passe alors de « Connexion au modèle… » à
 > « La note se génère… » (ou dès le premier morceau `generation_chunk` si
-> l'événement se perd). Plus aucun voile plein écran bloquant.
+> l'événement se perd). Plus aucun voile plein écran bloquant. Sur mobile,
+> tous les toasts tiennent sur une seule ligne (message tronqué avec des
+> points de suspension).
 
 > Rien de tout cela n'est automatique. Retranscrire écrase du texte que le
 > médecin a pu déjà corriger à la main.

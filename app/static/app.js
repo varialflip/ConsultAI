@@ -134,9 +134,10 @@
                     shadow-lg max-w-md transition-opacity duration-300 flex items-center gap-2`;
     const text = document.createElement('span');
     // ``singleLine`` : le message tient sur une ligne, tronqué par des points
-    // de suspension (ex. « Brouillon chargé », dont le titre peut être long) —
-    // sur mobile, un toast sur deux lignes déborde du cadre compact.
-    text.className = singleLine ? 'flex-1 truncate' : 'flex-1';
+    // de suspension (ex. « Brouillon chargé », dont le titre peut être long).
+    // Sur mobile, ``toast-msg`` force de toute façon une ligne unique (CSS de
+    // #toastZone) — voir index.html.
+    text.className = `toast-msg flex-1 min-w-0${singleLine ? ' truncate' : ''}`;
     text.textContent = message;
     text.title = singleLine ? message : '';
     const close = document.createElement('button');
@@ -228,7 +229,7 @@
     el.className = 'bg-slate-800 text-white text-sm pl-4 pr-2 py-2 rounded-lg shadow-lg max-w-md '
       + 'transition-opacity duration-300 flex items-center gap-2';
     const text = document.createElement('span');
-    text.className = 'flex-1';
+    text.className = 'toast-msg flex-1 min-w-0';
     text.textContent = message;
     const action = document.createElement('button');
     action.type = 'button';
@@ -681,7 +682,7 @@
     spinner.className = 'spinner';
     spinner.setAttribute('aria-hidden', 'true');
     const texte = document.createElement('span');
-    texte.className = 'flex-1 truncate';
+    texte.className = 'toast-msg flex-1 min-w-0 truncate';
     texte.textContent = message;
     const pct = document.createElement('span');
     pct.className = 'shrink-0 text-xs text-white/80 tabular-nums';

@@ -3,6 +3,14 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — v2.0.0-beta.69
+
+- **Tous les toasts tiennent sur une ligne sur mobile** (beta.69). Le message
+  est tronqué avec des points de suspension plutôt que de passer sur deux
+  lignes — y compris le toast « Note générée avec {model}. Relisez-la avant
+  utilisation. », trop long pour une ligne pleine largeur. (Desktop inchangé :
+  les messages longs continuent de s'afficher en entier.)
+
 ## 2026-08-19 — v2.0.0-beta.68
 
 - **Toasts — position et compacité ajustées** (beta.68). Sur **mobile**, la

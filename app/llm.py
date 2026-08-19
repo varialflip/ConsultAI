@@ -565,11 +565,12 @@ def list_available_models(provider: Optional[str] = None) -> List[str]:
 # pour les modèles dont on ignore la limite et pour le jour où elle change.
 # ---------------------------------------------------------------------------
 #: Plafonds connus, par fournisseur. Absent = aucune limite connue, on envoie la
-#: valeur demandée telle quelle.
-_MAX_OUTPUT_TOKENS = {
-    # Famille « command-a » : 8192 jetons de sortie.
-    "cohere": 8192,
-}
+#: valeur demandée telle quelle. Cohere n'y figure plus : sa limite réelle
+#: dépend du modèle (64000 pour command-a-plus) et est découverte à l'exécution
+#: par ``_complete_cohere`` (appel refusé → ``_learn_max_tokens``), comme pour
+#: le point de terminaison personnalisé. L'ancien plafond de 8192 étranglait
+#: les modèles à raisonnement, qui saturaient tout le budget avant le texte.
+_MAX_OUTPUT_TOKENS = {}
 
 #: Plafonds découverts à l'exécution, par (fournisseur, modèle). Complété quand
 #: un fournisseur nous corrige, pour ne pas répéter la requête refusée.
@@ -605,6 +606,17 @@ _CUSTOM_MAX_TOKENS_DEFAUT = 32768
 #: Plafond de la relance automatique (raisonnement débordé) — voir
 #: ``generate_note_stream``.
 _CUSTOM_MAX_TOKENS_PLAFOND = 65536
+
+#: Budget de sortie par défaut pour Cohere. La famille command-a raisonne elle
+#: aussi (elle l'a déjà montré : une note vide « MAX_TOKENS » avec le budget de
+#: 8192 de Gemini), mais le plafond réel est plus élevé — 64000 pour
+#: command-a-plus (constaté à l'API). Le même mécanisme de relance qu'au point
+#: de terminaison personnalisé s'applique (voir ``generate_note_stream``).
+_COHERE_MAX_TOKENS_DEFAUT = 32000
+
+#: Plafond de la relance pour Cohere (réponse vide, raisonnement saturant) —
+#: la limite annoncée par l'API pour la famille command-a-plus.
+_COHERE_MAX_TOKENS_PLAFOND = 64000
 
 
 def _custom_max_tokens() -> int:
@@ -1411,15 +1423,26 @@ def generate_note_stream(
         user_prompt = f"{user_prompt}\n\n{note[langue]}"
 
     t0 = time.monotonic()
-    # Budget de sortie propre au point de terminaison personnalisé : un modèle
-    # à raisonnement (DeepSeek…) consomme une large part dans sa pensée, et un
-    # budget trop bas (celui de Gemini) produisait une note vide (« motif :
-    # length »). La boucle relance une fois avec un budget doublé si le
-    # raisonnement a saturé tout le budget avant le moindre texte.
-    budget = _custom_max_tokens() if provider == "custom" else settings.gemini_max_output_tokens
+    # Budget de sortie propre aux fournisseurs à raisonnement : un modèle
+    # (DeepSeek, Cohere command-a…) consomme une large part dans sa pensée, et
+    # un budget trop bas (celui de Gemini) produisait une note vide (« motif :
+    # length » / « MAX_TOKENS »). La boucle relance une fois avec un budget
+    # doublé si le raisonnement a saturé tout le budget avant le moindre texte.
+    if provider == "custom":
+        budget = _custom_max_tokens()
+        budget_plafond = _CUSTOM_MAX_TOKENS_PLAFOND
+        tentatives = 3
+    elif provider == "cohere":
+        budget = _COHERE_MAX_TOKENS_DEFAUT
+        budget_plafond = _COHERE_MAX_TOKENS_PLAFOND
+        tentatives = 3
+    else:
+        budget = settings.gemini_max_output_tokens
+        budget_plafond = None
+        tentatives = 1
     raw = ""
     result = None
-    for tentative in range(3 if provider == "custom" else 1):
+    for tentative in range(tentatives):
         stream = complete_stream(
             build_system_prompt(
                 system_instructions, runtime_config.general_prompt(langue), langue
@@ -1460,8 +1483,8 @@ def generate_note_stream(
 
         if result is None or result.text.strip() or not result.truncated:
             break
-        if tentative < 2:
-            budget = min(int(budget * 2), _CUSTOM_MAX_TOKENS_PLAFOND)
+        if tentative < tentatives - 1 and budget_plafond is not None:
+            budget = min(int(budget * 2), budget_plafond)
             logger.warning(
                 "Note vide (%s, modèle %s) : raisonnement saturant le budget de "
                 "sortie — relance au budget %d jetons",

@@ -3,6 +3,20 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — v2.0.0-beta.71
+
+- **Cohere : note vide « MAX_TOKENS » corrigée** (beta.71). Les modèles de la
+  famille command-a raisonnent et consommaient tout leur budget de sortie
+  (plafonné à 8192 par l'ancienne limite codée en dur) avant de produire le
+  moindre texte — la génération échouait avec « réponse vide (motif :
+  MAX_TOKENS) », constaté en production sur `command-a-plus-05-2026`. Cohere
+  bénéficie désormais du traitement réservé au point de terminaison
+  personnalisé : budget de sortie propre de **32000 jetons**, relance
+  automatique au budget doublé (plafond 64000, la limite réelle annoncée par
+  l'API) si le raisonnement a tout consommé sans texte. La limite codée en dur
+  est retirée : la vraie limite par modèle est apprise de l'API à l'exécution,
+  comme pour `custom`.
+
 ## 2026-08-19 — v2.0.0-beta.70
 
 - **Toast mobile collé au bord** (beta.70). La zone de toasts touche le bord

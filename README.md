@@ -485,9 +485,9 @@ exacte), **Vocabulaire additionnel** et **Langue**.
 **Rubrique finale obligatoire.** Quelle que soit la mise en page, la note se
 termine toujours par la section **`Éléments à valider`** — corrections apportées
 et éléments à confirmer, en liste télégraphique (au-delà de 8 éléments, ils sont
-regroupés par catégorie). La consigne générale l'exige (§ 4.1) et les gabarits
-français livrés l'inscrivent (`## ÉLÉMENTS À VALIDER`) pour que tous les modèles
-la produisent, sans exception.
+regroupés par catégorie). La consigne générale l'exige (§ 4) et les gabarits
+livrés l'inscrivent (`## ÉLÉMENTS À VALIDER` / `## ITEMS TO VERIFY`) pour que
+tous les modèles la produisent, sans exception.
 
 **Structure des rubriques.** La consigne générale impose deux règles de mise en
 forme (§ 1 et § 3), renforcées en 2026-08-17 pour les modèles plus sensibles :
@@ -499,6 +499,14 @@ d'en-tête sans valeur dictée (médecin de famille, lieu) ; le marqueur
 `[inaudible]` ne sert qu'à un passage inintelligible situé À L'INTÉRIEUR d'une
 rubrique qui produit par ailleurs du contenu — il ne remplace jamais une rubrique
 ou une ligne vide.
+
+Depuis la **consolidation de 2026-08-19**, les règles transversales (aucune
+invention, remplissage interdit, style déclaratif et ellipse du sujet,
+raisonnement clinique préservé, première personne d'Impression/Plan, voix
+dictée, dénominalisation) ne sont plus énoncées que dans la consigne générale,
+en sections § 0 à § 4 ; les gabarits livrés ne portent plus que leur **carte de
+rubriques** et leur mise en page. Placée APRÈS les gabarits dans le prompt
+système, la consigne générale l'emporte en cas de conflit.
 
 Champs de substitution disponibles dans la mise en page : `{{DATE}}`,
 `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. (`{{PATIENT}}` et `{{DOSSIER}}` sont

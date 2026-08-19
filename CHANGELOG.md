@@ -3,6 +3,12 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-19 — v2.0.0-beta.70
+
+- **Toast mobile collé au bord** (beta.70). La zone de toasts touche le bord
+  inférieur de l'écran (plus de marge de 8 px) ; la safe-area de l'iPhone est
+  toujours respectée (`env(safe-area-inset-bottom)`).
+
 ## 2026-08-19 — v2.0.0-beta.69
 
 - **Tous les toasts tiennent sur une ligne sur mobile** (beta.69). Le message

@@ -28,6 +28,11 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   invalide — Mistral n'accepte que le daté `voxtral-mini-transcribe-realtime-2602`
   (`-latest` n'existe pas pour ce modèle, erreur 400 `invalid_model`). Défaut
   corrigé (code + `.env.example`) et valeur effective rafraîchie.
+- **Correctif** : la route `POST /api/dictation/{id}/utterance_ended` était
+  synchrone — exécutée par FastAPI dans le threadpool, la planification de la
+  transcription y échouait en « no running event loop » (500), le flush n'était
+  jamais consommé et la dictée ne transcrivait qu'au « Terminer ». Passée en
+  `async def`, la fin d'énoncé relance la transcription immédiatement.
 
 ## 2026-08-20 — v2.0.0-beta.83
 

@@ -110,6 +110,56 @@
       .join('\n');
   }
 
+  /**
+   * Glissé latéral pour fermer un toast (mobile surtout — la souris fonctionne
+   * aussi via les événements pointeur). La croix gère son propre clic : le
+   * glissé ne la concerne pas. ``pan-y`` laisse le défilement vertical au
+   * navigateur, seul l'axe horizontal nous revient.
+   *
+   * ``suspend``/``resume`` suspendent le compte à rebours pendant le glissé —
+   * disparaître sous le doigt serait pire qu'une notification qui s'attarde —
+   * et le relancent après un relâché sans dépassement.
+   */
+  function attachSwipeDismiss(el, dismiss, suspend, resume) {
+    let swipeX = null;
+    el.style.touchAction = 'pan-y';
+    el.addEventListener('pointerdown', (ev) => {
+      if (ev.target.closest('button')) return;
+      swipeX = ev.clientX;
+      suspend();
+      el.setPointerCapture(ev.pointerId);
+    });
+    el.addEventListener('pointermove', (ev) => {
+      if (swipeX === null) return;
+      const dx = ev.clientX - swipeX;
+      el.style.transition = 'none';
+      el.style.transform = `translateX(${dx}px)`;
+      el.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / 160));
+    });
+    el.addEventListener('pointerup', (ev) => {
+      if (swipeX === null) return;
+      const dx = ev.clientX - swipeX;
+      swipeX = null;
+      if (Math.abs(dx) > 64) {
+        dismiss(Math.sign(dx) * el.offsetWidth * 1.2);
+      } else {
+        // Retour élastique, puis un sursis avant l'auto-fermeture.
+        el.style.transition = 'transform 150ms ease-out, opacity 150ms ease-out';
+        el.style.transform = '';
+        el.style.opacity = '';
+        resume();
+      }
+    });
+    el.addEventListener('pointercancel', () => {
+      if (swipeX === null) return;
+      swipeX = null;
+      el.style.transition = '';
+      el.style.transform = '';
+      el.style.opacity = '';
+      resume();
+    });
+  }
+
   /** Notification éphémère en bas à droite. */
   /**
    * Retourne un ``{ dismiss }`` : nécessaire pour un toast « en cours »
@@ -124,10 +174,10 @@
    */
   function toast(message, type = 'info', durationMs = 4500, singleLine = false) {
     const palette = {
-      info: 'bg-slate-800',
-      success: 'toast-success',
+      info: 'toast-accent',
+      success: 'toast-accent',
+      warning: 'toast-accent',
       error: 'bg-red-700',
-      warning: 'bg-amber-600',
     };
     const el = document.createElement('div');
     el.className = `${palette[type] || palette.info} text-white text-sm pl-4 pr-2 py-2 rounded-lg
@@ -169,64 +219,30 @@
     // croix, le glissé ou un dismiss() explicite (voir showProgressToast).
     timer = durationMs > 0 ? setTimeout(dismiss, durationMs) : null;
     close.addEventListener('click', () => dismiss());
-
-    // Glissé pour fermer. La croix gère son propre clic : le glissé ne la
-    // concerne pas. pan-y laisse le défilement vertical au navigateur, seul
-    // l'axe horizontal nous revient.
-    let swipeX = null;
-    el.style.touchAction = 'pan-y';
-    el.addEventListener('pointerdown', (ev) => {
-      if (ev.target.closest('button')) return;
-      swipeX = ev.clientX;
-      clearTimeout(timer);
-      el.setPointerCapture(ev.pointerId);
-    });
-    el.addEventListener('pointermove', (ev) => {
-      if (swipeX === null) return;
-      const dx = ev.clientX - swipeX;
-      el.style.transition = 'none';
-      el.style.transform = `translateX(${dx}px)`;
-      el.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / 160));
-    });
-    el.addEventListener('pointerup', (ev) => {
-      if (swipeX === null) return;
-      const dx = ev.clientX - swipeX;
-      swipeX = null;
-      if (Math.abs(dx) > 64) {
-        dismiss(Math.sign(dx) * el.offsetWidth * 1.2);
-      } else {
-        // Retour élastique, puis un sursis avant l'auto-fermeture.
-        el.style.transition = 'transform 150ms ease-out, opacity 150ms ease-out';
-        el.style.transform = '';
-        el.style.opacity = '';
-        timer = setTimeout(dismiss, 3000);
-      }
-    });
-    el.addEventListener('pointercancel', () => {
-      if (swipeX === null) return;
-      swipeX = null;
-      el.style.transition = '';
-      el.style.transform = '';
-      el.style.opacity = '';
-    });
+    // Glissé pour fermer. Le compte à rebours est suspendu pendant le glissé
+    // et relancé après un relâché sans dépassement (voir attachSwipeDismiss).
+    attachSwipeDismiss(
+      el, dismiss,
+      () => clearTimeout(timer),
+      () => { timer = setTimeout(() => dismiss(), 3000); },
+    );
     return { dismiss: () => dismiss() };
   }
 
   /**
    * Variante de toast() porteuse d'un bouton d'action, pour une notification
    * qui propose de FAIRE quelque chose plutôt que de seulement informer (par
-   * exemple : suivre une dictée commencée sur un autre appareil). Volontairement
-   * plus simple que toast() — pas de glissé pour fermer, une croix suffit —
-   * pour ne pas risquer de régression sur le toast partout ailleurs utilisé.
+   * exemple : suivre une dictée commencée sur un autre appareil). Même
+   * fermeture que toast() — croix ou glissé latéral.
    *
-   * ``durationMs = 0`` rend le toast persistant : il ne part que par la croix
-   * ou par le bouton d'action. Une invitation manquée parce qu'on regardait
-   * ailleurs pendant 12 s ne doit pas exiger un rechargement de page pour
-   * réapparaître.
+   * ``durationMs = 0`` rend le toast persistant : il ne part que par la croix,
+   * le glissé ou le bouton d'action. Une invitation manquée parce qu'on
+   * regardait ailleurs pendant 12 s ne doit pas exiger un rechargement de
+   * page pour réapparaître.
    */
   function toastWithAction(message, actionLabel, onAction, durationMs = 12000) {
     const el = document.createElement('div');
-    el.className = 'bg-slate-800 text-white text-sm pl-4 pr-2 py-2 rounded-lg shadow-lg max-w-md '
+    el.className = 'toast-accent text-white text-sm pl-4 pr-2 py-2 rounded-lg shadow-lg max-w-md '
       + 'transition-opacity duration-300 flex items-center gap-2';
     const text = document.createElement('span');
     text.className = 'toast-msg flex-1 min-w-0';
@@ -246,16 +262,29 @@
 
     let dismissed = false;
     let timer;
-    const dismiss = () => {
+    const dismiss = (slideX) => {
       if (dismissed) return;
       dismissed = true;
       clearTimeout(timer);
-      el.style.opacity = '0';
-      setTimeout(() => el.remove(), 320);
+      if (slideX) {
+        el.style.transition = 'transform 200ms ease-in, opacity 200ms ease-in';
+        el.style.transform = `translateX(${slideX}px)`;
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 220);
+      } else {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 320);
+      }
     };
     timer = durationMs > 0 ? setTimeout(dismiss, durationMs) : null;
-    close.addEventListener('click', dismiss);
+    close.addEventListener('click', () => dismiss());
     action.addEventListener('click', () => { dismiss(); onAction(); });
+    // Même fermeture que les autres toasts : croix, ou glissé latéral.
+    attachSwipeDismiss(
+      el, dismiss,
+      () => clearTimeout(timer),
+      () => { timer = setTimeout(() => dismiss(), 3000); },
+    );
   }
 
   /**

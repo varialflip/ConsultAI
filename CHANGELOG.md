@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-20 — v2.0.0-beta.82
+
+- **Toasts harmonisés** (beta.82). Tous les toasts non « live » (information,
+  succès, avertissement, brouillon abandonné, invitations) prennent la
+  couleur d'accent du thème — seuls les erreurs restent rouges. Les toasts de
+  génération et de transcription restent noirs (en direct). Tous les toasts
+  se ferment à la croix **ou au glissé latéral**, sur mobile comme au
+  bureau (le toast à bouton d'action y a droit aussi).
+
 ## 2026-08-20 — v2.0.0-beta.81
 
 - **Correctif — le toast « brouillon abandonné » ne s'affichait pas** (beta.81).

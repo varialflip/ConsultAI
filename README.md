@@ -596,6 +596,22 @@ docker compose up -d
 docker compose up -d
 ```
 
+> **Machine de référence (`/opt/dictai`)** : la pile y monte le code du dépôt
+> en lecture seule (`/home/opc/ConsultAI/app` → `/app/app`, ainsi que
+> `CHANGELOG.md` — voir `docker-compose.yml`). Le conteneur tourne donc
+> directement la source, sans attendre l'image de la CI. Avant le
+> redéploiement, régénérer la feuille de style Tailwind (artefact de build
+> absent du dépôt) puis recréer le conteneur :
+>
+> ```bash
+> cd /home/opc/ConsultAI
+> [ -d node_modules ] || npm ci
+> node_modules/.bin/tailwindcss -i app/static/tailwind-src.css -o app/static/tailwind.css --minify
+> cd /opt/dictai
+> sudo docker compose pull consultai
+> sudo docker compose up -d --force-recreate consultai
+> ```
+
 Le schéma de la base est migré automatiquement au démarrage : colonnes ajoutées,
 gabarits protégés rafraîchis, gabarits livrés obsolètes retirés. Les journaux
 l'indiquent ligne par ligne.

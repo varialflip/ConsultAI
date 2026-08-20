@@ -9,11 +9,43 @@ Qwen Omni, point de terminaison personnalisé). Branché sur
 
 ## Cycle de déploiement
 
+Deux chemins bien distincts. Un simple push ne déploie rien ; une release
+(tag + déploiement) n'est faite que lorsqu'elle est **demandée explicitement**.
+
+### Commit simple — aucun déploiement
+
 1. Éditer le code ici.
 2. `git add` / `git commit` / `git push origin main`.
-3. Tagger : `git tag v2.0.0-beta.X && git push origin v2.0.0-beta.X`.
-4. CI construit et publie l'image (amd64 + arm64).
-5. Redéployer : `cd /opt/dictai && sudo docker compose pull consultai && sudo docker compose up -d consultai`.
+3. Rien d'autre : **pas de bump de version, pas de tag, pas de
+   redéploiement**. La CI publie bien `latest` + `sha-…` à chaque push
+   (image de référence), mais la pile reste épinglée à la dernière release.
+
+### Tag + déploiement — seulement sur demande explicite
+
+1. Bumper la version : `app/__init__.py` (`__version__`), entrée datée dans
+   `CHANGELOG.md`, documentation à jour (README, EFVP le cas échéant,
+   `.env.example`) — le tout dans le même commit.
+2. `git add` / `git commit` / `git push origin main`.
+3. Tagger : `git tag v2.0.0-beta.X && git push origin v2.0.0-beta.X` (la CI
+   publie l'image épinglée, amd64 + arm64 — dépendances Python et base).
+4. **Le code local EST le déploiement** : la pile `/opt/dictai` monte
+   `/home/opc/ConsultAI/app` → `/app/app` et `CHANGELOG.md` en lecture seule
+   (bind mount, voir `docker-compose.yml`). Le conteneur tourne directement
+   la source : aucune attente de la CI.
+5. Redéployer : régénérer la feuille Tailwind (artefact absent du dépôt) puis
+   recréer le conteneur :
+
+   ```bash
+   cd /home/opc/ConsultAI
+   [ -d node_modules ] || npm ci
+   node_modules/.bin/tailwindcss -i app/static/tailwind-src.css -o app/static/tailwind.css --minify
+   cd /opt/dictai
+   sudo docker compose pull consultai
+   sudo docker compose up -d --force-recreate consultai
+   ```
+
+   `--force-recreate` garantit la recréation même quand seule la source a
+   changé (le montage est recalculé à chaque démarrage).
 
 ## Règle permanente — documentation toujours en synchronisation
 
@@ -39,10 +71,11 @@ même commit** :
 
 ## Contraintes du code
 
-- Version logicielle : `app/__init__.py` (`__version__`). **Toujours aligner
-  la version du code sur le tag publié** — elle pilote la purge du cache du
-  service worker (`/sw.js`) et l'affichage de la version sur la page de
-  connexion.
+- Version logicielle : `app/__init__.py` (`__version__`). Elle ne change
+  **que lors d'une release** (tag + déploiement), jamais sur un simple push —
+  elle pilote la purge du cache du service worker (`/sw.js`) et l'affichage
+  de la version sur la page de connexion. Chaque tag publié doit avoir son
+  `__version__` aligné dans le même commit.
 - La langue des commentaires et du code est le **français** ; les textes
   d'interface passent par `app/i18n.py` (fr / en).
 - L'identité du patient (nom, numéro de dossier) n'est **ni collectée ni

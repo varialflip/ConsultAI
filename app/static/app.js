@@ -488,6 +488,35 @@
   let genRaf = null;
   let lastGenRender = 0;
 
+  // Révélation progressive de la TRANSCRIPTION — même mécanique que la note
+  // (voir createTextReveal). ``committedText`` est la base AUTORITAIRE du
+  // texte committé, jamais la valeur live de la boîte : pendant une
+  // révélation en cours celle-ci ne contient qu'un préfixe, et en repartir
+  // perdrait la queue non dévoilée. Le serveur écrit de toute façon la
+  // version durable (scheduleSave ignore raw_transcript pendant la dictée).
+  let committedText = '';
+  const transcriptReveal = createTextReveal((shown) => {
+    const box = $('transcript');
+    if (!box) return;
+    box.value = shown;
+    scrollTranscriptToBottom();
+    // La boîte ne contient qu'un préfixe pendant le dévoilement : il faut
+    // garder hasUnsavedChanges() cohérent, sans quoi la modale de conflit
+    // bloquerait la mise à jour en direct suivante (la transcription est
+    // écrite par le serveur, jamais par ce préfixe).
+    state.lastSavedSnapshot = workspaceSnapshot();
+  });
+
+  /**
+   * Réinitialise la révélation quand la transcription est réécrite en bloc
+   * (retranscription, ouverture d'un brouillon, reprise, brouillon neuf) :
+   * la boîte devient la nouvelle base ``committedText``, sans dévoilement.
+   */
+  function resetTranscriptReveal() {
+    transcriptReveal.reset();
+    committedText = $('transcript').value;
+  }
+
   const state = {
     templates: [],
     isTemplateAdmin: true,
@@ -826,6 +855,7 @@
       // donc pas non plus — silencieusement, ce n'est pas un échec.
       if (data.superseded) return;
       $('transcript').value = formatSentences(data.transcript);
+      resetTranscriptReveal();
       state.transcriptLanguage = data.stt_language || (tpl ? tpl.language : '');
       // Le serveur a déjà écrit ce texte en base. On force malgré tout une
       // sauvegarde : elle emporte aussi le gabarit qui vient de changer, et
@@ -1054,10 +1084,13 @@
     if (!fresh.length) return;
     dictation.appliedParts = session.parts.length;
 
-    const box = $('transcript');
-    const existing = box.value.replace(/\s+$/, '');
-    box.value = formatSentences(existing ? `${existing} ${fresh.join(' ')}` : fresh.join(' '));
-    scrollTranscriptToBottom();
+    // La base est ``committedText``, jamais la valeur live de la boîte (un
+    // préfixe pendant une révélation en cours). La révélation dévoile le
+    // texte progressivement, comme la note structurée.
+    committedText = formatSentences(
+      committedText ? `${committedText} ${fresh.join(' ')}` : fresh.join(' '),
+    );
+    transcriptReveal.set(committedText);
     updateTranscriptMeta({ duration_seconds: session.transcribed_seconds });
     updateActionButtons();
   }
@@ -1147,6 +1180,10 @@
     clearTimeout(dictation.retryHandle);
     stopDictationPolling();
     clearLiveLines();
+    // La base ``committedText`` repart de la boîte TELLE QUELLE : une dictée
+    // peut s'ouvrir sur un brouillon déjà transcrit, et les appends suivants
+    // doivent s'y ajouter (comportement historique d'applyDictationParts).
+    resetTranscriptReveal();
     dictation.localId = null;
     dictation.sessionId = null;
     dictation.consultationId = null;
@@ -2101,6 +2138,7 @@
       $('transcript').value = formatSentences(
         existing ? `${existing}\n\n${result.transcript}` : result.transcript,
       );
+      resetTranscriptReveal();
 
       if (result.stt_language) state.transcriptLanguage = result.stt_language;
       updateTranscriptMeta(result);
@@ -3347,6 +3385,7 @@
       state.recordedSeconds = draft.audio_seconds || 0;
 
       $('transcript').value = formatSentences(draft.raw_transcript);
+      resetTranscriptReveal();
       // Toujours la dernière note GÉNÉRÉE, jamais une version éditée : une
       // régénération remplace désormais ``edited_markdown`` sans condition
       // (voir api_generate), donc les deux ne divergent plus qu'en cours de
@@ -3403,6 +3442,7 @@
     state.lastSavedSnapshot = '';
     state.lastGeneratedMarkdown = '';
     $('transcript').value = '';
+    resetTranscriptReveal();
     $('markdownEditor').value = '';
     $('ctxExtra').value = '';
     clearMetadata();
@@ -5589,16 +5629,18 @@
       showBlockingSyncModal('sync.conflict_transcript');
       return;
     }
-    const box = $('transcript');
-    const existing = box.value.replace(/\s+$/, '');
-    box.value = formatSentences(existing ? `${existing} ${payload.text}` : payload.text);
-    scrollTranscriptToBottom();
+    // Base = ``committedText`` (jamais la valeur live de la boîte, préfixe
+    // pendant une révélation). La révélation synchrone le snapshot au fil du
+    // dévoilement (voir transcriptReveal) : pas de faux conflit en direct.
+    committedText = formatSentences(
+      committedText ? `${committedText} ${payload.text}` : payload.text,
+    );
+    transcriptReveal.set(committedText);
     updateTranscriptMeta({ duration_seconds: payload.audio_seconds });
     updateActionButtons();
     // Le texte poussé est déjà durable côté serveur : ne pas le marquer
-    // « à sauvegarder », sinon la prochaine sauvegarde automatique renverrait
-    // inutilement ce qui vient d'arriver.
-    state.lastSavedSnapshot = workspaceSnapshot();
+    // « à sauvegarder » — la révélation (transcriptReveal) synchronise le
+    // snapshot au fil du dévoilement, donc il ne reste jamais « en attente ».
   }
 
   /* -------------------------------------------------------------------------
@@ -5640,12 +5682,20 @@
       const el = document.createElement('div');
       el.className = 'live-line';
       box.appendChild(el);
-      entry = { el };
+      // Révélation propre à l'énoncé : la ligne « dactylographie » au fil des
+      // deltas, comme la note structurée.
+      entry = {
+        el,
+        accum: '',
+        reveal: createTextReveal((shown) => { el.textContent = shown; }),
+      };
       liveLines.set(payload.utterance_id, entry);
     }
-    // « text » = énoncé complet tel qu'accumulé par le serveur : il
-    // auto-répare toute perte de delta en route.
-    entry.el.textContent = payload.text || (entry.el.textContent || '') + (payload.delta || '');
+    // « text » = énoncé complet tel qu'accumulé par le serveur (auto-réparation
+    // d'un delta perdu) ; « delta » = incrément. ``accum`` suit la cible sans
+    // dépendre du contenu affiché (préfixe pendant la révélation).
+    entry.accum = payload.text || entry.accum + (payload.delta || '');
+    entry.reveal.set(entry.accum);
     box.classList.remove('hidden');
     scrollTranscriptToBottom();
   }
@@ -5655,6 +5705,7 @@
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
     const entry = liveLines.get(payload.utterance_id);
     if (!entry) return;
+    entry.reveal.reset();
     entry.el.remove();
     liveLines.delete(payload.utterance_id);
     const box = liveLinesBox();
@@ -5741,6 +5792,60 @@
     }
 
     startGenReveal();
+  }
+
+  /**
+   * Révélation progressive d'un texte — la même mécanique que la note
+   * structurée (voir genRevealFrame/applyGenShown), réutilisée pour la
+   * transcription et les lignes provisoires.
+   *
+   * ``set(cible)`` poursuit le dévoilement vers la cible : des appels
+   * successifs étendent la cible sans repartir de zéro. ``reset()`` annule.
+   * ``onApply(préfixe)`` reçoit le texte à afficher, borné à ~50 ms de rendu.
+   */
+  function createTextReveal(onApply) {
+    let shown = '';
+    let target = '';
+    let raf = null;
+    let lastRender = 0;
+
+    function frame(now) {
+      raf = null;
+      if (shown.length < target.length) {
+        // Rattrapage proportionnel : gros retard → grandes enjambées ; en fin
+        // de course, pas minuscules (finition lissée).
+        const remaining = target.length - shown.length;
+        const step = Math.max(2, Math.round(remaining * 0.15));
+        shown = target.slice(0, shown.length + Math.min(step, remaining));
+      } else {
+        shown = target;  // à jour — ou cible qui a rembobiné
+      }
+
+      if (shown.length >= target.length || now - lastRender >= 50) {
+        lastRender = now;
+        onApply(shown);
+      }
+
+      if (shown.length < target.length) {
+        raf = requestAnimationFrame(frame);
+      }
+    }
+
+    return {
+      /** Dévoile vers ``next`` (étend la cible si un dévoilement est en cours). */
+      set(next) {
+        target = next;
+        if (shown.length > target.length) shown = target;
+        if (!raf) raf = requestAnimationFrame(frame);
+      },
+      reset() {
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+        shown = '';
+        target = '';
+        lastRender = 0;
+      },
+      get shown() { return shown; },
+    };
   }
 
   /** Démarre (ou relance) la boucle d'animation qui dévoile le texte. */

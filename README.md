@@ -597,6 +597,10 @@ Trois modes, réglés par `STT_REALTIME_MODE` (défaut `off`) :
 | `vad` | À la fin de chaque énoncé, le navigateur signale au serveur de transcrire immédiatement ; coupe au silence (ffmpeg fait autorité sur la frontière) ; le texte apparaît quelques secondes après chaque pause | **tous** (dont Parakeet local) |
 | `sse` | Idem `vad`, plus : le texte provisoire arrive en **deltas** (Mistral Voxtral realtime) pendant la parole, affiché en italique sous la transcription ; le commit durable suit le chemin habituel | Mistral seulement |
 
+Le texte de la transcription s'affiche **progressivement** dans le panneau STT
+(« token par token »), avec la même mécanique que la note structurée — que ce
+soit les segments committés ou la ligne provisoire du mode `sse`.
+
 Précisions importantes :
 
 - **Le VAD ne filtre jamais l'enregistrement.** Le fichier brut reste complet

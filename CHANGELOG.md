@@ -33,6 +33,10 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   transcription y échouait en « no running event loop » (500), le flush n'était
   jamais consommé et la dictée ne transcrivait qu'au « Terminer ». Passée en
   `async def`, la fin d'énoncé relance la transcription immédiatement.
+- **Texte progressif dans le panneau STT**. La transcription apparaît en
+  continu, « token par token », avec la même mécanique que la note structurée
+  (rattrapage proportionnel, finition lissée) : segments committés et ligne
+  provisoire du mode streaming se dévoilent au fil de l'eau.
 
 ## 2026-08-20 — v2.0.0-beta.83
 

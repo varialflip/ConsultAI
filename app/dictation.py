@@ -874,6 +874,22 @@ def _transcribe_one_sse(session: DictationSession, payload, hints: str) -> dict:
 
     try:
         texte = transcribe_mistral_streaming(payload, hints, on_delta)
+        moteur = ("mistral",
+                  runtime_config.value("mistral_realtime_model") or _MISTRAL_REALTIME_MODEL_DEFAUT)
+    except TranscriptionError as exc:
+        # Le canal temps réel a échoué (réseau, modèle, quota…) : on retombe
+        # sur la transcription batch du même énoncé pour ne pas perdre la
+        # parole. Le texte arrive alors d'un bloc, sans ligne provisoire —
+        # c'est la garantie de robustesse, pas la promesse de latence.
+        logger.warning("Dictée %s : temps réel Mistral indisponible, repli batch — %s",
+                       session.id, exc)
+        try:
+            resultat = transcribe_payload(payload, hints)
+        except TranscriptionError:
+            raise
+        texte = (resultat.get("transcript") or "").strip()
+        moteur = (resultat.get("provider") or "mistral",
+                  resultat.get("model") or _MISTRAL_REALTIME_MODEL_DEFAUT)
     finally:
         # Toujours publié, même sur échec : une ligne provisoire ne doit pas
         # survivre à l'énoncé qui l'a produite.
@@ -884,8 +900,8 @@ def _transcribe_one_sse(session: DictationSession, payload, hints: str) -> dict:
         })
     return {
         "transcript": texte,
-        "provider": "mistral",
-        "model": runtime_config.value("mistral_realtime_model") or _MISTRAL_REALTIME_MODEL_DEFAUT,
+        "provider": moteur[0],
+        "model": moteur[1],
     }
 
 

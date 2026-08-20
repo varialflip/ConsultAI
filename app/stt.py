@@ -1791,34 +1791,178 @@ _MISTRAL_MODEL_DEFAUT = "voxtral-mini-latest"
 _MISTRAL_REALTIME_MODEL_DEFAUT = "voxtral-mini-transcribe-realtime-2602"
 
 
+def _decode_pcm16(content: bytes) -> bytes:
+    """Transcode l'OGG/Opus d'un énoncé en PCM s16le 16 kHz mono brut.
+
+    C'est le format attendu par le canal temps réel de Mistral
+    (``audio_format`` de la session : ``pcm_s16le`` / 16000). Le transcodage
+    est fait ici, à l'émission, plutôt que dans la boucle de réception : il
+    n'a pas besoin d'attendre le handshake.
+    """
+    if not _ffmpeg_available():
+        raise TranscriptionError(
+            "ffmpeg est absent du conteneur : transcodage PCM impossible."
+        )
+    workdir = tempfile.mkdtemp(prefix="consultai-pcm-")
+    src = os.path.join(workdir, "source")
+    dst = os.path.join(workdir, "out.pcm")
+    try:
+        with open(src, "wb") as handle:
+            handle.write(content)
+        _run_ffmpeg([
+            "-loglevel", "error", "-i", src, "-vn",
+            "-map_metadata", "-1",
+            "-ac", "1", "-ar", "16000",
+            "-c:a", "pcm_s16le",
+            "-f", "s16le", "-y", dst,
+        ])
+        with open(dst, "rb") as handle:
+            return handle.read()
+    except (TranscriptionError, OSError) as exc:
+        raise TranscriptionError(
+            f"Transcodage PCM de l'énoncé impossible : {exc}"
+        ) from exc
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _erreur_mistral(payload: dict) -> str:
+    """Message affichable depuis un événement « error » du canal temps réel."""
+    err = payload.get("error")
+    if isinstance(err, dict):
+        msg = err.get("message")
+        if isinstance(msg, str) and msg:
+            return msg
+    return "erreur du canal temps réel Mistral"
+
+
+def _transcrire_realtime_mistral(
+    model: str,
+    api_key: str,
+    pcm: bytes,
+    on_delta: Optional[Callable[[str, str], None]],
+) -> str:
+    """
+    Cœur asynchrone du canal temps réel Mistral (à lancer dans une boucle
+    d'événements dédiée — le fil d'exécution de la dictée n'est pas celui
+    d'uvicorn).
+
+    Protocole vérifié en direct (2026-08-20) :
+      1. WebSocket ``wss://api.mistral.ai/v1/audio/transcriptions/realtime``,
+         auth ``Authorization: Bearer <clé>`` ;
+      2. handshake jusqu'à ``session.created`` (annonce ``audio_format``) ;
+      3. envoi de ``input_audio.append`` (PCM s16le 16 kHz en base64, en
+         morceaux bornés par la limite du service), puis ``input_audio.flush``
+         et ``input_audio.end`` ;
+      4. lecture des ``transcription.text.delta`` / ``transcription.segment``
+         (ligne provisoire) jusqu'à ``transcription.done``, qui porte le texte
+         autoritaire de l'énoncé.
+    """
+    import asyncio
+    import base64
+    import json as _json
+    import urllib.parse
+
+    try:
+        import websockets
+    except ImportError as exc:  # pragma: no cover
+        raise TranscriptionError(
+            "La bibliothèque websockets est absente du conteneur."
+        ) from exc
+
+    uri = (
+        "wss://api.mistral.ai/v1/audio/transcriptions/realtime"
+        f"?model={urllib.parse.quote(model)}"
+    )
+
+    segments_texte: List[str] = []
+    courant = ""
+    final = ""
+
+    def _publier(delta: str) -> None:
+        if on_delta is not None:
+            on_delta(delta, " ".join(segments_texte + [courant]).strip())
+
+    async def _session() -> str:
+        nonlocal segments_texte, courant, final
+        # 262 144 octets décodés au maximum par « append » : à 32 ko/s
+        # (s16le mono 16 kHz), un morceau de ~7 s reste sous la barre.
+        MORCEAU = 200 * 1024
+
+        async with websockets.connect(
+            uri,
+            additional_headers={"Authorization": f"Bearer {api_key}"},
+            max_size=None,
+            open_timeout=15,
+        ) as ws:
+            while True:
+                brut = await asyncio.wait_for(ws.recv(), timeout=20)
+                msg = _json.loads(brut if isinstance(brut, str) else brut.decode("utf-8", "replace"))
+                type_msg = msg.get("type")
+                if type_msg == "session.created":
+                    break
+                if type_msg == "error":
+                    raise TranscriptionError(_erreur_mistral(msg))
+
+            for i in range(0, len(pcm), MORCEAU):
+                await ws.send(_json.dumps({
+                    "type": "input_audio.append",
+                    "audio": base64.b64encode(pcm[i:i + MORCEAU]).decode("ascii"),
+                }))
+            await ws.send(_json.dumps({"type": "input_audio.flush"}))
+            await ws.send(_json.dumps({"type": "input_audio.end"}))
+
+            while True:
+                try:
+                    brut = await asyncio.wait_for(ws.recv(), timeout=60)
+                except asyncio.TimeoutError:
+                    break
+                msg = _json.loads(brut if isinstance(brut, str) else brut.decode("utf-8", "replace"))
+                type_msg = msg.get("type")
+                if type_msg == "error":
+                    raise TranscriptionError(_erreur_mistral(msg))
+                if type_msg == "transcription.done":
+                    final = str(msg.get("text") or "")
+                    break
+                morceau = str(msg.get("text") or "")
+                if type_msg == "transcription.segment":
+                    segments_texte.append(morceau)
+                    courant = ""
+                    _publier(morceau)
+                elif morceau:
+                    courant += morceau
+                    _publier(morceau)
+
+        return final or " ".join(segments_texte + [courant]).strip()
+
+    return asyncio.run(_session())
+
+
 def transcribe_mistral_streaming(
     payload: AudioPayload,
     extra_phrase_hints: Optional[str] = None,
     on_delta: Optional[Callable[[str, str], None]] = None,
 ) -> str:
     """
-    Transcription streaming d'un énoncé par Mistral Voxtral realtime.
+    Transcription temps réel d'un énoncé par Mistral Voxtral realtime.
 
-    Même contrat HTTP que ``_transcribe_mistral`` (POST multipart vers
-    ``/v1/audio/transcriptions``), mais avec ``stream=true`` : le serveur
-    renvoie le texte en événements SSE. Schéma documenté (openapi.mistral.ai) :
-    des deltas ``transcription.text.delta``, des segments stabilisés
-    ``transcription.segment`` (avec bornes de temps), et l'événement final
-    ``transcription.done`` qui porte le texte complet.
+    Contrairement au chemin batch, le modèle realtime n'accepte QUE le canal
+    WebSocket ``/v1/audio/transcriptions/realtime`` (le POST multipart le
+    refuse avec « only supports realtime transcription »). Le PCM s16le
+    16 kHz est poussé par ``input_audio.append`` ; le serveur renvoie des
+    deltas ``transcription.text.delta`` et des segments stabilisés
+    ``transcription.segment``, puis ``transcription.done`` avec le texte
+    complet de l'énoncé.
 
     Chaque texte est relayé à ``on_delta(delta, texte_complet)`` : le second
     argument (segments stabilisés + delta en cours) rend la ligne provisoire
-    auto-réparatrice — un delta perdu en route est rattrapé par le suivant ou
-    par le segment stabilisé. Le texte RETOURNÉ est celui de
-    ``transcription.done``, la version autoritaire de l'énoncé qui deviendra
-    le commit durable (les deltas ne servent qu'à l'affichage).
+    auto-réparatrice. Le texte RETOURNÉ est celui de ``transcription.done``,
+    la version autoritaire qui deviendra le commit durable.
 
     ``extra_phrase_hints`` est ignoré, comme pour le chemin batch : aucune
     adaptation documentée chez Mistral.
     """
-    import json as _json
-    import urllib.error
-    import urllib.request
+    import asyncio
 
     api_key = runtime_config.value("mistral_api_key")
     if not api_key:
@@ -1828,75 +1972,23 @@ def transcribe_mistral_streaming(
         )
 
     model = runtime_config.value("mistral_realtime_model") or _MISTRAL_REALTIME_MODEL_DEFAUT
-    langue = runtime_config.stt_language("mistral")
 
-    champs = {"model": model, "stream": True}
-    if langue:
-        champs["language"] = langue
-    corps, ctype = _multipart_body_fields(champs, "file", "dictee.ogg", payload.content)
-
-    requete = urllib.request.Request(
-        _MISTRAL_URL,
-        data=corps,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": ctype},
-        method="POST",
-    )
-
-    def _publier(delta: str) -> None:
-        if on_delta is not None:
-            on_delta(delta, " ".join(segments_texte + [courant]).strip())
-
-    segments_texte: List[str] = []
-    courant = ""
-    final = ""
+    # La dictée tourne dans un fil du pool (jamais la boucle d'uvicorn) : on
+    # peut se permettre une boucle d'événements dédiée au canal temps réel.
+    # ``get_running_loop`` lève en l'absence de boucle — c'est la vérification
+    # voulue : ``asyncio.run`` est permis dans un fil de pool, pas sur la
+    # boucle principale.
     try:
-        with urllib.request.urlopen(requete, timeout=240) as reponse:
-            for ligne in reponse:
-                ligne_dec = ligne.decode("utf-8", "replace").strip()
-                if not ligne_dec.startswith("data:"):
-                    continue
-                corps_evt = ligne_dec[5:].strip()
-                if corps_evt == "[DONE]":
-                    break
-                try:
-                    evt = _json.loads(corps_evt)
-                except ValueError:
-                    continue
-                # Deux formes de trame : « {event, data} » ou le payload nu.
-                if isinstance(evt, dict) and "data" in evt and isinstance(evt["data"], dict):
-                    evt = evt["data"]
-                type_evt = evt.get("type") if isinstance(evt, dict) else None
-                morceau = str(evt.get("text") or "") if isinstance(evt, dict) else ""
-                if type_evt == "transcription.done":
-                    final = morceau
-                    break
-                if type_evt == "transcription.segment":
-                    segments_texte.append(morceau)
-                    courant = ""
-                    _publier(morceau)
-                elif morceau:
-                    # transcription.text.delta (ou forme inconnue portant du texte).
-                    courant += morceau
-                    _publier(morceau)
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:400]
-        logger.error("Mistral a refusé la requête streaming (%s) : %s", exc.code, detail)
-        if exc.code in (401, 403):
-            raise TranscriptionError(
-                "Mistral refuse la clé API. Vérifiez-la dans le panneau "
-                "d'administration."
-            ) from exc
-        raise TranscriptionError(f"Erreur Mistral ({exc.code}) : {detail}") from exc
-    except Exception as exc:
-        logger.exception("Échec de l'appel Mistral (streaming)")
-        raise TranscriptionError(f"Erreur Mistral : {exc}") from exc
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        raise TranscriptionError("Canal temps réel Mistral appelé sur la boucle principale.")
+    pcm = _decode_pcm16(payload.content)
+    if not pcm:
+        raise TranscriptionError("Énoncé vide après transcodage PCM.")
 
-    if final:
-        return final
-    # Sans événement « done » (fichier interrompu), le texte accumulé reste
-    # le meilleur résultat — il vaut mieux un énoncé complet approximatif
-    # qu'une tranche perdue.
-    return " ".join(segments_texte + [courant]).strip()
+    return _transcrire_realtime_mistral(model, api_key, pcm, on_delta)
 
 
 def _transcribe_mistral(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:

@@ -2209,7 +2209,15 @@ async def upload_dictation_chunk(
 def get_dictation(session_id: str, request: Request):
     """Avancement de la dictée : le navigateur y lit les tranches transcrites."""
     user = current_user(request)
-    return _dictation_session(session_id, user).to_public()
+    session = _dictation_session(session_id, user)
+    # Scrutation de l'onglet qui enregistre (~7 s) : c'est le signal de vie qui
+    # distingue une dictée simplement en pause d'une dictée abandonnée par un
+    # onglet mort. Sans cette mise à jour, la moindre pause de plus de
+    # ``_STALE_AFTER`` secondes ferait marquer le brouillon « abandonnée » et
+    # archiver l'audio par ``dictation.cleanup_abandoned`` alors que le
+    # médecin compte bien reprendre.
+    session.save()
+    return session.to_public()
 
 
 class DictationTemplateIn(BaseModel):
@@ -2671,8 +2679,12 @@ def list_consultations(
     """
     user = current_user(request)
     limit = max(1, min(limit, 200))
-    # Même cadence que la purge des consultations : une dictée abandonnée est
-    # nettoyée dans les heures qui suivent, sans attendre un redémarrage.
+    # Les dictées abandonnées par un onglet mort sont traitées ici — c'est le
+    # moment où le médecin regarde la liste : audio archivé dans le brouillon,
+    # brouillon marqué « abandonnée », sessions sans contenu (< 10 s) purgées.
+    # AVANT purge_expired : une session à conserver ne doit pas être emportée
+    # par la purge de rétention au même accès.
+    dictation.cleanup_abandoned(user.username, db)
     dictation.purge_expired()
     purge_expired_consultations(db)
     rows = db.scalars(

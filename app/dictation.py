@@ -54,9 +54,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from app import live, llm, runtime_config, usage
+from app import live, llm, recordings, runtime_config, usage
 from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
+from sqlalchemy.orm import Session
 from app.stt import (
     TranscriptionError,
     extract_segment,
@@ -106,6 +107,22 @@ _HEADROOM_SECONDS = 2.0
 
 #: En deçà, la tranche extraite est considérée comme la fin du fichier.
 _MIN_SEGMENT_SECONDS = 0.7
+
+#: Délai sans AUCUNE activité (fragment reçu, ou scrutation de l'onglet qui
+#: enregistre) après lequel une dictée est réputée abandonnée : l'onglet est
+#: mort (navigateur fermé), le brouillon doit être marqué et son audio
+#: conservé. Le client rafraîchit ``updated_at`` à chaque scrutation (~7 s)
+#: tant que la page est ouverte, donc une dictée en pause ne devient jamais
+#: « abandonnée ». Marge volontairement confortable pour tolérer la mise en
+#: veille des minuteurs dans un onglet d'arrière-plan. Voir
+#: ``cleanup_abandoned``.
+_STALE_AFTER = 300.0
+
+#: En deçà de cette durée d'audio reçue, une dictée abandonnée n'a rien à
+#: conserver : la session et le brouillon vide sont supprimés. L'audio est le
+#: critère (pas la transcription) : un fournisseur en audio direct ne produit
+#: jamais de transcription, seul l'audio compte.
+_MIN_AUDIO_SECONDS = 10.0
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +408,128 @@ def purge_expired() -> int:
         logger.info("Purge des dictées : %d session(s) de plus de %g h supprimée(s)",
                     removed, hours)
     return removed
+
+
+def cleanup_abandoned(username: str, db: Session) -> None:
+    """
+    Traite les dictées abandonnées par un onglet mort — appelée à l'ouverture
+    de la liste des brouillons, pas en boucle de fond (voir main.py,
+    list_consultations).
+
+    Une session sans AUCUNE activité (fragment, ou scrutation de l'onglet qui
+    enregistrait) depuis ``_STALE_AFTER`` secondes est réputée orpheline. Deux
+    cas :
+
+      * rien à conserver (moins de ``_MIN_AUDIO_SECONDS`` d'audio reçus, ou —
+        pour les fournisseurs qui produisent une transcription — aucune tranche
+        transcrite) : la session est supprimée, et le brouillon s'il est vide ;
+      * du contenu : l'audio rejoint le brouillon comme un enregistrement
+        (exactement ce qu'un « Terminer » ferait — voir main.py,
+        finish_dictation), le brouillon est marqué « abandonnée » (s'il n'a
+        pas déjà une note générée), la session est effacée. L'audio étant
+        conservé, le médecin peut encore générer la note directement depuis le
+        brouillon, y compris avec un fournisseur en audio direct.
+
+    Rien n'est transcrit ici : la transcription d'appoint est secondaire face
+    à l'audio, et la récupération doit rester discrète et sans coût.
+    """
+    limit = _STALE_AFTER
+    now = time.time()
+    archived = 0
+    removed = 0
+    # Le fournisseur actif contourne-t-il le STT (audio envoyé seul au modèle,
+    # sans transcription) ? Dans ce cas « rien de transcrit » est l'état NORMAL
+    # d'une dictée : l'absence de contenu ne se juge que sur l'audio.
+    opts = llm.audio_settings(llm.active_provider())
+    transcript_expected = not (opts["bypass_stt"] and not opts["keep_transcript"])
+    try:
+        entries = os.listdir(_root())
+    except OSError:
+        return
+    for entry in entries:
+        state_path = os.path.join(settings.dictation_dir, entry, "state.json")
+        try:
+            with open(state_path, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError, KeyError):
+            continue
+        if data.get("username") != username or data.get("status") == "finished":
+            continue
+        try:
+            age = now - float(data.get("updated_at", now))
+        except (TypeError, ValueError):
+            continue
+        if age <= limit:
+            continue
+        try:
+            session = load_session(entry, username)
+        except (SessionNotFound, OSError, ValueError, KeyError):
+            continue
+        if session.received_seconds < _MIN_AUDIO_SECONDS or (
+                transcript_expected and not (session.parts or session.offset_seconds > 0)):
+            _delete_empty(username, session, db)
+            removed += 1
+            continue
+        _archive_abandoned(session, db)
+        archived += 1
+    if archived or removed:
+        logger.info(
+            "Dictées abandonnées de %s : %d audio archivé(s), %d sans contenu supprimée(s)",
+            username, archived, removed,
+        )
+
+
+def _delete_empty(username: str, session: DictationSession, db: Session) -> None:
+    """Session sans contenu : audio effacé, et brouillon si rien à y garder."""
+    delete_session(session)
+    consultation = db.get(Consultation, session.consultation_id)
+    if consultation is not None and consultation.owner == username and not (
+            consultation.raw_transcript or consultation.generated_markdown
+            or consultation.edited_markdown):
+        recordings.delete_for_consultation(db, consultation.id)
+        db.delete(consultation)
+        db.commit()
+        logger.info("Brouillon %s vide supprimé (dictée sans contenu)",
+                    session.consultation_id)
+
+
+def _archive_abandoned(session: DictationSession, db: Session) -> None:
+    """
+    Conserve l'audio d'une dictée abandonnée en le rattachant au brouillon,
+    marque le brouillon « abandonnée » et efface la session. Même trajectoire
+    qu'un « Terminer » explicite : une seule politique d'audio.
+    """
+    consultation = db.get(Consultation, session.consultation_id)
+    if consultation is None or consultation.owner != session.username:
+        # Orphelin (brouillon supprimé entre-temps) : l'audio n'a nulle part
+        # où aller, la session est simplement effacée.
+        logger.info("Dictée %s : brouillon disparu, audio non conservé",
+                    session.id)
+        delete_session(session)
+        return
+    stored = recordings.store_path(
+        db, consultation, session.audio_path, session.mime_type,
+        int(round(session.received_seconds)), "dictee",
+    )
+    # L'audio est la valeur (génération directe depuis le brouillon) : c'est
+    # lui qui donne la durée réelle de l'enregistrement.
+    consultation.audio_seconds = int(round(session.received_seconds))
+    if consultation.status not in ("genere", "finalise", "abandonnee"):
+        consultation.status = "abandonnee"
+    db.commit()
+    delete_session(session)
+    if stored:
+        live.publish(consultation.owner, "recording_added", {
+            "consultation_id": consultation.id,
+            "recording_id": stored.id,
+            "origin_tab": "",
+        })
+        logger.info(
+            "Dictée %s abandonnée : audio conservé avec le brouillon %s "
+            "(%.1f Mo, %s s), brouillon marqué « abandonnée »",
+            session.id, consultation.id, stored.size_bytes / 1048576,
+            int(round(session.received_seconds)),
+        )
 
 
 # ---------------------------------------------------------------------------

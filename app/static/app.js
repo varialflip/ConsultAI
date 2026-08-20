@@ -3068,6 +3068,7 @@
       genere: 'status.genere',
       finalise: 'status.finalise',
       error: 'status.error',
+      abandonnee: 'status.abandonnee',
     };
     const cle = labels[status];
     return cle ? T(cle) : status;
@@ -3102,7 +3103,7 @@
         ${reason}
         <div class="text-[11px] text-slate-400 mt-1">
           ${draft.template_name ? esc(draft.template_name) + ' · ' : ''}
-          <span class="uppercase tracking-wide">${esc(statusLabel(draft.status))}</span>
+          <span class="uppercase tracking-wide${draft.status === 'abandonnee' ? ' text-red-600 font-semibold' : ''}">${esc(statusLabel(draft.status))}</span>
         </div>
       </div>
       <button type="button" data-delete="${draft.id}"
@@ -3110,6 +3111,9 @@
         ${esc(T('drafts.delete'))}
       </button>
     `;
+    if (draft.status === 'abandonnee') {
+      item.classList.add('bg-red-50/50');
+    }
     return item;
   }
 

@@ -667,6 +667,7 @@ Incluez `/volume1/docker/ConsultAI/data` dans Hyper Backup.
 | Acronymes mal transcrits | Ajoutez-les au **Vocabulaire additionnel** du gabarit. |
 | Dictée transcrite dans la mauvaise langue | Choisissez le gabarit de la bonne langue : l'application propose de retranscrire l'enregistrement (§ 7.5). Sans enregistrement conservé, elle refuse — il n'y a plus de source. |
 | Tranches retardées avec Cohere | Limite de 5 req/min atteinte. Changez de service (§ 7.2). |
+| Navigateur fermé en plein enregistrement | La dictée n'est pas perdue : à l'ouverture des brouillons, l'audio est rattaché au brouillon (marqué **« Abandonnée »** en rouge pâle) et peut encore servir à générer la note — notamment avec un fournisseur en **audio direct**. Le brouillon suit la rétention globale (§ 7.1). Les dictées de moins de 10 s sont supprimées. Une dictée simplement en pause n'est jamais marquée. |
 
 ### Diagnostic
 

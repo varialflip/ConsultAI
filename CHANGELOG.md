@@ -3,6 +3,21 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-20 — v2.0.0-beta.79
+
+- **Dictées abandonnées : l'audio est conservé** (beta.79). Une dictée
+  interrompue par un onglet fermé (navigateur quitté, application tuée) n'est
+  plus perdue : à l'ouverture de la liste des brouillons, le serveur rattache
+  l'audio au brouillon comme un enregistrement — c'est lui qui sert à générer
+  la note, notamment avec un fournisseur en **audio direct** — et marque le
+  brouillon **« Abandonnée »** en rouge pâle. Le brouillon suit ensuite la
+  rétention globale (`consultation_retention_hours`, 12 h par défaut), comme
+  n'importe quel autre contenu. Les dictées quasi vides (moins de 10 s d'audio)
+  sont supprimées, session et brouillon vide compris. La détection repose sur
+  la **scrutation du navigateur** (une dictée en pause n'est jamais marquée) et
+  se fait à l'accès à la liste — aucune boucle de fond côté serveur. Aucune
+  transcription supplémentaire n'est déclenchée.
+
 ## 2026-08-20 — v2.0.0-beta.78
 
 - **Le bandeau de récupération disparaît** (beta.78). Les dictées interrompues

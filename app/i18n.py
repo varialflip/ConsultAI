@@ -902,6 +902,9 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "status.genere": ("Générée", "Generated"),
     "status.finalise": ("Finalisée", "Finalized"),
     "status.error": ("Erreur", "Error"),
+    # Dictée abandonnée par un onglet mort : le brouillon garde son audio,
+    # mais la transcription n'a pas été conclue — signalé en rouge pâle.
+    "status.abandonnee": ("Abandonnée", "Abandoned"),
     "drafts.confirm_delete": (
         "Supprimer définitivement ce brouillon ?",
         "Permanently delete this draft?",

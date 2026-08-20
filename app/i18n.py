@@ -1529,6 +1529,85 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Leave empty to follow the template language. Mistral only accepts "
         "ISO-639-1: “fr”, “en” — never “fr-CA”.",
     ),
+    "set.mistral_realtime_model.label": (
+        "Modèle Voxtral temps réel", "Voxtral realtime model",
+    ),
+    "set.mistral_realtime_model.help": (
+        "Modèle de TRANSCRIPTION STREAMING (deltas pendant la parole), utilisé "
+        "en mode « sse » uniquement. Réservé à la transcription en direct.",
+        "Streaming transcription model (deltas while speaking), used in “sse” "
+        "mode only. Intended for live transcription.",
+    ),
+
+    "set.stt_realtime_mode.label": ("Temps réel de la dictée", "Realtime dictation"),
+    "set.stt_realtime_mode.help": (
+        "Le texte apparaît pendant la dictée, par-dessus le batch fiable "
+        "inchangé. « désactivé » : comportement historique (l'audio ne quitte "
+        "jamais la machine). « énoncé » : le VAD du navigateur signale la fin "
+        "de chaque phrase, transcription immédiate au silence — compatible avec "
+        "tous les fournisseurs, dont le Parakeet local. « streaming » : deltas "
+        "chez Mistral Voxtral realtime pendant la parole (l'audio part alors "
+        "chez Mistral). « streaming » n'est applicable qu'à Mistral ; « énoncé » "
+        "est inapplicable à Cohere (5 requêtes/min).",
+        "Text appears while dictating, on top of the unchanged reliable batch. "
+        "“Disabled”: legacy behavior (audio never leaves the machine). "
+        "“Utterance”: the browser VAD signals the end of each sentence, "
+        "immediate transcription at silence — works with every provider, "
+        "including the local Parakeet. “Streaming”: Mistral Voxtral realtime "
+        "deltas while speaking (audio then goes to Mistral). “Streaming” only "
+        "applies to Mistral; “Utterance” cannot apply to Cohere (5 req/min).",
+    ),
+    "set.stt_realtime_mode.off": ("désactivé", "disabled"),
+    "set.stt_realtime_mode.vad": ("énoncé (VAD)", "utterance (VAD)"),
+    "set.stt_realtime_mode.sse": ("streaming (Mistral)", "streaming (Mistral)"),
+
+    "set.stt_vad_sensitivity.label": (
+        "Sensibilité du détecteur de parole", "Speech detector sensitivity",
+    ),
+    "set.stt_vad_sensitivity.help": (
+        "Seuil d'énergie du micro au-dessus duquel une voix est reconnue. "
+        "« élevée » convient à un micro doux ou à un local bruyant, « faible » "
+        "à un casque ; un seuil trop bas laisse passer les bruits de fond, trop "
+        "haut coupe les attaques de mots. Ce réglage ne touche jamais à "
+        "l'audio enregistré, il ne pilote que la transcription.",
+        "Microphone energy threshold above which speech is detected. “High” "
+        "suits a quiet mic or a noisy room, “low” a headset; too low lets "
+        "background noise through, too high clips word onsets. This never "
+        "touches the recorded audio, it only gates transcription.",
+    ),
+    "set.stt_vad_sensitivity.low": ("faible", "low"),
+    "set.stt_vad_sensitivity.medium": ("moyenne", "medium"),
+    "set.stt_vad_sensitivity.high": ("élevée", "high"),
+    "set.stt_vad_speech_ms.label": (
+        "Parole reconnue après (ms)", "Speech recognized after (ms)",
+    ),
+    "set.stt_vad_speech_ms.help": (
+        "Durée de signal au-dessus du seuil avant de considérer qu'une voix "
+        "parle. Un court bruit (clavier, papier) ne déclenche rien.",
+        "How long the signal must stay above threshold before speech is "
+        "assumed. A brief noise (keyboard, paper) triggers nothing.",
+    ),
+    "set.stt_vad_silence_ms.label": (
+        "Fin d'énoncé après (ms)", "Utterance end after (ms)",
+    ),
+    "set.stt_vad_silence_ms.help": (
+        "Pause au-dessous du seuil qui marque la fin de la phrase : le texte "
+        "apparaît alors. Une valeur trop haute retarde le texte, trop basse "
+        "coupe au milieu d'une hésitation.",
+        "Silence below threshold that marks the end of the sentence — the text "
+        "then appears. Too high delays the text, too low cuts mid-hesitation.",
+    ),
+    "set.stt_vad_finish_sweep.label": (
+        "Re-transcrire les trous à la fin", "Re-transcribe gaps on finish",
+    ),
+    "set.stt_vad_finish_sweep.help": (
+        "Au « Terminer », re-parcourt l'audio brut complet et re-transcrit les "
+        "passages de parole manqués (VAD trop strict, tranche échouée). "
+        "L'audio ayant été conservé en entier, rien n'est perdu.",
+        "On “Finish”, rescans the full raw audio and re-transcribes any missed "
+        "speech (over-strict VAD, failed segment). Since the full audio is "
+        "kept, nothing is lost.",
+    ),
 
     # Pas de clé propre : voir set.openai_api_key, sous Modèle de langage,
     # dont le champ est répété ici (voir app.js, PROVIDER_KEY_FIELD).

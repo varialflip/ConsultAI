@@ -59,10 +59,13 @@ from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
 from sqlalchemy.orm import Session
 from app.stt import (
+    _MISTRAL_REALTIME_MODEL_DEFAUT,
     TranscriptionError,
+    detect_speech_ranges,
     extract_segment,
     find_cut_point,
     transcribe,
+    transcribe_mistral_streaming,
     transcribe_payload,
 )
 
@@ -124,6 +127,28 @@ _STALE_AFTER = 300.0
 #: jamais de transcription, seul l'audio compte.
 _MIN_AUDIO_SECONDS = 10.0
 
+# ---------------------------------------------------------------------------
+# Temps réel de la dictée (mode « vad » / « sse »)
+# ---------------------------------------------------------------------------
+#: Longueur minimale d'un énoncé avant qu'une coupe au silence ne soit
+#: tentée. En deçà, on ne peut pas distinguer un vrai énoncé d'un bruit de
+#: bouche : la fenêtre de recherche de ``find_cut_point`` commence ici.
+_FLUSH_MIN = 1.5
+
+#: En deçà de cette quantité d'audio EN ATTENTE, la fin d'énoncé signalée par
+#: le navigateur ne déclenche rien : il faut de la matière à transcrire.
+_FLUSH_MIN_PENDING = 2.0
+
+#: Tolérance de chevauchement couverture/parole du filet de fin : une région
+#: est réputée couverte quand elle est transcrite à moins de cette marge.
+#: Absorbe les écarts de mesure (ffprobe vs silencedetect) sans laisser de
+#: blancs audibles.
+_SWEEP_OVERLAP_SECONDS = 0.3
+
+#: En deçà, une région non couverte ne mérite pas un appel de plus — elle
+#: tomberait de toute façon sous ``_MIN_SPEECH_SECONDS`` de ``stt``.
+_SWEEP_MIN_REGION = 0.7
+
 
 # ---------------------------------------------------------------------------
 # Structure d'une session
@@ -144,6 +169,19 @@ class DictationSession:
     parts: List[str] = field(default_factory=list)
     status: str = "recording"         # recording | finished | error
     last_error: str = ""
+    #: Couverture de l'audio par les transcriptions réussies, dans l'horloge
+    #: MESURÉE : intervalles [début, fin] du fichier brut déjà transcrits.
+    #: Sert au filet de fin (``_sweep_uncovered``) à retrouver les trous
+    #: laissés par un VAD trop strict ou une tranche échouée.
+    covered_ranges: List[Tuple[float, float]] = field(default_factory=list)
+    #: Un énoncé vient de se terminer côté navigateur (signal VAD) : la
+    #: prochaine passe découpe et transcrit immédiatement, sans attendre le
+    #: cadencement batch.
+    flush_requested: bool = False
+    #: Compteur des énoncés transcrits en streaming : chaque énoncé porte un
+    #: identifiant, pour que la ligne provisoire des onglets puisse être
+    #: retirée au commit.
+    utterance_seq: int = 0
 
     # -- Chemins ------------------------------------------------------------
     @property
@@ -175,6 +213,9 @@ class DictationSession:
             "parts": self.parts,
             "status": self.status,
             "last_error": self.last_error,
+            "covered_ranges": list(self.covered_ranges),
+            "flush_requested": self.flush_requested,
+            "utterance_seq": self.utterance_seq,
         }
 
     def to_public(self) -> dict:
@@ -322,6 +363,11 @@ def load_session(session_id: str, username: str) -> DictationSession:
         parts=data.get("parts", []),
         status=data.get("status", "recording"),
         last_error=data.get("last_error", ""),
+        covered_ranges=[
+            (float(a), float(b)) for a, b in data.get("covered_ranges", [])
+        ],
+        flush_requested=bool(data.get("flush_requested", False)),
+        utterance_seq=int(data.get("utterance_seq", 0)),
     )
     if session.username != username:
         # Message volontairement identique à l'absence : ne pas révéler
@@ -593,6 +639,66 @@ def should_process(session: DictationSession) -> bool:
     return pending >= high + _HEADROOM_SECONDS
 
 
+def realtime_mode() -> str:
+    """
+    Mode temps réel EFFECTIF de la dictée (``off`` | ``vad`` | ``sse``).
+
+    La valeur du panneau est validée contre le fournisseur actif : un mode
+    inapplicable retombe silencieusement sur ``off`` plutôt que de casser la
+    dictée.
+
+      * ``sse`` n'a de sens qu'avec Mistral (le streaming est un contrat
+        Voxtral) ;
+      * ``vad`` (énoncé-granularité) est incompatible avec Cohere, plafonné à
+        5 requêtes/minute : une dictée hachée épuiserait le quota et le
+        texte en direct serait systématiquement retardé par l'étalement.
+    """
+    mode = runtime_config.value("stt_realtime_mode")
+    provider = runtime_config.value("stt_provider")
+    if mode == "vad" and provider == "cohere":
+        return "off"
+    if mode == "sse" and provider != "mistral":
+        return "off"
+    return mode
+
+
+def should_flush(session: DictationSession) -> bool:
+    """Assez d'audio en attente pour traiter immédiatement la fin d'énoncé ?"""
+    pending = session.received_seconds - session.offset_seconds
+    return pending >= _FLUSH_MIN_PENDING
+
+
+def request_flush(session_id: str, username: str) -> DictationSession:
+    """
+    Le navigateur signale qu'un énoncé vient de se terminer (VAD client).
+
+    Pose le drapeau ``flush_requested`` : la prochaine passe découpera et
+    transcrira immédiatement, en coupant au premier silence exploitable —
+    c'est ce qui fait apparaître le texte quelques secondes après chaque
+    pause au lieu d'attendre le cadencement batch. Le drapeau est un simple
+    signal, jamais un repère de coupe : la frontière reste ffmpeg
+    (``find_cut_point``), qui travaille dans l'horloge mesurée du fichier.
+    """
+    with _lock_for(session_id):
+        session = load_session(session_id, username)
+        if session.status == "finished":
+            raise DictationError("Cette dictée est déjà conclue.")
+        if realtime_mode() == "off":
+            # Le mode a été désactivé (ou est inapplicable au fournisseur
+            # actif) depuis le début de la dictée : le signal n'a plus d'objet.
+            return session
+        session.flush_requested = True
+        session.save()
+        return session
+
+
+def _session_owner(session: DictationSession) -> str:
+    """Nom du propriétaire du brouillon — l'adresse de diffusion en direct."""
+    with SessionLocal() as db:
+        row = db.get(Consultation, session.consultation_id)
+        return row.owner if row is not None else session.username
+
+
 # ---------------------------------------------------------------------------
 # Découpage et transcription
 # ---------------------------------------------------------------------------
@@ -679,19 +785,28 @@ def _store_part(
             })
 
 
-def _transcribe_one(session: DictationSession, hints: str, final: bool) -> Optional[float]:
+def _transcribe_one(session: DictationSession, hints: str, final: bool,
+                    flush: bool = False) -> Optional[float]:
     """
     Extrait puis transcrit une tranche. Retourne sa durée, ou ``None`` s'il
     ne reste plus rien à découper.
+
+    ``flush`` (fin d'énoncé signalée par le VAD du navigateur) coupe au
+    PREMIER silence exploitable après un minimum de parole, plutôt qu'au
+    silence le plus proche de la durée cible : c'est la pause du locuteur qui
+    dicte la coupe.
     """
     low, target, high = _window()
     # En cours de dictée, on cherche un silence pour ne pas trancher un mot.
     # À la fin, il ne reste par construction qu'un reliquat plus court que la
     # fenêtre : on le prend entier, sans coupe donc sans risque.
-    length = (
-        high if final
-        else find_cut_point(session.audio_path, session.offset_seconds, target, low, high)
-    )
+    if final:
+        length = high
+    elif flush:
+        length = find_cut_point(session.audio_path, session.offset_seconds,
+                                _FLUSH_MIN, _FLUSH_MIN, high)
+    else:
+        length = find_cut_point(session.audio_path, session.offset_seconds, target, low, high)
 
     try:
         payload = extract_segment(session.audio_path, session.offset_seconds, length)
@@ -703,10 +818,20 @@ def _transcribe_one(session: DictationSession, hints: str, final: bool) -> Optio
     if payload.duration_seconds < _MIN_SEGMENT_SECONDS:
         return None
 
-    result = transcribe_payload(payload, hints)
+    if realtime_mode() == "sse" and flush:
+        result = _transcribe_one_sse(session, payload, hints)
+    else:
+        result = transcribe_payload(payload, hints)
     session.offset_seconds += payload.duration_seconds
 
     text = (result.get("transcript") or "").strip()
+    if text:
+        # Couverture : cette plage est transcrite — le filet de fin n'y
+        # repassera pas. Une tranche muette ne laisse rien à rattraper (elle
+        # n'apparaît de toute façon pas dans les régions de parole).
+        session.covered_ranges.append(
+            (session.offset_seconds - payload.duration_seconds, session.offset_seconds)
+        )
     if not text:
         # Tranche muette : le curseur avance quand même, sinon la boucle
         # repasserait indéfiniment sur le même silence.
@@ -722,6 +847,139 @@ def _transcribe_one(session: DictationSession, hints: str, final: bool) -> Optio
         session.id, payload.duration_seconds, len(text), session.offset_seconds,
     )
     return payload.duration_seconds
+
+
+def _transcribe_one_sse(session: DictationSession, payload, hints: str) -> dict:
+    """
+    Transcrit un énoncé via Mistral Voxtral realtime, en publiant les deltas.
+
+    Les deltas vont à tous les onglets (``transcript_delta``) pour composer la
+    ligne provisoire ; à la fin, ``transcript_final`` la retire, et le commit
+    durable suit son chemin habituel (``_store_part``, qui diffuse le texte
+    définitif aux autres onglets). L'énoncé porte un ``utterance_id`` : c'est
+    lui qui relie deltas, final et retrait de la ligne.
+    """
+    uid = session.utterance_seq
+    session.utterance_seq += 1
+    owner = _session_owner(session)
+
+    def on_delta(delta: str, full: str) -> None:
+        live.publish(owner, "transcript_delta", {
+            "consultation_id": session.consultation_id,
+            "session_id": session.id,
+            "utterance_id": uid,
+            "delta": delta,
+            "text": full,
+        })
+
+    try:
+        texte = transcribe_mistral_streaming(payload, hints, on_delta)
+    finally:
+        # Toujours publié, même sur échec : une ligne provisoire ne doit pas
+        # survivre à l'énoncé qui l'a produite.
+        live.publish(owner, "transcript_final", {
+            "consultation_id": session.consultation_id,
+            "session_id": session.id,
+            "utterance_id": uid,
+        })
+    return {
+        "transcript": texte,
+        "provider": "mistral",
+        "model": runtime_config.value("mistral_realtime_model") or _MISTRAL_REALTIME_MODEL_DEFAUT,
+    }
+
+
+def _subtract_ranges(base, cuts: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    """Retire les plages ``cuts`` de ``base`` (intervalles [début, fin])."""
+    result: List[Tuple[float, float]] = []
+    for start, end in base:
+        curseur = start
+        for c0, c1 in cuts:
+            if c1 <= curseur:
+                continue
+            if c0 >= end:
+                break
+            if c0 > curseur:
+                result.append((curseur, min(c0, end)))
+            curseur = max(curseur, c1)
+            if curseur >= end:
+                break
+        if curseur < end:
+            result.append((curseur, end))
+    return result
+
+
+def _sweep_uncovered(session: DictationSession, hints: str) -> None:
+    """
+    Filet de fin : re-transcrit les zones de parole non couvertes.
+
+    Au « Terminer », on re-parcourt le fichier brut avec silencedetect
+    (détection SERVEUR, indépendante du VAD du navigateur) et on compare aux
+    plages déjà transcrites (``covered_ranges``). Tout trou — énoncé que le
+    VAD a manqué, tranche qui avait échoué — est re-extraite et re-transcrite.
+
+    L'audio brut est resté complet tout du long : c'est ce qui rend cette
+    reprise possible sans avoir rien gardé d'autre. Une région qui échoue est
+    sautée (texte partiel conservé), comme la retranscription écarte un
+    enregistrement muet.
+    """
+    regions = detect_speech_ranges(session.audio_path)
+    if not regions:
+        return
+    # Les plages couvertes sont élargies de la tolérance : une couverture à
+    # quelques centièmes de seconde près ne doit pas créer de faux trou.
+    couvert = [
+        (c0 - _SWEEP_OVERLAP_SECONDS, c1 + _SWEEP_OVERLAP_SECONDS)
+        for c0, c1 in session.covered_ranges
+    ]
+    trous = _subtract_ranges(regions, couvert)
+    for start, end in trous:
+        if end - start < _SWEEP_MIN_REGION:
+            continue
+        logger.info(
+            "Dictée %s : trou de %.1f s détecté en fin (%.1f-%.1f s), re-transcription",
+            session.id, end - start, start, end,
+        )
+        _transcribe_region(session, start, end, hints)
+
+
+def _transcribe_region(session: DictationSession, start: float, end: float, hints: str) -> None:
+    """Transcrit l'intervalle [start, end[ du fichier brut, en découpant si
+    nécessaire (un trou long repasse par les coupes au silence, comme le
+    découpage en cours de dictée)."""
+    low, target, high = _window()
+    curseur = start
+    while end - curseur > 0.05:
+        restant = end - curseur
+        # Dernier morceau : entier, sans coupe donc sans risque.
+        longueur = (
+            restant if restant <= high
+            else find_cut_point(session.audio_path, curseur, target, low, high)
+        )
+        try:
+            payload = extract_segment(session.audio_path, curseur, longueur)
+        except TranscriptionError:
+            break
+        if payload.duration_seconds < _MIN_SEGMENT_SECONDS:
+            break
+        curseur += payload.duration_seconds
+        try:
+            result = transcribe_payload(payload, hints)
+        except TranscriptionError as exc:
+            logger.warning(
+                "Dictée %s : trou [%.1f-%.1f s] écarté — %s",
+                session.id, curseur - payload.duration_seconds, curseur, exc,
+            )
+            continue
+        text = (result.get("transcript") or "").strip()
+        if text:
+            session.covered_ranges.append(
+                (curseur - payload.duration_seconds, curseur)
+            )
+        _store_part(session, text,
+                    (result.get("provider") or "", result.get("model") or ""),
+                    duration_seconds=payload.duration_seconds)
+    session.save()
 
 
 def process_pending(session_id: str, username: str, final: bool = False) -> DictationSession:
@@ -750,11 +1008,23 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
         hints = _phrase_hints(session.template_id)
         _, _, high = _window()
 
+        # Fin d'énoncé signalée par le navigateur : la première tranche de
+        # cette passe part immédiatement, coupée au premier silence après un
+        # minimum de parole. Le drapeau n'est consommé qu'une fois la tranche
+        # réellement transcrite — s'il n'y a pas encore assez d'audio reçu
+        # (le fragment portant la fin de l'énoncé n'est pas arrivé), il
+        # reste posé pour la prochaine passe.
+        flush = session.flush_requested
+
         while True:
-            if not final and not should_process(session):
-                break
+            if not final:
+                if flush:
+                    if not should_flush(session):
+                        break
+                elif not should_process(session):
+                    break
             try:
-                duration = _transcribe_one(session, hints, final)
+                duration = _transcribe_one(session, hints, final, flush)
             except TranscriptionError as exc:
                 session.last_error = str(exc)
                 session.save()
@@ -766,8 +1036,17 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
             # fin du fichier : inutile de refaire un tour pour rien.
             if final and duration < high - 0.5:
                 break
+            if flush:
+                # Un énoncé suffit : le cadencement batch reprend ensuite. Le
+                # drapeau est persisté — ``_transcribe_one`` a déjà sauvé la
+                # session AVANT ce point, il faut repersister l'effacement.
+                flush = False
+                session.flush_requested = False
+                session.save()
 
         if final:
+            if runtime_config.value("stt_vad_finish_sweep") != "false":
+                _sweep_uncovered(session, hints)
             _finalise(session)
         return session
 
@@ -794,6 +1073,8 @@ def _finalise(session: DictationSession) -> None:
     _bind_template_language(session.template_id)
     result = transcribe(raw, session.mime_type, _phrase_hints(session.template_id))
     session.offset_seconds = float(result.get("duration_seconds") or 0)
+    if session.offset_seconds > 0:
+        session.covered_ranges[:] = [(0.0, session.offset_seconds)]
     text = (result.get("transcript") or "").strip()
     if text:
         _store_part(session, text,

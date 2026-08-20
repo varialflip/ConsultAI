@@ -217,6 +217,51 @@ SETTINGS: Tuple[Setting, ...] = (
         "mistral_language", "text", "group.stt",
         default=lambda: "", placeholder="fr / en",
     ),
+    Setting(
+        "mistral_realtime_model", "text", "group.stt",
+        default=lambda: settings.mistral_realtime_model,
+        placeholder="voxtral-mini-transcribe-realtime-latest",
+    ),
+
+    # Temps réel de la dictée : une couche d'affichage par-dessus le batch
+    # fiable. Trois modes — « off » (comportement historique, l'audio ne
+    # quitte jamais la machine), « vad » (le VAD du navigateur signale la fin
+    # de chaque énoncé, transcription immédiate au silence — tous
+    # fournisseurs, dont le Parakeet local), « sse » (deltas streaming chez
+    # Mistral Voxtral realtime pendant la parole). « sse » n'est applicable
+    # qu'à Mistral et « vad » est incompatible avec Cohere (5 req/min) — le
+    # serveur retombe silencieusement sur « off » dans ces cas.
+    Setting(
+        "stt_realtime_mode", "choice", "group.stt",
+        default=lambda: settings.stt_realtime_mode,
+        choices=(
+            ("off", "set.stt_realtime_mode.off"),
+            ("vad", "set.stt_realtime_mode.vad"),
+            ("sse", "set.stt_realtime_mode.sse"),
+        ),
+    ),
+    Setting(
+        "stt_vad_sensitivity", "choice", "group.stt",
+        default=lambda: settings.stt_vad_sensitivity,
+        choices=(
+            ("low", "set.stt_vad_sensitivity.low"),
+            ("medium", "set.stt_vad_sensitivity.medium"),
+            ("high", "set.stt_vad_sensitivity.high"),
+        ),
+    ),
+    Setting(
+        "stt_vad_speech_ms", "number", "group.stt",
+        default=lambda: str(settings.stt_vad_speech_ms),
+    ),
+    Setting(
+        "stt_vad_silence_ms", "number", "group.stt",
+        default=lambda: str(settings.stt_vad_silence_ms),
+    ),
+    Setting(
+        "stt_vad_finish_sweep", "choice", "group.stt",
+        default=lambda: "true" if settings.stt_vad_finish_sweep else "false",
+        choices=ON_OFF,
+    ),
 
     # Pas de clé propre : « openai_api_key » (sous Modèle de langage) sert aux
     # deux usages, même compte — comme Cohere et Mistral, mais dans l'autre

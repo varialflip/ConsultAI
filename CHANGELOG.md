@@ -3,6 +3,28 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-20
+
+- **Temps réel de la dictée** (mode « énoncé » et « streaming »). Par-dessus
+  le batch fiable inchangé (audio téléversé par fragments, copie locale,
+  fichier brut complet), un détecteur de parole (VAD) tournant dans le
+  navigateur signale la fin de chaque énoncé : le serveur transcrit
+  immédiatement, en coupant au silence (ffmpeg fait toujours autorité sur la
+  frontière). Le texte apparaît quelques secondes après chaque pause au lieu
+  de ~10-15 s. Deux modes réglables (`STT_REALTIME_MODE`) : **« vad »**,
+  compatible avec tous les fournisseurs y compris le Parakeet local (l'audio
+  ne quitte pas la machine) ; **« sse »**, qui ajoute un affichage provisoire
+  en deltas pendant la parole via Mistral Voxtral realtime (l'audio part
+  alors chez Mistral — désactivé par défaut, décision de conformité EFVP).
+- **Filet de fin : re-transcription des trous** (`STT_VAD_FINISH_SWEEP`). Au
+  « Terminer », le serveur re-parcourt l'audio brut (détection de parole par
+  ffmpeg) et re-transcrit tout passage manqué — un énoncé que le VAD n'avait
+  pas vu, une tranche qui avait échoué. Rien n'est perdu ; le bénéfice profite
+  aussi au batch classique.
+- **Réglages du détecteur** : sensibilité (`STT_VAD_SENSITIVITY`), délais
+  d'entrée/sortie de parole (`STT_VAD_SPEECH_MS`, `STT_VAD_SILENCE_MS`) et
+  modèle Mistral du mode streaming (`MISTRAL_REALTIME_MODEL`).
+
 ## 2026-08-20 — v2.0.0-beta.83
 
 - **Hauteur des toasts unifiée sur mobile** (beta.83). Les toasts « live »

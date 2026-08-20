@@ -723,6 +723,15 @@
                          leading-relaxed text-slate-700 thin-scroll"
                   placeholder="{{ t('transcript.placeholder') }}"></textarea>
 
+        <!-- LIGNES PROVISOIRES (mode « streaming ») — le texte en cours de
+             reconnaissance, publié en deltas, affiché en italique au-dessus du
+             pied. Volontairement HORS de la zone committée : seul le commit
+             durable (transcript_final) la retire. invisible tant qu'aucun
+             énoncé ne stream. -->
+        <div id="liveLines" class="hidden shrink-0 px-4 sm:px-6 py-1.5 text-[13px]
+                                   italic leading-relaxed text-slate-400 thin-scroll"
+             aria-live="polite"></div>
+
         <!-- PIED DE LA DICTÉE — même rôle que celui de la note (moteur qui a
              produit CE texte, état de sauvegarde), mais sur ce panneau-ci : sur
              mobile les deux panneaux ne sont jamais visibles en même temps, et

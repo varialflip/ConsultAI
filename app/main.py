@@ -1282,6 +1282,19 @@ async def api_config(request: Request):
         # règle sur MediaRecorder, mais le serveur qui en décide.
         "dictation_chunk_seconds": settings.dictation_chunk_seconds,
         "dictation_segment_seconds": settings.dictation_segment_seconds,
+        # Temps réel de la dictée. ``stt_realtime_mode`` est le mode EFFECTIF
+        # (validé contre le fournisseur actif — voir dictation.realtime_mode) :
+        # c'est lui que le navigateur doit suivre pour savoir s'il tourne le
+        # VAD et signale les fins d'énoncé. ``vad``/``sse`` exigent des
+        # réglages côté client (seuil, cadences), transmis tels quels.
+        "stt_realtime_mode": dictation.realtime_mode(),
+        "stt_vad_sensitivity": runtime_config.value("stt_vad_sensitivity"),
+        "stt_vad_speech_ms": runtime_config.value_float(
+            "stt_vad_speech_ms", settings.stt_vad_speech_ms
+        ),
+        "stt_vad_silence_ms": runtime_config.value_float(
+            "stt_vad_silence_ms", settings.stt_vad_silence_ms
+        ),
         # Une seule session désormais : celle de l'application. La déconnexion
         # ferme la session locale puis celle du fournisseur, dans cet ordre —
         # voir la route /auth/logout.
@@ -2217,6 +2230,29 @@ async def upload_dictation_chunk(
     if dictation.should_process(session):
         _schedule_dictation_processing(session_id, user.username)
 
+    return session.to_public()
+
+
+@app.post("/api/dictation/{session_id}/utterance_ended")
+def dictation_utterance_ended(session_id: str, request: Request):
+    """
+    Fin d'énoncé signalée par le VAD du navigateur (mode temps réel).
+
+    C'est un DÉCLENCHEUR, pas un repère de coupe : le serveur pose le
+    drapeau de flush et lance une passe qui découpe au premier silence
+    exploitable (ffmpeg fait autorité sur la frontière). Rien n'est envoyé
+    ici — seul l'ordre « traite maintenant » voyage.
+    """
+    user = current_user(request)
+    _dictation_session(session_id, user)  # 404 avant de toucher l'état
+
+    try:
+        session = dictation.request_flush(session_id, user.username)
+    except DictationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if dictation.should_flush(session):
+        _schedule_dictation_processing(session_id, user.username)
     return session.to_public()
 
 

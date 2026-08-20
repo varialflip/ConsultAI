@@ -215,6 +215,8 @@ class Settings:
     # llm.LLM_PROVIDERS / runtime_config.SETTINGS pour le réglage partagé.
     mistral_api_key: str = ""
     mistral_model: str = "voxtral-mini-latest"
+    #: Modèle « temps réel » (streaming SSE) — mode ``sse`` seulement.
+    mistral_realtime_model: str = "voxtral-mini-transcribe-realtime-latest"
 
     # --- Dictée par segments ---
     # La dictée n'est plus envoyée en un seul bloc à la fin : le navigateur
@@ -223,6 +225,20 @@ class Settings:
     dictation_dir: str = "/data/dictations"
     dictation_chunk_seconds: int = 5      # cadence de téléversement (navigateur)
     dictation_segment_seconds: int = 10   # durée visée d'une tranche transcrite
+
+    # --- Temps réel de la dictée ---
+    # Une couche d'affichage par-dessus le batch fiable : le VAD du navigateur
+    # signale la fin de chaque énoncé, le serveur transcrit immédiatement en
+    # coupant au silence (mode « vad »), ou en streaming SSE chez Mistral
+    # (mode « sse »). Défaut « off » : le comportement historique, et la
+    # posture de conformité par défaut (l'audio ne quitte jamais la machine).
+    stt_realtime_mode: str = "off"          # off | vad | sse
+    stt_vad_sensitivity: str = "medium"     # low | medium | high (seuil énergie)
+    stt_vad_speech_ms: int = 150            # parole reconnue après X ms au-dessus du seuil
+    stt_vad_silence_ms: int = 450           # fin d'énoncé après X ms sous le seuil
+    #: Filet de fin : au « Terminer », re-parcourt l'audio brut et re-transcrit
+    #: les zones de parole non couvertes (VAD raté, tranche échouée).
+    stt_vad_finish_sweep: bool = True
 
     # --- Gemini ---
     gemini_api_key: str = ""
@@ -415,12 +431,20 @@ class Settings:
             cohere_model=_env("COHERE_MODEL", "cohere-transcribe-03-2026"),
             mistral_api_key=_env("MISTRAL_API_KEY"),
             mistral_model=_env("MISTRAL_MODEL", "voxtral-mini-latest"),
+            mistral_realtime_model=_env(
+                "MISTRAL_REALTIME_MODEL", "voxtral-mini-transcribe-realtime-latest"
+            ),
 
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
             backup_dir=_env("BACKUP_DIR", "/data/backups"),
             dictation_dir=_env("DICTATION_DIR", "/data/dictations"),
             dictation_chunk_seconds=_env_int("DICTATION_CHUNK_SECONDS", 5),
             dictation_segment_seconds=_env_int("DICTATION_SEGMENT_SECONDS", 10),
+            stt_realtime_mode=_env("STT_REALTIME_MODE", "off"),
+            stt_vad_sensitivity=_env("STT_VAD_SENSITIVITY", "medium"),
+            stt_vad_speech_ms=_env_int("STT_VAD_SPEECH_MS", 150),
+            stt_vad_silence_ms=_env_int("STT_VAD_SILENCE_MS", 450),
+            stt_vad_finish_sweep=_env_bool("STT_VAD_FINISH_SWEEP", True),
 
             gemini_api_key=_env("GEMINI_API_KEY"),
             gemini_model=_env("GEMINI_MODEL", "gemini-2.5-flash"),

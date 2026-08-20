@@ -1279,6 +1279,62 @@ def _run_ffmpeg(args: Sequence[str], timeout: int = 300) -> str:
 _SILENCE_RE = re.compile(r"silence_(start|end):\s*(-?\d+(?:\.\d+)?)")
 
 
+def detect_speech_ranges(
+    path: str, silence_duration: float = 0.25
+) -> List[Tuple[float, float]]:
+    """
+    Régions de parole d'un fichier, au sens de ffmpeg silencedetect.
+
+    Renvoie la liste des intervalles ``[début, fin]`` contenant de la parole,
+    dérivée des silences détectés (les compléments). Les deux extrémités sont
+    traitées : une parole qui déborde le dernier silence détecté est bornée
+    par la durée mesurée du fichier. Le seuil vient de
+    ``stt_silence_threshold_db`` (celui du retrait des silences), réutilisé
+    pour rester cohérent avec le reste de la chaîne.
+
+    Sert au filet de fin de la dictée (``dictation._sweep_uncovered``) : les
+    trous de couverture se calculent contre ces régions, calculées sur
+    l'AUDIO — jamais contre un VAD client, qui ne pourrait pas retrouver ce
+    que son propre seuil a manqué.
+    """
+    if not _ffmpeg_available():
+        return []
+    try:
+        log = _run_ffmpeg(
+            [
+                "-loglevel", "info", "-i", path, "-vn",
+                "-af", (
+                    f"silencedetect=noise={settings.stt_silence_threshold_db}dB"
+                    f":duration={silence_duration}"
+                ),
+                "-f", "null", "-",
+            ],
+            timeout=600,
+        )
+    except (TranscriptionError, subprocess.SubprocessError):
+        return []
+
+    events = [(kind, float(value)) for kind, value in _SILENCE_RE.findall(log)]
+    duree = probe_duration(path) or 0.0
+    regions: List[Tuple[float, float]] = []
+    curseur = 0.0
+    silence_en_cours = False
+    for kind, value in events:
+        if kind == "start":
+            if value > curseur + 0.05:
+                regions.append((curseur, value))
+            silence_en_cours = True
+        else:
+            curseur = value
+            silence_en_cours = False
+    # Fichier qui se termine en plein passage de parole : rien ne le signale,
+    # on borne par la durée mesurée. Un silence terminal, lui, a fermé la
+    # dernière région par son « end ».
+    if not silence_en_cours and duree > curseur + 0.05:
+        regions.append((curseur, duree))
+    return regions
+
+
 def find_cut_point(path: str, start: float, target: float, low: float, high: float) -> float:
     """
     Choisit où couper la tranche qui commence à ``start``.
@@ -1727,6 +1783,118 @@ def _transcribe_cohere(payload: AudioPayload, extra_phrase_hints: Optional[str] 
 # ===========================================================================
 _MISTRAL_URL = "https://api.mistral.ai/v1/audio/transcriptions"
 _MISTRAL_MODEL_DEFAUT = "voxtral-mini-latest"
+#: Modèle « temps réel » de Mistral (``voxtral-mini-transcribe-realtime``) :
+#: entraîné pour la transcription en direct, il renvoie le texte en deltas
+#: SSE pendant qu'il reconnaît. Survolé par ``mistral_realtime_model``.
+_MISTRAL_REALTIME_MODEL_DEFAUT = "voxtral-mini-transcribe-realtime-latest"
+
+
+def transcribe_mistral_streaming(
+    payload: AudioPayload,
+    extra_phrase_hints: Optional[str] = None,
+    on_delta: Optional[Callable[[str, str], None]] = None,
+) -> str:
+    """
+    Transcription streaming d'un énoncé par Mistral Voxtral realtime.
+
+    Même contrat HTTP que ``_transcribe_mistral`` (POST multipart vers
+    ``/v1/audio/transcriptions``), mais avec ``stream=true`` : le serveur
+    renvoie le texte en événements SSE. Schéma documenté (openapi.mistral.ai) :
+    des deltas ``transcription.text.delta``, des segments stabilisés
+    ``transcription.segment`` (avec bornes de temps), et l'événement final
+    ``transcription.done`` qui porte le texte complet.
+
+    Chaque texte est relayé à ``on_delta(delta, texte_complet)`` : le second
+    argument (segments stabilisés + delta en cours) rend la ligne provisoire
+    auto-réparatrice — un delta perdu en route est rattrapé par le suivant ou
+    par le segment stabilisé. Le texte RETOURNÉ est celui de
+    ``transcription.done``, la version autoritaire de l'énoncé qui deviendra
+    le commit durable (les deltas ne servent qu'à l'affichage).
+
+    ``extra_phrase_hints`` est ignoré, comme pour le chemin batch : aucune
+    adaptation documentée chez Mistral.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    api_key = runtime_config.value("mistral_api_key")
+    if not api_key:
+        raise TranscriptionError(
+            "Mistral est sélectionné mais aucune clé API n'est renseignée. "
+            "Panneau d'administration → Reconnaissance vocale."
+        )
+
+    model = runtime_config.value("mistral_realtime_model") or _MISTRAL_REALTIME_MODEL_DEFAUT
+    langue = runtime_config.stt_language("mistral")
+
+    champs = {"model": model, "stream": True}
+    if langue:
+        champs["language"] = langue
+    corps, ctype = _multipart_body_fields(champs, "file", "dictee.ogg", payload.content)
+
+    requete = urllib.request.Request(
+        _MISTRAL_URL,
+        data=corps,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": ctype},
+        method="POST",
+    )
+
+    def _publier(delta: str) -> None:
+        if on_delta is not None:
+            on_delta(delta, " ".join(segments_texte + [courant]).strip())
+
+    segments_texte: List[str] = []
+    courant = ""
+    final = ""
+    try:
+        with urllib.request.urlopen(requete, timeout=240) as reponse:
+            for ligne in reponse:
+                ligne_dec = ligne.decode("utf-8", "replace").strip()
+                if not ligne_dec.startswith("data:"):
+                    continue
+                corps_evt = ligne_dec[5:].strip()
+                if corps_evt == "[DONE]":
+                    break
+                try:
+                    evt = _json.loads(corps_evt)
+                except ValueError:
+                    continue
+                # Deux formes de trame : « {event, data} » ou le payload nu.
+                if isinstance(evt, dict) and "data" in evt and isinstance(evt["data"], dict):
+                    evt = evt["data"]
+                type_evt = evt.get("type") if isinstance(evt, dict) else None
+                morceau = str(evt.get("text") or "") if isinstance(evt, dict) else ""
+                if type_evt == "transcription.done":
+                    final = morceau
+                    break
+                if type_evt == "transcription.segment":
+                    segments_texte.append(morceau)
+                    courant = ""
+                    _publier(morceau)
+                elif morceau:
+                    # transcription.text.delta (ou forme inconnue portant du texte).
+                    courant += morceau
+                    _publier(morceau)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:400]
+        logger.error("Mistral a refusé la requête streaming (%s) : %s", exc.code, detail)
+        if exc.code in (401, 403):
+            raise TranscriptionError(
+                "Mistral refuse la clé API. Vérifiez-la dans le panneau "
+                "d'administration."
+            ) from exc
+        raise TranscriptionError(f"Erreur Mistral ({exc.code}) : {detail}") from exc
+    except Exception as exc:
+        logger.exception("Échec de l'appel Mistral (streaming)")
+        raise TranscriptionError(f"Erreur Mistral : {exc}") from exc
+
+    if final:
+        return final
+    # Sans événement « done » (fichier interrompu), le texte accumulé reste
+    # le meilleur résultat — il vaut mieux un énoncé complet approximatif
+    # qu'une tranche perdue.
+    return " ".join(segments_texte + [courant]).strip()
 
 
 def _transcribe_mistral(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:

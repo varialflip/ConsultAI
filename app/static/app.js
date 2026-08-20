@@ -576,6 +576,14 @@
   /** Cadences réglées par le serveur (/api/config), avec des valeurs de repli. */
   const dictationConfig = { chunkSeconds: 5, segmentSeconds: 10 };
 
+  /**
+   * Temps réel de la dictée (réglages serveur, repli sûr = off).
+   * ``realtimeMode`` : 'off' | 'vad' | 'sse' (mode EFFECTIF, validé serveur).
+   * Les seuils VAD ne pilotent jamais l'enregistrement (l'audio reste
+   * complet) : ils décident seulement quand signaler une fin d'énoncé.
+   */
+  const VAD_THRESHOLDS = { low: 0.04, medium: 0.08, high: 0.14 };
+
   /** Le point de rupture « lg » de Tailwind, seuil du double panneau. */
   const isMobileLayout = () => window.matchMedia('(max-width: 1023px)').matches;
 
@@ -1138,6 +1146,7 @@
   function resetDictationState() {
     clearTimeout(dictation.retryHandle);
     stopDictationPolling();
+    clearLiveLines();
     dictation.localId = null;
     dictation.sessionId = null;
     dictation.consultationId = null;
@@ -1232,6 +1241,94 @@
     });
   }
 
+  /* -------------------------------------------------------------------------
+   * Détecteur de parole (VAD)
+   * ----------------------------------------------------------------------
+   * Machine à états SILENCE ↔ PAROLE sur l'énergie déjà mesurée pour la
+   * waveform. Son SEUL rôle est de signaler au serveur la fin de chaque
+   * énoncé (POST /utterance_ended) : il ne filtre jamais l'enregistrement,
+   * qui reste complet jusqu'au bout — le serveur re-parcourt l'audio brut au
+   * « Terminer » pour re-transcrire ce que ce seuil aurait manqué.
+   *
+   * Anti-faux-positifs : il faut `vadSpeechMs` de signal au-dessus du seuil
+   * pour entrer en « parole » (un clavier ne déclenche rien), et `vadSilenceMs`
+   * de pause pour en sortir (une hésitation ne coupe pas l'énoncé). À la
+   * sortie, on ne renvoie un signal que si la dictée est réellement active.
+   * ---------------------------------------------------------------------- */
+
+  const vad = {
+    talking: false,       // en cours de parole ?
+    noiseSince: 0,        // début du signal au-dessus du seuil (ms horloge murale)
+    quietSince: 0,        // début de la pause sous le seuil (ms horloge murale)
+  };
+
+  function vadThreshold() {
+    return VAD_THRESHOLDS[dictationConfig.vadSensitivity] || VAD_THRESHOLDS.medium;
+  }
+
+  /** Nourrit la machine à états à chaque échantillon de la waveform. */
+  function feedVad(level) {
+    const mode = dictationConfig.realtimeMode;
+    if (mode !== 'vad' && mode !== 'sse') return;
+    if (!state.recording || state.paused) return;
+    const threshold = vadThreshold();
+    const now = performance.now();
+    const speechMs = dictationConfig.vadSpeechMs || 150;
+    const silenceMs = dictationConfig.vadSilenceMs || 450;
+
+    if (level >= threshold) {
+      vad.quietSince = 0;
+      if (!vad.talking) {
+        vad.noiseSince = vad.noiseSince || now;
+        if (now - vad.noiseSince >= speechMs) vad.talking = true;
+      }
+      return;
+    }
+    vad.noiseSince = 0;
+    if (!vad.talking) return;
+    vad.quietSince = vad.quietSince || now;
+    if (now - vad.quietSince < silenceMs) return;
+    // Fin d'énoncé : la parole a réellement cessé assez longtemps.
+    vad.talking = false;
+    vad.quietSince = 0;
+    signalUtteranceEnded();
+  }
+
+  function resetVad() {
+    vad.talking = false;
+    vad.noiseSince = 0;
+    vad.quietSince = 0;
+  }
+
+  /**
+   * Signale au serveur qu'un énoncé vient de se terminer.
+   *
+   * Le serveur découpe alors immédiatement au silence et transcrit — le texte
+   * apparaît quelques secondes après la pause. C'est un déclencheur, jamais un
+   * repère de coupe : ffmpeg reste l'autorité sur la frontière. Un bref délai
+   * puis un rapatriement des tranches font apparaître l'énoncé committé sans
+   * attendre le prochain fragment.
+   */
+  function signalUtteranceEnded() {
+    if (!dictation.sessionId || !dictation.active) return;
+    api(`/api/dictation/${dictation.sessionId}/utterance_ended`, {
+      method: 'POST',
+    }).catch((err) => {
+      console.warn('Fin d\'énoncé non transmise :', err);
+    });
+    // Le traitement est asynchrone côté serveur : on revient chercher le
+    // texte committé un peu plus tard, plutôt que d'attendre le prochain
+    // fragment ou la scrutation.
+    setTimeout(async () => {
+      if (!dictation.sessionId) return;
+      try {
+        applyDictationParts(await api(`/api/dictation/${dictation.sessionId}`));
+      } catch (_) {
+        /* le prochain fragment ou la scrutation reprendra le relais */
+      }
+    }, 1200);
+  }
+
   /** Waveform du micro — confirme visuellement que le micro capte bien. */
   function startWaveform(stream) {
     try {
@@ -1273,6 +1370,10 @@
             wave.peak = 0;
             if (wave.levels.length > waveCapacity()) wave.levels.shift();
           }
+
+          // Détecteur de parole : ne touche JAMAIS à l'enregistrement (l'audio
+          // reste complet), il ne fait que signaler la fin de chaque énoncé.
+          feedVad(level);
         } else {
           // À la reprise, l'horloge repart de zéro plutôt que de rattraper
           // d'un coup toute la durée de la pause.
@@ -1602,6 +1703,7 @@
     resetDictationState();
     dictation.active = true;
     dictation.localId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    resetVad();
 
     try {
       dictation.consultationId = await ensureConsultation();
@@ -1669,9 +1771,11 @@
     if (state.paused) {
       recorder.mediaRecorder.resume();
       state.paused = false;
+      resetVad();  // la pause a interrompu le signal : on repart de zéro
     } else {
       recorder.mediaRecorder.pause();
       state.paused = true;
+      resetVad();
     }
     updateRecordingUI();
   }
@@ -3236,6 +3340,7 @@
       toast(T('drafts.busy_open'), 'warning');
       return;
     }
+    clearLiveLines();
     try {
       const draft = await api(`/api/consultations/${id}`);
       state.consultationId = draft.id;
@@ -5387,6 +5492,14 @@
       dictationConfig.segmentSeconds = config.dictation_segment_seconds;
     }
 
+    // Temps réel : le mode EFFECTIF (validé serveur contre le fournisseur
+    // actif) et les paramètres du détecteur de parole. Le VAD n'étant utile
+    // qu'en mode « vad »/« sse », tout le reste se replie sur un état inerte.
+    dictationConfig.realtimeMode = config.stt_realtime_mode || 'off';
+    dictationConfig.vadSensitivity = config.stt_vad_sensitivity || 'medium';
+    dictationConfig.vadSpeechMs = Number(config.stt_vad_speech_ms) || 150;
+    dictationConfig.vadSilenceMs = Number(config.stt_vad_silence_ms) || 450;
+
     $('btnNewTemplate').classList.toggle('hidden', false);
     state.logoutUrl = config.logout_url || '/auth/logout';
     state.isAdmin = Boolean(config.is_admin);
@@ -5486,6 +5599,66 @@
     // « à sauvegarder », sinon la prochaine sauvegarde automatique renverrait
     // inutilement ce qui vient d'arriver.
     state.lastSavedSnapshot = workspaceSnapshot();
+  }
+
+  /* -------------------------------------------------------------------------
+   * Lignes provisoires (mode « streaming »)
+   * ----------------------------------------------------------------------
+   * Le texte en cours de reconnaissance arrive en deltas (transcript_delta)
+   * et s'affiche en italique sous la transcription, HORS de la zone committée.
+   * transcript_final retire la ligne : le texte définitif, lui, rejoint la
+   * transcription par les voies habituelles (événement « transcript » pour
+   * les onglets suiveurs, applyDictationParts pour l'onglet qui dicte). Un
+   * delta perdu en route est rattrapé par le « text » complet que chaque
+   * événement porte. Volontairement fragile et éphémère : rien ici ne doit
+   * jamais entrer dans la note.
+   * ---------------------------------------------------------------------- */
+
+  const liveLines = new Map();  // utterance_id → { el }
+
+  function liveLinesBox() {
+    return $('liveLines');
+  }
+
+  function clearLiveLines() {
+    const box = liveLinesBox();
+    if (box) {
+      box.replaceChildren();
+      box.classList.add('hidden');
+    }
+    liveLines.clear();
+  }
+
+  function onTranscriptDelta(evt) {
+    const payload = JSON.parse(evt.data || '{}');
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    if (!payload.delta && !payload.text) return;
+    const box = liveLinesBox();
+    if (!box) return;
+    let entry = liveLines.get(payload.utterance_id);
+    if (!entry) {
+      const el = document.createElement('div');
+      el.className = 'live-line';
+      box.appendChild(el);
+      entry = { el };
+      liveLines.set(payload.utterance_id, entry);
+    }
+    // « text » = énoncé complet tel qu'accumulé par le serveur : il
+    // auto-répare toute perte de delta en route.
+    entry.el.textContent = payload.text || (entry.el.textContent || '') + (payload.delta || '');
+    box.classList.remove('hidden');
+    scrollTranscriptToBottom();
+  }
+
+  function onTranscriptFinal(evt) {
+    const payload = JSON.parse(evt.data || '{}');
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    const entry = liveLines.get(payload.utterance_id);
+    if (!entry) return;
+    entry.el.remove();
+    liveLines.delete(payload.utterance_id);
+    const box = liveLinesBox();
+    if (box && !liveLines.size) box.classList.add('hidden');
   }
 
   function onSyncRecording(evt) {
@@ -5706,6 +5879,8 @@
     if (liveSource) liveSource.close();
     liveSource = new EventSource('/api/events');
     liveSource.addEventListener('transcript', onSyncTranscript);
+    liveSource.addEventListener('transcript_delta', onTranscriptDelta);
+    liveSource.addEventListener('transcript_final', onTranscriptFinal);
     liveSource.addEventListener('dictation_started', onSyncDictationStarted);
     liveSource.addEventListener('recording_added', onSyncRecording);
     liveSource.addEventListener('recording_deleted', onSyncRecording);

@@ -53,7 +53,7 @@ Déploiement en production (2026-08-14) :
 | Accès public | `app.dictai.ca` / `app.loki.casa` (HTTPS TLS) |
 | Fournisseur d'identité | Pocket ID, auto-hébergé : `login.dictai.ca` et `login.loki.casa` (2 instances) |
 | Modèle de langage | **Google Gemini via Vertex AI**, région `northamerica-northeast1` (Montréal, Québec) — modèle `gemini-2.5-pro`, **audio de la dictée envoyé directement au modèle multimodal** ; la transcription locale Parakeet reste configurée en secours. Les requêtes restent dans la région (addendum de politique cloud Google consenti pour les renseignements de santé) |
-| Reconnaissance vocale | Effectuée **au Québec, sur le serveur local** : l'audio n'en sort jamais |
+| Reconnaissance vocale | Effectuée **au Québec, sur le serveur local** : l'audio n'en sort jamais (**mode par défaut**). Chemin optionnel « streaming » (désactivé par défaut) : l'audio d'un énoncé part à l'API Mistral (Voxtral realtime) — décision de conformité à revalider avant activation, voir § 5 |
 | Base de données | SQLite (`/data/consultai.db`), WAL |
 
 ### 2.2 Environnement technique
@@ -175,7 +175,8 @@ Autres flux :
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
 | Mise en forme de la note (depuis 2026-08-16) | **Audio de la dictée** (trajet principal) ; texte recoupé par le gabarit | Google Vertex AI — Gemini `gemini-2.5-pro` | Québec (région `northamerica-northeast1`, Montréal) — voir § 7.4 |
-| Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (secours Parakeet) |
+| Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (Parakeet local, mode par défaut) |
+| Reconnaissance vocale temps réel — mode « streaming » (`STT_REALTIME_MODE=sse`, **désactivé par défaut**) | Énoncé de la dictée (quelques secondes d'audio) | API Mistral (Voxtral realtime) | Traitement hors Québec — décision de conformité à revalider avant activation (voir § 5). Seul le mode « sse » exporte l'audio ; « vad » reste local |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
 | Turnstile (captcha) | Données du navigateur, adresse IP | Cloudflare | Hors Canada (données non cliniques) |
@@ -213,6 +214,17 @@ Autres flux :
 > fournisseur STT/LLM en deux clics : **chaque changement est une décision de
 > conformité** (résidence des données, entente de service) et doit être revalidé
 > avant toute bascule.
+>
+> > **Temps réel de la dictée (mode « streaming », `STT_REALTIME_MODE=sse`) —
+> > désactivé par défaut.** Le mode « vad » ne change rien aux flux : la
+> > reconnaissance reste locale (Parakeet) et l'audio ne quitte pas la
+> > machine. Seul le mode « sse » envoie l'audio d'un énoncé à l'API Mistral
+> > (Voxtral realtime, traitement hors Québec) pour un affichage en deltas
+> > pendant la parole. L'activation de ce mode est une **décision de
+> > conformité** (résidence des données hors Canada) qui doit être revalidée
+> > avant toute bascule ; le panneau en avertit. À défaut, le mode par défaut
+> > (`off`) et le mode « vad » préservent l'engagement « l'audio n'en sort
+> > jamais ».
 
 ---
 

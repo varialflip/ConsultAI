@@ -581,6 +581,48 @@ manuelle.
 Le service worker ne met en cache que des ressources statiques et anonymes. Ni la
 page `/`, ni les appels `/api/` — ils contiennent des renseignements de santé.
 
+### 7.7 Temps réel de la dictée
+
+Le batch fiable reste l'épine dorsale : l'audio est téléversé par fragments,
+copié localement (IndexedDB) et conservé en entier sur le serveur — rien ne
+change. Le temps réel est une **couche d'affichage par-dessus**, déclenchée par
+un **détecteur de parole (VAD)** tournant dans le navigateur sur l'énergie du
+micro déjà mesurée pour la waveform.
+
+Trois modes, réglés par `STT_REALTIME_MODE` (défaut `off`) :
+
+| Mode | Ce qui se passe | Fournisseurs |
+|---|---|---|
+| `off` | Comportement historique : tranche ~10 s, texte après ~10-15 s | tous |
+| `vad` | À la fin de chaque énoncé, le navigateur signale au serveur de transcrire immédiatement ; coupe au silence (ffmpeg fait autorité sur la frontière) ; le texte apparaît quelques secondes après chaque pause | **tous** (dont Parakeet local) |
+| `sse` | Idem `vad`, plus : le texte provisoire arrive en **deltas** (Mistral Voxtral realtime) pendant la parole, affiché en italique sous la transcription ; le commit durable suit le chemin habituel | Mistral seulement |
+
+Précisions importantes :
+
+- **Le VAD ne filtre jamais l'enregistrement.** Le fichier brut reste complet
+  du premier au dernier fragment : c'est ce qui permet de corriger a posteriori.
+- **Filet de fin** (`STT_VAD_FINISH_SWEEP`, défaut `on`) : au « Terminer », le
+  serveur re-parcourt l'audio brut (détection de parole par ffmpeg, côté
+  serveur) et **re-transcrit tout passage manqué** — un énoncé que le VAD
+  n'avait pas vu, une tranche qui avait échoué. Rien n'est perdu.
+- **Une seule transcription par plage d'audio.** Le VAD accélère le
+  déclenchement de la passe existante ; il n'ajoute pas de seconde passe.
+- **`sse` envoie l'audio à l'API Mistral** (hors de la machine) : engagement
+  de conformité modifié, voir § 11 et EFVP. `vad`, lui, **préserve**
+  l'engagement « l'audio ne quitte jamais la machine » avec le Parakeet local.
+- Contraintes appliquées automatiquement : `sse` n'est actif qu'avec Mistral ;
+  `vad` est désactivé avec Cohere (5 requêtes/minute incompatibles avec la
+  granularité des énoncés).
+- Réglages fins : `STT_VAD_SENSITIVITY` (low/medium/high), `STT_VAD_SPEECH_MS`
+  (parole reconnue après), `STT_VAD_SILENCE_MS` (fin d'énoncé après) et, pour
+  le mode `sse`, `MISTRAL_REALTIME_MODEL`.
+
+Les énoncés très courts (moins de ~0,7 s, ex. « oui », « d'accord ») sont plus
+exposés qu'avant, noyés qu'ils étaient dans une tranche de 10 s : le seuil
+`_MIN_SPEECH_SECONDS` de la reconnaissance les écarte. Le filet de fin les
+retente au « Terminer » sans garantie — comportement assumé, à reconsidérer si
+le gain de latence ne compense pas ces interjections.
+
 ---
 
 ## 8. Mise à jour

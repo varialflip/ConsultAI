@@ -3,6 +3,16 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-20 — v2.0.0-beta.78
+
+- **Le bandeau de récupération disparaît** (beta.78). Les dictées interrompues
+  par un onglet fermé n'affichent plus le bandeau et ses boutons « Reprendre /
+  Terminer et transcrire / Télécharger / Supprimer », source de confusion et de
+  répétition quand plusieurs appareils étaient connectés. Une dictée abandonnée
+  n'est plus traitée à part : sa session est simplement purgée à la rétention
+  globale (`consultation_retention_hours`, défaut 12 h) et le brouillon garde
+  les tranches déjà transcrites.
+
 ## 2026-08-19 — v2.0.0-beta.77
 
 - **Consolidation des consignes retirée, définitivement** (beta.77) — la

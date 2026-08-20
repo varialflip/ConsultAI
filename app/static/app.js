@@ -1627,7 +1627,6 @@
     updateRecordingUI();
     updateDictationStatus();
     window.addEventListener('beforeunload', warnBeforeUnload);
-    hideRecoveryBanner();
   }
 
   function togglePause() {
@@ -1718,10 +1717,9 @@
       return true;
     } catch (err) {
       toast(err.message, 'error', 12000);
-      // L'audio reste sur le serveur et dans le navigateur : la bannière
-      // permet de reprendre là où l'on s'est arrêté.
+      // L'audio reste sur le serveur et dans le navigateur : le brouillon
+      // garde les tranches déjà transcrites, le reste partira avec la purge.
       resetDictationState();
-      refreshRecoveryBanner();
       return false;
     } finally {
       finishToast.dismiss();
@@ -1785,249 +1783,6 @@
     event.preventDefault();
     event.returnValue = '';
     return '';
-  }
-
-  /* -------------------------------------------------------------------------
-   * Récupération d'une dictée interrompue
-   * ----------------------------------------------------------------------
-   * Deux sources, réunies par l'identifiant de session : ce que le serveur a
-   * reçu (il le garde plusieurs jours) et ce que le navigateur a gardé. Le
-   * cas le plus fréquent — onglet fermé, application iOS tuée en arrière-plan
-   * — laisse les deux, et la reprise n'envoie alors que les fragments qui
-   * manquent au serveur : le texte déjà transcrit n'est pas redemandé.
-   * ---------------------------------------------------------------------- */
-
-  function hideRecoveryBanner() {
-    $('recoveryBanner').classList.add('hidden');
-  }
-
-  async function refreshRecoveryBanner() {
-    if (state.recording) return;
-
-    let serverSessions = [];
-    try {
-      serverSessions = (await api('/api/dictation')).sessions || [];
-    } catch (_) {
-      /* hors ligne : on se contente des copies locales */
-    }
-    const localSessions = (await bestEffort(() => audioStore.listSessions(), 'inventaire')) || [];
-
-    const byServerId = new Map(serverSessions.map((s) => [s.session_id, s]));
-    const entries = [];
-
-    localSessions.forEach((local) => {
-      entries.push({
-        localId: local.localId,
-        server: byServerId.get(local.serverSessionId) || null,
-        consultationId: local.consultationId,
-        mimeType: local.mimeType,
-        label: local.label,
-        createdAt: local.createdAt,
-      });
-      byServerId.delete(local.serverSessionId);
-    });
-    // Dictées connues du seul serveur : autre navigateur, ou copie locale
-    // effacée. L'audio est là, elles restent récupérables.
-    byServerId.forEach((server) => {
-      entries.push({
-        localId: null,
-        server,
-        consultationId: server.consultation_id,
-        label: '',
-        createdAt: server.created_at * 1000,
-      });
-    });
-
-    const banner = $('recoveryBanner');
-    const list = $('recoveryList');
-    if (!entries.length) {
-      banner.classList.add('hidden');
-      list.innerHTML = '';
-      return;
-    }
-
-    entries.sort((a, b) => b.createdAt - a.createdAt);
-    list.innerHTML = entries.map((entry, index) => {
-      const when = formatDateTime(new Date(entry.createdAt).toISOString());
-      const seconds = entry.server ? entry.server.received_seconds : 0;
-
-      // Une session inconnue de CET onglet (pas de copie locale), encore au
-      // statut « recording » et dont le dernier fragment date de moins d'une
-      // minute : très probablement une dictée qui tourne VRAIMENT ailleurs en
-      // ce moment (un autre appareil, un autre onglet), pas une dictée
-      // abandonnée. « Reprendre et transcrire » y appellerait /finish et
-      // tronquerait cette dictée en cours — on propose de la suivre à la
-      // place (voir onSyncTranscript, qui prend le relais une fois
-      // l'onglet ouvert sur la même consultation).
-      const liveElsewhere = !entry.localId && entry.server && entry.server.status === 'recording'
-        && (Date.now() / 1000 - entry.server.updated_at) < 60;
-
-      if (liveElsewhere) {
-        return `<li class="text-sm" data-index="${index}">
-          <p class="text-slate-600">${esc([entry.label || T('recovery.unnamed'), T('recovery.live_elsewhere')]
-            .filter(Boolean).join(' · '))}</p>
-          <div class="flex flex-wrap gap-2 mt-1">
-            <button type="button" data-act="follow" data-index="${index}"
-                    class="accent-btn px-2.5 py-1 rounded-md text-xs font-medium">
-              ${esc(T('sync.follow'))}</button>
-          </div>
-        </li>`;
-      }
-
-      const detail = [
-        entry.label || T('recovery.unnamed'),
-        when,
-        seconds
-          ? T('recovery.received', { duration: formatDuration(seconds) })
-          : T('recovery.not_received'),
-      ].filter(Boolean).join(' · ');
-
-      return `<li class="text-sm" data-index="${index}">
-        <p class="text-amber-900">${esc(detail)}</p>
-        <div class="flex flex-wrap gap-2 mt-1">
-          <!-- « Reprendre » ouvre sans conclure (peekStoredSession) — n'a de
-               sens que si le serveur a déjà une session à rouvrir. Conclure
-               (audio archivé, reliquat transcrit) reste un geste à part, le
-               même mot que pour la dictée en cours (rec.finish_title) ;
-               seul bouton PLEIN quand « Reprendre » ne peut pas s'afficher
-               (dictée jamais parvenue au serveur). -->
-          ${entry.server ? `<button type="button" data-act="resume" data-index="${index}"
-                  class="px-2.5 py-1 rounded-md bg-amber-600 text-white text-xs font-medium
-                         hover:bg-amber-700">${esc(T('recovery.resume'))}</button>` : ''}
-          <button type="button" data-act="finish" data-index="${index}"
-                  class="px-2.5 py-1 rounded-md text-xs font-medium ${entry.server
-                    ? 'border border-amber-400 text-amber-800 hover:bg-amber-100'
-                    : 'bg-amber-600 text-white hover:bg-amber-700'}">
-            ${esc(T('rec.finish_title'))}</button>
-          ${entry.localId ? `<button type="button" data-act="download" data-index="${index}"
-                  class="px-2.5 py-1 rounded-md border border-amber-400 text-amber-800 text-xs
-                         hover:bg-amber-100">${esc(T('recovery.download'))}</button>` : ''}
-          <button type="button" data-act="discard" data-index="${index}"
-                  class="px-2.5 py-1 rounded-md border border-amber-400 text-amber-800 text-xs
-                         hover:bg-amber-100">${esc(T('recovery.discard'))}</button>
-        </div>
-      </li>`;
-    }).join('');
-
-    list.querySelectorAll('button[data-act]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const entry = entries[Number(button.dataset.index)];
-        if (button.dataset.act === 'follow') {
-          // Rien à recharger ni à conclure ici (voir onSyncTranscript) : le
-          // seul geste manquant est de sortir le bandeau de l'écran, sinon
-          // il reste affiché au-dessus de la consultation qu'on vient
-          // d'ouvrir pour la suivre.
-          loadDraft(entry.consultationId);
-          hideRecoveryBanner();
-        } else if (button.dataset.act === 'resume') peekStoredSession(entry);
-        else if (button.dataset.act === 'finish') finishStoredSession(entry);
-        else if (button.dataset.act === 'download') downloadStoredSession(entry);
-        else discardStoredSession(entry);
-      });
-    });
-    banner.classList.remove('hidden');
-  }
-
-  /** Reconstitue le fichier audio complet à partir des fragments conservés. */
-  async function assembleStoredAudio(localId, mimeType) {
-    const chunks = await audioStore.chunks(localId);
-    if (!chunks.length) return null;
-    return new Blob(chunks.map((row) => row.blob), { type: mimeType || 'audio/webm' });
-  }
-
-  async function downloadStoredSession(entry) {
-    const blob = await bestEffort(
-      () => assembleStoredAudio(entry.localId, entry.mimeType), 'assemblage',
-    );
-    if (!blob) {
-      toast(T('recovery.nothing_local'), 'warning');
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `dictee-${new Date(entry.createdAt).toISOString().slice(0, 19).replace(/[:T]/g, '-')}`
-      + (entry.mimeType && entry.mimeType.includes('mp4') ? '.mp4' : '.webm');
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  }
-
-  async function discardStoredSession(entry) {
-    if (!window.confirm(T('recovery.confirm_discard'))) return;
-    if (entry.server) {
-      try {
-        await api(`/api/dictation/${entry.server.session_id}/cancel`, { method: 'POST' });
-      } catch (err) {
-        console.warn(T('recovery.delete_failed'), err);
-      }
-    }
-    if (entry.localId) await bestEffort(() => audioStore.remove(entry.localId), 'suppression');
-    toast(T('recovery.deleted'), 'info');
-    refreshRecoveryBanner();
-  }
-
-  /**
-   * Envoie ce qui manque au serveur pour cette session, sans rien conclure :
-   * la consultation s'ouvre sur ce qui est déjà transcrit (traité au fil de
-   * la dictée d'origine), la session reste ouverte côté serveur pour un
-   * « Terminer et transcrire » explicite, plus tard — voir finishStoredSession.
-   * N'a de sens que si le serveur connaît déjà cette session (voir le rendu
-   * du bouton, absent sinon) : une dictée qui n'a jamais atteint le serveur
-   * n'a rien à montrer avant d'être intégralement envoyée.
-   */
-  async function peekStoredSession(entry) {
-    if (!entry.server) return;
-    const busy = showProgressToast(T('recovery.peeking'));
-    try {
-      if (entry.localId) {
-        const chunks = await audioStore.chunks(entry.localId);
-        for (const row of chunks) {
-          if (row.seq < entry.server.next_seq) continue;
-          await postChunk(entry.server.session_id, row.seq, row.blob, dictationConfig.chunkSeconds * 1000);
-        }
-      }
-      const current = await api(`/api/dictation/${entry.server.session_id}`);
-      await loadDraft(current.consultation_id);
-      toast(T('recovery.peeked'), 'info', 8000);
-    } catch (err) {
-      toast(T('recovery.resume_failed', { error: err.message }), 'error', 12000);
-    } finally {
-      busy.dismiss();
-      refreshRecoveryBanner();
-    }
-  }
-
-  /**
-   * Reprend une dictée interrompue et la CONCLUT : complète ce qui manque au
-   * serveur, transcrit le reliquat, archive l'audio. Le texte retourne dans
-   * la consultation d'origine.
-   */
-  async function finishStoredSession(entry) {
-    const busy = showProgressToast(T('recovery.resuming'));
-    try {
-      if (entry.server) {
-        // Le serveur a déjà une partie de l'audio : on ne lui renvoie que la
-        // suite, sans quoi le début serait transcrit deux fois.
-        if (entry.localId) {
-          const chunks = await audioStore.chunks(entry.localId);
-          for (const row of chunks) {
-            if (row.seq < entry.server.next_seq) continue;
-            await postChunk(entry.server.session_id, row.seq, row.blob, dictationConfig.chunkSeconds * 1000);
-          }
-        }
-        const result = await api(`/api/dictation/${entry.server.session_id}/finish`, { method: 'POST' });
-        if (entry.localId) await bestEffort(() => audioStore.remove(entry.localId), 'nettoyage');
-        await loadDraft(result.consultation_id);
-        toast(T('recovery.resumed', { count: result.part_count }), 'success');
-      } else {
-        await uploadStoredSession(entry.localId);
-      }
-    } catch (err) {
-      toast(T('recovery.resume_failed', { error: err.message }), 'error', 12000);
-    } finally {
-      busy.dismiss();
-      refreshRecoveryBanner();
-    }
   }
 
   /**
@@ -5839,13 +5594,11 @@
    *
    * Le toast est persistant (durationMs = 0) : une invitation qui disparaît
    * au bout de 12 s obligeait à recharger la page quand on n'avait pas les
-   * yeux dessus. Le bandeau de récupération, lui aussi rafraîchi ici, garde
-   * une trace durable de la dictée à suivre.
+   * yeux dessus.
    */
   function onSyncDictationStarted(evt) {
     const payload = JSON.parse(evt.data);
     if (payload.origin_tab === state.tabId) return;
-    refreshRecoveryBanner();
     if (String(payload.consultation_id) === String(state.consultationId)) return;
     toastWithAction(
       T('sync.dictation_started', { title: payload.title }),
@@ -5853,18 +5606,6 @@
       () => loadDraft(payload.consultation_id),
       0,
     );
-  }
-
-  /**
-   * La dictée suivie (ou démarrée) ailleurs vient de se conclure ou d'être
-   * abandonnée : la session a disparu du serveur, le bandeau « Suivre »
-   * n'a plus de raison d'être — on le recalcule plutôt que d'attendre le
-   * prochain chargement de page.
-   */
-  function onSyncDictationStopped(evt) {
-    const payload = JSON.parse(evt.data);
-    if (payload.origin_tab === state.tabId) return;
-    refreshRecoveryBanner();
   }
 
   function onSyncConsultationDeleted(evt) {
@@ -5883,7 +5624,6 @@
     liveSource = new EventSource('/api/events');
     liveSource.addEventListener('transcript', onSyncTranscript);
     liveSource.addEventListener('dictation_started', onSyncDictationStarted);
-    liveSource.addEventListener('dictation_stopped', onSyncDictationStopped);
     liveSource.addEventListener('recording_added', onSyncRecording);
     liveSource.addEventListener('recording_deleted', onSyncRecording);
     liveSource.addEventListener('generated', onSyncGeneratedOrPatched);
@@ -6076,9 +5816,6 @@
     } catch (err) {
       toast(T('app.load_failed', { error: err.message }), 'error', 12000);
     }
-
-    // Une dictée laissée en plan par un onglet fermé se signale d'elle-même.
-    refreshRecoveryBanner().catch((err) => console.warn('Récupération :', err));
 
     connectLiveEvents();
 

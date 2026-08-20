@@ -683,57 +683,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
 
     # --- Récupération d'une dictée interrompue -----------------------------
-    "recovery.title": ("Dictée interrompue retrouvée", "Interrupted dictation found"),
-    # « Reprendre » n'exige plus rien : elle rouvre la consultation sur ce
-    # qui est déjà transcrit, sans forcer une passe de transcription tout de
-    # suite — voir peekStoredSession() côté JS. Terminer reste un geste
-    # explicite, séparé (rec.finish_title, même bouton et même libellé que
-    # celui de la dictée en cours).
-    "recovery.resume": ("Reprendre", "Resume"),
-    "recovery.download": ("Télécharger l'audio", "Download the audio"),
-    "recovery.discard": ("Supprimer", "Delete"),
-    "recovery.unnamed": ("Consultation sans nom", "Unnamed consultation"),
-    "recovery.received": (
-        "{duration} reçues par le serveur",
-        "{duration} received by the server",
-    ),
-    "recovery.not_received": ("non reçue par le serveur", "not received by the server"),
-    "recovery.live_elsewhere": (
-        "Dictée en cours sur un autre appareil.",
-        "Dictation in progress on another device.",
-    ),
-    "recovery.nothing_local": (
-        "Aucun fragment local à télécharger.",
-        "No local chunk to download.",
-    ),
-    "recovery.confirm_discard": (
-        "Supprimer définitivement cet enregistrement ?",
-        "Permanently delete this recording?",
-    ),
-    "recovery.delete_failed": (
-        "Suppression côté serveur impossible :",
-        "Server-side deletion failed:",
-    ),
-    "recovery.deleted": ("Enregistrement supprimé.", "Recording deleted."),
-    "recovery.peeking": (
-        "Récupération de la dictée…",
-        "Retrieving the dictation…",
-    ),
-    "recovery.peeked": (
-        "Dictée ouverte — la session reste active côté serveur, terminez-la "
-        "quand vous voulez.",
-        "Dictation opened — the session stays active server-side, finish it "
-        "whenever you're ready.",
-    ),
-    "recovery.resuming": (
-        "Reprise de la dictée interrompue…",
-        "Resuming the interrupted dictation…",
-    ),
-    "recovery.resumed": (
-        "Dictée récupérée — {count} tranche(s) transcrite(s).",
-        "Dictation recovered — {count} segment(s) transcribed.",
-    ),
-    "recovery.resume_failed": ("Reprise impossible : {error}", "Resume failed: {error}"),
     "recovery.no_chunks": (
         "Aucun fragment audio conservé pour cette dictée.",
         "No audio chunk kept for this dictation.",

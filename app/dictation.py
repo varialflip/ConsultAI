@@ -410,7 +410,7 @@ def purge_expired() -> int:
     return removed
 
 
-def cleanup_abandoned(username: str, db: Session) -> None:
+def cleanup_abandoned(username: str, db: Session, origin_tab: str = "") -> None:
     """
     Traite les dictées abandonnées par un onglet mort — appelée à l'ouverture
     de la liste des brouillons, pas en boucle de fond (voir main.py,
@@ -470,7 +470,7 @@ def cleanup_abandoned(username: str, db: Session) -> None:
             _delete_empty(username, session, db)
             removed += 1
             continue
-        _archive_abandoned(session, db)
+        _archive_abandoned(session, db, origin_tab)
         archived += 1
     if archived or removed:
         logger.info(
@@ -493,7 +493,9 @@ def _delete_empty(username: str, session: DictationSession, db: Session) -> None
                     session.consultation_id)
 
 
-def _archive_abandoned(session: DictationSession, db: Session) -> None:
+def _archive_abandoned(
+    session: DictationSession, db: Session, origin_tab: str = "",
+) -> None:
     """
     Conserve l'audio d'une dictée abandonnée en le rattachant au brouillon,
     marque le brouillon « abandonnée » et efface la session. Même trajectoire
@@ -522,7 +524,7 @@ def _archive_abandoned(session: DictationSession, db: Session) -> None:
         live.publish(consultation.owner, "recording_added", {
             "consultation_id": consultation.id,
             "recording_id": stored.id,
-            "origin_tab": "",
+            "origin_tab": origin_tab,
         })
         logger.info(
             "Dictée %s abandonnée : audio conservé avec le brouillon %s "
@@ -530,6 +532,13 @@ def _archive_abandoned(session: DictationSession, db: Session) -> None:
             session.id, consultation.id, stored.size_bytes / 1048576,
             int(round(session.received_seconds)),
         )
+    # Les autres onglets/appareils ouverts sont prévenus en direct : un
+    # brouillon abandonné vient d'apparaître dans la liste.
+    live.publish(consultation.owner, "consultation_abandoned", {
+        "consultation_id": consultation.id,
+        "title": consultation.title,
+        "origin_tab": origin_tab,
+    })
 
 
 # ---------------------------------------------------------------------------

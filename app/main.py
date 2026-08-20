@@ -2140,13 +2140,28 @@ def _dictation_session(session_id: str, user: Principal):
 
 
 @app.get("/api/dictation")
-def list_dictations(request: Request):
+def list_dictations(request: Request, db: Session = Depends(get_db)):
     """
-    Dictées ouvertes restées sur le serveur — typiquement un onglet fermé en
-    plein enregistrement. Le navigateur les propose à la reprise.
+    Dictées ouvertes restées sur le serveur, et brouillons actuellement
+    marqués « abandonnée ». La passe de traitement des dictées orphelines
+    (audio archivé, brouillon marqué, sessions sans contenu purgées) tourne
+    ici, à chaque chargement de page — c'est ce qui nourrit le toast
+    « brouillon abandonné » côté client.
     """
     user = current_user(request)
-    return {"sessions": dictation.list_sessions(user.username)}
+    dictation.cleanup_abandoned(
+        user.username, db, request.headers.get("x-consultai-tab", ""),
+    )
+    abandoned = db.scalars(
+        select(Consultation.id).where(
+            Consultation.owner == user.owner_key,
+            Consultation.status == "abandonnee",
+        )
+    ).all()
+    return {
+        "sessions": dictation.list_sessions(user.username),
+        "abandoned": list(abandoned),
+    }
 
 
 @app.post("/api/dictation", status_code=status.HTTP_201_CREATED)
@@ -2684,7 +2699,9 @@ def list_consultations(
     # brouillon marqué « abandonnée », sessions sans contenu (< 10 s) purgées.
     # AVANT purge_expired : une session à conserver ne doit pas être emportée
     # par la purge de rétention au même accès.
-    dictation.cleanup_abandoned(user.username, db)
+    dictation.cleanup_abandoned(
+        user.username, db, request.headers.get("x-consultai-tab", ""),
+    )
     dictation.purge_expired()
     purge_expired_consultations(db)
     rows = db.scalars(

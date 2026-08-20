@@ -3,6 +3,17 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-20 — v2.0.0-beta.80
+
+- **Brouillon abandonné : un toast vous y renvoie** (beta.80). À chaque
+  chargement, tant qu'un brouillon marqué « Abandonnée » existe, un toast
+  dismissable (« Une dictée abandonnée a laissé un brouillon — voyez la liste
+  des brouillons », bouton **Voir**) s'affiche et ouvre la liste. Les autres
+  appareils ouverts sont prévenus en direct dès qu'une dictée interrompue est
+  détectée (SSE). La détection se fait désormais aussi au chargement de la
+  page, pas seulement à l'ouverture de la liste des brouillons : l'audio est
+  archivé et le brouillon marqué même si on ne l'ouvre jamais.
+
 ## 2026-08-20 — v2.0.0-beta.79
 
 - **Dictées abandonnées : l'audio est conservé** (beta.79). Une dictée

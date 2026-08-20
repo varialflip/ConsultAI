@@ -930,6 +930,13 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "drafts.today": ("Aujourd'hui", "Today"),
     "drafts.yesterday": ("Hier", "Yesterday"),
     "drafts.default_title": ("Consultation", "Consultation"),
+    # Toast montré à chaque chargement tant qu'un brouillon « abandonnée »
+    # existe, et à la détection en direct d'une dictée interrompue.
+    "drafts.abandoned_toast": (
+        "Une dictée abandonnée a laissé un brouillon — voyez la liste des brouillons.",
+        "An abandoned dictation left a draft — see the drafts list.",
+    ),
+    "drafts.view": ("Voir", "View"),
 
     # --- Synchronisation en direct (autre onglet, autre appareil) ----------
     "sync.reload": ("Recharger", "Reload"),

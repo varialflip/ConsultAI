@@ -501,6 +501,12 @@
     // peut s'activer sans transcription, voir updateActionButtons().
     llmBypassStt: false,
     llmBypassSttKeepTranscript: false,
+    // Toast « brouillon abandonné » montré pendant CETTE page : remontré à
+    // chaque chargement tant qu'un brouillon « abandonnée » existe (voir
+    // refreshAbandonedState). Les annonces en direct (SSE) se dédupliquent
+    // séparément, par consultation — voir onSyncConsultationAbandoned.
+    abandonedToastShown: false,
+    abandonedToasts: new Set(),
   };
 
   // Objets liés à l'enregistrement, regroupés pour un nettoyage simple.
@@ -1513,7 +1519,12 @@
     // relancer ce mécanisme intégré.
     if (document.visibilityState === 'visible' && liveSource
         && liveSource.readyState === EventSource.CLOSED) {
-      connectLiveEvents();
+    connectLiveEvents();
+
+    // Un brouillon « abandonnée » qui attend dans la liste se signale par un
+    // toast dismissable à chaque chargement, tant qu'il existe.
+    refreshAbandonedState().catch((err) => console.warn('Brouillons abandonnés :', err));
+
     }
   });
 
@@ -5612,6 +5623,50 @@
     );
   }
 
+  /**
+   * Un brouillon vient d'être marqué « abandonnée » (navigateur fermé en
+   * plein enregistrement, détecté par un autre appareil) : on prévient en
+   * direct. Le brouillon est dans la liste, son audio a été conservé.
+   */
+  function onSyncConsultationAbandoned(evt) {
+    const payload = JSON.parse(evt.data);
+    if (payload.origin_tab === state.tabId) return;
+    if (state.abandonedToasts.has(String(payload.consultation_id))) return;
+    state.abandonedToasts.add(String(payload.consultation_id));
+    toastWithAction(
+      T('drafts.abandoned_toast', { count: 1 }),
+      T('drafts.view'),
+      () => openDraftsModal(),
+      10000,
+    );
+  }
+
+  /**
+   * Au chargement : signale discrètement les brouillons « abandonnée » qui
+   * attendent dans la liste. Appelé à CHAQUE chargement tant qu'un tel
+   * brouillon existe — le toast est dismissable, et l'entrée reste visible et
+   * supprimable dans la liste.
+   */
+  async function refreshAbandonedState() {
+    if (state.recording) return;
+    let data;
+    try {
+      data = await api('/api/dictation');
+    } catch (_) {
+      return; // hors ligne : rien à annoncer
+    }
+    const abandoned = data.abandoned || [];
+    if (!abandoned.length || state.abandonedToastShown) return;
+    state.abandonedToastShown = true;
+    abandoned.forEach((id) => state.abandonedToasts.add(String(id)));
+    toastWithAction(
+      T('drafts.abandoned_toast', { count: abandoned.length }),
+      T('drafts.view'),
+      () => openDraftsModal(),
+      10000,
+    );
+  }
+
   function onSyncConsultationDeleted(evt) {
     const payload = JSON.parse(evt.data);
     if (payload.origin_tab === state.tabId) return;
@@ -5637,6 +5692,7 @@
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);
     liveSource.addEventListener('consultation_created', onSyncConsultationCreated);
     liveSource.addEventListener('consultation_deleted', onSyncConsultationDeleted);
+    liveSource.addEventListener('consultation_abandoned', onSyncConsultationAbandoned);
     // EventSource se reconnecte déjà tout seul (avec le délai « retry: » du
     // serveur) : on se contente de journaliser plutôt que de dupliquer cette
     // logique.

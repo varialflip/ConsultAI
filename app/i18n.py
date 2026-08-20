@@ -1538,6 +1538,17 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Streaming transcription model (deltas while speaking), used in “sse” "
         "mode only. Intended for live transcription.",
     ),
+    "set.mistral_realtime_delay_ms.label": (
+        "Délai de contexte (ms)", "Context delay (ms)",
+    ),
+    "set.mistral_realtime_delay_ms.help": (
+        "Le modèle attend ce temps avant de transcrire, pour rassembler le "
+        "contexte des paroles précédentes (target_streaming_delay_ms). Plus "
+        "élevé = plus précis mais texte plus tardif ; 0 = défaut du service.",
+        "The model waits this long before transcribing, to gather context "
+        "from previous speech (target_streaming_delay_ms). Higher = more "
+        "accurate but later text; 0 = service default.",
+    ),
 
     "set.stt_realtime_mode.label": ("Temps réel de la dictée", "Realtime dictation"),
     "set.stt_realtime_mode.help": (

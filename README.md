@@ -601,6 +601,16 @@ Le texte de la transcription s'affiche **progressivement** dans le panneau STT
 (« token par token »), avec la même mécanique que la note structurée — que ce
 soit les segments committés ou la ligne provisoire du mode `sse`.
 
+**Contexte conservé en mode `sse`.** Contrairement à une session par énoncé, le
+mode `sse` garde **une seule session WebSocket par dictée** : chaque énoncé y
+est ajouté, et le modèle de streaming conserve le contexte des énoncés
+précédents (noms de médicaments, acronymes, cohérence de l'anamnèse). Le
+serveur facture par énoncé, pas par session. `MISTRAL_REALTIME_DELAY_MS`
+(`target_streaming_delay_ms`) règle le compromis : attendre un peu avant de
+transcrire pour rassembler du contexte (1000 ms par défaut). Si la session
+meurt (réseau, pause très longue), le repli batch du même énoncé prend le
+relais — rien n'est perdu, seul le contexte recommence.
+
 Précisions importantes :
 
 - **Le VAD ne filtre jamais l'enregistrement.** Le fichier brut reste complet

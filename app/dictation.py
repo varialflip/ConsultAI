@@ -60,12 +60,13 @@ from app.database import Consultation, SessionLocal, utcnow
 from sqlalchemy.orm import Session
 from app.stt import (
     _MISTRAL_REALTIME_MODEL_DEFAUT,
+    MistralRealtimeTranscription,
     TranscriptionError,
+    _decode_pcm16,
     detect_speech_ranges,
     extract_segment,
     find_cut_point,
     transcribe,
-    transcribe_mistral_streaming,
     transcribe_payload,
 )
 
@@ -393,6 +394,7 @@ def list_sessions(username: str) -> List[dict]:
 def delete_session(session: DictationSession) -> None:
     shutil.rmtree(session.directory, ignore_errors=True)
     _forget_lock(session.id)
+    _forget_realtime(session.id)
     logger.info("Dictée %s supprimée", session.id)
 
 
@@ -419,6 +421,7 @@ def purge_for_user(username: str) -> int:
         if data.get("username") == username:
             shutil.rmtree(directory, ignore_errors=True)
             _forget_lock(entry)
+            _forget_realtime(entry)
             removed += 1
     if removed:
         logger.info("Dictées de %s : %d session(s) supprimée(s)", username, removed)
@@ -449,6 +452,7 @@ def purge_expired() -> int:
             continue
         if age > limit:
             shutil.rmtree(directory, ignore_errors=True)
+            _forget_realtime(entry)
             removed += 1
     if removed:
         logger.info("Purge des dictées : %d session(s) de plus de %g h supprimée(s)",
@@ -700,6 +704,40 @@ def _session_owner(session: DictationSession) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Canal temps réel Mistral persistant (mode « sse »)
+# ---------------------------------------------------------------------------
+# Une session WebSocket par dictée, conservée ouverte pour que le modèle de
+# streaming garde le contexte des énoncés successifs (voir
+# stt.MistralRealtimeTranscription). Fermée et retirée dès que la dictée se
+# conclut, s'abandonne ou est purgée. Comme les verrous du module, le registre
+# vit en mémoire : cela ne fonctionne QUE parce que ConsultAI tourne en un
+# seul worker uvicorn.
+_realtime_sessions: Dict[str, MistralRealtimeTranscription] = {}
+_realtime_guard = threading.Lock()
+
+
+def _realtime_session(session: DictationSession) -> MistralRealtimeTranscription:
+    """Canal temps réel PERSISTANT de cette dictée (créé à la demande)."""
+    api_key = runtime_config.value("mistral_api_key")
+    model = runtime_config.value("mistral_realtime_model") or _MISTRAL_REALTIME_MODEL_DEFAUT
+    boucle = live.event_loop()
+    with _realtime_guard:
+        inst = _realtime_sessions.get(session.id)
+        if inst is None or inst.is_closed:
+            inst = MistralRealtimeTranscription(model, api_key, boucle)
+            _realtime_sessions[session.id] = inst
+        return inst
+
+
+def _forget_realtime(session_id: str) -> None:
+    """Ferme et retire le canal temps réel d'une dictée (fin, abandon, purge)."""
+    with _realtime_guard:
+        inst = _realtime_sessions.pop(session_id, None)
+    if inst is not None:
+        inst.close()
+
+
+# ---------------------------------------------------------------------------
 # Découpage et transcription
 # ---------------------------------------------------------------------------
 def _phrase_hints(template_id: Optional[int]) -> str:
@@ -851,13 +889,17 @@ def _transcribe_one(session: DictationSession, hints: str, final: bool,
 
 def _transcribe_one_sse(session: DictationSession, payload, hints: str) -> dict:
     """
-    Transcrit un énoncé via Mistral Voxtral realtime, en publiant les deltas.
+    Transcrit un énoncé via le canal temps réel Mistral PERSISTANT de la
+    dictée, en publiant les deltas.
 
-    Les deltas vont à tous les onglets (``transcript_delta``) pour composer la
-    ligne provisoire ; à la fin, ``transcript_final`` la retire, et le commit
-    durable suit son chemin habituel (``_store_part``, qui diffuse le texte
-    définitif aux autres onglets). L'énoncé porte un ``utterance_id`` : c'est
-    lui qui relie deltas, final et retrait de la ligne.
+    La session WebSocket est ouverte au premier énoncé et conservée tant que
+    la dictée dure (``_realtime_session``) : c'est elle qui permet au modèle
+    de streaming de garder le contexte des énoncés précédents. Les deltas
+    vont à tous les onglets (``transcript_delta``) pour composer la ligne
+    provisoire ; ``transcript_final`` la retire au commit, qui suit son chemin
+    habituel (``_store_part``). Si le canal est mort (réseau, session expirée),
+    on retombe sur la transcription batch du même énoncé — la dictée ne perd
+    jamais la parole.
     """
     uid = session.utterance_seq
     session.utterance_seq += 1
@@ -873,16 +915,20 @@ def _transcribe_one_sse(session: DictationSession, payload, hints: str) -> dict:
         })
 
     try:
-        texte = transcribe_mistral_streaming(payload, hints, on_delta)
+        pcm = _decode_pcm16(payload.content)
+        if not pcm:
+            raise TranscriptionError("Énoncé vide après transcodage PCM.")
+        texte = _realtime_session(session).transcribe(pcm, on_delta)
         moteur = ("mistral",
                   runtime_config.value("mistral_realtime_model") or _MISTRAL_REALTIME_MODEL_DEFAUT)
     except TranscriptionError as exc:
-        # Le canal temps réel a échoué (réseau, modèle, quota…) : on retombe
-        # sur la transcription batch du même énoncé pour ne pas perdre la
-        # parole. Le texte arrive alors d'un bloc, sans ligne provisoire —
-        # c'est la garantie de robustesse, pas la promesse de latence.
+        # Canal temps réel indisponible (session morte, réseau…) : on retombe
+        # sur la transcription batch du même énoncé, et on jette la session
+        # morte — le prochain énoncé en ouvrira une fraîche. Le texte arrive
+        # alors d'un bloc, sans ligne provisoire.
         logger.warning("Dictée %s : temps réel Mistral indisponible, repli batch — %s",
                        session.id, exc)
+        _forget_realtime(session.id)
         try:
             resultat = transcribe_payload(payload, hints)
         except TranscriptionError:

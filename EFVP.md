@@ -220,11 +220,14 @@ Autres flux :
 > > reconnaissance reste locale (Parakeet) et l'audio ne quitte pas la
 > > machine. Seul le mode « sse » envoie l'audio d'un énoncé à l'API Mistral
 > > (Voxtral realtime, traitement hors Québec) pour un affichage en deltas
-> > pendant la parole. L'activation de ce mode est une **décision de
-> > conformité** (résidence des données hors Canada) qui doit être revalidée
-> > avant toute bascule ; le panneau en avertit. À défaut, le mode par défaut
-> > (`off`) et le mode « vad » préservent l'engagement « l'audio n'en sort
-> > jamais ».
+> > pendant la parole. Une **seule session WebSocket est ouverte par dictée**
+> > et maintenue jusqu'à sa conclusion (« Terminer », abandon ou purge) : la
+> > dictée complète transite alors vers Mistral au fil de l'eau, puis la
+> > session est close — rien n'est conservé côté Mistral au-delà. L'activation
+> > de ce mode est une **décision de conformité** (résidence des données hors
+> > Canada) qui doit être revalidée avant toute bascule ; le panneau en
+> > avertit. À défaut, le mode par défaut (`off`) et le mode « vad » préservent
+> > l'engagement « l'audio n'en sort jamais ».
 
 ---
 

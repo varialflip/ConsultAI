@@ -222,6 +222,10 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: settings.mistral_realtime_model,
         placeholder="voxtral-mini-transcribe-realtime-2602",
     ),
+    Setting(
+        "mistral_realtime_delay_ms", "number", "group.stt",
+        default=lambda: str(settings.mistral_realtime_delay_ms),
+    ),
 
     # Temps réel de la dictée : une couche d'affichage par-dessus le batch
     # fiable. Trois modes — « off » (comportement historique, l'audio ne

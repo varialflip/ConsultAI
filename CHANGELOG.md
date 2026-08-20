@@ -37,6 +37,12 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   continu, « token par token », avec la même mécanique que la note structurée
   (rattrapage proportionnel, finition lissée) : segments committés et ligne
   provisoire du mode streaming se dévoilent au fil de l'eau.
+- **Contexte conservé en mode « sse »**. Le mode streaming garde une seule
+  session WebSocket Mistral par dictée : chaque énoncé y est ajouté et le
+  modèle conserve le contexte des énoncés précédents (noms, posologies,
+  cohérence de l'anamnèse). Nouveau réglage `MISTRAL_REALTIME_DELAY_MS`
+  (attente de contexte avant transcription, 1000 ms par défaut). Repli batch
+  conservé si la session meurt.
 
 ## 2026-08-20 — v2.0.0-beta.83
 

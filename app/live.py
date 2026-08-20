@@ -68,6 +68,16 @@ def bind_loop(loop: asyncio.AbstractEventLoop) -> None:
     _loop = loop
 
 
+def event_loop() -> Optional[asyncio.AbstractEventLoop]:
+    """Boucle d'événements d'uvicorn (None avant le démarrage).
+
+    Exposée aux couches qui doivent y soumettre des tâches depuis un fil du
+    pool — le canal temps réel Mistral persistant (app/stt.py), dont la
+    WebSocket vit sur cette boucle.
+    """
+    return _loop
+
+
 def subscribe(owner_key: str) -> "asyncio.Queue":
     """Nouvel abonné pour cet usager — un par connexion SSE ouverte."""
     queue: asyncio.Queue = asyncio.Queue(maxsize=_MAX_QUEUE)

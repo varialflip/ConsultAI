@@ -1836,159 +1836,174 @@ def _erreur_mistral(payload: dict) -> str:
     return "erreur du canal temps réel Mistral"
 
 
-def _transcrire_realtime_mistral(
-    model: str,
-    api_key: str,
-    pcm: bytes,
-    on_delta: Optional[Callable[[str, str], None]],
-) -> str:
+class MistralRealtimeTranscription:
     """
-    Cœur asynchrone du canal temps réel Mistral (à lancer dans une boucle
-    d'événements dédiée — le fil d'exécution de la dictée n'est pas celui
-    d'uvicorn).
+    Canal WebSocket réel temps Mistral, PERSISTANT sur une dictée.
 
-    Protocole vérifié en direct (2026-08-20) :
-      1. WebSocket ``wss://api.mistral.ai/v1/audio/transcriptions/realtime``,
-         auth ``Authorization: Bearer <clé>`` ;
-      2. handshake jusqu'à ``session.created`` (annonce ``audio_format``) ;
-      3. envoi de ``input_audio.append`` (PCM s16le 16 kHz en base64, en
-         morceaux bornés par la limite du service), puis ``input_audio.flush``
-         et ``input_audio.end`` ;
-      4. lecture des ``transcription.text.delta`` / ``transcription.segment``
-         (ligne provisoire) jusqu'à ``transcription.done``, qui porte le texte
-         autoritaire de l'énoncé.
+    Une instance = une session WebSocket = une dictée. Les énoncés y sont
+    ajoutés successivement (``input_audio.append`` + ``flush``) et la session
+    reste ouverte tant que la dictée dure — c'est la condition pour que le
+    modèle de streaming conserve le contexte des énoncés précédents. Le
+    serveur facture par énoncé (``prompt_audio_seconds`` plat sur des appends
+    successifs) : preuve qu'il traite incrémentalement, en conservant son
+    état, plutôt que de re-décoder tout le flux. ``close`` (``end`` +
+    ``done``) à la fin de la dictée.
+
+    Les méthodes sont asynchrones mais exposées en blocage : le canal vit sur
+    la boucle d'événements d'uvicorn (``loop``), et chaque appel y est soumis
+    depuis le fil du pool où tourne la dictée (``run_coroutine_threadsafe``).
     """
-    import asyncio
-    import base64
-    import json as _json
-    import urllib.parse
 
-    try:
-        import websockets
-    except ImportError as exc:  # pragma: no cover
-        raise TranscriptionError(
-            "La bibliothèque websockets est absente du conteneur."
-        ) from exc
+    #: 262 144 octets décodés au maximum par « append » : à 32 ko/s
+    #: (s16le mono 16 kHz), un morceau de ~7 s reste sous la barre.
+    _MORCEAU = 200 * 1024
 
-    uri = (
-        "wss://api.mistral.ai/v1/audio/transcriptions/realtime"
-        f"?model={urllib.parse.quote(model)}"
-    )
+    def __init__(self, model: str, api_key: str, loop) -> None:
+        self._model = model
+        self._api_key = api_key
+        self._loop = loop
+        self._ws = None
+        self._closed = False
 
-    segments_texte: List[str] = []
-    courant = ""
-    final = ""
+    def _run(self, coro, timeout: float = 120.0):
+        import asyncio
 
-    def _publier(delta: str) -> None:
-        if on_delta is not None:
-            on_delta(delta, " ".join(segments_texte + [courant]).strip())
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future.result(timeout=timeout)
 
-    async def _session() -> str:
-        nonlocal segments_texte, courant, final
-        # 262 144 octets décodés au maximum par « append » : à 32 ko/s
-        # (s16le mono 16 kHz), un morceau de ~7 s reste sous la barre.
-        MORCEAU = 200 * 1024
+    @property
+    def is_closed(self) -> bool:
+        # Seul ``_closed`` compte : une instance fraîche (jamais connectée)
+        # est utilisable — elle se connecte à la première transcription. La
+        # fermeture pose ``_closed`` puis vide ``_ws``.
+        return self._closed
 
-        async with websockets.connect(
+    def transcribe(self, pcm: bytes, on_delta=None) -> str:
+        """Append + flush un énoncé sur la session ; retourne son texte final."""
+        return self._run(self._transcribe(pcm, on_delta))
+
+    def close(self) -> None:
+        """Clôt la session (``input_audio.end``) et libère la WebSocket."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._run(self._close(), timeout=10)
+        except Exception:
+            logger.debug("Fermeture du canal temps réel Mistral impossible", exc_info=True)
+
+    # -- internes ------------------------------------------------------------
+    async def _connect(self) -> None:
+        import asyncio
+        import json as _json
+        import urllib.parse
+
+        try:
+            import websockets
+        except ImportError as exc:  # pragma: no cover
+            raise TranscriptionError(
+                "La bibliothèque websockets est absente du conteneur."
+            ) from exc
+
+        uri = (
+            "wss://api.mistral.ai/v1/audio/transcriptions/realtime"
+            f"?model={urllib.parse.quote(self._model)}"
+        )
+        self._ws = await websockets.connect(
             uri,
-            additional_headers={"Authorization": f"Bearer {api_key}"},
+            additional_headers={"Authorization": f"Bearer {self._api_key}"},
             max_size=None,
             open_timeout=15,
-        ) as ws:
-            while True:
-                brut = await asyncio.wait_for(ws.recv(), timeout=20)
-                msg = _json.loads(brut if isinstance(brut, str) else brut.decode("utf-8", "replace"))
-                type_msg = msg.get("type")
-                if type_msg == "session.created":
-                    break
-                if type_msg == "error":
-                    raise TranscriptionError(_erreur_mistral(msg))
-
-            for i in range(0, len(pcm), MORCEAU):
-                await ws.send(_json.dumps({
-                    "type": "input_audio.append",
-                    "audio": base64.b64encode(pcm[i:i + MORCEAU]).decode("ascii"),
-                }))
-            await ws.send(_json.dumps({"type": "input_audio.flush"}))
-            await ws.send(_json.dumps({"type": "input_audio.end"}))
-
-            while True:
-                try:
-                    brut = await asyncio.wait_for(ws.recv(), timeout=60)
-                except asyncio.TimeoutError:
-                    break
-                msg = _json.loads(brut if isinstance(brut, str) else brut.decode("utf-8", "replace"))
-                type_msg = msg.get("type")
-                if type_msg == "error":
-                    raise TranscriptionError(_erreur_mistral(msg))
-                if type_msg == "transcription.done":
-                    final = str(msg.get("text") or "")
-                    break
-                morceau = str(msg.get("text") or "")
-                if type_msg == "transcription.segment":
-                    segments_texte.append(morceau)
-                    courant = ""
-                    _publier(morceau)
-                elif morceau:
-                    courant += morceau
-                    _publier(morceau)
-
-        return final or " ".join(segments_texte + [courant]).strip()
-
-    return asyncio.run(_session())
-
-
-def transcribe_mistral_streaming(
-    payload: AudioPayload,
-    extra_phrase_hints: Optional[str] = None,
-    on_delta: Optional[Callable[[str, str], None]] = None,
-) -> str:
-    """
-    Transcription temps réel d'un énoncé par Mistral Voxtral realtime.
-
-    Contrairement au chemin batch, le modèle realtime n'accepte QUE le canal
-    WebSocket ``/v1/audio/transcriptions/realtime`` (le POST multipart le
-    refuse avec « only supports realtime transcription »). Le PCM s16le
-    16 kHz est poussé par ``input_audio.append`` ; le serveur renvoie des
-    deltas ``transcription.text.delta`` et des segments stabilisés
-    ``transcription.segment``, puis ``transcription.done`` avec le texte
-    complet de l'énoncé.
-
-    Chaque texte est relayé à ``on_delta(delta, texte_complet)`` : le second
-    argument (segments stabilisés + delta en cours) rend la ligne provisoire
-    auto-réparatrice. Le texte RETOURNÉ est celui de ``transcription.done``,
-    la version autoritaire qui deviendra le commit durable.
-
-    ``extra_phrase_hints`` est ignoré, comme pour le chemin batch : aucune
-    adaptation documentée chez Mistral.
-    """
-    import asyncio
-
-    api_key = runtime_config.value("mistral_api_key")
-    if not api_key:
-        raise TranscriptionError(
-            "Mistral est sélectionné mais aucune clé API n'est renseignée. "
-            "Panneau d'administration → Reconnaissance vocale."
         )
+        while True:
+            brut = await asyncio.wait_for(self._ws.recv(), timeout=20)
+            msg = _json.loads(brut if isinstance(brut, str) else brut.decode("utf-8", "replace"))
+            if msg.get("type") == "session.created":
+                break
+            if msg.get("type") == "error":
+                raise TranscriptionError(_erreur_mistral(msg))
 
-    model = runtime_config.value("mistral_realtime_model") or _MISTRAL_REALTIME_MODEL_DEFAUT
+        # `target_streaming_delay_ms` : attendre un peu avant de transcrire
+        # pour « rassembler du contexte » (documentation Mistral) — le levier
+        # qualité/latence, réglable au panneau.
+        try:
+            delai = int(runtime_config.value("mistral_realtime_delay_ms"))
+        except (TypeError, ValueError):
+            delai = 0
+        if delai > 0:
+            await self._ws.send(_json.dumps({
+                "type": "session.update",
+                "session": {"target_streaming_delay_ms": delai},
+            }))
 
-    # La dictée tourne dans un fil du pool (jamais la boucle d'uvicorn) : on
-    # peut se permettre une boucle d'événements dédiée au canal temps réel.
-    # ``get_running_loop`` lève en l'absence de boucle — c'est la vérification
-    # voulue : ``asyncio.run`` est permis dans un fil de pool, pas sur la
-    # boucle principale.
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        pass
-    else:
-        raise TranscriptionError("Canal temps réel Mistral appelé sur la boucle principale.")
-    pcm = _decode_pcm16(payload.content)
-    if not pcm:
-        raise TranscriptionError("Énoncé vide après transcodage PCM.")
+    async def _transcribe(self, pcm: bytes, on_delta) -> str:
+        import asyncio
+        import base64
+        import json as _json
 
-    return _transcrire_realtime_mistral(model, api_key, pcm, on_delta)
+        if self._ws is None:
+            await self._connect()
+        ws = self._ws
+        segments_texte: List[str] = []
+        courant = ""
+
+        def _publier(delta: str) -> None:
+            if on_delta is not None:
+                on_delta(delta, " ".join(segments_texte + [courant]).strip())
+
+        for i in range(0, len(pcm), self._MORCEAU):
+            await ws.send(_json.dumps({
+                "type": "input_audio.append",
+                "audio": base64.b64encode(pcm[i:i + self._MORCEAU]).decode("ascii"),
+            }))
+        await ws.send(_json.dumps({"type": "input_audio.flush"}))
+
+        while True:
+            try:
+                brut = await asyncio.wait_for(ws.recv(), timeout=60)
+            except asyncio.TimeoutError:
+                break
+            msg = _json.loads(brut if isinstance(brut, str) else brut.decode("utf-8", "replace"))
+            type_msg = msg.get("type")
+            if type_msg == "error":
+                raise TranscriptionError(_erreur_mistral(msg))
+            if type_msg == "transcription.done":
+                return str(msg.get("text") or "") or " ".join(segments_texte + [courant]).strip()
+            morceau = str(msg.get("text") or "")
+            if type_msg == "transcription.segment":
+                segments_texte.append(morceau)
+                courant = ""
+                _publier(morceau)
+            elif morceau:
+                courant += morceau
+                _publier(morceau)
+        return " ".join(segments_texte + [courant]).strip()
+
+    async def _close(self) -> None:
+        import asyncio
+        import json as _json
+
+        ws = self._ws
+        if ws is None:
+            return
+        try:
+            await ws.send(_json.dumps({"type": "input_audio.end"}))
+            try:
+                async with asyncio.timeout(5):
+                    while True:
+                        brut = await ws.recv()
+                        msg = _json.loads(brut if isinstance(brut, str) else brut.decode("utf-8", "replace"))
+                        if msg.get("type") in ("transcription.done", "error"):
+                            break
+            except Exception:
+                pass
+        except Exception:
+            pass
+        try:
+            await ws.close()
+        except Exception:
+            pass
+        self._ws = None
 
 
 def _transcribe_mistral(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:

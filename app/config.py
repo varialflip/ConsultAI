@@ -218,6 +218,10 @@ class Settings:
     #: Modèle « temps réel » (streaming SSE) — mode ``sse`` seulement.
     #: ID vérifié contre /v1/models : seul le daté ``-2602`` est accepté.
     mistral_realtime_model: str = "voxtral-mini-transcribe-realtime-2602"
+    #: Délai cible de streaming (``target_streaming_delay_ms``) : le modèle
+    #: attend ce temps avant de transcrire pour rassembler du contexte —
+    #: qualité vs latence. 0 = défaut du service.
+    mistral_realtime_delay_ms: int = 1000
 
     # --- Dictée par segments ---
     # La dictée n'est plus envoyée en un seul bloc à la fin : le navigateur
@@ -435,6 +439,7 @@ class Settings:
             mistral_realtime_model=_env(
                 "MISTRAL_REALTIME_MODEL", "voxtral-mini-transcribe-realtime-2602"
             ),
+            mistral_realtime_delay_ms=_env_int("MISTRAL_REALTIME_DELAY_MS", 1000),
 
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
             backup_dir=_env("BACKUP_DIR", "/data/backups"),

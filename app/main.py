@@ -2234,7 +2234,7 @@ async def upload_dictation_chunk(
 
 
 @app.post("/api/dictation/{session_id}/utterance_ended")
-def dictation_utterance_ended(session_id: str, request: Request):
+async def dictation_utterance_ended(session_id: str, request: Request):
     """
     Fin d'énoncé signalée par le VAD du navigateur (mode temps réel).
 
@@ -2242,12 +2242,21 @@ def dictation_utterance_ended(session_id: str, request: Request):
     drapeau de flush et lance une passe qui découpe au premier silence
     exploitable (ffmpeg fait autorité sur la frontière). Rien n'est envoyé
     ici — seul l'ordre « traite maintenant » voyage.
+
+    La route est ``async def`` à dessein : ``_schedule_dictation_processing``
+    crée une tâche via ``asyncio.create_task``, qui exige la boucle
+    d'événements. Une route synchrone (exécutée dans le threadpool par
+    FastAPI) ferait échouer la planification en « no running event loop » —
+    et le flush ne serait jamais consommé, la dictée ne transcrivant plus
+    qu'au « Terminer ».
     """
     user = current_user(request)
     _dictation_session(session_id, user)  # 404 avant de toucher l'état
 
     try:
-        session = dictation.request_flush(session_id, user.username)
+        session = await run_in_threadpool(
+            dictation.request_flush, session_id, user.username
+        )
     except DictationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

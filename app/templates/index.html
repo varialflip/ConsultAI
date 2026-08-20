@@ -303,6 +303,13 @@
       #toastZone { bottom: max(4.625rem, calc(env(safe-area-inset-bottom) + 4.125rem)); }
     }
 
+    /* Même hauteur minimale pour tous les toasts sur une ligne : ceux à bouton
+       de fermeture (couleur d'accent) mesurent 2,5 rem — le bouton ✕ est plus
+       haut que le texte — et le toast « live » noir doit faire exactement pareil
+       sur mobile (sinon 4 px d'écart). Un message sur plusieurs lignes (bureau)
+       grandit naturellement au-delà de ce minimum. */
+    #toastZone > div { min-height: 2.5rem; }
+
     /* TOUS les toasts tiennent sur une ligne sur mobile : le message est
        tronqué avec des points de suspension plutôt que de passer à la ligne
        (ex. « Note générée avec {model}. Relisez-la avant utilisation. »). */

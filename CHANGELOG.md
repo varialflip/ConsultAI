@@ -3,6 +3,14 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-20 — v2.0.0-beta.83
+
+- **Hauteur des toasts unifiée sur mobile** (beta.83). Les toasts « live »
+  (noirs) faisaient 4 px de moins que les toasts de couleur d'accent (le
+  bouton ✕ force une hauteur de 2,5 rem) : une hauteur minimale commune
+  (`min-height: 2.5rem`) sur tous les toasts supprime l'écart. Les messages
+  sur plusieurs lignes (bureau) grandissent comme avant.
+
 ## 2026-08-20 — v2.0.0-beta.82
 
 - **Toasts harmonisés** (beta.82). Tous les toasts non « live » (information,

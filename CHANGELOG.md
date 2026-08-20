@@ -24,6 +24,10 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 - **Réglages du détecteur** : sensibilité (`STT_VAD_SENSITIVITY`), délais
   d'entrée/sortie de parole (`STT_VAD_SPEECH_MS`, `STT_VAD_SILENCE_MS`) et
   modèle Mistral du mode streaming (`MISTRAL_REALTIME_MODEL`).
+- **Correctif** : l'identifiant du modèle Mistral realtime par défaut était
+  invalide — Mistral n'accepte que le daté `voxtral-mini-transcribe-realtime-2602`
+  (`-latest` n'existe pas pour ce modèle, erreur 400 `invalid_model`). Défaut
+  corrigé (code + `.env.example`) et valeur effective rafraîchie.
 
 ## 2026-08-20 — v2.0.0-beta.83
 

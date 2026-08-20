@@ -220,7 +220,7 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting(
         "mistral_realtime_model", "text", "group.stt",
         default=lambda: settings.mistral_realtime_model,
-        placeholder="voxtral-mini-transcribe-realtime-latest",
+        placeholder="voxtral-mini-transcribe-realtime-2602",
     ),
 
     # Temps réel de la dictée : une couche d'affichage par-dessus le batch

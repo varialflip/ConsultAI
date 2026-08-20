@@ -216,7 +216,8 @@ class Settings:
     mistral_api_key: str = ""
     mistral_model: str = "voxtral-mini-latest"
     #: Modèle « temps réel » (streaming SSE) — mode ``sse`` seulement.
-    mistral_realtime_model: str = "voxtral-mini-transcribe-realtime-latest"
+    #: ID vérifié contre /v1/models : seul le daté ``-2602`` est accepté.
+    mistral_realtime_model: str = "voxtral-mini-transcribe-realtime-2602"
 
     # --- Dictée par segments ---
     # La dictée n'est plus envoyée en un seul bloc à la fin : le navigateur
@@ -432,7 +433,7 @@ class Settings:
             mistral_api_key=_env("MISTRAL_API_KEY"),
             mistral_model=_env("MISTRAL_MODEL", "voxtral-mini-latest"),
             mistral_realtime_model=_env(
-                "MISTRAL_REALTIME_MODEL", "voxtral-mini-transcribe-realtime-latest"
+                "MISTRAL_REALTIME_MODEL", "voxtral-mini-transcribe-realtime-2602"
             ),
 
             audio_dir=_env("AUDIO_DIR", "/data/audio"),

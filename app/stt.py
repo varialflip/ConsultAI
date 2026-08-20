@@ -1785,8 +1785,10 @@ _MISTRAL_URL = "https://api.mistral.ai/v1/audio/transcriptions"
 _MISTRAL_MODEL_DEFAUT = "voxtral-mini-latest"
 #: Modèle « temps réel » de Mistral (``voxtral-mini-transcribe-realtime``) :
 #: entraîné pour la transcription en direct, il renvoie le texte en deltas
-#: SSE pendant qu'il reconnaît. Survolé par ``mistral_realtime_model``.
-_MISTRAL_REALTIME_MODEL_DEFAUT = "voxtral-mini-transcribe-realtime-latest"
+#: SSE pendant qu'il reconnaît. Survolé par ``mistral_realtime_model``. ID
+#: vérifié contre /v1/models (2026-08-20) : « -latest » n'existe pas pour ce
+#: modèle, seul le daté ``-2602`` est accepté.
+_MISTRAL_REALTIME_MODEL_DEFAUT = "voxtral-mini-transcribe-realtime-2602"
 
 
 def transcribe_mistral_streaming(

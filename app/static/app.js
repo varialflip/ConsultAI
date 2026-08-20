@@ -1519,12 +1519,7 @@
     // relancer ce mécanisme intégré.
     if (document.visibilityState === 'visible' && liveSource
         && liveSource.readyState === EventSource.CLOSED) {
-    connectLiveEvents();
-
-    // Un brouillon « abandonnée » qui attend dans la liste se signale par un
-    // toast dismissable à chaque chargement, tant qu'il existe.
-    refreshAbandonedState().catch((err) => console.warn('Brouillons abandonnés :', err));
-
+      connectLiveEvents();
     }
   });
 
@@ -5878,6 +5873,10 @@
     }
 
     connectLiveEvents();
+
+    // Un brouillon « abandonnée » qui attend dans la liste se signale par un
+    // toast dismissable à chaque chargement, tant qu'il existe.
+    refreshAbandonedState().catch((err) => console.warn('Brouillons abandonnés :', err));
 
     // Le réseau revient : la file d'attente repart sans attendre le prochain
     // fragment, qui pourrait ne jamais venir si le médecin est en pause.

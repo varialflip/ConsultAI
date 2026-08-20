@@ -3,6 +3,14 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-20 — v2.0.0-beta.81
+
+- **Correctif — le toast « brouillon abandonné » ne s'affichait pas** (beta.81).
+  L'appel au chargement avait été inséré dans le gestionnaire
+  `visibilitychange` au lieu de `init()` (la beta.80) : le toast ne se
+  déclenchait jamais au chargement. L'appel est déplacé dans `init()` et le
+  gestionnaire `visibilitychange` est rétabli dans sa forme d'origine.
+
 ## 2026-08-20 — v2.0.0-beta.80
 
 - **Brouillon abandonné : un toast vous y renvoie** (beta.80). À chaque

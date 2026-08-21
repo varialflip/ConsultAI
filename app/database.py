@@ -1475,6 +1475,55 @@ def migrate_general_prompt_undo_consolidation(db: Session) -> int:
     return touches
 
 
+#: Ancienne phrase de regroupement des médicaments LIVRÉE dans les gabarits
+#: avant la reformulation « indication dictée ou cliniquement évidente ».
+#: Même mécanique que les migrations de la consigne générale : on ne remplace
+#: la phrase que si elle est encore EXACTEMENT le texte livré d'origine, pour
+#: ne jamais écraser une instruction personnalisée par le médecin.
+_OLD_MED_GROUPING_SENTENCES = (
+    "Regroupe un même traitement en une ligne lorsqu'il sert la même indication (ex. « Metformine 500 mg PO bid, Diamicron MR 90 mg PO die »).",
+    'Group a single treatment on one line when it serves the same indication (e.g. "Metformin 500 mg PO BID, Diamicron MR 90 mg PO daily").',
+)
+
+#: Phrases de remplacement (une par langue, même ordre que ci-dessus).
+_NEW_MED_GROUPING_SENTENCES = (
+    "Regroupe sur une même ligne les médicaments qui servent la même indication lorsque celle-ci est dictée ou cliniquement évidente — deux laxatifs, deux opioïdes, deux hypoglycémiants par exemple — en plaçant l'indication entre parenthèses en fin de ligne (« Senokot 1 comprimé PO HS, Lax-A-Day 17 g PO die (constipation) »). En cas de doute sur une indication commune, conserve une ligne par médicament.",
+    'Group on a single line the medications that serve the same indication when that indication is dictated or clinically obvious — for example two laxatives, two opioids, two antihyperglycemics — placing the indication in parentheses at the end of the line ("Senokot 1 tablet PO HS, Lax-A-Day 17 g PO daily (constipation)"). When in doubt about a shared indication, keep one medication per line.',
+)
+
+
+def migrate_template_med_grouping(db: Session) -> int:
+    """
+    Porte dans les gabarits EN BASE la reformulation de la règle de
+    regroupement des médicaments (« même indication » → « dictée ou
+    cliniquement évidente »).
+
+    Les gabarits verrouillés sont déjà rafraîchis depuis ``default_templates``
+    par ``seed_locked_templates`` : cette migration ne concerne donc que les
+    copies modifiables (dupliquées avant la reformulation). On ne remplace la
+    phrase que si elle est encore EXACTEMENT le texte livré d'origine — une
+    instruction personnalisée est laissée intacte et signalée au journal.
+    """
+    touches = 0
+    for row in db.scalars(select(Template)).all():
+        inst = row.system_instructions or ""
+        for ancienne, nouvelle in zip(
+            _OLD_MED_GROUPING_SENTENCES, _NEW_MED_GROUPING_SENTENCES
+        ):
+            if ancienne in inst:
+                row.system_instructions = inst.replace(ancienne, nouvelle)
+                touches += 1
+                logger.info(
+                    "Gabarit « %s » : règle de regroupement des médicaments "
+                    "reformulée (indication dictée ou cliniquement évidente).",
+                    row.name,
+                )
+                break
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Groupes livrés. « admins » ouvre le panneau d'administration, « users » ne
 #: donne accès qu'à ses propres consultations.
 _SYSTEM_GROUPS = (
@@ -1743,6 +1792,7 @@ def init_db() -> None:
         migrate_general_prompt_final_section(db)
         migrate_general_prompt_structure(db)
         migrate_general_prompt_undo_consolidation(db)
+        migrate_template_med_grouping(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

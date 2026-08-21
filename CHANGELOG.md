@@ -5,6 +5,20 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-08-21
 
+- **Règle de regroupement des médicaments rendue actionnable dans les
+  gabarits.** La consigne « Regroupe un même traitement en une ligne lorsqu'il
+  sert la même indication » n'était jamais exécutée : le modèle refusait
+  d'inférer une indication commune, la consigne générale prioritaire
+  interdisant toute invention. Reformulation dans les gabarits verrouillés
+  (Consultation Médicale Générale FR/EN, Consultation - Gériatrie) et leurs
+  copies existantes (migration au démarrage) : regroupement sur une même ligne
+  lorsque l'indication est **dictée ou cliniquement évidente** (deux laxatifs,
+  deux opioïdes, deux hypoglycémiants…), indication entre parenthèses en fin de
+  ligne, et une ligne par médicament en cas de doute. La consigne générale
+  n'est pas modifiée.
+
+## 2026-08-21
+
 - **Correctif — le panneau « Nouveautés » de la connexion rend le Markdown du
   changelog.** Le gras (`**…**`) et le code inline (`` `…` ``) s'affichaient en
   texte brut. Nouveau filtre Jinja `md_inline` (échappement puis conversion

@@ -52,7 +52,7 @@ Deux chemins bien distincts. Un simple push ne déploie rien ; une release
 Tout changement de code (release **ou pas**) doit garder à jour, **dans le
 même commit** :
 
-- **`README.md`** — fonctionnalités, fournisseurs STT/LLM (huit vocaux, sept
+- **`README.md`** — fonctionnalités, fournisseurs STT/LLM (neuf vocaux, sept
   modèles — audio direct aux multimodaux), configuration, procédures,
   structure. Aucune nouveauté n'est ajoutée sans y être décrite.
 - **`CHANGELOG.md`** — entrée datée, copiée dans l'image et affichée sur la

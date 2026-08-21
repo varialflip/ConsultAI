@@ -557,6 +557,8 @@ def transcribe_payload(
         return _transcribe_mistral(payload, extra_phrase_hints)
     if provider == "openai":
         return _transcribe_openai(payload, extra_phrase_hints)
+    if provider == "modulate":
+        return _transcribe_modulate(payload, extra_phrase_hints)
     if provider == "custom":
         return _transcribe_custom(payload, extra_phrase_hints, on_progress)
     return _transcribe_google(payload, extra_phrase_hints, boost)
@@ -2144,6 +2146,126 @@ def _transcribe_openai(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         "duration_seconds": int(round(payload.duration_seconds)),
         "segments": 1 if transcript else 0,
         "provider": "openai",
+        "model": model,
+    }
+
+
+# ===========================================================================
+# Modulate
+# ===========================================================================
+#
+# API « Velma STT » de Modulate (https://platform.modulate.ai) : un POST
+# multipart, header ``X-API-Key`` (pas de Bearer), champ fichier
+# ``upload_file``. Le « modèle » est le segment de l'URL :
+#
+#   velma-2-stt-batch                   Multilingue, vocabulaire personnalisé
+#   velma-2-stt-batch-multilingual-vfast  Plus rapide, sans vocabulaire
+#   velma-2-stt-batch-english-vfast     Anglais seul (avec horodatages par mot)
+#
+# On appelle directement l'API en HTTP : une seule requête par tranche, comme
+# pour Deepgram, et cela évite d'embarquer un SDK de plus dans une image qui
+# tourne sur un NAS.
+#
+# Le lexique d'adaptation passe par ``config.custom_terms`` (limites : 1000
+# entrées, 8000 caractères de JSON) — c'est le seul canal de vocabulaire du
+# modèle multilingue. La diarisation est désactivée : une dictée de
+# consultation est mono-locuteur (le clinicien), et elle coûte de la latence
+# sans rien apporter ici.
+
+_MODULATE_BASE = "https://platform.modulate.ai/api"
+_MODULATE_DEFAULT_MODEL = "velma-2-stt-batch"
+
+#: Plafond volontairement bas : le JSON ``custom_terms`` doit tenir sous 8000
+#: caractères, et un décodeur saturé de termes à privilégier saute du contenu
+#: (même constat mesuré qu'ailleurs — voir LEXIQUE_PRIORITAIRE).
+_MODULATE_MAX_TERMS = 100
+
+
+def _transcribe_modulate(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
+    """
+    Transcription par Modulate (Velma STT, modèle multilingue par défaut).
+
+    ``extra_phrase_hints`` est converti en ``custom_terms`` dans le champ
+    ``config`` du multipart.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    api_key = runtime_config.value("modulate_api_key")
+    if not api_key:
+        raise TranscriptionError(
+            "Modulate est sélectionné mais aucune clé API n'est renseignée. "
+            "Panneau d'administration → Reconnaissance vocale."
+        )
+
+    model = runtime_config.value("modulate_model").strip() or _MODULATE_DEFAULT_MODEL
+    langue = runtime_config.stt_language("modulate")
+    termes = _termes_prioritaires(extra_phrase_hints, _MODULATE_MAX_TERMS)
+
+    champs = {"speaker_diarization": "false"}
+    if langue:
+        champs["language"] = langue
+    if termes:
+        champs["config"] = _json.dumps({"custom_terms": termes})
+
+    corps, ctype = _multipart_body_fields(champs, "upload_file", "dictee.ogg", payload.content)
+    url = f"{_MODULATE_BASE}/{model}"
+    requete = urllib.request.Request(
+        url,
+        data=corps,
+        headers={"X-API-Key": api_key, "Content-Type": ctype},
+        method="POST",
+    )
+
+    logger.info(
+        "Envoi à Modulate : %.2f Mo, %s s facturées, modèle %s, langue %s, "
+        "%d termes de vocabulaire",
+        len(payload.content) / 1048576, round(payload.effective_seconds, 1) or "?",
+        model, langue or "auto", len(termes),
+    )
+    try:
+        with urllib.request.urlopen(requete, timeout=300) as reponse:
+            data = _json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = (exc.read() or b"").decode("utf-8", "replace")[:400]
+        logger.error("Modulate a refusé la requête (%s) : %s", exc.code, detail)
+        if exc.code in (401, 403):
+            raise TranscriptionError(
+                "Modulate refuse la clé API. Vérifiez-la dans le panneau "
+                "d'administration."
+            ) from exc
+        if exc.code == 413:
+            raise TranscriptionError(
+                "Modulate refuse l'audio : fichier trop volumineux (limite 100 Mo)."
+            ) from exc
+        if exc.code == 400:
+            raise TranscriptionError(
+                f"Modulate refuse la requête : {detail or 'paramètre invalide'}. "
+                "Vérifiez le code de langue et le vocabulaire du gabarit."
+            ) from exc
+        if exc.code in (502, 503, 504):
+            raise TranscriptionError(
+                f"Modulate est indisponible ({exc.code}). Patientez puis réessayez."
+            ) from exc
+        raise TranscriptionError(f"Erreur Modulate ({exc.code}) : {detail}") from exc
+    except Exception as exc:
+        logger.exception("Échec de l'appel Modulate")
+        raise TranscriptionError(f"Erreur Modulate : {exc}") from exc
+
+    transcript = str(data.get("text") or "").strip()
+    if not transcript and not payload.allow_silence:
+        raise TranscriptionError(
+            "Aucune parole n'a été détectée. Vérifiez le micro et le volume "
+            "de l'enregistrement, puis réessayez."
+        )
+
+    return {
+        "transcript": transcript,
+        "confidence": 0.0,
+        "duration_seconds": int(round(payload.duration_seconds)),
+        "segments": len(data.get("utterances") or []) or (1 if transcript else 0),
+        "provider": "modulate",
         "model": model,
     }
 

@@ -199,6 +199,10 @@ class Settings:
     assemblyai_api_key: str = ""
     assemblyai_model: str = "universal-3-5-pro"
 
+    # --- Modulate (Velma STT, service de reconnaissance vocale) ---
+    # Valeur par défaut seulement : le panneau d'administration la surcharge.
+    modulate_api_key: str = ""
+
     # --- Soniox (quatrième service de reconnaissance vocale) ---
     soniox_api_key: str = ""
     soniox_model: str = "stt-async-v5"
@@ -429,6 +433,7 @@ class Settings:
             deepgram_model=_env("DEEPGRAM_MODEL", "nova-2"),
             assemblyai_api_key=_env("ASSEMBLYAI_API_KEY"),
             assemblyai_model=_env("ASSEMBLYAI_MODEL", "universal-3-5-pro"),
+            modulate_api_key=_env("MODULATE_API_KEY"),
             soniox_api_key=_env("SONIOX_API_KEY"),
             soniox_model=_env("SONIOX_MODEL", "stt-async-v5"),
             soniox_send_context=_env_bool("SONIOX_SEND_CONTEXT", True),

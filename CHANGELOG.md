@@ -3,6 +3,17 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-21
+
+- **Nouveau service vocal : Modulate (Velma STT)**. Neuvième fournisseur de
+  reconnaissance vocale, multilingue avec détection de langue par énoncé et
+  vocabulaire personnalisé (`custom_terms`, jusqu'à 100 termes envoyés depuis
+  le lexique intégré et le gabarit). Modèle par défaut `velma-2-stt-batch` ;
+  sélectionnable dans le panneau (y compris `…-multilingual-vfast`, plus
+  rapide mais sans vocabulaire, et `…-english-vfast`, anglais seul). Clé dans
+  le panneau d'administration (ou `MODULATE_API_KEY`). Diarisation désactivée
+  (dictée mono-locuteur, moins de latence).
+
 ## 2026-08-20
 
 - **Temps réel de la dictée** (mode « énoncé » et « streaming »). Par-dessus

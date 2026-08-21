@@ -83,6 +83,7 @@ STT_PROVIDERS = (
     ("cohere", "Cohere Transcribe"),
     ("mistral", "Mistral Voxtral"),
     ("openai", "OpenAI Whisper"),
+    ("modulate", "Modulate"),
     ("custom", "provider.custom_endpoint"),
 )
 
@@ -277,6 +278,19 @@ SETTINGS: Tuple[Setting, ...] = (
     Setting(
         "openai_stt_language", "text", "group.stt",
         default=lambda: "", placeholder="fr / en",
+    ),
+
+    Setting(
+        "modulate_api_key", "secret", "group.stt",
+        default=lambda: settings.modulate_api_key,
+    ),
+    Setting(
+        "modulate_model", "text", "group.stt",
+        default=lambda: "", placeholder="velma-2-stt-batch",
+    ),
+    Setting(
+        "modulate_language", "text", "group.stt",
+        default=lambda: "", placeholder="fr / en / auto",
     ),
 
     Setting(
@@ -675,6 +689,7 @@ def stt_language(provider: str) -> str:
         "mistral": "mistral_language",
         "openai": "openai_stt_language",
         "custom": "custom_stt_language",
+        "modulate": "modulate_language",
     }.get(provider)
 
     if cle is not None:
@@ -707,6 +722,7 @@ def stt_model(provider: Optional[str] = None) -> str:
         "mistral": "mistral_model",
         "openai": "openai_stt_model",
         "custom": "custom_stt_model",
+        "modulate": "modulate_model",
     }.get(provider)
     if cle is not None:
         return value(cle) or ""

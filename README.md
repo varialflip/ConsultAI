@@ -5,7 +5,7 @@ médecin dicte, l'application transcrit, un modèle de langage met en forme selo
 un gabarit, le médecin relit et exporte.
 
 * Interface **française ou anglaise**, au choix de chaque usager.
-* **Huit** services de reconnaissance vocale et **sept** fournisseurs de
+* **Neuf** services de reconnaissance vocale et **sept** fournisseurs de
   modèle de langage, commutables depuis le panneau d'administration sans
   reconstruire l'image. Plusieurs modèles (Gemini, Qwen Omni, point de
   terminaison personnalisé) peuvent aussi recevoir **l'audio directement**,
@@ -194,6 +194,7 @@ ASSEMBLYAI_API_KEY=
 SONIOX_API_KEY=
 COHERE_API_KEY=
 MISTRAL_API_KEY=
+MODULATE_API_KEY=
 
 # Modèle de langage — au moins un
 GEMINI_API_KEY=                # ou GOOGLE_CLOUD_PROJECT pour Vertex AI
@@ -423,6 +424,7 @@ enregistrer.
 | **Cohere** | **aucune** | ⚠️ voir ci-dessous |
 | **Mistral Voxtral** | **aucune connue** | Clé partagée avec le modèle de langage Mistral |
 | **OpenAI (Whisper)** | **aucune** | Clé partagée avec le modèle de langage OpenAI |
+| **Modulate** | 100 termes (`custom_terms`) | Velma STT multilingue, détection de langue par énoncé |
 | **Personnalisé** | **aucune** | Endpoint compatible API OpenAI (ex. Whisper auto-hébergé) ; l'audio reste sur votre machine |
 
 > Un point de terminaison personnalisé est tout indiqué pour un **Whisper

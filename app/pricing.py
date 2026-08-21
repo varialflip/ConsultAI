@@ -54,11 +54,13 @@ DEFAULT_RATES: Tuple[Tuple[str, str, str, str, float, str], ...] = (
     ("qwen_omni", "", "llm", "token_audio_input_1m", 1.50),
 
     # --- STT (audio → texte) -------------------------------------------------
-    # Facturés à la durée : google, deepgram, assemblyai, soniox.
+    # Facturés à la durée : google, deepgram, assemblyai, soniox, modulate.
     ("google", "", "stt", "audio_minute", 0.024),
     ("deepgram", "", "stt", "audio_minute", 0.0043),
     ("assemblyai", "", "stt", "audio_minute", 0.0062),
     ("soniox", "", "stt", "audio_minute", 0.006),
+    # Modulate Velma STT : à partir de 0,03 $US/h annoncé (~0,0005 $/min).
+    ("modulate", "", "stt", "audio_minute", 0.0005),
     # Facturés au jeton (audio envoyé comme entrée multimodale d'un LLM) :
     # cohere/mistral partagent la clé API LLM, qwen_omni et openai idem selon
     # le modèle — à corriger si le modèle réellement utilisé facture autrement.

@@ -176,6 +176,7 @@ Autres flux :
 |---|---|---|---|
 | Mise en forme de la note (depuis 2026-08-16) | **Audio de la dictée** (trajet principal) ; texte recoupé par le gabarit | Google Vertex AI — Gemini `gemini-2.5-pro` | Québec (région `northamerica-northeast1`, Montréal) — voir § 7.4 |
 | Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (Parakeet local, mode par défaut) |
+| Reconnaissance vocale — fournisseur cloud (Modulate, si sélectionné) | Tranches de dictée (~10 s) | API Modulate (Velma STT) | Traitement hébergé par Modulate — **aucun mode par défaut ne l'envoie** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |
 | Reconnaissance vocale temps réel — mode « streaming » (`STT_REALTIME_MODE=sse`, **désactivé par défaut**) | Énoncé de la dictée (quelques secondes d'audio) | API Mistral (Voxtral realtime) | Traitement hors Québec — décision de conformité à revalider avant activation (voir § 5). Seul le mode « sse » exporte l'audio ; « vad » reste local |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |
@@ -266,7 +267,7 @@ Autres flux :
   région Montréal (`northamerica-northeast1`), couverte par l'addendum de
   politique cloud Google pour les renseignements de santé. Un changement de
   fournisseur depuis le panneau d'administration (par ex. vers OpenAI,
-  Anthropic, Cohere, Mistral, Google, Qwen Omni) **déplace le traitement**
+  Anthropic, Cohere, Mistral, Google, Qwen Omni, Modulate) **déplace le traitement**
   immédiatement et sans revalidation — chaque bascule reste une décision de
   conformité revalidée (§ 8).
 - **R4 (erreur humaine)** — La transcription et la mise en forme sont imparfaites ;

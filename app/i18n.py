@@ -91,6 +91,7 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         "mistral": "fr",
         "openai": "fr",
         "custom": "fr",
+        "modulate": "fr",
     },
     "en": {
         "google": "en-CA",
@@ -101,6 +102,7 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         "mistral": "en",
         "openai": "en",
         "custom": "en",
+        "modulate": "en",
     },
 }
 
@@ -1635,6 +1637,32 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "de l'ISO-639-1 : « fr », « en » — jamais « fr-CA ».",
         "Leave empty to follow the template language. OpenAI only accepts "
         "ISO-639-1: “fr”, “en” — never “fr-CA”.",
+    ),
+
+    "set.modulate_api_key.label": ("Clé API Modulate", "Modulate API key"),
+    "set.modulate_api_key.help": (
+        "Clé « X-API-Key » de la plateforme Modulate (Velma STT), créée dans "
+        "l'onglet API Keys du tableau de bord.",
+        "“X-API-Key” from the Modulate platform (Velma STT), created in the "
+        "API Keys tab of the dashboard.",
+    ),
+    "set.modulate_model.label": ("Modèle Modulate", "Modulate model"),
+    "set.modulate_model.help": (
+        "Dernier segment de l'URL de l'endpoint : « velma-2-stt-batch » "
+        "(multilingue, vocabulaire personnalisé) par défaut ; "
+        "« velma-2-stt-batch-multilingual-vfast » (plus rapide, sans "
+        "vocabulaire) ; « velma-2-stt-batch-english-vfast » (anglais seul).",
+        "Last segment of the endpoint URL: “velma-2-stt-batch” (multilingual, "
+        "custom vocabulary) by default; “velma-2-stt-batch-multilingual-vfast” "
+        "(faster, no vocabulary); “velma-2-stt-batch-english-vfast” "
+        "(English only).",
+    ),
+    "set.modulate_language.label": ("Langue Modulate", "Modulate language"),
+    "set.modulate_language.help": (
+        "Laisser vide pour suivre la langue du gabarit, « auto » pour laisser "
+        "Modulate détecter. Modulate accepte de l'ISO-639-1 : « fr », « en ».",
+        "Leave empty to follow the template language, “auto” to let Modulate "
+        "detect. Modulate accepts ISO-639-1: “fr”, “en”.",
     ),
 
     "set.custom_stt_api_key.label": ("Clé API", "API key"),

@@ -5,6 +5,19 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-08-21
 
+- **Correctif — le panneau « Nouveautés » de la connexion rend le Markdown du
+  changelog.** Le gras (`**…**`) et le code inline (`` `…` ``) s'affichaient en
+  texte brut. Nouveau filtre Jinja `md_inline` (échappement puis conversion
+  `**`/backticks, aucun contenu injectable). Le parseur perdait aussi des
+  entrées : un en-tête daté sans intitulé de version (`## AAAA-MM-JJ` seul,
+  par ex. l'entrée Modulate) n'était pas reconnu, et les lignes de continuation
+  des puces étaient jetées — items tronqués en plein milieu. Les en-têtes sans
+  titre sont désormais lus et les items joints sur toutes leurs lignes. La page
+  de connexion est la seule surface publique — le rendu y respecte l'apparence
+  des autres documents.
+
+## 2026-08-21
+
 - **Nouveau service vocal : Modulate (Velma STT)**. Neuvième fournisseur de
   reconnaissance vocale, multilingue avec détection de langue par énoncé et
   vocabulaire personnalisé (`custom_terms`, jusqu'à 100 termes envoyés depuis

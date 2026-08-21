@@ -25,9 +25,10 @@ _CHANGELOG_PATHS = (
     os.path.join(os.path.dirname(os.path.dirname(__file__)), "CHANGELOG.md"),
 )
 
-#: « ## AAAA-MM-JJ — vX.Y.Z-beta.N » en tête d'entrée.
+#: « ## AAAA-MM-JJ [— titre] » en tête d'entrée ; le titre (souvent la version)
+#: est facultatif — une entrée datée sans intitulé doit tout de même être lue.
 _ENTRY_RE = re.compile(
-    r"^##\s+(\d{4}-\d{2}-\d{2})\s*—\s*(\S[^\n]*)", re.MULTILINE
+    r"^##\s+(\d{4}-\d{2}-\d{2})(?:\s*—\s*(\S[^\n]*))?", re.MULTILINE
 )
 
 #: Le numéro de version est le dernier nombre de l'intitulé (« v2.0.0-beta.38 »).
@@ -71,15 +72,19 @@ def _parse() -> List[ChangelogEntry]:
     for index, match in enumerate(matches):
         start = match.end()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(source)
-        items = [
-            line.strip("- ").strip()
-            for line in source[start:end].splitlines()
-            if line.strip().startswith("-")
-        ]
+        items: List[str] = []
+        for line in source[start:end].splitlines():
+            ligne = line.strip()
+            if not ligne:
+                continue
+            if ligne.startswith("-"):
+                items.append(ligne.lstrip("-").strip())
+            elif items:
+                items[-1] += " " + ligne
         result.append(
             ChangelogEntry(
                 date=datetime.strptime(match.group(1), "%Y-%m-%d").date(),
-                title=match.group(2).strip(),
+                title=(match.group(2) or "").strip(),
                 items=items,
             )
         )

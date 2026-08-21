@@ -389,7 +389,18 @@ def _title_ai_italic(title: str) -> Markup:
     return Markup("<span class=\"ai\">AI</span>".join(esc_html(p) for p in title.split("AI")))
 
 
+def _md_inline(value: str) -> Markup:
+    """Rend le sous-ensemble de Markdown utilisé dans le CHANGELOG
+    (l'échappement précède la conversion : aucun contenu n'est injectable).
+    L'inline code est traité en premier pour protéger son contenu du gras."""
+    texte = esc_html(value)
+    texte = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", texte)
+    texte = re.sub(r"\*\*([^*\n]+)\*\*", r"<strong>\1</strong>", texte)
+    return Markup(texte)
+
+
 jinja_templates.env.filters["ai_italic"] = _title_ai_italic
+jinja_templates.env.filters["md_inline"] = _md_inline
 
 
 # ---------------------------------------------------------------------------

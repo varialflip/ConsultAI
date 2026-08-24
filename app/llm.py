@@ -954,11 +954,17 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     )
 
 
-def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None, on_stream_started=None):
+def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None, on_stream_started=None, on_thought=None):
     """
     Version en continu de ``_complete_gemini`` : rend chaque fragment de texte
     au fil de l'eau, puis rend un ``Completion`` complet (usage, motif d'arrêt)
     pris dans les derniers morceaux du flux.
+
+    ``on_thought`` — callable optionnel, appelé avec le texte du raisonnement
+    du modèle au fur et à mesure (jamais diffusé dans la note). N'est activé
+    que si l'appelant le fournit : c'est lui qui demande à Gemini de livrer les
+    parties de pensée (``include_thoughts``), et la pensée ne transite alors
+    QUE par ce canal — elle ne peut jamais entrer dans ``full``/le flux.
     """
     from google.genai import types
 
@@ -976,9 +982,13 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     # « Raisonnement : Oui, budget 128 ») ; un modèle qui refuse le champ
     # ``thinking_config`` avec un budget non nul retombe sur le flux sans lui.
     budget_thinking = _gemini_thinking_budget()
-    config_kwargs["thinking_config"] = types.ThinkingConfig(
-        thinking_budget=budget_thinking
-    )
+    thinking_kwargs = {"thinking_budget": budget_thinking}
+    if on_thought is not None:
+        # Demande à Gemini de renvoyer les parties de raisonnement dans le
+        # flux (``part.thought=True``). Sans ce champ, elles ne sont pas
+        # livrées et il n'y a rien à afficher.
+        thinking_kwargs["include_thoughts"] = True
+    config_kwargs["thinking_config"] = types.ThinkingConfig(**thinking_kwargs)
     couper_thinking = budget_thinking == 0
     if json_mode:
         config_kwargs["response_mime_type"] = "application/json"
@@ -1045,6 +1055,14 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
                 # fragments dans un même morceau — de quoi rapprocher l'affichage
                 # d'un flux continu.
                 for piece in (getattr(chunk, "parts", None) or []):
+                    # Partie de raisonnement (``thought=True``) : elle ne
+                    # transite que par ``on_thought``, JAMAIS dans la note.
+                    if getattr(piece, "thought", False):
+                        if on_thought is not None:
+                            part = getattr(piece, "text", None) or ""
+                            if part:
+                                on_thought(part)
+                        continue
                     part = getattr(piece, "text", None) or ""
                     if part:
                         full.append(part)
@@ -1094,11 +1112,15 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     )
 
 
-def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, on_stream_started=None):
+def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, on_stream_started=None, on_thought=None):
     """
     Version en continu de ``_complete_anthropic``. ``create(stream=True)``
     renvoie un objet itérable ; ``get_final_message()`` fournit en fin de flux
     l'usage et le motif d'arrêt exacts du message complet.
+
+    ``on_thought`` reçoit le texte des blocs ``thinking`` d'Anthropic (jamais
+    diffusé dans la note) — uniquement s'ils sont émis, ce qui suppose que le
+    raisonnement soit activé côté Anthropic.
     """
     client = get_client("anthropic")
     if json_mode:
@@ -1128,14 +1150,20 @@ def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, o
         for event in stream:
             # Seuls les fragments de texte comptent — ni titre de bloc, ni
             # raisonnement, ni signal de fin.
-            if (
-                getattr(event, "type", "") == "content_block_delta"
-                and getattr(getattr(event, "delta", None), "type", "") == "text_delta"
-            ):
-                text = getattr(event.delta, "text", "") or ""
-                if text:
-                    full.append(text)
-                    yield text
+            if getattr(event, "type", "") == "content_block_delta":
+                delta = getattr(event, "delta", None)
+                if delta is None:
+                    continue
+                delta_type = getattr(delta, "type", "")
+                if delta_type == "text_delta":
+                    text = getattr(delta, "text", "") or ""
+                    if text:
+                        full.append(text)
+                        yield text
+                elif delta_type == "thinking_delta" and on_thought is not None:
+                    thinking = getattr(delta, "thinking", "") or ""
+                    if thinking:
+                        on_thought(thinking)
         final = stream.get_final_message()
     except Exception as exc:
         logger.exception("Échec du flux Anthropic")
@@ -1160,7 +1188,7 @@ def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, o
     )
 
 
-def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=None, on_stream_started=None):
+def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=None, on_stream_started=None, on_thought=None):
     """
     Version en continu de ``_complete_openai``/``_complete_qwen_omni``.
 
@@ -1168,6 +1196,10 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
     dernier morceau (OpenAI, OpenRouter, Qwen DashScope) ; un point de
     terminaison personnalisé qui refuse ce paramètre est retenté sans lui, le
     décompte d'usage restant alors vide (la note, elle, est identique).
+
+    ``on_thought`` reçoit le raisonnement des modèles reflexifs (DeepSeek,
+    Qwen…) au fil de l'eau, via ``reasoning_content``/``reasoning`` — jamais
+    diffusé dans la note.
     """
     client = get_client(provider)
     label = {
@@ -1257,8 +1289,18 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
             # pour tout fournisseur OpenAI-compatible.
             delta = getattr(choice, "delta", None) if choice else None
             delta_content = getattr(delta, "content", None) or ""
-            # ``reasoning_content`` (Qwen, DeepSeek) n'est pas du texte de note :
-            # ignoré — seule la part ``reasoning_tokens`` de l'usage est retenue.
+            # ``reasoning_content`` (Qwen, DeepSeek) / ``reasoning`` (OpenRouter,
+            # modèles o-…) n'est pas du texte de note : diffusé uniquement vers
+            # ``on_thought``, sinon ignoré — seule la part ``reasoning_tokens``
+            # de l'usage est retenue.
+            if on_thought is not None and delta is not None:
+                thinking = (
+                    getattr(delta, "reasoning_content", None)
+                    or getattr(delta, "reasoning", None)
+                    or ""
+                )
+                if thinking:
+                    on_thought(str(thinking))
             if delta_content:
                 full.append(delta_content)
                 yield delta_content
@@ -1323,6 +1365,7 @@ def complete_stream(
     provider: Optional[str] = None,
     audio: Optional[Tuple[bytes, str]] = None,
     on_stream_started: Optional[Callable[[], None]] = None,
+    on_thought: Optional[Callable[[str], None]] = None,
 ):
     """
     Version en continu de ``complete()``.
@@ -1342,15 +1385,15 @@ def complete_stream(
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
 
     if provider == "gemini":
-        gen = _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio, on_stream_started=on_stream_started)
+        gen = _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider == "anthropic":
-        gen = _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, on_stream_started=on_stream_started)
+        gen = _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider == "openai":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=audio, on_stream_started=on_stream_started)
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider == "custom":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio, on_stream_started=on_stream_started)
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider == "qwen_omni":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio, on_stream_started=on_stream_started)
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider in ("cohere", "mistral"):
         completion = complete(
             system, user, model=model, temperature=temperature,
@@ -1375,6 +1418,7 @@ def generate_note_stream(
     language: Optional[str] = None,
     audio: Optional[Tuple[bytes, str]] = None,
     on_stream_started: Optional[Callable[[], None]] = None,
+    on_thought: Optional[Callable[[str], None]] = None,
 ):
     """
     Version en continu de ``generate_note``.
@@ -1390,6 +1434,9 @@ def generate_note_stream(
     que le fournisseur LLM a accusé réception de la requête (ConsultAI ne
     l'exécute pas — le signal est celui de l'acquittement réel, pas du
     lancement interne).
+
+    ``on_thought`` reçoit le raisonnement du modèle au fil de l'eau (jamais
+    dans la note) ; transmis au flux, qui ne le produit que si on le demande.
     """
     provider = active_provider()
     opts = audio_settings(provider)
@@ -1454,6 +1501,7 @@ def generate_note_stream(
             provider=provider,
             audio=audio_to_send,
             on_stream_started=on_stream_started,
+            on_thought=on_thought,
         )
 
         # Rend le texte brut accumulé ; conserve le Completion final. Le

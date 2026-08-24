@@ -315,6 +315,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "La note structurée apparaîtra ici après la mise en forme.",
         "The structured note will appear here after formatting.",
     ),
+    "note.thinking": ("Raisonnement du modèle…", "Model reasoning…"),
 
     # --- Politique de confidentialité (FAQ) -------------------------------
     "privacy.title": ("Politique de confidentialité", "Privacy policy"),
@@ -1828,6 +1829,32 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Used when “Thinking” is on. Reasoning tokens allocated to the model "
         "before answering. Minimum accepted by gemini-2.5-pro on Vertex: 128 "
         "(0 and 1-127 are rejected). Empty = 128.",
+    ),
+    "set.show_thinking_admin.label": (
+        "Montrer le raisonnement — administrateurs",
+        "Show reasoning — administrators",
+    ),
+    "set.show_thinking_admin.help": (
+        "Affiche le raisonnement (thinking) du modèle dans la fenêtre de note "
+        "pendant la génération, pour les administrateurs. La pensée défile "
+        "puis s'efface dès que le texte de la note commence ; elle n'est "
+        "jamais enregistrée. Hors fonction si le modèle ne produit pas de "
+        "raisonnement.",
+        "Shows the model's reasoning (thinking) in the note window during "
+        "generation, for administrators. The thinking streams then is cleared "
+        "as soon as the note text starts; it is never saved. No-op when the "
+        "model produces no reasoning.",
+    ),
+    "set.show_thinking_users.label": (
+        "Montrer le raisonnement — utilisateurs",
+        "Show reasoning — users",
+    ),
+    "set.show_thinking_users.help": (
+        "Même affichage transitoire du raisonnement (thinking), pour les "
+        "utilisateurs non administrateurs. Désactivé par défaut : la pensée "
+        "du modèle peut contenir des brouillons non relus.",
+        "Same transient reasoning (thinking) display, for non-admin users. Off "
+        "by default: the model's thinking may contain unrevised drafts.",
     ),
     "set.gemini_send_audio.label": (
         "Joindre aussi l'audio (silences plafonnés)",

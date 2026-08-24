@@ -29,6 +29,21 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-08-21
 
+## 2026-08-21
+
+- **Affichage du raisonnement du modèle (thinking) pendant la génération.**
+  Pendant la mise en forme, le raisonnement du modèle défile désormais dans la
+  fenêtre de note — même dévoilement progressif que le texte, avec un badge
+  « Raisonnement du modèle… » — puis est **effacé de l'écran** dès que le texte
+  de la note commence. Il n'est **jamais persisté** (rien du flux en cours
+  n'est auto-sauvegardé pendant une génération). Deux réglages du panneau
+  (Modèle de langage), **désactivés par défaut** : `show_thinking_admin`
+  (administrateurs) et `show_thinking_users` (autres utilisateurs). Supporté
+  pour Gemini (parties `thought`), les endpoints OpenAI-compatibles à
+  raisonnement (`reasoning_content`/`reasoning` — DeepSeek, Qwen…) et
+  Anthropic (blocs `thinking`). Sans effet si le modèle ne produit pas de
+  raisonnement.
+
 - **Retrait des silences : bascule globale pour toutes les pipelines.**
   Le plafonnement des pauses (`stt_trim_silence`, « Retirer les longues
   pauses ») s'applique désormais à **toutes** les pistes et **tous** les

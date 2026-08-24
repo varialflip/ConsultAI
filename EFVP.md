@@ -411,6 +411,23 @@ protection des renseignements personnels (Dr Frederick Duong, § 1) :
 La politique de confidentialité de l'application reprend ces droits à
 destination du public (page de connexion et pied de page).
 
+### 7.9 Affichage du raisonnement du modèle (2026-08-21)
+
+Pendant la mise en forme, un **affichage transitoire du raisonnement du
+modèle** (thinking) est possible dans la fenêtre de note, sous deux bascules
+du panneau (administrateurs / autres utilisateurs), **désactivées par
+défaut** :
+
+- Le raisonnement est **généré par le fournisseur** qui reçoit déjà la dictée
+  (Vertex AI — Gemini, Montréal) : l'affichage n'ajoute **aucun envoi** de
+  renseignement supplémentaire hors de la machine ;
+- Il est **effacé de l'écran** dès que le texte de la note commence et n'est
+  **jamais persisté** (aucune trace dans la base, les sauvegardes ou les
+  journaux de génération) ;
+- Comme le reste de la génération, il peut contenir des brouillons non relus :
+  la bascule étant désactivée par défaut, son activation est une décision
+  explicite de l'administration.
+
 ---
 
 ## 8. Registre des incidents

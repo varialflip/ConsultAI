@@ -2420,6 +2420,31 @@ def _generate_and_publish(
             "origin_tab": origin_tab,
         })
 
+    # --- Raisonnement du modèle (thinking) : affichage transitoire ---------
+    # Décidé côté serveur selon le rôle de l'appelant et les deux bascules du
+    # panneau (admin / autres utilisateurs). La pensée est diffusée en direct
+    # pendant la génération puis effacée : elle n'est JAMAIS écrite en base —
+    # seule ``result["markdown"]`` est persisté plus bas.
+    show_thinking = (
+        runtime_config.value("show_thinking_admin") == "true"
+        if user.is_admin
+        else runtime_config.value("show_thinking_users") == "true"
+    )
+    thought_accum = {"raw": "", "seq": 0}
+
+    def _on_thought(fragment: str) -> None:
+        if not _generation_guard.is_current(payload.consultation_id, generation_seq):
+            return
+        thought_accum["raw"] += fragment
+        thought_accum["seq"] += 1
+        live.publish(user.owner_key, "generation_thought", {
+            "type": "delta", "seq": thought_accum["seq"],
+            "delta": fragment,
+            "consultation_id": payload.consultation_id,
+            "generation_token": payload.generation_token,
+            "origin_tab": origin_tab,
+        })
+
     generator = llm.generate_note_stream(
         payload.transcript,
         template_row.system_instructions,
@@ -2430,6 +2455,7 @@ def _generate_and_publish(
         template_row.language,
         audio_payload,
         on_stream_started=_publish_started,
+        on_thought=_on_thought if show_thinking else None,
     )
 
     raw = ""
@@ -2465,6 +2491,14 @@ def _generate_and_publish(
                     "generation_token": payload.generation_token,
                     "origin_tab": origin_tab,
                 })
+                if show_thinking and thought_accum["raw"]:
+                    live.publish(user.owner_key, "generation_thought", {
+                        "type": "snapshot", "seq": thought_accum["seq"],
+                        "markdown": thought_accum["raw"],
+                        "consultation_id": payload.consultation_id,
+                        "generation_token": payload.generation_token,
+                        "origin_tab": origin_tab,
+                    })
                 last_snapshot = now
         else:
             # Supplantée pendant la génération : on coupe le flux fournisseur

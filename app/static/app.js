@@ -487,6 +487,9 @@
   let genShown = '';
   let genRaf = null;
   let lastGenRender = 0;
+  // Phase « raisonnement du modèle » : le thinking défile dans la même
+  // fenêtre que la note, puis est effacé dès le premier morceau de texte.
+  let genThoughtPhase = false;
 
   // Révélation progressive de la TRANSCRIPTION — même mécanique que la note
   // (voir createTextReveal). ``committedText`` est la base AUTORITAIRE du
@@ -2238,6 +2241,8 @@
     genSeq = 0;
     genShown = '';
     lastGenRender = 0;
+    genThoughtPhase = false;
+    hideThinkingIndicator();
     setGenerating(true);
     $('markdownEditor').value = '';
     showPreview();
@@ -2322,6 +2327,8 @@
         // rendu en continu à appliquer ni animation en attente.
         if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
         genShown = '';
+        genThoughtPhase = false;
+        hideThinkingIndicator();
         setGenerating(false);
       }
     }
@@ -2729,6 +2736,11 @@
   }
 
   const scheduleSave = debounce(async function saveDraft() {
+    // Pendant une génération, l'éditeur ne contient que du flux transitoire
+    // (raisonnement du modèle puis note en streaming) : on n'en persiste
+    // jamais d'état intermédiaire. La note finale est écrite par le serveur
+    // (POST /api/generate) ; un sauvegarde reprendra normalement ensuite.
+    if (pendingGenerate) return;
     const snapshot = workspaceSnapshot();
     if (snapshot === state.lastSavedSnapshot) return;
 
@@ -5770,6 +5782,20 @@
     if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
 
+    // Premier morceau de TEXTE de la note : le raisonnement (thinking) s'est
+    // terminé — on efface la pensée de l'écran (elle n'est jamais persistée),
+    // puis la note défile à son tour.
+    if (genThoughtPhase) {
+      genThoughtPhase = false;
+      hideThinkingIndicator();
+      if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
+      genText = '';
+      genSeq = 0;
+      genShown = '';
+      lastGenRender = 0;
+      applyGenShown();
+    }
+
     // Le premier morceau de texte est LA preuve que le modèle a répondu : il
     // bascule le toast en phase « génération » même si l'événement dédié
     // `generation_started` s'est perdu (file SSE saturée, reconnexion).
@@ -5792,6 +5818,52 @@
     }
 
     startGenReveal();
+  }
+
+  /**
+   * Raisonnement (thinking) du modèle, diffusé par le serveur pendant la
+   * génération (événement SSE ``generation_thought``). Il défile dans la même
+   * fenêtre que la note, puis est effacé dès le premier morceau de texte
+   * (voir onGenerationChunk) — jamais persisté.
+   */
+  function onGenerationThought(evt) {
+    if (!pendingGenerate) return;
+    const payload = JSON.parse(evt.data || '{}');
+    if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+
+    if (!genThoughtPhase) {
+      genThoughtPhase = true;
+      showThinkingIndicator();
+    }
+
+    // Même preuve d'activité que le texte de la note : le modèle a répondu.
+    if (!state.genStarted && progressToast && progressToast.setMessage) {
+      state.genStarted = true;
+      progressToast.setMessage(T('generate.streaming'));
+    }
+
+    if (payload.type === 'snapshot' || !payload.type) {
+      genText = payload.markdown || '';
+      genSeq = payload.seq || 0;
+    } else {
+      if (genSeq + 1 === payload.seq || genSeq === 0) {
+        genText += payload.delta || '';
+      }
+      genSeq = payload.seq || genSeq;
+    }
+
+    startGenReveal();
+  }
+
+  function showThinkingIndicator() {
+    const el = $('thinkingIndicator');
+    if (el) el.classList.remove('hidden');
+  }
+
+  function hideThinkingIndicator() {
+    const el = $('thinkingIndicator');
+    if (el) el.classList.add('hidden');
   }
 
   /**
@@ -5991,6 +6063,7 @@
     liveSource.addEventListener('recording_deleted', onSyncRecording);
     liveSource.addEventListener('generated', onSyncGeneratedOrPatched);
     liveSource.addEventListener('generation_chunk', onGenerationChunk);
+    liveSource.addEventListener('generation_thought', onGenerationThought);
     liveSource.addEventListener('generation_started', onGenerationStarted);
     liveSource.addEventListener('transcription_progress', onTranscriptionProgress);
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);

@@ -406,6 +406,18 @@ pour dévoiler les fournisseurs non sélectionnés.
 > l'extraction, un **modèle rapide non raisonneur** (field « Modèle rapide »)
 > est recommandé.
 
+> **Afficher le raisonnement (thinking) pendant la génération.** Deux
+> réglages sous Modèle de langage — **Montrer le raisonnement —
+> administrateurs** (`show_thinking_admin`) et **Montrer le raisonnement —
+> utilisateurs** (`show_thinking_users`), **désactivés par défaut**. Lorsque
+> l'un est actif pour la personne qui génère, le raisonnement du modèle défile
+> dans la fenêtre de note (même dévoilement progressif que le texte, avec un
+> badge « Raisonnement du modèle… »), puis est **effacé de l'écran** dès que le
+> texte de la note commence : il n'est **jamais enregistré**. Supporté pour
+> Gemini (parties `thought`), les endpoints OpenAI-compatibles à raisonnement
+> (`reasoning_content`/`reasoning`, ex. DeepSeek, Qwen) et Anthropic (blocs
+> `thinking`). Sans effet si le modèle ne produit pas de raisonnement.
+
 Dans l'onglet Comptes, l'appartenance se règle en cliquant les pastilles de
 groupe, et chaque changement s'applique immédiatement — il n'y a rien à
 enregistrer.

@@ -847,6 +847,16 @@
           <!-- Le progrès de la génération s'affiche dans le toast unifié
                (#toastZone) ; le texte, lui, défile ici en direct pendant que
                le serveur diffuse les morceaux de la note. -->
+          <!-- Badge transitoire : le raisonnement (thinking) du modèle
+               défile ici puis est effacé dès que le texte de la note commence
+               — il n'est jamais persisté. -->
+          <div id="thinkingIndicator"
+               class="hidden absolute top-2 right-3 z-10 inline-flex items-center gap-1.5
+                      rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium
+                      text-amber-700 ring-1 ring-amber-200 animate-pulse">
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+            <span>{{ t('note.thinking') }}</span>
+          </div>
           <p class="text-slate-400 italic">{{ t('note.empty') }}</p>
         </div>
 

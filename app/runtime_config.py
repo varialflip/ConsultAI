@@ -366,6 +366,18 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: str(settings.gemini_thinking_budget),
         placeholder="128",
     ),
+
+    # Affichage du raisonnement du modèle (thinking) pendant la génération :
+    # deux bascules indépendantes — administrateurs d'abord, autres usagers
+    # ensuite. La pensée est diffusée en direct puis effacée, jamais persistée.
+    Setting(
+        "show_thinking_admin", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
+    Setting(
+        "show_thinking_users", "choice", "group.llm",
+        default=lambda: "false", choices=ON_OFF,
+    ),
     Setting(
         "gemini_send_audio", "choice", "group.llm",
         default=lambda: "false", choices=ON_OFF,

@@ -26,7 +26,7 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   Consultation - Gériatrie = 103, Suivi - Gériatrie = 104 : les deux
   consultations générales s'affichent avant la gériatrie. Rafraîchi au
   démarrage comme le reste du gabarit verrouillé.
-- **Gabarits généraux réécits sur le modèle « FD ».** Les gabarits verrouillés
+- **Gabarits généraux réécrits sur le modèle « FD ».** Les gabarits verrouillés
   « Consultation Médicale Générale » (fr) et « General Medical Consultation »
   (en) adoptent la mise en forme des gabarits personnels : capitales de phrase
   (« ## Raison de consultation », « ## Antécédents », « ## Médicaments »,

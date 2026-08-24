@@ -229,10 +229,10 @@ COHERE_LLM_THINKING_BUDGET=1024
 > autour de 6-7 min) garde le modèle principal sur toute la dictée. Le
 > découpage prime sur le **seuil de durée** (`custom_stt_max_seconds`), qui
 > reste disponible sans découpage pour envoyer directement au modèle de repli
-> les dictées trop longues. Le **retrait des silences est suspendu** pour cet
-> endpoint (pas de facturation à la durée, et le plafonnement des pauses
-> dégrade certains modèles locaux multilingues) : l'audio lui est envoyé tel
-> quel.
+> les dictées trop longues. Le **retrait des silences** (plafonnement des
+> pauses, bascule globale `stt_trim_silence`) s'applique désormais **à tous les
+> fournisseurs, y compris cet endpoint** et l'audio joint au modèle de langage ;
+> coupez la bascule s'il dégrade un modèle local multilingue.
 
 ---
 

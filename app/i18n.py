@@ -1432,12 +1432,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Trim long pauses",
     ),
     "set.stt_trim_silence.help": (
-        "Les services facturent à la durée d'audio. Seule la copie envoyée "
-        "est raccourcie : l'enregistrement conservé avec le brouillon reste "
-        "intact, et la durée affichée reste celle de la dictée réelle.",
-        "Services bill by audio duration. Only the copy that is sent is "
-        "shortened: the recording kept with the draft stays intact, and the "
-        "displayed duration remains that of the actual dictation.",
+        "Plafonne les pauses au-delà de « Pause conservée » dans la copie "
+        "envoyée — de quoi réduire la durée facturée (services à la durée) "
+        "et les jetons audio du modèle. Bascule GLOBALE : s'applique à toutes "
+        "les pistes et à tous les fournisseurs (reconnaissance vocale et audio "
+        "joint au modèle de langage). Seule la copie envoyée est raccourcie : "
+        "l'enregistrement conservé avec le brouillon reste intact, et la durée "
+        "affichée reste celle de la dictée réelle.",
+        "Caps pauses beyond “Pause kept” in the copy that is sent — reducing "
+        "billed duration (duration-billed services) and model audio tokens. "
+        "GLOBAL toggle: applies to every track and provider (speech "
+        "recognition and the audio attached to the language model). Only the "
+        "sent copy is shortened: the recording kept with the draft stays "
+        "intact, and the displayed duration remains that of the actual "
+        "dictation.",
     ),
     "set.stt_silence_keep_seconds.label": (
         "Pause conservée (secondes)",

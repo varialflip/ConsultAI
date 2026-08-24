@@ -596,9 +596,9 @@ def _prepare_audio_for_generation(
     dernière.
 
     ``audio_format`` (``ogg`` / ``mp3`` / ``wav``) décide du conteneur de
-    sortie : le point de terminaison personnalisé peut n'exposer que des
-    modèles réclamant MP3/WAV (ex. Mistral Voxtral, qui refuse l'OGG). Les
-    autres fournisseurs (Gemini, Qwen) restent sur OGG, leur format connu.
+    sortie. Le plafonnement des silences (bascule globale ``stt_trim_silence``)
+    s'applique à toutes les pistes et à tous les formats ; quand il est éteint
+    ou en échec, l'audio est joint tel quel (``transcode_to``).
 
     Best-effort à dessein : aucun enregistrement, fusion ou rognage impossible,
     ou dictée trop longue (``<fournisseur>_send_audio_max_minutes``)
@@ -611,9 +611,27 @@ def _prepare_audio_for_generation(
 
     def _traiter(source: str, provenance: str) -> Optional[Tuple[bytes, str]]:
         """Prépare l'audio de ``source`` dans le format demandé."""
-        if fmt in ("mp3", "wav"):
-            # Pas de rognage des silences : l'audio joint au modèle de langage
-            # doit rester la dictée telle quelle (voir stt.transcode_to).
+        plafond = max_minutes * 60
+        contenu, mime, duree = None, None, None
+        rogné = False
+
+        # Plafonnement des silences — bascule GLOBALE ``stt_trim_silence``,
+        # appliquée à toutes les pistes et à tous les formats (ogg/mp3/wav),
+        # y compris l'audio envoyé au modèle de langage.
+        # ``cap_silence_to`` renvoie ``None`` quand la bascule est éteinte ou
+        # que le filtre échoue : on envoie alors l'audio tel quel (transcodé).
+        try:
+            capped = stt.cap_silence_to(source, fmt)
+        except OSError as exc:
+            logger.warning(
+                "Audio non joint (consultation %s, %s) : %s",
+                consultation_id, provenance, exc,
+            )
+            capped = None
+        if capped is not None:
+            contenu, mime, duree = capped
+            rogné = True
+        else:
             transcodé = stt.transcode_to(source, fmt)
             if transcodé is None:
                 logger.warning(
@@ -622,55 +640,7 @@ def _prepare_audio_for_generation(
                 )
                 return None
             contenu, mime, duree = transcodé
-            plafond = max_minutes * 60
-            if duree <= 0 or duree > plafond:
-                logger.info(
-                    "Audio non joint (consultation %s, %s) : %.1f s hors bornes "
-                    "(plafond %.0f s)",
-                    consultation_id, provenance, duree, plafond,
-                )
-                return None
-            logger.info(
-                "Audio joint (consultation %s, %s) : %.1f s (%s)",
-                consultation_id, provenance, duree, mime,
-            )
-            return contenu, mime
 
-        # OGG : comportement historique — rognage des silences, puis repli
-        # sur l'audio d'origine si le rognage est indisponible.
-        try:
-            trimmed = stt.compress_silence(source)
-        except OSError as exc:
-            logger.warning(
-                "Audio non joint (consultation %s, %s) : %s",
-                consultation_id, provenance, exc,
-            )
-            return None
-        if trimmed is None:
-            # Rognage désactivé ou en échec : envoyer l'audio tel quel vaut
-            # mieux que rien — avec le contournement du STT, c'est la seule
-            # source du modèle (voir llm.generate_note).
-            try:
-                with open(source, "rb") as handle:
-                    contenu = handle.read()
-                duree = stt.probe_duration(source)
-            except OSError as exc:
-                logger.warning(
-                    "Audio non joint (consultation %s, %s) : %s",
-                    consultation_id, provenance, exc,
-                )
-                return None
-            if not contenu or duree <= 0:
-                logger.info(
-                    "Audio non joint (consultation %s, %s) : fichier illisible",
-                    consultation_id, provenance,
-                )
-                return None
-            provenance = f"{provenance}, audio non rogné"
-        else:
-            contenu, duree = trimmed
-
-        plafond = max_minutes * 60
         if duree <= 0 or duree > plafond:
             logger.info(
                 "Audio non joint (consultation %s, %s) : %.1f s hors bornes "
@@ -679,10 +649,11 @@ def _prepare_audio_for_generation(
             )
             return None
         logger.info(
-            "Audio joint (consultation %s, %s) : %.1f s",
-            consultation_id, provenance, duree,
+            "Audio joint (consultation %s, %s) : %.1f s (%s)%s",
+            consultation_id, provenance, duree, mime,
+            ", silences plafonnés" if rogné else "",
         )
-        return contenu, "audio/ogg"
+        return contenu, mime
 
     pistes = recordings.for_consultation(db, consultation_id)
     if not pistes:

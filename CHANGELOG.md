@@ -29,6 +29,19 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-08-21
 
+- **Retrait des silences : bascule globale pour toutes les pipelines.**
+  Le plafonnement des pauses (`stt_trim_silence`, « Retirer les longues
+  pauses ») s'applique désormais à **toutes** les pistes et **tous** les
+  fournisseurs — y compris l'endpoint personnalisé (Parakeet) et l'audio
+  joint au modèle de langage (Gemini/Qwen), quel que soit le format d'envoi
+  (ogg/mp3/wav). L'exception « provider custom » est supprimée. Éteindre la
+  bascule restaure l'envoi de l'audio tel quel partout. Attention : le
+  plafonnement avait été suspendu pour Parakeet/ONNX en beta.45 (attaques de
+  mots coupées, mélange des langues) — à surveiller sur le transcript si la
+  bascule est active.
+
+## 2026-08-21
+
 - **Règle de regroupement des médicaments rendue actionnable dans les
   gabarits.** La consigne « Regroupe un même traitement en une ligne lorsqu'il
   sert la même indication » n'était jamais exécutée : le modèle refusait

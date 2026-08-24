@@ -1426,24 +1426,55 @@ def compress_silence(source_path: str) -> Optional[Tuple[bytes, float]]:
     On emploie ``start_silence`` et non ``start_duration`` : le premier borne
     le silence conservé, le second exigerait une durée minimale de parole
     avant de cesser de couper, et rognerait l'attaque d'un mot court.
+
+    Depuis la bascule globale ``stt_trim_silence``, le plafonnement s'applique
+    à TOUS les fournisseurs — y compris l'endpoint personnalisé (Parakeet) —
+    et à toutes les pistes (STT comme audio joint au modèle). Pour éteindre
+    partout : panneau → Reconnaissance vocale → « Retirer les longues pauses ».
+    """
+    result = cap_silence_to(source_path, "ogg")
+    if result is None:
+        return None
+    content, _mime, duration = result
+    return content, duration
+
+
+_SEND_AUDIO_FORMATS = {
+    # (suffixe de sortie, codec, options du codec, type MIME)
+    "ogg": ("output.ogg", "libopus", ["-b:a", "24k", "-application", "voip"], "audio/ogg"),
+    "mp3": ("output.mp3", "libmp3lame", ["-b:a", "96k"], "audio/mpeg"),
+    "wav": ("output.wav", "pcm_s16le", [], "audio/wav"),
+}
+
+
+def cap_silence_to(source_path: str, fmt: str = "ogg") -> Optional[Tuple[bytes, str, float]]:
+    """
+    Plafonne les pauses de ``source_path`` (même filtre que
+    ``compress_silence``) puis encode le résultat dans le format demandé.
+
+    ``fmt`` — ``ogg`` / ``mp3`` / ``wav`` — suit ``_SEND_AUDIO_FORMATS``.
+    Retourne ``(contenu, type_mime, durée)``, ou ``None`` si la bascule
+    ``stt_trim_silence`` est éteinte, si ffmpeg est absent ou si le filtre
+    échoue — l'appelant envoie alors l'audio tel quel (``transcode_to``).
+
+    Contrairement au comportement historique, il n'y a plus d'exception pour
+    l'endpoint personnalisé : la bascule est GLOBALE. L'éventuel souci de
+    qualité d'un modèle particulier (ex. attaques de mots coupées) se gère en
+    coupant la bascule, pas en créant une exception par fournisseur.
     """
     if runtime_config.value("stt_trim_silence") == "false" or not _ffmpeg_available():
-        return None
-
-    if runtime_config.value("stt_provider") == "custom":
-        # Endpoints personnalisés (ex. Parakeet/ONNX local) : pas de
-        # facturation à la durée — la concaténation des paroles n'économise
-        # rien — et le modèle y est sensible (le plafonnement des pauses
-        # coupe les attaques de mots et fait mélanger les langues à un
-        # modèle multilingue). On envoie l'audio tel quel.
         return None
 
     keep = max(0.0, runtime_config.value_float(
         "stt_silence_keep_seconds", settings.stt_silence_keep_seconds
     ))
     seuil = f"{settings.stt_silence_threshold_db}dB"
+    desc = _SEND_AUDIO_FORMATS.get((fmt or "ogg").strip().lower())
+    if desc is None:
+        desc = _SEND_AUDIO_FORMATS["ogg"]
+    sortie, codec, codec_opts, mime = desc
     workdir = tempfile.mkdtemp(prefix="consultai-trim-")
-    dst = os.path.join(workdir, "trimmed.ogg")
+    dst = os.path.join(workdir, "trimmed." + sortie.rsplit(".", 1)[-1])
     try:
         _run_ffmpeg([
             "-loglevel", "error", "-i", source_path, "-vn",
@@ -1454,13 +1485,15 @@ def compress_silence(source_path: str) -> Optional[Tuple[bytes, float]]:
                 f":stop_threshold={seuil}"
             ),
             "-ac", "1", "-ar", "48000",
-            "-c:a", "libopus", "-b:a", "24k", "-application", "voip",
-            "-f", "ogg", "-y", dst,
+            "-c:a", codec, *codec_opts,
+            "-f", sortie.rsplit(".", 1)[-1], "-y", dst,
         ])
     except (TranscriptionError, subprocess.SubprocessError, OSError) as exc:
         # Un filtre qui échoue ne doit pas faire perdre la tranche : on
-        # renonce à l'économie et on envoie l'audio d'origine.
-        logger.warning("Retrait des silences impossible, audio envoyé tel quel : %s", exc)
+        # renonce au plafonnement et on envoie l'audio d'origine.
+        logger.warning(
+            "Plafonnement des silences impossible, audio envoyé tel quel : %s", exc
+        )
         shutil.rmtree(workdir, ignore_errors=True)
         return None
 
@@ -1469,19 +1502,13 @@ def compress_silence(source_path: str) -> Optional[Tuple[bytes, float]]:
             content = handle.read()
         # Une sortie vide n'est pas une panne : c'est le résultat exact d'une
         # tranche où personne n'a parlé.
-        return content, probe_duration(dst)
+        if not content:
+            return None
+        return content, mime, probe_duration(dst)
     except OSError:
         return None
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
-
-
-_SEND_AUDIO_FORMATS = {
-    # (suffixe de sortie, codec, options du codec, type MIME)
-    "ogg": ("output.ogg", "libopus", ["-b:a", "24k", "-application", "voip"], "audio/ogg"),
-    "mp3": ("output.mp3", "libmp3lame", ["-b:a", "96k"], "audio/mpeg"),
-    "wav": ("output.wav", "pcm_s16le", [], "audio/wav"),
-}
 
 
 def transcode_to(source_path: str, fmt: str = "ogg") -> Optional[Tuple[bytes, str, float]]:
@@ -1493,10 +1520,10 @@ def transcode_to(source_path: str, fmt: str = "ogg") -> Optional[Tuple[bytes, st
     à certains modèles exposés derrière un point de terminaison personnalisé
     (ex. Mistral Voxtral via OpenRouter, qui refuse l'OGG).
 
-    Contrairement à ``compress_silence``, on ne rogne aucun silence ici : le
-    retrait des pauses sert au service de reconnaissance, qui facture à la
-    durée ; l'audio joint au modèle de langage doit rester la dictée telle
-    quelle. Retourne ``(contenu, type_mime, durée)``, ou ``None`` si le
+    Contrairement à ``compress_silence``/``cap_silence_to``, on ne plafonne
+    aucun silence ici : c'est la version « audio tel quel », utilisée quand la
+    bascule ``stt_trim_silence`` est éteinte ou que le plafonnement échoue.
+    Retourne ``(contenu, type_mime, durée)``, ou ``None`` si le
     transcodage échoue — l'appelant décide alors de renoncer à l'audio plutôt
     que d'envoyer un fichier que le modèle pourrait rejeter.
     """

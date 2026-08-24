@@ -5,6 +5,26 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-08-24
 
+- **Panneau d'administration réorganisé par flux de travail ; recherche de
+  réglage.** Cinq onglets : **Dictée** (service de transcription sous son
+  sous-onglet, puis retrait des pauses et temps réel), **Note** (modèle de
+  langage sous son sous-onglet, consigne générale, affichage du raisonnement),
+  **Comptes et accès** (inscription automatique, attributs du nom et de
+  l'avatar, comptes), **Données et sauvegarde** (purge des dossiers, rotation
+  des sauvegardes, restauration) et **Statistiques**. Une **recherche** au-dessus
+  des onglets filtre tous les réglages et mène directement au champ (onglet,
+  sous-onglet, défilement). Les champs sans objet courant sont masqués au lieu
+  d'attendre une lecture attentive : le VAD ne se règle qu'en mode « énoncé »,
+  le streaming Mistral qu'en mode « streaming », la durée maximale d'audio
+  joint seulement si l'audio est joint, la transcription conservée seulement si
+  l'on ignore le service vocal, le budget de raisonnement seulement si le
+  raisonnement est activé — les réglages fins (seuils VAD en ms, repli et
+  découpage du point de terminaison personnalisé) se replient sous « Avancé ».
+  Les clés partagées entre deux services (Cohere, Mistral, OpenAI) restent un
+  seul réglage, répété sous les deux onglets concernés. Libellés clarifiés :
+  « attribut » plutôt que « revendication », seuils de repli et tranches
+  d'audio nommés pour ce qu'ils font. Aucune valeur en base n'est touchée par
+  la migration : mêmes clés, mêmes défauts.
 - **Consigne générale réécrite ; traduction anglaise alignée.** La consigne
   générale française est restructurée en sept sections (0 proportionnalité,
   1 aucune invention, 2 correction de la transcription — tableau
@@ -26,6 +46,7 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   Consultation - Gériatrie = 103, Suivi - Gériatrie = 104 : les deux
   consultations générales s'affichent avant la gériatrie. Rafraîchi au
   démarrage comme le reste du gabarit verrouillé.
+
 - **Gabarits généraux réécrits sur le modèle « FD ».** Les gabarits verrouillés
   « Consultation Médicale Générale » (fr) et « General Medical Consultation »
   (en) adoptent la mise en forme des gabarits personnels : capitales de phrase
@@ -39,6 +60,32 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   les copies personnelles ne sont pas touchées.
 
 ## 2026-08-21
+
+- **Pages « test » réservées : index + dictées, sous OIDC.** `/test` est un
+  index des dictées (hyperliens) et `/test/{id}` affiche la note **Gemini et
+  la note Qwen Omni côte à côte** (rendues via marked + DOMPurify, assainies
+  côté client), avec les **stats de génération en haut** (durée, tokens de
+  sortie, tokens audio pour chaque modèle) et un bouton **← Index**. Les deux
+  colonnes restent visibles en **orientation paysage** (mobile landscape).
+  **Analyse des différences** en haut de chaque page : métriques (caractères,
+  mots, coût estimé), rubriques présentes dans une seule note, contenu
+  différent (lignes) et un **résumé comparatif généré par un modèle tiers**
+  (DeepSeek) avec verdict sur la viabilité de Qwen Omni vs Gemini 2.5 Pro.
+  Données lues depuis `/data/test_index.json`. Sans session, redirection vers
+  `/auth/login?next=…`.
+
+## 2026-08-21
+
+- **Retrait des silences : bascule globale pour toutes les pipelines.**
+  Le plafonnement des pauses (`stt_trim_silence`, « Retirer les longues
+  pauses ») s'applique désormais à **toutes** les pistes et **tous** les
+  fournisseurs — y compris l'endpoint personnalisé (Parakeet) et l'audio
+  joint au modèle de langage (Gemini/Qwen), quel que soit le format d'envoi
+  (ogg/mp3/wav). L'exception « provider custom » est supprimée. Éteindre la
+  bascule restaure l'envoi de l'audio tel quel partout. Attention : le
+  plafonnement avait été suspendu pour Parakeet/ONNX en beta.45 (attaques de
+  mots coupées, mélange des langues) — à surveiller sur le transcript si la
+  bascule est active.
 
 ## 2026-08-21
 
@@ -55,16 +102,18 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   Anthropic (blocs `thinking`). Sans effet si le modèle ne produit pas de
   raisonnement.
 
-- **Retrait des silences : bascule globale pour toutes les pipelines.**
-  Le plafonnement des pauses (`stt_trim_silence`, « Retirer les longues
-  pauses ») s'applique désormais à **toutes** les pistes et **tous** les
-  fournisseurs — y compris l'endpoint personnalisé (Parakeet) et l'audio
-  joint au modèle de langage (Gemini/Qwen), quel que soit le format d'envoi
-  (ogg/mp3/wav). L'exception « provider custom » est supprimée. Éteindre la
-  bascule restaure l'envoi de l'audio tel quel partout. Attention : le
-  plafonnement avait été suspendu pour Parakeet/ONNX en beta.45 (attaques de
-  mots coupées, mélange des langues) — à surveiller sur le transcript si la
-  bascule est active.
+## 2026-08-21
+
+- **Règle de regroupement des médicaments renforcée dans les gabarits.**
+  Le modèle ajoutait bien l'indication entre parenthèses mais laissait chaque
+  médicament sur sa propre ligne. La consigne « Médication actuelle » des
+  gabarits « Consultation - Gériatrie » et « Consultation Médicale Générale »
+  (FR, verrouillés) ainsi que des copies (FD) précise désormais que
+  « écrire l'indication sur une ligne ne dispense pas du regroupement » : dès
+  que deux médicaments partagent la même indication (dictée ou cliniquement
+  évidente), ils doivent figurer sur la **même ligne**. Exemples étendus :
+  deux ou trois antalgiques, deux laxatifs, deux hypoglycémiants, couple
+  calcium + vitamine D. La consigne générale n'est pas modifiée.
 
 ## 2026-08-21
 

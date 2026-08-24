@@ -1137,6 +1137,54 @@ async def index(request: Request):
     )
 
 
+@app.get("/test", response_class=HTMLResponse, include_in_schema=False)
+async def test_page(request: Request):
+    """Index « test » réservé : liste des dictées, sous OIDC."""
+    user = current_user(request)
+    index = _read_test_index()
+    return jinja_templates.TemplateResponse(
+        request,
+        "test.html",
+        {
+            "app_title": settings.app_title,
+            "user": user.to_dict(),
+            "index": index,
+        },
+    )
+
+
+@app.get("/test/{dictation_id}", response_class=HTMLResponse, include_in_schema=False)
+async def test_dictation_page(request: Request, dictation_id: int):
+    """Page dictée : notes Gemini / Qwen Omni côte à côte, stats en haut."""
+    user = current_user(request)
+    index = _read_test_index()
+    found = next(
+        (d for d in index.get("dictations", []) if d.get("id") == dictation_id), None
+    )
+    if found is None:
+        raise HTTPException(status_code=404, detail="Dictée introuvable")
+    return jinja_templates.TemplateResponse(
+        request,
+        "test_dictation.html",
+        {
+            "app_title": settings.app_title,
+            "user": user.to_dict(),
+            "index": index,
+            "dictation": found,
+        },
+    )
+
+
+def _read_test_index() -> dict:
+    chemin = "/data/test_index.json"
+    try:
+        with open(chemin, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError) as exc:
+        logger.warning("Page /test : %s illisible (%s)", chemin, exc)
+        return {"generated_at": "", "dictations": []}
+
+
 # ===========================================================================
 # Identité et configuration
 # ===========================================================================
@@ -1355,6 +1403,9 @@ def get_admin_settings(request: Request, admin: Principal = Depends(require_temp
             {"key": groupe, "label": i18n.t(groupe, langue)}
             for groupe in runtime_config.GROUPS
         ],
+        # Avertissements par onglet (Cohere…) : le client les filtre selon le
+        # service CONSULTÉ, pas seulement l'actif.
+        "warnings": runtime_config.group_warnings(langue),
     }
 
 
@@ -1379,6 +1430,7 @@ def put_admin_settings(
             {"key": groupe, "label": i18n.t(groupe, langue)}
             for groupe in runtime_config.GROUPS
         ],
+        "warnings": runtime_config.group_warnings(langue),
         "language": langue,
     }
 

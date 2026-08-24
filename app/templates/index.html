@@ -1306,6 +1306,15 @@
       <div id="adminTabs" class="flex gap-1 overflow-x-auto thin-scroll -mb-px"></div>
     </div>
 
+    <!-- Recherche : filtre TOUS les réglages, tous onglets confondus. Sous
+         deux caractères saisis, le contenu normal de l'onglet reprend la main. -->
+    <div class="shrink-0 px-4 pt-3 border-b border-slate-100 pb-3">
+      <input id="adminSearchInput" type="search" autocomplete="off"
+             placeholder="{{ t('admin.search.placeholder') }}"
+             class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white
+                    placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300">
+    </div>
+
     <form id="adminForm" class="overflow-auto thin-scroll flex-1 min-h-0">
       <!-- Bandeau d'explication propre à l'onglet courant. -->
       <div id="adminIntro" class="px-4 pt-4"></div>

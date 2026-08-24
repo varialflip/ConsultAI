@@ -978,37 +978,35 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     # L'ancien bandeau expliquait la surcharge du .env en haut de TOUS les
     # onglets, y compris ceux où elle ne s'applique pas. Chaque onglet dit
     # maintenant ce qu'il fait, et seuls ceux qui portent des réglages
-    # mentionnent le .env.
-    "admin.intro.group.system": (
-        "Comportement général de l'installation.",
-        "General behaviour of this installation.",
+    # mentionnent le .env. Les onglets suivent les flux de travail :
+    # Dictée (la voix devient texte), Note (le texte devient note), Comptes
+    # et accès (qui entre), Données et sauvegarde (ce qu'on garde), Statistiques.
+    "admin.intro.group.dictation": (
+        "Comment la voix devient texte : le service de transcription sous son "
+        "propre sous-onglet, puis ce qui s'applique à tous — retrait des "
+        "pauses et temps réel.",
+        "How voice becomes text: the transcription service under its own "
+        "sub-tab, then what applies to all — pause trimming and realtime.",
     ),
-    "admin.intro.group.stt": (
-        "Service qui transcrit la dictée. Le découpage en tranches est commun à "
-        "tous : seul l'envoi final change.",
-        "The service that transcribes dictation. Segmentation is common to all "
-        "of them: only the final upload differs.",
+    "admin.intro.group.note": (
+        "Comment la transcription devient note : le modèle de langage sous son "
+        "propre sous-onglet, la consigne générale qui complète les gabarits, "
+        "et l'affichage du raisonnement.",
+        "How the transcript becomes a note: the language model under its own "
+        "sub-tab, the general instruction complementing templates, and the "
+        "reasoning display.",
     ),
-    "admin.intro.group.llm": (
-        "Modèle qui met la transcription en forme selon le gabarit.",
-        "The model that formats the transcript according to the template.",
-    ),
-    "admin.intro.group.prompts": (
-        "Consignes ajoutées à celles de TOUS les gabarits. Celle qui s'applique "
-        "dépend de la langue du gabarit employé.",
-        "Instructions added to those of EVERY template. Which one applies "
-        "depends on the language of the template in use.",
-    ),
-    "admin.intro.group.users": (
-        "Qui peut entrer, avec quels droits, et quelles propriétés du "
-        "fournisseur d'identité sont lues.",
+    "admin.intro.group.access": (
+        "Qui peut entrer, avec quels droits, et quels attributs du fournisseur "
+        "d'identité sont lus pour le nom et l'avatar.",
         "Who may sign in, with which rights, and which identity-provider "
-        "properties are read.",
+        "attributes are read for the name and avatar.",
     ),
-    "admin.intro.group.backup": (
-        "Export/import complet de l'application, avec sauvegarde quotidienne "
-        "automatique.",
-        "Full application export/import, with an automatic daily backup.",
+    "admin.intro.group.data": (
+        "Combien de temps les consultations restent sur le serveur, combien de "
+        "sauvegardes sont conservées, et comment restaurer.",
+        "How long consultations stay on the server, how many backups are "
+        "kept, and how to restore.",
     ),
     "admin.intro.group.stats": (
         "Jetons et minutes d'audio consommés par usager, par modèle et par "
@@ -1024,6 +1022,9 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "<code>.env</code> file: effective immediately, with no rebuild. "
         "Clearing a field resets it to the <code>.env</code> value.",
     ),
+    "admin.advanced": ("Avancé", "Advanced"),
+    "admin.search.placeholder": ("Rechercher un réglage…", "Search a setting…"),
+    "admin.search.none": ("Aucun réglage ne correspond.", "No matching setting."),
 
     # --- Panneau : comptes et groupes ---------------------------------------
     "people.users_title": ("Comptes", "Accounts"),
@@ -1100,10 +1101,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "This service has no setting in this panel: it is configured in the "
         "<code>.env</code> file and, for Google, through the service account "
         "mounted in the container.",
-    ),
-    "admin.provider_shared": (
-        "Réglages communs à tous les services",
-        "Settings shared by all services",
     ),
     "admin.provider_no_key": (
         "Aucune clé enregistrée pour ce service : il refusera les requêtes tant "
@@ -1274,14 +1271,105 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "identity.usage.cost": ("≈ {amount} $ estimé", "≈ US${amount} estimated"),
 
     # --- Panneau d'administration : groupes de réglages --------------------
+    # Onglets organisés par flux de travail — voir runtime_config.GROUPS.
     "group.interface": ("Interface", "Interface"),
-    "group.system": ("Système", "System"),
-    "group.stt": ("Reconnaissance vocale", "Speech recognition"),
-    "group.users": ("Comptes et groupes", "Users and groups"),
-    "group.llm": ("Modèle de langage", "Language model"),
-    "group.prompts": ("Consignes", "Instructions"),
-    "group.backup": ("Sauvegarde", "Backup"),
+    "group.dictation": ("Dictée", "Dictation"),
+    "group.note": ("Note", "Note"),
+    "group.access": ("Comptes et accès", "Accounts and access"),
+    "group.data": ("Données et sauvegarde", "Data and backups"),
     "group.stats": ("Statistiques", "Statistics"),
+
+    # --- Sous-titres internes à un onglet (Setting.section) ------------------
+    "sect.silence": ("Retrait des pauses", "Pause trimming"),
+    "sect.realtime": ("Temps réel", "Realtime"),
+    "sect.prompts": ("Consigne générale", "General instruction"),
+
+    # --- Textes partagés entre fournisseurs de modèle de langage -------------
+    # Les fabriques _cap_* de runtime_config.py instancient ces capacités pour
+    # chaque fournisseur : valeurs propres à chacun en base, textes écrits une
+    # seule fois ici. Un fournisseur qui s'écarte du commun garde son propre
+    # set.<clé> (point de terminaison personnalisé, notamment).
+    "set.cap.model.label": ("Modèle", "Model"),
+    "set.cap.model.help": (
+        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
+        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
+        "The “Available models” button queries the provider with the "
+        "configured key and shows what this account actually has access to.",
+    ),
+    "set.cap.model_fast.label": (
+        "Modèle rapide (métadonnées)",
+        "Fast model (metadata)",
+    ),
+    "set.cap.model_fast.help": (
+        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
+        "payée au jeton. Laisser vide pour employer le modèle principal.",
+        "Used only to re-read metadata, a trivial task paid by the token. "
+        "Leave empty to use the main model.",
+    ),
+    "set.cap.temperature.label": ("Température", "Temperature"),
+    "set.cap.temperature.help": (
+        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
+        "n'a pas sa place dans une note clinique. Les modèles les plus "
+        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
+        "est produite quand même.",
+        "0 = deterministic. Above 0.4 the model starts embellishing, which "
+        "has no place in a clinical note. The most recent models no longer "
+        "accept it: the setting is then ignored and the note is produced "
+        "anyway.",
+    ),
+    "set.cap.send_audio.label": (
+        "Joindre aussi l'audio (silences plafonnés)",
+        "Also attach audio (pauses capped)",
+    ),
+    "set.cap.send_audio.help": (
+        "Envoie l'extrait audio en plus de la transcription : le modèle peut "
+        "trancher un terme mal reconnu (nom propre, terme médical) en "
+        "l'écoutant. Ajoute un coût et quelques secondes par note.",
+        "Sends the audio clip alongside the transcript: the model can "
+        "resolve a poorly recognized term (proper noun, medical term) by "
+        "listening to it. Adds cost and a few seconds per note.",
+    ),
+    "set.cap.send_audio_max_minutes.label": (
+        "Durée maximale envoyée (minutes)",
+        "Maximum duration sent (minutes)",
+    ),
+    "set.cap.send_audio_max_minutes.help": (
+        "Au-delà de cette durée d'audio (après retrait des silences), rien "
+        "n'est joint — la note se génère comme avant, sur la seule "
+        "transcription. Protège la latence et le coût sur une très longue "
+        "dictée.",
+        "Beyond this much audio (after silence trimming), nothing is "
+        "attached — the note is generated as before, from the transcript "
+        "alone. Protects latency and cost on a very long dictation.",
+    ),
+    "set.cap.bypass_stt.label": (
+        "Ignorer la reconnaissance vocale (audio direct)",
+        "Skip speech recognition (direct audio)",
+    ),
+    "set.cap.bypass_stt.help": (
+        "L'audio part directement au modèle, sans passer par le service de "
+        "reconnaissance vocale — économise son coût et sa latence. La note "
+        "peut alors se générer sans transcription, dès qu'un enregistrement "
+        "existe.",
+        "Audio goes straight to the model, without passing through speech "
+        "recognition — saves its cost and latency. The note can then be "
+        "generated without a transcript, as soon as a recording exists.",
+    ),
+    "set.cap.keep_transcript.label": (
+        "Conserver une transcription pendant l'enregistrement",
+        "Keep a transcript during recording",
+    ),
+    "set.cap.keep_transcript.help": (
+        "Sans effet si l'option ci-dessus est désactivée. Activée : la "
+        "reconnaissance vocale continue de tourner pendant la dictée (texte "
+        "visible et modifiable), mais la note se génère quand même à partir "
+        "de l'audio. Désactivée (par défaut) : aucun appel au service vocal "
+        "pendant l'enregistrement, économie maximale.",
+        "No effect if the option above is off. On: speech recognition keeps "
+        "running during dictation (visible, editable text), but the note is "
+        "still generated from the audio. Off (default): no call to the "
+        "speech service during recording, maximum savings.",
+    ),
 
     # --- Panneau d'administration : réglages -------------------------------
     "set.allow_signup.label": (
@@ -1332,25 +1420,25 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "to disable the purge.",
     ),
     "set.oidc_name_claim.label": (
-        "Revendication du nom affiché",
-        "Display-name claim",
+        "Attribut du nom affiché",
+        "Display-name attribute",
     ),
     "set.oidc_name_claim.help": (
-        "Quelle propriété du fournisseur d'identité sert de nom affiché : "
+        "Quel attribut du fournisseur d'identité sert de nom affiché : "
         "« name » (nom complet), « preferred_username » (nom d'usager), "
-        "« nickname », « given_name »… Si elle est absente de la réponse, "
+        "« nickname », « given_name »… S'il est absent de la réponse, "
         "l'application essaie les autres dans cet ordre, puis le courriel. "
         "Le nom d'usager, lui, ne change pas : c'est la clé de propriété des "
         "consultations.",
-        "Which identity-provider property is used as the display name: “name” "
+        "Which identity-provider attribute is used as the display name: “name” "
         "(full name), “preferred_username”, “nickname”, “given_name”… If it is "
         "absent from the response, the application tries the others in that "
         "order, then the email. The username itself never changes: it is the "
         "ownership key of consultations.",
     ),
     "set.oidc_picture_claim.label": (
-        "Revendication de l'avatar",
-        "Avatar claim",
+        "Attribut de l'avatar",
+        "Avatar attribute",
     ),
     "set.oidc_picture_claim.help": (
         "Propriété portant l'adresse de la photo, « picture » chez la plupart "
@@ -1719,7 +1807,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Fallback endpoint address, same format as the main address. Empty = "
         "same address as the main one.",
     ),
-    "set.custom_stt_max_seconds.label": ("Seuil de durée (s)", "Duration threshold (s)"),
+    "set.custom_stt_max_seconds.label": ("Repli au-delà de (secondes)", "Fallback beyond (seconds)"),
     "set.custom_stt_max_seconds.help": (
         "Au-delà de cette durée, la dictée part directement au modèle de repli "
         "(utile si l'endpoint principal plafonne en longueur d'audio). Vide = "
@@ -1728,7 +1816,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "model (useful when the main endpoint caps audio length). Empty = no "
         "duration-based routing; only the 5xx fallback applies.",
     ),
-    "set.custom_stt_chunk_seconds.label": ("Découpage (s)", "Chunk size (s)"),
+    "set.custom_stt_chunk_seconds.label": ("Tranches d'audio (secondes)", "Audio chunks (seconds)"),
     "set.custom_stt_chunk_seconds.help": (
         "Découpe l'audio en tranches de cette durée (ex. 60) avant l'envoi, "
         "en coupant de préférence dans un silence : chaque tranche part au "
@@ -1764,45 +1852,18 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "clinical lexicon and template vocabulary are not sent to it — drug "
         "names and acronyms are exactly what it transcribes least well.",
     ),
-
     "set.llm_provider.label": ("Fournisseur", "Provider"),
     "set.llm_provider.help": ("", ""),
 
-    # --- Réglages « modèle » : un jeu de trois par fournisseur ---------------
-    # Le libellé reste générique (« Modèle », et non « Modèle Gemini ») : un
-    # seul fournisseur est visible à la fois, sous son propre sous-onglet — le
-    # nommer suffit à savoir de qui on parle, pas besoin de le répéter ici.
-    # Le contenu est donc volontairement identique d'un fournisseur à l'autre.
+    # --- Réglages « modèle » : textes partagés -------------------------------
+    # Les libellés et textes d'aide de modèle / modèle rapide / température /
+    # audio joint / contournement du STT sont communs à tous les fournisseurs :
+    # ils vivent sous set.cap.* ci-dessus, instanciés par les fabriques
+    # _cap_* de runtime_config.py. Ne restent ici que les clés propres à un
+    # fournisseur (Gemini thinking, budget Cohere, point de terminaison
+    # personnalisé…).
     "set.gemini_api_key.label": ("Clé API Google Gemini", "Google Gemini API key"),
     "set.gemini_api_key.help": ("", ""),
-    "set.gemini_model.label": ("Modèle", "Model"),
-    "set.gemini_model.help": (
-        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
-        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
-        "The “Available models” button queries the provider with the "
-        "configured key and shows what this account actually has access to.",
-    ),
-    "set.gemini_model_fast.label": (
-        "Modèle rapide (métadonnées)",
-        "Fast model (metadata)",
-    ),
-    "set.gemini_model_fast.help": (
-        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
-        "payée au jeton. Laisser vide pour employer le modèle principal.",
-        "Used only to re-read metadata, a trivial task paid by the token. "
-        "Leave empty to use the main model.",
-    ),
-    "set.gemini_temperature.label": ("Température", "Temperature"),
-    "set.gemini_temperature.help": (
-        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
-        "n'a pas sa place dans une note clinique. Les modèles les plus "
-        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
-        "est produite quand même.",
-        "0 = deterministic. Above 0.4 the model starts embellishing, which "
-        "has no place in a clinical note. The most recent models no longer "
-        "accept it: the setting is then ignored and the note is produced "
-        "anyway.",
-    ),
     "set.gemini_thinking.label": (
         "Raisonnement (thinking)",
         "Thinking",
@@ -1856,153 +1917,15 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Same transient reasoning (thinking) display, for non-admin users. Off "
         "by default: the model's thinking may contain unrevised drafts.",
     ),
-    "set.gemini_send_audio.label": (
-        "Joindre aussi l'audio (silences plafonnés)",
-        "Also attach audio (pauses capped)",
-    ),
-    "set.gemini_send_audio.help": (
-        "Envoie l'extrait audio en plus de la transcription : le modèle peut "
-        "trancher un terme mal reconnu (nom propre, terme médical) en "
-        "l'écoutant. Ajoute un coût et quelques secondes par note.",
-        "Sends the audio clip alongside the transcript: the model can "
-        "resolve a poorly recognized term (proper noun, medical term) by "
-        "listening to it. Adds cost and a few seconds per note.",
-    ),
-    "set.gemini_send_audio_max_minutes.label": (
-        "Durée maximale envoyée (minutes)",
-        "Maximum duration sent (minutes)",
-    ),
-    "set.gemini_send_audio_max_minutes.help": (
-        "Au-delà de cette durée d'audio (après retrait des silences), rien "
-        "n'est joint — la note se génère comme avant, sur la seule "
-        "transcription. Protège la latence et le coût sur une très longue "
-        "dictée.",
-        "Beyond this much audio (after silence trimming), nothing is "
-        "attached — the note is generated as before, from the transcript "
-        "alone. Protects latency and cost on a very long dictation.",
-    ),
-    "set.gemini_bypass_stt.label": (
-        "Ignorer la reconnaissance vocale (audio direct)",
-        "Skip speech recognition (direct audio)",
-    ),
-    "set.gemini_bypass_stt.help": (
-        "L'audio part directement au modèle, sans passer par le service de "
-        "reconnaissance vocale — économise son coût et sa latence. La note "
-        "peut alors se générer sans transcription, dès qu'un enregistrement "
-        "existe.",
-        "Audio goes straight to the model, without passing through speech "
-        "recognition — saves its cost and latency. The note can then be "
-        "generated without a transcript, as soon as a recording exists.",
-    ),
-    "set.gemini_bypass_stt_keep_transcript.label": (
-        "Conserver une transcription pendant l'enregistrement",
-        "Keep a transcript during recording",
-    ),
-    "set.gemini_bypass_stt_keep_transcript.help": (
-        "Sans effet si l'option ci-dessus est désactivée. Activée : la "
-        "reconnaissance vocale continue de tourner pendant la dictée (texte "
-        "visible et modifiable), mais la note se génère quand même à partir "
-        "de l'audio. Désactivée (par défaut) : aucun appel au service vocal "
-        "pendant l'enregistrement, économie maximale.",
-        "No effect if the option above is off. On: speech recognition keeps "
-        "running during dictation (visible, editable text), but the note is "
-        "still generated from the audio. Off (default): no call to the "
-        "speech service during recording, maximum savings.",
-    ),
-
     "set.anthropic_api_key.label": ("Clé API Anthropic", "Anthropic API key"),
     "set.anthropic_api_key.help": ("", ""),
-    "set.anthropic_model.label": ("Modèle", "Model"),
-    "set.anthropic_model.help": (
-        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
-        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
-        "The “Available models” button queries the provider with the "
-        "configured key and shows what this account actually has access to.",
-    ),
-    "set.anthropic_model_fast.label": (
-        "Modèle rapide (métadonnées)",
-        "Fast model (metadata)",
-    ),
-    "set.anthropic_model_fast.help": (
-        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
-        "payée au jeton. Laisser vide pour employer le modèle principal.",
-        "Used only to re-read metadata, a trivial task paid by the token. "
-        "Leave empty to use the main model.",
-    ),
-    "set.anthropic_temperature.label": ("Température", "Temperature"),
-    "set.anthropic_temperature.help": (
-        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
-        "n'a pas sa place dans une note clinique. Les modèles les plus "
-        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
-        "est produite quand même.",
-        "0 = deterministic. Above 0.4 the model starts embellishing, which "
-        "has no place in a clinical note. The most recent models no longer "
-        "accept it: the setting is then ignored and the note is produced "
-        "anyway.",
-    ),
 
     "set.openai_api_key.label": ("Clé API OpenAI", "OpenAI API key"),
     "set.openai_api_key.help": ("", ""),
-    "set.openai_model.label": ("Modèle", "Model"),
-    "set.openai_model.help": (
-        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
-        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
-        "The “Available models” button queries the provider with the "
-        "configured key and shows what this account actually has access to.",
-    ),
-    "set.openai_model_fast.label": (
-        "Modèle rapide (métadonnées)",
-        "Fast model (metadata)",
-    ),
-    "set.openai_model_fast.help": (
-        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
-        "payée au jeton. Laisser vide pour employer le modèle principal.",
-        "Used only to re-read metadata, a trivial task paid by the token. "
-        "Leave empty to use the main model.",
-    ),
-    "set.openai_temperature.label": ("Température", "Temperature"),
-    "set.openai_temperature.help": (
-        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
-        "n'a pas sa place dans une note clinique. Les modèles les plus "
-        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
-        "est produite quand même.",
-        "0 = deterministic. Above 0.4 the model starts embellishing, which "
-        "has no place in a clinical note. The most recent models no longer "
-        "accept it: the setting is then ignored and the note is produced "
-        "anyway.",
-    ),
 
-    # Cohere et Mistral n'ont pas de clé propre ici — voir set.cohere_api_key /
-    # set.mistral_api_key, sous Reconnaissance vocale, dont le champ est
-    # répété sous cet onglet (voir app.js, partitionFields()).
-    "set.cohere_llm_model.label": ("Modèle", "Model"),
-    "set.cohere_llm_model.help": (
-        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
-        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
-        "The “Available models” button queries the provider with the "
-        "configured key and shows what this account actually has access to.",
-    ),
-    "set.cohere_llm_model_fast.label": (
-        "Modèle rapide (métadonnées)",
-        "Fast model (metadata)",
-    ),
-    "set.cohere_llm_model_fast.help": (
-        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
-        "payée au jeton. Laisser vide pour employer le modèle principal.",
-        "Used only to re-read metadata, a trivial task paid by the token. "
-        "Leave empty to use the main model.",
-    ),
-    "set.cohere_llm_temperature.label": ("Température", "Temperature"),
-    "set.cohere_llm_temperature.help": (
-        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
-        "n'a pas sa place dans une note clinique. Les modèles les plus "
-        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
-        "est produite quand même.",
-        "0 = deterministic. Above 0.4 the model starts embellishing, which "
-        "has no place in a clinical note. The most recent models no longer "
-        "accept it: the setting is then ignored and the note is produced "
-        "anyway.",
-    ),
+    # Cohere et Mistral n'ont pas de clé propre côté Note : elle se règle sous
+    # Dictée (cohere_api_key / mistral_api_key), d'où le champ est répété via
+    # ``also_in``. Leurs textes modèle/température sont ceux de set.cap.*.
     "set.cohere_llm_thinking_budget.label": (
         "Budget de raisonnement (jetons)",
         "Thinking budget (tokens)",
@@ -2021,35 +1944,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "metadata re-read (a mechanical task).",
     ),
 
-    "set.mistral_llm_model.label": ("Modèle", "Model"),
-    "set.mistral_llm_model.help": (
-        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
-        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
-        "The “Available models” button queries the provider with the "
-        "configured key and shows what this account actually has access to.",
-    ),
-    "set.mistral_llm_model_fast.label": (
-        "Modèle rapide (métadonnées)",
-        "Fast model (metadata)",
-    ),
-    "set.mistral_llm_model_fast.help": (
-        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
-        "payée au jeton. Laisser vide pour employer le modèle principal.",
-        "Used only to re-read metadata, a trivial task paid by the token. "
-        "Leave empty to use the main model.",
-    ),
-    "set.mistral_llm_temperature.label": ("Température", "Temperature"),
-    "set.mistral_llm_temperature.help": (
-        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
-        "n'a pas sa place dans une note clinique. Les modèles les plus "
-        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
-        "est produite quand même.",
-        "0 = deterministic. Above 0.4 the model starts embellishing, which "
-        "has no place in a clinical note. The most recent models no longer "
-        "accept it: the setting is then ignored and the note is produced "
-        "anyway.",
-    ),
-
     "set.qwen_omni_api_key.label": ("Clé API Qwen Omni", "Qwen Omni API key"),
     "set.qwen_omni_api_key.help": (
         "Clé du compte Alibaba Cloud DashScope.",
@@ -2063,87 +1957,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Address of DashScope's OpenAI-compatible mode, including the "
         "version prefix. Differs by account region (international or "
         "mainland China) — see the DashScope documentation.",
-    ),
-    "set.qwen_omni_model.label": ("Modèle", "Model"),
-    "set.qwen_omni_model.help": (
-        "Le bouton « Modèles disponibles » interroge le fournisseur avec la "
-        "clé configurée et affiche ce à quoi ce compte a réellement droit.",
-        "The “Available models” button queries the provider with the "
-        "configured key and shows what this account actually has access to.",
-    ),
-    "set.qwen_omni_model_fast.label": (
-        "Modèle rapide (métadonnées)",
-        "Fast model (metadata)",
-    ),
-    "set.qwen_omni_model_fast.help": (
-        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
-        "payée au jeton. Laisser vide pour employer le modèle principal.",
-        "Used only to re-read metadata, a trivial task paid by the token. "
-        "Leave empty to use the main model.",
-    ),
-    "set.qwen_omni_temperature.label": ("Température", "Temperature"),
-    "set.qwen_omni_temperature.help": (
-        "0 = déterministe. Au-delà de 0,4 le modèle commence à broder, ce qui "
-        "n'a pas sa place dans une note clinique. Les modèles les plus "
-        "récents ne l'acceptent plus : le réglage est alors ignoré, la note "
-        "est produite quand même.",
-        "0 = deterministic. Above 0.4 the model starts embellishing, which "
-        "has no place in a clinical note. The most recent models no longer "
-        "accept it: the setting is then ignored and the note is produced "
-        "anyway.",
-    ),
-    "set.qwen_omni_send_audio.label": (
-        "Joindre aussi l'audio (silences plafonnés)",
-        "Also attach audio (pauses capped)",
-    ),
-    "set.qwen_omni_send_audio.help": (
-        "Envoie l'extrait audio en plus de la transcription : le modèle peut "
-        "trancher un terme mal reconnu (nom propre, terme médical) en "
-        "l'écoutant. Ajoute un coût et quelques secondes par note.",
-        "Sends the audio clip alongside the transcript: the model can "
-        "resolve a poorly recognized term (proper noun, medical term) by "
-        "listening to it. Adds cost and a few seconds per note.",
-    ),
-    "set.qwen_omni_send_audio_max_minutes.label": (
-        "Durée maximale envoyée (minutes)",
-        "Maximum duration sent (minutes)",
-    ),
-    "set.qwen_omni_send_audio_max_minutes.help": (
-        "Au-delà de cette durée d'audio (après retrait des silences), rien "
-        "n'est joint — la note se génère comme avant, sur la seule "
-        "transcription. Protège la latence et le coût sur une très longue "
-        "dictée.",
-        "Beyond this much audio (after silence trimming), nothing is "
-        "attached — the note is generated as before, from the transcript "
-        "alone. Protects latency and cost on a very long dictation.",
-    ),
-    "set.qwen_omni_bypass_stt.label": (
-        "Ignorer la reconnaissance vocale (audio direct)",
-        "Skip speech recognition (direct audio)",
-    ),
-    "set.qwen_omni_bypass_stt.help": (
-        "L'audio part directement au modèle, sans passer par le service de "
-        "reconnaissance vocale — économise son coût et sa latence. La note "
-        "peut alors se générer sans transcription, dès qu'un enregistrement "
-        "existe.",
-        "Audio goes straight to the model, without passing through speech "
-        "recognition — saves its cost and latency. The note can then be "
-        "generated without a transcript, as soon as a recording exists.",
-    ),
-    "set.qwen_omni_bypass_stt_keep_transcript.label": (
-        "Conserver une transcription pendant l'enregistrement",
-        "Keep a transcript during recording",
-    ),
-    "set.qwen_omni_bypass_stt_keep_transcript.help": (
-        "Sans effet si l'option ci-dessus est désactivée. Activée : la "
-        "reconnaissance vocale continue de tourner pendant la dictée (texte "
-        "visible et modifiable), mais la note se génère quand même à partir "
-        "de l'audio. Désactivée (par défaut) : aucun appel au service vocal "
-        "pendant l'enregistrement, économie maximale.",
-        "No effect if the option above is off. On: speech recognition keeps "
-        "running during dictation (visible, editable text), but the note is "
-        "still generated from the audio. Off (default): no call to the "
-        "speech service during recording, maximum savings.",
     ),
 
     "set.custom_llm_api_key.label": ("Clé API", "API key"),
@@ -2310,6 +2123,15 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Ex. : Utiliser systématiquement le vouvoiement. Ne jamais abréger "
         "les noms de médicaments.",
         "e.g.: Always spell out drug names. Never abbreviate diagnoses.",
+    ),
+    # Une consigne par langue : les libellés se distinguent, l'aide est partagée.
+    "set.general_prompt_fr.label": (
+        "Consigne générale (gabarits en français)",
+        "General instruction (French templates)",
+    ),
+    "set.general_prompt_en.label": (
+        "Consigne générale (gabarits en anglais)",
+        "General instruction (English templates)",
     ),
     "choice.on": ("Activé", "Enabled"),
     "choice.off": ("Désactivé", "Disabled"),

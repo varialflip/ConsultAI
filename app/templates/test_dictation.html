@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_title }} — #{{ dictation['id'] }} {{ dictation['title'] }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           background: #f1f5f9; margin: 0; color: #0f172a; }
+    header { background: #0f172a; color: #fff; padding: 12px 24px;
+             display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    header a { color: #fff; text-decoration: none; font-size: 14px; margin-left: 12px; }
+    header .back { font-weight: 600; }
+    main { max-width: 1200px; margin: 20px auto; padding: 0 16px; }
+    h1 { font-size: 1.25rem; margin: 0 0 4px; }
+    .meta { font-size: .82rem; color: #64748b; margin-bottom: 12px; }
+
+    /* Stats en haut */
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .stat { background: #fff; border-radius: 10px; padding: 10px 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.1); border: 1px solid #e2e8f0; }
+    .stat h3 { margin: 0 0 6px; font-size: .9rem; }
+    .stat .row { display: flex; justify-content: space-between; font-size: .82rem;
+                 font-variant-numeric: tabular-nums; padding: 1px 0; }
+    .stat .row span { color: #64748b; }
+
+    /* Analyse des différences */
+    .analysis { background: #fff; border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+                box-shadow: 0 1px 3px rgba(0,0,0,.1); border: 1px solid #e2e8f0; }
+    .analysis h2 { margin: 0 0 8px; font-size: 1.05rem; }
+    .analysis h3 { font-size: .9rem; margin: 14px 0 4px; }
+    .analysis p { margin: 4px 0; }
+    .analysis table { width: 100%; border-collapse: collapse; font-size: .84rem; margin: 6px 0; }
+    .analysis td, .analysis th { border: 1px solid #e2e8f0; padding: 5px 8px; text-align: left; }
+    .analysis th { background: #f8fafc; }
+    .analysis ul { margin: 4px 0; padding-left: 1.4rem; font-size: .84rem; }
+    .analysis .tag { display:inline-block; font-size:.72rem; padding:1px 6px; border-radius:8px; margin-left:6px; }
+    .tag.gem { background:#dbeafe; color:#1e40af; }
+    .tag.omni { background:#ede9fe; color:#6d28d9; }
+    .summary-md { font-size: .92rem; background:#f8fafc; border:1px solid #e2e8f0;
+                  border-radius:8px; padding:10px 14px; }
+    .summary-md li { margin: 2px 0; }
+
+    /* Side by side — 2 colonnes maintenues en paysage (mobile landscape) */
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    @media (orientation: portrait) and (max-width: 767px) { .cols { grid-template-columns: 1fr; } }
+    .col { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+           border: 1px solid #e2e8f0; overflow: hidden; }
+    .col h2 { margin: 0; padding: 8px 14px; font-size: .9rem; color: #fff; }
+    .col.gem h2 { background: #1e40af; }
+    .col.omni h2 { background: #7c3aed; }
+    .col .md { padding: 16px 20px; max-height: 85vh; overflow: auto; }
+    .md h1 { font-size: 1.4rem; }
+    .md h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .03em;
+             border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+    .md h3 { font-size: 1rem; font-style: italic; }
+    .md ul, .md ol { padding-left: 1.5rem; }
+    .md li { margin: 2px 0; }
+    .md table { border-collapse: collapse; font-size: .82rem; margin: 8px 0; }
+    .md td, .md th { border: 1px solid #e2e8f0; padding: 4px 8px; }
+    .md code { background: #f1f5f9; padding: 1px 4px; border-radius: 4px; font-size: .9em; }
+    .md blockquote { border-left: 3px solid #cbd5e1; margin: 8px 0; padding: 2px 12px; color: #475569; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong><a class="back" href="/test">← Index</a></strong>
+    <span>
+      <a href="/">Application</a>
+      <a href="/auth/logout">Déconnexion</a>
+    </span>
+  </header>
+  <main>
+    <h1>#{{ dictation['id'] }} — {{ dictation['title'] }}</h1>
+    <div class="meta">{{ dictation['owner'] }} · {{ dictation['template'] }} · audio {{ dictation['audio_seconds'] }} s</div>
+
+    <div class="analysis">
+      <h2>Analyse des différences — Gemini 2.5 Pro vs Qwen 3 Omni</h2>
+
+      <h3>Résumé comparatif (analyse tiers)</h3>
+      <div class="summary-md md" id="analysis-summary"></div>
+
+      <h3>Métriques</h3>
+      <table>
+        <tr><th></th><th>Gemini 2.5 Pro</th><th>Qwen 3 Omni</th></tr>
+        <tr><td>Caractères</td><td>{{ dictation['analysis']['metrics']['gemini']['chars'] }}</td><td>{{ dictation['analysis']['metrics']['omni']['chars'] }}</td></tr>
+        <tr><td>Mots</td><td>{{ dictation['analysis']['metrics']['gemini']['words'] }}</td><td>{{ dictation['analysis']['metrics']['omni']['words'] }}</td></tr>
+        <tr><td>Coût estimé (USD)</td><td>${{ dictation['analysis']['cost_estimate_usd']['gemini'] }}</td><td>${{ dictation['analysis']['cost_estimate_usd']['omni'] }}</td></tr>
+      </table>
+
+      {% set g_only = dictation['analysis']['structure']['gemini_only'] %}
+      {% set o_only = dictation['analysis']['structure']['omni_only'] %}
+      {% if g_only or o_only %}
+      <h3>Rubriques présentes dans une seule note</h3>
+      <ul>
+        {% for h in g_only %}<li><span class="tag gem">Gemini</span> {{ h }}</li>{% endfor %}
+        {% for h in o_only %}<li><span class="tag omni">Omni</span> {{ h }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+
+      {% set diff = dictation['analysis']['diff'] %}
+      {% if diff['in_gemini_only_count'] or diff['in_omni_only_count'] %}
+      <h3>Contenu différent (lignes)</h3>
+      <table>
+        <tr><th>Uniquement dans Gemini</th><th>Uniquement dans Qwen Omni</th></tr>
+        <tr>
+          <td>
+            <em>{{ diff['in_gemini_only_count'] }} lignes</em>
+            <ul>
+              {% for l in diff['in_gemini_only'] %}<li>{{ l }}</li>{% endfor %}
+              {% if diff['in_gemini_only_count'] > 8 %}<li>…</li>{% endif %}
+            </ul>
+          </td>
+          <td>
+            <em>{{ diff['in_omni_only_count'] }} lignes</em>
+            <ul>
+              {% for l in diff['in_omni_only'] %}<li>{{ l }}</li>{% endfor %}
+              {% if diff['in_omni_only_count'] > 8 %}<li>…</li>{% endif %}
+            </ul>
+          </td>
+        </tr>
+      </table>
+      {% endif %}
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <h3>Gemini — {{ dictation['gemini']['model'] }}</h3>
+        <div class="row"><span>Durée</span><b>{{ dictation['gemini']['elapsed_seconds'] }} s</b></div>
+        <div class="row"><span>Tokens sortie</span><b>{{ dictation['gemini']['output_tokens'] }}</b></div>
+        <div class="row"><span>Tokens audio</span><b>{{ dictation['gemini']['audio_tokens'] }}</b></div>
+      </div>
+      <div class="stat">
+        <h3>Qwen Omni — {{ dictation['omni']['model'] }}</h3>
+        <div class="row"><span>Durée</span><b>{{ dictation['omni']['elapsed_seconds'] }} s</b></div>
+        <div class="row"><span>Tokens sortie</span><b>{{ dictation['omni']['output_tokens'] }}</b></div>
+        <div class="row"><span>Tokens audio</span><b>{{ dictation['omni']['audio_tokens'] }}</b></div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="col gem">
+        <h2>Gemini</h2>
+        <div class="md" id="gemini-note"></div>
+      </div>
+      <div class="col omni">
+        <h2>Qwen Omni</h2>
+        <div class="md" id="omni-note"></div>
+      </div>
+    </div>
+
+    <script>
+      var GEMINI_MD = {{ dictation['gemini']['note_md'] | tojson }};
+      var OMNI_MD   = {{ dictation['omni']['note_md'] | tojson }};
+      var SUMMARY   = {{ dictation['analysis']['summary'] | tojson }};
+      function render(el, md) {
+        var raw = window.marked ? marked.parse(md || '') : (md || '');
+        document.getElementById(el).innerHTML =
+          window.DOMPurify ? DOMPurify.sanitize(raw) : raw;
+      }
+      render('gemini-note', GEMINI_MD);
+      render('omni-note', OMNI_MD);
+      render('analysis-summary', SUMMARY);
+    </script>
+  </main>
+</body>
+</html>

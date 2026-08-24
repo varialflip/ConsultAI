@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_title }} — Index des dictées</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+           background: #f1f5f9; margin: 0; color: #0f172a; }
+    header { background: #0f172a; color: #fff; padding: 12px 24px;
+             display: flex; justify-content: space-between; align-items: center; }
+    header a { color: #fff; text-decoration: none; font-size: 14px; margin-left: 16px; }
+    main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 1.3rem; }
+    .card { display: block; background: #fff; border-radius: 10px; padding: 14px 18px;
+            margin: 10px 0; text-decoration: none; color: inherit;
+            box-shadow: 0 1px 3px rgba(0,0,0,.1); border: 1px solid #e2e8f0; }
+    .card:hover { border-color: #2563eb; }
+    .card h2 { margin: 0 0 4px; font-size: 1.05rem; }
+    .card .meta { font-size: .8rem; color: #64748b; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 8px; }
+    td, th { border: 1px solid #e2e8f0; padding: 5px 8px; text-align: left; }
+    th { background: #f8fafc; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .empty { color: #64748b; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>{{ app_title }} — Test</strong>
+    <span>
+      <a href="/">Application</a>
+      <a href="/auth/logout">Déconnexion</a>
+    </span>
+  </header>
+  <main>
+    <h1>Index des dictées — Gemini vs Qwen Omni</h1>
+    {% if index.get('dictations') %}
+      {% for d in index['dictations'] %}
+      <a class="card" href="/test/{{ d['id'] }}">
+        <h2>#{{ d['id'] }} — {{ d['title'] }}</h2>
+        <div class="meta">{{ d['owner'] }} · {{ d['template'] }} · audio {{ d['audio_seconds'] }} s</div>
+        <table>
+          <tr><th></th><th>Modèle</th><th class="num">Temps (s)</th><th class="num">Tokens out</th><th class="num">Tokens audio</th></tr>
+          <tr>
+            <td><strong>Gemini</strong></td>
+            <td>{{ d['gemini']['model'] }}</td>
+            <td class="num">{{ d['gemini']['elapsed_seconds'] }}</td>
+            <td class="num">{{ d['gemini']['output_tokens'] }}</td>
+            <td class="num">{{ d['gemini']['audio_tokens'] }}</td>
+          </tr>
+          <tr>
+            <td><strong>Omni</strong></td>
+            <td>{{ d['omni']['model'] }}</td>
+            <td class="num">{{ d['omni']['elapsed_seconds'] }}</td>
+            <td class="num">{{ d['omni']['output_tokens'] }}</td>
+            <td class="num">{{ d['omni']['audio_tokens'] }}</td>
+          </tr>
+        </table>
+      </a>
+      {% endfor %}
+      <p class="empty">Généré le {{ index.get('generated_at', '—') }}</p>
+    {% else %}
+      <p class="empty">Aucune dictée dans l'index.</p>
+    {% endif %}
+  </main>
+</body>
+</html>

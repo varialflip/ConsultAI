@@ -212,8 +212,9 @@ COHERE_LLM_THINKING_BUDGET=1024
 > **Cohere, Mistral et OpenAI n'ont qu'une clé pour deux usages** :
 > `COHERE_API_KEY`, `MISTRAL_API_KEY` et `OPENAI_API_KEY` alimentent chacun le
 > service vocal *et* le modèle de langage (OpenAI Whisper d'un côté, les
-> modèles gpt-4o de l'autre). Le champ n'apparaît donc qu'une fois dans le
-> panneau, sous Reconnaissance vocale, et le panneau du modèle y renvoie.
+> modèles gpt-4o de l'autre). Le réglage n'existe qu'une fois en base : le
+> champ est répété sous les deux onglets concernés (Dictée et Note), et une
+> saisie sous l'un se reflète aussitôt sous l'autre.
 >
 > Un **point de terminaison personnalisé** (ex. Whisper auto-hébergé,
 > compatible API OpenAI) se configure uniquement depuis le panneau, sans
@@ -366,17 +367,30 @@ Modèle : gemini / gemini-2.5-flash | Reconnaissance vocale : soniox (fr-CA) | L
 
 ### 7.1 Panneau d'administration
 
-**Réglages**, visible des seuls administrateurs. Sept onglets :
+**Réglages**, visible des seuls administrateurs, organisé par flux de travail —
+cinq onglets :
 
 | Onglet | Contenu |
 |---|---|
-| Système | Inscription automatique, rétention des consultations |
-| Reconnaissance vocale | Service, clés, modèles, retrait des longues pauses |
-| Modèle de langage | Fournisseur, modèle, modèle rapide, température, clés |
-| Consignes | Consigne générale, en français et en anglais |
-| Comptes et groupes | Revendications d'identité, comptes, groupes, permissions |
-| Sauvegarde | Sauvegardes manuelles, rotation, restauration (§ 9) |
+| Dictée | Service de reconnaissance vocale (sous-onglet par service : clé, modèle, langue), retrait des longues pauses, temps réel de la dictée (mode, VAD) |
+| Note | Modèle de langage (sous-onglet par fournisseur : clé, modèle, rapide, température, audio, raisonnement), consigne générale fr/en, affichage du raisonnement |
+| Comptes et accès | Inscription automatique, attributs du nom affiché et de l'avatar, comptes et groupes |
+| Données et sauvegarde | Purge des dossiers après délai, rotation des sauvegardes, export/import et restauration (§ 9) |
 | Statistiques | Usage et coûts par fournisseur |
+
+Une **recherche** au-dessus des onglets filtre tous les réglages (libellé,
+aide, nom technique) tous onglets confondus ; cliquer un résultat ouvre
+l'onglet — et le sous-onglet de service — où se trouve le champ, puis y amène.
+
+Les champs ne s'affichent que quand ils ont un objet : le VAD ne se règle
+qu'en mode temps réel « énoncé », le modèle et le délai de streaming Mistral
+qu'en mode « streaming », la durée maximale d'audio joint seulement si l'audio
+est joint, la transcription conservée pendant l'enregistrement seulement si
+l'on ignore le service vocal, le budget de raisonnement seulement si le
+raisonnement est activé. Masquer un champ n'efface rien : la valeur reste en
+base. Les réglages fins — seuils VAD en millisecondes, repli sur erreur et
+découpage en tranches du point de terminaison personnalisé — se replient sous
+un bloc **Avancé**.
 
 Dans le panneau **Statistiques**, la liste des **Tarifs** est regroupée par
 des onglets-fournisseur : un clic filtre le tableau. Les tarifs du fournisseur
@@ -387,10 +401,13 @@ Ces valeurs sont stockées en base et **surchargent le `.env`** : effet immédia
 sans reconstruction. Vider un champ le remet à la valeur du `.env`. Chaque champ
 indique sa provenance (`panneau` ou `.env`).
 
-Dans Reconnaissance vocale et Modèle de langage, un **sous-menu** ouvre les
-réglages de chaque service, actif ou non : on peut y coller une clé ou un
-modèle sans mettre le service en production — il n'y a plus de case à cocher
-pour dévoiler les fournisseurs non sélectionnés.
+Dans **Dictée** et **Note**, un **sous-menu** ouvre les réglages de chaque
+service, actif ou non : on peut y coller une clé ou un modèle sans mettre le
+service en production — il n'y a plus de case à cocher pour dévoiler les
+fournisseurs non sélectionnés. Une clé partagée entre deux services (Cohere et
+Mistral : transcription + note ; OpenAI : Whisper + note) n'existe qu'une fois
+en base : le champ est répété sous chacun des deux onglets, et toute saisie
+s'y reflète aussitôt.
 
 > Le **point de terminaison personnalisé** expose un **Budget de sortie**
 > (`custom_llm_max_tokens`, 32768 jetons par défaut) propre à ce fournisseur,
@@ -407,9 +424,9 @@ pour dévoiler les fournisseurs non sélectionnés.
 > est recommandé.
 
 > **Afficher le raisonnement (thinking) pendant la génération.** Deux
-> réglages sous Modèle de langage — **Montrer le raisonnement —
-> administrateurs** (`show_thinking_admin`) et **Montrer le raisonnement —
-> utilisateurs** (`show_thinking_users`), **désactivés par défaut**. Lorsque
+> réglages sous Note — **Montrer le raisonnement — administrateurs**
+> (`show_thinking_admin`) et **Montrer le raisonnement — utilisateurs**
+> (`show_thinking_users`), **désactivés par défaut**. Lorsque
 > l'un est actif pour la personne qui génère, le raisonnement du modèle défile
 > dans la fenêtre de note (même dévoilement progressif que le texte, avec un
 > badge « Raisonnement du modèle… »), puis est **effacé de l'écran** dès que le

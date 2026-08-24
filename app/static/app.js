@@ -3734,12 +3734,13 @@
     // remplir. Lire les valeurs dans le DOM au moment d'enregistrer, comme
     // avant, perdait silencieusement une clé saisie sous un autre sous-onglet.
     values: {},
-    //: Sous-onglet visible, par groupe : { 'group.stt': 'soniox', … }
+    //: Sous-onglet visible, par groupe : { 'group.dictation': 'soniox', … }
     subTab: {},
     people: null,       // réponse de /api/admin/users, chargée à la demande
     backups: null,      // réponse de /api/admin/backup, chargée à la demande
     stats: null,        // réponse de /api/admin/usage, chargée à la demande
     pricing: null,       // réponse de /api/admin/pricing, chargée à la demande
+    warnings: {},        // avertissements par onglet (Cohere…), du serveur
     statsRange: null,   // { from, to } — filtre courant de l'onglet Statistiques
     statsOwner: '',     // filtre d'usager de l'onglet Statistiques ('' = tous)
     pricingProvider: '',// onglet fournisseur du tableau des tarifs ('' = tous)
@@ -3747,39 +3748,27 @@
   };
 
   /**
-    * Clé du groupe de réglages qui porte AUSSI la gestion des comptes.
-    *
-    * Ce n'est plus un onglet artificiel : « group.users » est un vrai groupe,
-    * avec ses propres réglages (quelle revendication porte le nom, laquelle
-    * porte l'avatar). L'onglet affiche donc ces champs, puis les comptes et les
-    * groupes — c'est au même endroit qu'on regarde quand un nom s'affiche mal.
-    *
-    * On compare des CLÉS et jamais des libellés : ceux-ci sont traduits.
+    * Onglets du panneau à écran entièrement personnalisé (listes, actions,
+    * pas de simple clé/valeur) : comptes, sauvegarde, statistiques. On compare
+    * des CLÉS et jamais des libellés : ceux-ci sont traduits.
     */
-  const PEOPLE_GROUP = 'group.users';
-  //: Mêmes principes que PEOPLE_GROUP ci-dessus : un onglet à écran entièrement
-  //: personnalisé plutôt que des champs génériques, pour les mêmes raisons
-  //: (listes, actions, pas de simple clé/valeur).
-  const BACKUP_GROUP = 'group.backup';
+  const PEOPLE_GROUP = 'group.access';
+  const BACKUP_GROUP = 'group.data';
   const STATS_GROUP = 'group.stats';
 
   /**
-   * Champs « modèle » (principal et rapide) de chaque fournisseur de modèle
-   * de langage — ce sont eux, et EUX SEULS, qui doivent proposer la liste du
-   * datalist partagé « Modèles disponibles ». Les champs *_model des services
-   * vocaux (Deepgram, Cohere Transcribe…) portent le même suffixe mais n'ont
-   * rien à voir : leur donner ce datalist suggérerait des noms de modèles de
-   * langage dans un champ de reconnaissance vocale.
+   * Onglets présentés par SERVICE, avec un sous-menu.
+   *
+   * Le sous-menu remplace la liste déroulante de sélection : on choisit un
+   * service en cliquant son onglet, et l'on voit sous celui-ci tout ce qui le
+   * concerne. Le serveur déclare la même chose, réglage par réglage, via les
+   * ``only_for`` ; cette table ne fait que nommer l'onglet porteur du
+   * sous-menu.
    */
-  const LLM_MODEL_FIELD_KEYS = new Set([
-    'gemini_model', 'gemini_model_fast',
-    'anthropic_model', 'anthropic_model_fast',
-    'openai_model', 'openai_model_fast',
-    'cohere_llm_model', 'cohere_llm_model_fast',
-    'mistral_llm_model', 'mistral_llm_model_fast',
-    'qwen_omni_model', 'qwen_omni_model_fast',
-    'custom_llm_model', 'custom_llm_model_fast',
-  ]);
+  const PROVIDER_GROUPS = {
+    'group.dictation': 'stt_provider',
+    'group.note': 'llm_provider',
+  };
 
   function adminFieldMarkup(field, groupKey) {
     // Une clé partagée (Cohere, Mistral) est répétée sous deux groupes : sans
@@ -3824,13 +3813,16 @@
       // champ numérique (budget de raisonnement…) reste un entier libre.
       const step = (field.kind === 'number' && field.key.endsWith('_temperature'))
         ? ' step="0.05" min="0" max="2"' : '';
-      const list = LLM_MODEL_FIELD_KEYS.has(field.key) ? ' list="modelOptions"' : '';
+      // « Modèles disponibles » : le serveur marque lui-même les champs de
+      // modèle concernés (``datalist``), principal et rapide de chaque
+      // fournisseur de modèle de langage.
+      const list = field.datalist ? ' list="modelOptions"' : '';
       control = `<input id="${id}" data-key="${field.key}" type="${type}"${step}${list}
                    value="${esc(field.value || '')}" placeholder="${esc(field.placeholder)}"
                    class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">`;
     }
 
-    return `<div>
+    return `<div data-box-for="${esc(field.key)}">
       <label for="${id}" class="block text-xs font-medium text-slate-600 mb-1">
         ${esc(field.label)}${origin}
       </label>
@@ -3838,160 +3830,7 @@
     </div>`;
   }
 
-  /* -------------------------------------------------------------------------
-   * Champs sans objet selon le fournisseur choisi
-   * ----------------------------------------------------------------------
-   * Une clé Anthropic n'a rien à faire à l'écran quand OpenAI est sélectionné :
-   * elle n'est pas seulement inutile, elle laisse croire qu'il faut la
-   * renseigner. On masque donc ce qui ne sert pas au fournisseur courant.
-   *
-   * MASQUER N'EST PAS EFFACER : la valeur reste en base et reparaît au retour
-   * du fournisseur. Le champ masqué n'est simplement pas rendu, donc jamais
-   * marqué modifié, donc jamais renvoyé.
-   * ---------------------------------------------------------------------- */
-  const PROVIDER_ONLY = {
-    // Modèle de langage : AUCUN réglage commun — modèle, modèle rapide et
-    // température sont propres à chaque fournisseur (voir runtime_config.py).
-    gemini_api_key: { key: 'llm_provider', value: 'gemini' },
-    gemini_model: { key: 'llm_provider', value: 'gemini' },
-    gemini_model_fast: { key: 'llm_provider', value: 'gemini' },
-    gemini_temperature: { key: 'llm_provider', value: 'gemini' },
-    gemini_thinking: { key: 'llm_provider', value: 'gemini' },
-    gemini_thinking_budget: { key: 'llm_provider', value: 'gemini' },
-    // Options audio : propres à Gemini, PAS des réglages communs — sans ces
-    // entrées elles s'affichaient (à tort) sous les six autres onglets.
-    gemini_send_audio: { key: 'llm_provider', value: 'gemini' },
-    gemini_send_audio_max_minutes: { key: 'llm_provider', value: 'gemini' },
-    gemini_bypass_stt: { key: 'llm_provider', value: 'gemini' },
-    gemini_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'gemini' },
-    anthropic_api_key: { key: 'llm_provider', value: 'anthropic' },
-    anthropic_model: { key: 'llm_provider', value: 'anthropic' },
-    anthropic_model_fast: { key: 'llm_provider', value: 'anthropic' },
-    anthropic_temperature: { key: 'llm_provider', value: 'anthropic' },
-    openai_api_key: { key: 'llm_provider', value: 'openai' },
-    openai_model: { key: 'llm_provider', value: 'openai' },
-    openai_model_fast: { key: 'llm_provider', value: 'openai' },
-    openai_temperature: { key: 'llm_provider', value: 'openai' },
-    // Suffixe « _llm » : cohere_model / mistral_model existent déjà côté
-    // Reconnaissance vocale et désignent le modèle de TRANSCRIPTION.
-    cohere_llm_model: { key: 'llm_provider', value: 'cohere' },
-    cohere_llm_model_fast: { key: 'llm_provider', value: 'cohere' },
-    cohere_llm_temperature: { key: 'llm_provider', value: 'cohere' },
-    mistral_llm_model: { key: 'llm_provider', value: 'mistral' },
-    mistral_llm_model_fast: { key: 'llm_provider', value: 'mistral' },
-    mistral_llm_temperature: { key: 'llm_provider', value: 'mistral' },
-    qwen_omni_api_key: { key: 'llm_provider', value: 'qwen_omni' },
-    qwen_omni_base_url: { key: 'llm_provider', value: 'qwen_omni' },
-    qwen_omni_model: { key: 'llm_provider', value: 'qwen_omni' },
-    qwen_omni_model_fast: { key: 'llm_provider', value: 'qwen_omni' },
-    qwen_omni_temperature: { key: 'llm_provider', value: 'qwen_omni' },
-    qwen_omni_send_audio: { key: 'llm_provider', value: 'qwen_omni' },
-    qwen_omni_send_audio_max_minutes: { key: 'llm_provider', value: 'qwen_omni' },
-    qwen_omni_bypass_stt: { key: 'llm_provider', value: 'qwen_omni' },
-    qwen_omni_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'qwen_omni' },
-    custom_llm_api_key: { key: 'llm_provider', value: 'custom' },
-    custom_llm_base_url: { key: 'llm_provider', value: 'custom' },
-    custom_llm_model: { key: 'llm_provider', value: 'custom' },
-    custom_llm_model_fast: { key: 'llm_provider', value: 'custom' },
-    custom_llm_temperature: { key: 'llm_provider', value: 'custom' },
-    custom_llm_max_tokens: { key: 'llm_provider', value: 'custom' },
-    custom_llm_reasoning_effort: { key: 'llm_provider', value: 'custom' },
-    // Options audio : le point de terminaison personnalisé peut être
-    // multimodal (OpenRouter) — mêmes réglages que Gemini/Qwen Omni.
-    custom_send_audio: { key: 'llm_provider', value: 'custom' },
-    custom_send_audio_max_minutes: { key: 'llm_provider', value: 'custom' },
-    custom_send_audio_format: { key: 'llm_provider', value: 'custom' },
-    custom_bypass_stt: { key: 'llm_provider', value: 'custom' },
-    custom_bypass_stt_keep_transcript: { key: 'llm_provider', value: 'custom' },
-    // Réglages propres à chaque service vocal
-    deepgram_api_key: { key: 'stt_provider', value: 'deepgram' },
-    deepgram_model: { key: 'stt_provider', value: 'deepgram' },
-    deepgram_language: { key: 'stt_provider', value: 'deepgram' },
-    assemblyai_api_key: { key: 'stt_provider', value: 'assemblyai' },
-    assemblyai_model: { key: 'stt_provider', value: 'assemblyai' },
-    assemblyai_language: { key: 'stt_provider', value: 'assemblyai' },
-    assemblyai_medical: { key: 'stt_provider', value: 'assemblyai' },
-    soniox_api_key: { key: 'stt_provider', value: 'soniox' },
-    soniox_model: { key: 'stt_provider', value: 'soniox' },
-    soniox_language: { key: 'stt_provider', value: 'soniox' },
-    soniox_send_context: { key: 'stt_provider', value: 'soniox' },
-    cohere_api_key: { key: 'stt_provider', value: 'cohere' },
-    cohere_model: { key: 'stt_provider', value: 'cohere' },
-    cohere_language: { key: 'stt_provider', value: 'cohere' },
-    mistral_api_key: { key: 'stt_provider', value: 'mistral' },
-    mistral_model: { key: 'stt_provider', value: 'mistral' },
-    mistral_language: { key: 'stt_provider', value: 'mistral' },
-    openai_stt_model: { key: 'stt_provider', value: 'openai' },
-    openai_stt_language: { key: 'stt_provider', value: 'openai' },
-    custom_stt_api_key: { key: 'stt_provider', value: 'custom' },
-    custom_stt_base_url: { key: 'stt_provider', value: 'custom' },
-    custom_stt_model: { key: 'stt_provider', value: 'custom' },
-    custom_stt_language: { key: 'stt_provider', value: 'custom' },
-    custom_stt_fallback_model: { key: 'stt_provider', value: 'custom' },
-    custom_stt_fallback_base_url: { key: 'stt_provider', value: 'custom' },
-    custom_stt_max_seconds: { key: 'stt_provider', value: 'custom' },
-    custom_stt_chunk_seconds: { key: 'stt_provider', value: 'custom' },
-  };
 
-  /**
-   * Groupes présentés par SERVICE, avec un sous-menu.
-   *
-   * Le sous-menu remplace la liste déroulante de sélection : on choisit un
-   * service en cliquant son onglet, et l'on voit sous celui-ci tout ce qui le
-   * concerne. Les réglages qui s'appliquent à TOUS les services — le retrait
-   * des pauses, le modèle, la température — sont répétés sous chaque service :
-   * c'est délibéré, on règle un service d'un seul endroit.
-   */
-  const PROVIDER_GROUPS = {
-    'group.stt': 'stt_provider',
-    'group.llm': 'llm_provider',
-  };
-
-  /**
-   * Clé d'API dont dépend un service, par groupe et par service.
-   *
-   * Nécessaire parce que la correspondance n'est pas toujours « un service, un
-   * champ » : Cohere et Mistral emploient LA MÊME clé pour la reconnaissance
-   * vocale et pour le modèle de langage. Le réglage n'existe qu'une fois côté
-   * serveur, sous Reconnaissance vocale — mais ``partitionFields`` RÉPÈTE ce
-   * même champ sous Modèle de langage plutôt que de renvoyer vers l'autre
-   * onglet : les deux copies partagent le même ``data-key`` et sont
-   * maintenues synchronisées (voir le gestionnaire d'``input`` plus bas).
-   */
-  const PROVIDER_KEY_FIELD = {
-    'group.stt|deepgram': 'deepgram_api_key',
-    'group.stt|assemblyai': 'assemblyai_api_key',
-    'group.stt|soniox': 'soniox_api_key',
-    'group.stt|cohere': 'cohere_api_key',
-    'group.stt|mistral': 'mistral_api_key',
-    // Pas de clé propre : même compte que le modèle de langage OpenAI,
-    // réglage porté par « group.llm » (voir runtime_config.py).
-    'group.stt|openai': 'openai_api_key',
-    'group.stt|custom': 'custom_stt_api_key',
-    'group.llm|gemini': 'gemini_api_key',
-    'group.llm|anthropic': 'anthropic_api_key',
-    'group.llm|openai': 'openai_api_key',
-    'group.llm|cohere': 'cohere_api_key',
-    'group.llm|mistral': 'mistral_api_key',
-    'group.llm|qwen_omni': 'qwen_omni_api_key',
-    'group.llm|custom': 'custom_llm_api_key',
-  };
-
-  /**
-   * Avertissements affichés en tête d'un groupe, selon la valeur d'un réglage.
-   *
-   * Cohere plafonne à 5 requêtes/minute : c'est une contrainte qui décide de
-   * l'usage qu'on peut en faire, pas un détail à enterrer dans un texte
-   * d'aide. Elle s'affiche donc en évidence dès qu'on le sélectionne.
-   */
-  const PROVIDER_WARNINGS = [
-    {
-      group: 'group.stt',
-      key: 'stt_provider',
-      value: 'cohere',
-      messages: ['admin.cohere_warning', 'admin.cohere_no_vocab'],
-    },
-  ];
 
   /**
    * Valeur courante d'un réglage.
@@ -4023,35 +3862,108 @@
   }
 
   /**
-   * Répartit les champs d'un groupe : propres au service affiché, puis communs.
-   *
-   * La répartition est DÉDUITE de PROVIDER_ONLY, déjà nécessaire par ailleurs :
-   * un champ sans règle s'applique à tous les services, un champ avec règle
-   * n'appartient qu'au sien. Le sélecteur de service lui-même n'est pas rendu —
-   * le sous-menu le remplace.
+   * La répartition est DÉDUITE du schéma du serveur : un champ sans
+   * ``only_for`` s'applique à tous les services (ou appartient aux sections
+   * globales de l'onglet), un champ avec ``only_for`` n'appartient qu'au
+   * sien. ``also_in`` répète sous cet onglet une clé partagée entre deux
+   * services (Cohere, Mistral, OpenAI) : la saisie écrit le même réglage,
+   * inutile de changer d'onglet pour la faire. Le sélecteur de service
+   * lui-même n'est pas rendu — le sous-menu le remplace.
    */
+  function inAlsoIn(field, groupKey, provider) {
+    return (field.also_in || [])
+      .some((partage) => partage[0] === groupKey && partage[1] === provider);
+  }
+
   function partitionFields(groupKey, provider) {
     const selecteur = PROVIDER_GROUPS[groupKey];
     const propres = [];
     const communs = [];
     adminState.fields.forEach((field) => {
-      if (field.group !== groupKey || field.key === selecteur) return;
-      const regle = PROVIDER_ONLY[field.key];
-      if (!regle) communs.push(field);
-      else if (regle.key === selecteur && regle.value === provider) propres.push(field);
+      const natif = field.group === groupKey;
+      if (!natif && !inAlsoIn(field, groupKey, provider)) return;
+      if (natif && field.key === selecteur) return;
+      // Clé partagée depuis un autre onglet : propre au service visité.
+      if (!natif) { propres.push(field); return; }
+      if (!field.only_for) communs.push(field);
+      else if (field.only_for.key === selecteur && field.only_for.value === provider) {
+        propres.push(field);
+      }
+    });
+    return { propres, communs };
+  }
+
+  /** Champ « clé d'API » dont dépend le service visité, selon le schéma. */
+  function providerKeyField(groupKey, provider) {
+    const selecteur = PROVIDER_GROUPS[groupKey];
+    const natif = adminState.fields.find((f) =>
+      f.group === groupKey && f.kind === 'secret' && f.only_for
+      && f.only_for.key === selecteur && f.only_for.value === provider);
+    if (natif) return natif;
+    return adminState.fields.find((f) => f.kind === 'secret'
+      && (f.also_in || []).some((partage) => partage[0] === groupKey && partage[1] === provider));
+  }
+
+  /**
+   * Visibilité conditionnelle : le serveur envoie, pour chaque champ, les
+   * conditions ``visible_if`` (et) sur d'autres réglages — le VAD ne se règle
+   * qu'en mode « énoncé », la transcription conservée seulement quand on
+   * ignore le STT… MASQUER N'EST PAS EFFACER : la valeur reste en base et le
+   * champ masqué n'est simplement pas visible ; s'il avait déjà été modifié,
+   * il part quand même à l'enregistrement.
+   */
+  function visibiliteOk(field) {
+    return (field.visible_if || [])
+      .every((condition) => String(adminValueOf(condition.key)) === condition.value);
+  }
+
+  function applyVisibilities(container) {
+    container.querySelectorAll('[data-box-for]').forEach((boite) => {
+      const field = adminState.fields.find((f) => f.key === boite.dataset.boxFor);
+      if (!field || !(field.visible_if || []).length) return;
+      boite.classList.toggle('hidden', !visibiliteOk(field));
+    });
+  }
+
+  /**
+   * Rend une liste de champs : ceux d'avant les sous-titres, puis chaque
+   * section (ordre d'apparition), les réglages ``advanced`` repliés sous un
+   * bloc « Avancé » dans leur section d'origine.
+   */
+  function renderBucket(fields, groupKey) {
+    const rendu = (list) => {
+      const normaux = list.filter((f) => !f.advanced);
+      const avancees = list.filter((f) => f.advanced);
+      let html = normaux.map((f) => adminFieldMarkup(f, groupKey)).join('');
+      if (avancees.length) {
+        html += `<details class="rounded-lg border border-slate-200 bg-slate-50">
+            <summary class="cursor-pointer select-none px-3 py-2 text-[11px]
+                            font-medium uppercase tracking-wide text-slate-500">
+              ${esc(T('admin.advanced'))}</summary>
+            <div class="p-3 pt-1 space-y-3">
+              ${avancees.map((f) => adminFieldMarkup(f, groupKey)).join('')}
+            </div>
+          </details>`;
+      }
+      return html;
+    };
+
+    const simples = [];
+    const sections = [];
+    fields.forEach((field) => {
+      if (!field.section) { simples.push(field); return; }
+      let groupee = sections.find((x) => x.titre === field.section);
+      if (!groupee) { groupee = { titre: field.section, champs: [] }; sections.push(groupee); }
+      groupee.champs.push(field);
     });
 
-    // Clé partagée entre deux services (Cohere, Mistral) : le champ n'existe
-    // qu'une fois côté serveur, sous Reconnaissance vocale, mais on le RÉPÈTE
-    // ici plutôt que de renvoyer vers l'autre onglet — dans les deux cas la
-    // saisie écrit le même réglage, inutile de changer d'onglet pour la faire.
-    const partagee = PROVIDER_KEY_FIELD[`${groupKey}|${provider}`];
-    const champPartage = partagee && adminState.fields.find((f) => f.key === partagee);
-    if (champPartage && champPartage.group !== groupKey) {
-      propres.unshift(champPartage);
-    }
-
-    return { propres, communs };
+    return rendu(simples)
+      + sections.map((section) => `
+          <div class="pt-2 space-y-3">
+            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
+              ${esc(section.titre)}</p>
+            ${rendu(section.champs)}
+          </div>`).join('');
   }
 
   function providerSubMenu(groupKey) {
@@ -4089,10 +4001,9 @@
     // Une clé absente est la première cause de « ça ne marche pas » après un
     // changement de service : on le dit ici plutôt que de laisser découvrir
     // l'échec à la première dictée.
-    const nomClef = PROVIDER_KEY_FIELD[`${groupKey}|${vu}`];
-    const champClef = nomClef && adminState.fields.find((f) => f.key === nomClef);
+    const champClef = providerKeyField(groupKey, vu);
     const sansClef = champClef && !champClef.configured
-      && !adminState.values[nomClef]
+      && !adminState.values[champClef.key]
       ? `<p class="text-[11px] text-amber-800 mt-1">${esc(T('admin.provider_no_key'))}</p>`
       : '';
 
@@ -4138,11 +4049,13 @@
         const { propres, communs } = partitionFields(group.key, vu);
         // Les avertissements suivent le service CONSULTÉ et non le service
         // actif : on veut lire les réserves sur Cohere avant de l'activer.
-        const alertes = PROVIDER_WARNINGS
-          .filter((a) => a.group === group.key && a.value === vu)
+        // Le serveur fournit la liste (déjà traduite), on filtre sur la
+        // valeur du service visité.
+        const alertes = (adminState.warnings[group.key] || [])
+          .filter((a) => a.value === vu)
           .flatMap((a) => a.messages)
-          .map((c) => `<p class="rounded-lg border border-amber-300 bg-amber-50 p-2.5
-                                 text-[11px] leading-relaxed text-amber-900">${esc(T(c))}</p>`)
+          .map((message) => `<p class="rounded-lg border border-amber-300 bg-amber-50 p-2.5
+                                  text-[11px] leading-relaxed text-amber-900">${esc(message)}</p>`)
           .join('');
 
         corps = `
@@ -4151,19 +4064,15 @@
             ${providerStatus(group.key)}
             ${alertes}
             ${propres.length
-              ? propres.map((f) => adminFieldMarkup(f, group.key)).join('')
+              ? renderBucket(propres, group.key)
               : `<p class="text-[11px] text-slate-500 leading-relaxed">${
                   T('admin.provider_env_only')}</p>`}
           </div>
-          ${communs.length ? `<div class="pt-1 space-y-3">
-            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
-              ${esc(T('admin.provider_shared'))}</p>
-            ${communs.map(adminFieldMarkup).join('')}
-          </div>` : ''}`;
+          ${renderBucket(communs)}`;
       } else {
         const fields = adminState.fields.filter((f) => f.group === group.key);
         if (!fields.length) return '';
-        corps = fields.map(adminFieldMarkup).join('');
+        corps = renderBucket(fields);
       }
 
       return `<section data-group-index="${index}" class="space-y-3">
@@ -4172,6 +4081,10 @@
         ${corps}
       </section>`;
     }).join('');
+
+    // Première passe de visibilité : les conditions ``visible_if`` décident
+    // de ce qui s'affiche dès le rendu (le client réévalue à chaque frappe).
+    applyVisibilities(container);
 
     // La consigne générale est du Markdown au même titre qu'un gabarit.
     container.querySelectorAll('textarea[data-key]').forEach(enableMarkdownEditing);
@@ -4183,15 +4096,18 @@
         // Mémorisé dans l'état : la valeur doit survivre à un changement de
         // sous-onglet, qui reconstruit le DOM.
         adminState.values[key] = element.value;
-        // Une clé partagée (Cohere, Mistral) existe en DOUBLE — sous
-        // Reconnaissance vocale et sous Modèle de langage. Les deux onglets
-        // restent montés en parallèle (seul un ``hidden`` bascule lequel se
-        // voit) : sans ce report immédiat, la copie de l'autre onglet
-        // resterait affichée avec l'ancienne valeur jusqu'au prochain rendu
-        // complet.
+        // Une clé partagée (Cohere, Mistral) existe en DOUBLE — sous Dictée
+        // et sous Note. Les deux onglets restent montés en parallèle (seul un
+        // ``hidden`` bascule lequel se voit) : sans ce report immédiat, la
+        // copie de l'autre onglet resterait affichée avec l'ancienne valeur
+        // jusqu'au prochain rendu complet.
         container.querySelectorAll(`[data-key="${key}"]`).forEach((autre) => {
           if (autre !== element) autre.value = element.value;
         });
+        // La valeur saisie peut être elle-même condition de visibilité
+        // (mode temps réel, audio joint, contournement du STT…) : on
+        // réévalue tout le panneau monté, les deux onglets compris.
+        applyVisibilities(container);
         $('adminStatus').textContent = T('admin.unsaved');
       };
       element.addEventListener('input', mark);
@@ -4294,6 +4210,11 @@
     const boite = $('adminIntro');
     if (!boite) return;
 
+    // Une recherche en cours remplace tout le contenu par ses résultats : le
+    // bandeau de l'onglet n'a alors plus rien à dire.
+    if (!tab) { boite.classList.add('hidden'); return; }
+    boite.classList.remove('hidden');
+
     const phrase = T(`admin.intro.${tab}`);
     const reglages = adminState.fields.some((f) => f.group === tab);
 
@@ -4325,7 +4246,7 @@
 
     // « Modèles disponibles » n'a de sens que sur l'onglet du modèle de langage ;
     // « Enregistrer » que sur un onglet portant des réglages.
-    $('btnListModels').classList.toggle('hidden', tab !== 'group.llm');
+    $('btnListModels').classList.toggle('hidden', tab !== 'group.note');
     const aDesReglages = adminState.fields.some((f) => f.group === tab);
     $('btnSaveAdmin').classList.toggle('hidden', !aDesReglages);
 
@@ -4341,6 +4262,91 @@
     if (comptes && !adminState.people) loadPeople();
     if (sauvegarde && !adminState.backups) loadBackups();
     if (stats && !adminState.stats) loadStats();
+  }
+
+  /* -------------------------------------------------------------------------
+   * Recherche de réglage
+   * ----------------------------------------------------------------------
+   * Quatre-vingt-seize réglages, deux niveaux d'onglets : chercher un mot
+   * (« pause », « température », « Cohere ») doit y mener directement. La
+   * recherche remplace le contenu courant par une liste plate ; cliquer un
+   * résultat ouvre l'onglet — et le sous-onglet — où le champ se trouve,
+   * puis fait défiler jusqu'à lui.
+   * ---------------------------------------------------------------------- */
+  function adminSearchResults(requete) {
+    const q = requete.trim().toLowerCase();
+    if (!q) return [];
+    return adminState.fields.filter((field) =>
+      [field.label, field.help, field.key, field.group_label]
+        .some((texte) => String(texte || '').toLowerCase().includes(q)));
+  }
+
+  function renderAdminSearch(requete) {
+    const container = $('adminFields');
+    const resultats = adminSearchResults(requete);
+    if (!resultats.length) {
+      container.innerHTML = `<p class="text-sm text-slate-500">${esc(T('admin.search.none'))}</p>`;
+      return;
+    }
+    container.innerHTML = '<div class="space-y-1">' + resultats.map((field) => {
+      const service = field.only_for
+        ? (providerChoices(field.group).find((c) => c.value === field.only_for.value) || {}).label
+        : '';
+      const chemin = [field.group_label, service].filter(Boolean).join(' · ');
+      return `<button type="button" data-search-jump="${esc(field.key)}"
+                class="w-full text-left px-3 py-2 rounded-lg border border-slate-200
+                       hover:bg-slate-50 transition">
+          <span class="block text-xs font-medium text-slate-700">${esc(field.label)}</span>
+          <span class="block text-[11px] text-slate-500">${esc(chemin)}</span>
+        </button>`;
+    }).join('') + '</div>';
+
+    container.querySelectorAll('button[data-search-jump]').forEach((bouton) => {
+      bouton.addEventListener('click', () => jumpToSetting(bouton.dataset.searchJump));
+    });
+  }
+
+  function jumpToSetting(key) {
+    const field = adminState.fields.find((f) => f.key === key);
+    if (!field) return;
+    $('adminSearchInput').value = '';
+    adminState.tab = field.group;
+    if (field.only_for && PROVIDER_GROUPS[field.group]) {
+      // Le champ n'apparaît que sous le sous-onglet de son service.
+      adminState.subTab[field.group] = field.only_for.value;
+    }
+    renderAdminFields(adminState.groups);
+    showAdminTab(adminState.tab);
+    requestAnimationFrame(() => {
+      // Plusieurs copies pour une clé partagée ; on vise la copie visible.
+      const boites = Array.from($('adminFields').querySelectorAll(`[data-box-for="${key}"]`))
+        .filter((boite) => !boite.classList.contains('hidden') && boite.offsetParent !== null);
+      if (!boites.length) return;
+      const boite = boites[0];
+      boite.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // Contour éphémère, en style inline : aucune classe Tailwind à générer.
+      boite.style.outline = '2px solid #3b82f6';
+      setTimeout(() => { boite.style.outline = ''; }, 1400);
+    });
+  }
+
+  function setupAdminSearch() {
+    const champ = $('adminSearchInput');
+    if (!champ) return;
+    champ.addEventListener('input', () => {
+      const requete = champ.value;
+      // En dessous de deux caractères, retour au contenu normal : une lettre
+      // isolée filtrerait presque tout, sans rien apporter.
+      if (requete.trim().length < 2) {
+        renderAdminFields(adminState.groups);
+        showAdminTab(adminState.tab);
+        return;
+      }
+      renderAdminIntro(null);
+      ['adminPeople', 'adminBackup', 'adminStats'].forEach((id) => $(id).classList.add('hidden'));
+      $('adminFields').classList.remove('hidden');
+      renderAdminSearch(requete);
+    });
   }
 
   /* -------------------------------------------------------------------------
@@ -5259,13 +5265,17 @@
     adminState.stats = null;
     adminState.pricing = null;
     adminState.statsOwner = '';
+    adminState.warnings = {};
     adminState.dirty = new Set();
     adminState.values = {};
     adminState.subTab = {};
+    const recherche = $('adminSearchInput');
+    if (recherche) recherche.value = '';
     $('adminFields').innerHTML = `<p class="text-sm text-slate-500">${esc(T('admin.loading'))}</p>`;
     try {
       const data = await api('/api/admin/settings');
       adminState.fields = data.settings || [];
+      adminState.warnings = data.warnings || {};
       adminState.dirty = new Set();
       renderAdminFields(data.groups);
     } catch (err) {
@@ -5296,6 +5306,7 @@
       const result = await api('/api/admin/settings', { method: 'PUT', body: { values } });
 
       adminState.fields = result.settings || [];
+      adminState.warnings = result.warnings || {};
       adminState.dirty = new Set();
       adminState.values = {};
       renderAdminFields(result.groups || null);
@@ -5315,14 +5326,14 @@
     // c'est le service CONSULTÉ qu'il faut interroger, pas nécessairement
     // l'actif — sans quoi ce bouton renseignait toujours les modèles du
     // fournisseur en service, même en visitant l'onglet d'un autre.
-    const provider = currentProvider('group.llm');
+    const provider = currentProvider('group.note');
     $('adminStatus').textContent = T('admin.querying');
     try {
       const data = await api(`/api/models?provider=${encodeURIComponent(provider)}`);
       // Une seule liste, mais rattachée aux DEUX champs de modèle du
       // fournisseur interrogé — le principal et le rapide portent tous deux
-      // ``list="modelOptions"`` depuis leur rendu (voir LLM_MODEL_FIELD_KEYS),
-      // il suffit donc de remplir le datalist partagé.
+      // ``list="modelOptions"`` depuis leur rendu (marque ``datalist`` du
+      // schéma serveur), il suffit donc de remplir le datalist partagé.
       const datalist = $('modelOptions');
       datalist.innerHTML = (data.models || [])
         .map((name) => `<option value="${esc(name)}"></option>`).join('');
@@ -6190,6 +6201,7 @@
     $('btnCloseAdmin').addEventListener('click', () => $('adminModal').classList.add('hidden'));
     $('btnSaveAdmin').addEventListener('click', saveAdminSettings);
     $('btnListModels').addEventListener('click', listAvailableModels);
+    setupAdminSearch();
 
     // --- Sélecteur de panneau (mobile) ---
     $('paneTabDictee').addEventListener('click', () => setMobilePane('dictee'));

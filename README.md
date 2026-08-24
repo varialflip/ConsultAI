@@ -474,6 +474,9 @@ Quatre sont livrés, tous verrouillés :
 | Consultation - Gériatrie | fr | 🔒 protégé |
 | Suivi - Gériatrie | fr | 🔒 protégé |
 
+L'ordre ci-dessus est l'ordre d'affichage livré (`sort_order` 101 à 104 : les
+deux consultations générales d'abord, la gériatrie ensuite).
+
 Les quatre sont ni modifiables ni supprimables — le refus est appliqué côté
 serveur. **Dupliquez-les** pour obtenir une copie indépendante et entièrement
 modifiable ; c'est le chemin prévu, et un bouton du formulaire le propose.
@@ -485,11 +488,13 @@ concentre), **Mise en page** (le squelette Markdown, qui fixe la structure
 exacte), **Vocabulaire additionnel** et **Langue**.
 
 **Rubrique finale obligatoire.** Quelle que soit la mise en page, la note se
-termine toujours par la section **`Éléments à valider`** — corrections apportées
-et éléments à confirmer, en liste télégraphique (au-delà de 8 éléments, ils sont
-regroupés par catégorie). La consigne générale l'exige (§ 4.1) et les gabarits
-français livrés l'inscrivent (`## ÉLÉMENTS À VALIDER`) pour que tous les modèles
-la produisent, sans exception.
+termine toujours par la section des **éléments à valider**, sous l'intitulé
+exact prévu par le gabarit (`## ÉLÉMENTS À VALIDER` dans les gabarits français
+livrés). Liste télégraphique à deux mentions possibles seulement —
+« correction apportée : … » ou « … → à confirmer » —, « Aucun élément à
+signaler. » quand il n'y a rien à rapporter ; jamais « Confirmé ». Au-delà de
+8 éléments, ils sont regroupés par catégorie. La consigne générale l'exige
+(§ 6).
 
 **Structure des rubriques.** La consigne générale impose deux règles de mise en
 forme (§ 1 et § 3), renforcées en 2026-08-17 pour les modèles plus sensibles :

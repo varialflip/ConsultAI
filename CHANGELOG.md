@@ -3,6 +3,30 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-24
+
+- **Consigne générale réécrite ; traduction anglaise alignée.** La consigne
+  générale française est restructurée en sept sections (0 proportionnalité,
+  1 aucune invention, 2 correction de la transcription — tableau
+  d'homophonies québécois étoffé —, 3 style de rédaction : style déclaratif,
+  ellipse du sujet, listes d'examen sans libellé interne, 4 médicaments avec
+  regroupement par indication partagée, 5 format de sortie, 6 vérification
+  finale et « Corrections et éléments à valider » : deux mentions seulement,
+  « correction apportée » ou « à confirmer », statut unique « Aucun élément à
+  signaler. », intitulé exact du gabarit). La version anglaise en est la
+  traduction section par section, adaptée là où une traduction littérale ne
+  veut rien dire : homophonies propres à la reconnaissance anglaise, décimales
+  à point, PO/daily/BID/TID/QID, équivalents des acronymes cliniques
+  (ADL, IADL, COPD, HTN, CBC, PET, MRI, DTRs) — les acronymes du réseau
+  québécois restés tels quels. Les défauts livrés (`app/default_prompts.py`)
+  suivent ; une consigne personnalisée en base n'est pas touchée par le
+  module.
+- **Ordre des gabarits verrouillés : 101 à 104.** Consultation Médicale
+  Générale (fr) = 101, General Medical Consultation (en) = 102,
+  Consultation - Gériatrie = 103, Suivi - Gériatrie = 104 : les deux
+  consultations générales s'affichent avant la gériatrie. Rafraîchi au
+  démarrage comme le reste du gabarit verrouillé.
+
 ## 2026-08-21
 
 - **Règle de regroupement des médicaments rendue actionnable dans les

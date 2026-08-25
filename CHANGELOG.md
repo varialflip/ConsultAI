@@ -5,6 +5,22 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-08-25
 
+- **Gabarits gériatriques verrouillés : les versions « FD Markdown » deviennent
+  les défauts livrés.** « Consultation - Gériatrie » et « Suivi - Gériatrie »
+  sont remplacés par le contenu des gabarits affinés à l'usage — mêmes règles
+  du Résumé enrichies le jour même (hospitalisations antérieures). Côté
+  consultation : règle de classement de l'autonomie fonctionnelle (test
+  AVQ / AVD / Mobilité avec exemples tranchés), ordre des médicaments étendu
+  (cognition, impact SNC, diabète, cardiovasculaire, autres, puis laxatifs,
+  vitamines, pompes et gouttes), ordre de l'examen, investigations en deux
+  listes (Laboratoires / Imagerie), phrase-résumé d'Impression uniquement si
+  dictée ; la mise en page place « Autonomie fonctionnelle » sous l'histoire
+  sociale. Côté suivi : mise en page resserrée avec lignes d'en-tête (lieu,
+  date, médecin de famille) et rubrique Médicaments, titres en casse de phrase
+  au lieu des MAJUSCULES. Les copies modifiables « (FD Markdown) », désormais
+  redondantes, sont retirées — les gabarits verrouillés restent rafraîchis à
+  chaque démarrage depuis `app/default_templates.py`.
+
 - **Aucune omission dans les notes.** La consigne générale interdisait
   l'invention sans interdire symétriquement l'omission : un fait dicté pouvait
   être condensé jusqu'à disparaître — constaté sur une note de suivi où

@@ -1475,6 +1475,65 @@ def migrate_general_prompt_undo_consolidation(db: Session) -> int:
     return touches
 
 
+#: Empreintes des consignes générales LIVRÉES avant l'ajout des règles
+#: « aucune omission » et « hospitalisations et séjours » (2026-08-25 : un
+#: séjour hospitalier antérieur dicté avait été passé sous silence dans une
+#: note de suivi). Deux variantes sont acceptées par langue : le texte du
+#: module et la copie en base, qui peut en différer d'un caractère (saut de
+#: ligne final absent). Toute autre empreinte = consigne personnalisée par le
+#: médecin → on n'y touche pas, comme pour les migrations précédentes.
+_OLD_GENERAL_PROMPT_SHA_NO_OMISSION = {
+    "general_prompt_fr": (
+        "e2f7c2043f365374d29cd8f2ba2be7fcef7fc5180bfbec45a515b58247818d3f",
+        "8cf454a7a33eb9e66ffbf55042c514c57c4635ec5e0094035bf61d3d370db01b",
+    ),
+    "general_prompt_en": (
+        "952bf3717947c1fff54ebd750fc9692af21d27a1de2e7ee41971dfe828809b9f",
+    ),
+}
+
+
+def migrate_general_prompt_no_omission(db: Session) -> int:
+    """
+    Porte les règles « aucune omission » et « hospitalisations et séjours »
+    dans la consigne générale EN BASE.
+
+    Même mécanique que ``migrate_general_prompt_undo_consolidation`` : la
+    valeur n'est remplacée que si elle est encore EXACTEMENT l'un des défauts
+    livrés (comparaison par empreinte) ; une consigne personnalisée est
+    laissée intacte et signalée au journal — le médecin devra alors ajouter
+    les règles depuis le panneau.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, anciennes in _OLD_GENERAL_PROMPT_SHA_NO_OMISSION.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() not in anciennes:
+            logger.info(
+                "Consigne « %s » personnalisée : migration de la règle "
+                "« aucune omission » ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : règles « aucune omission » / "
+            "« hospitalisations et séjours » ajoutées.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Ancienne phrase de regroupement des médicaments LIVRÉE dans les gabarits
 #: avant la reformulation « indication dictée ou cliniquement évidente ».
 #: Même mécanique que les migrations de la consigne générale : on ne remplace
@@ -1516,6 +1575,62 @@ def migrate_template_med_grouping(db: Session) -> int:
                 logger.info(
                     "Gabarit « %s » : règle de regroupement des médicaments "
                     "reformulée (indication dictée ou cliniquement évidente).",
+                    row.name,
+                )
+                break
+    if touches:
+        db.commit()
+    return touches
+
+
+#: Fragment « Résumé » LIVRÉ dans le gabarit « Suivi - Gériatrie » avant
+#: l'ajout de la mention explicite des hospitalisations antérieures. Même
+#: mécanique que les autres migrations : on ne remplace le fragment que s'il
+#: y figure EXACTEMENT tel que livré. Deux casses sont couvertes : la phrase
+#: livrée (« Résumé : les faits… ») et la variante retitrée des copies
+#: markdown (« **Résumé.** Les faits… »).
+_OLD_SUIVI_RESUME_FRAGMENTS = (
+    "les faits saillants, les antécédents importants, ce qui est nouveau depuis la dernière visite",
+    "Les faits saillants, les antécédents importants, ce qui est nouveau depuis la dernière visite",
+)
+
+#: Fragments de remplacement (un par ancien, même ordre).
+_NEW_SUIVI_RESUME_FRAGMENTS = (
+    "les faits saillants, les antécédents importants — y compris toute "
+    "hospitalisation antérieure (lieu, année, motif) —, ce qui est nouveau "
+    "depuis la dernière visite",
+    "Les faits saillants, les antécédents importants — y compris toute "
+    "hospitalisation antérieure (lieu, année, motif) —, ce qui est nouveau "
+    "depuis la dernière visite",
+)
+
+
+def migrate_template_suivi_resume_stays(db: Session) -> int:
+    """
+    Porte dans les copies modifiables du gabarit « Suivi - Gériatrie » la
+    mention explicite des hospitalisations antérieures dans la règle du
+    Résumé (2026-08-25 : un séjour hospitalier antérieur dicté avait été
+    passé sous silence).
+
+    Les gabarits verrouillés sont déjà rafraîchis depuis
+    ``default_templates`` par ``seed_locked_templates`` : cette migration ne
+    concerne donc que les copies dupliquées avant la reformulation. On ne
+    remplace le fragment que s'il y est encore EXACTEMENT le texte livré
+    d'origine — une règle du Résumé déjà retravaillée autrement est laissée
+    intacte et signalée au journal.
+    """
+    touches = 0
+    for row in db.scalars(select(Template)).all():
+        inst = row.system_instructions or ""
+        for ancienne, nouvelle in zip(
+            _OLD_SUIVI_RESUME_FRAGMENTS, _NEW_SUIVI_RESUME_FRAGMENTS
+        ):
+            if ancienne in inst:
+                row.system_instructions = inst.replace(ancienne, nouvelle)
+                touches += 1
+                logger.info(
+                    "Gabarit « %s » : règle du Résumé enrichie "
+                    "(hospitalisation antérieure : lieu, année, motif).",
                     row.name,
                 )
                 break
@@ -1792,7 +1907,9 @@ def init_db() -> None:
         migrate_general_prompt_final_section(db)
         migrate_general_prompt_structure(db)
         migrate_general_prompt_undo_consolidation(db)
+        migrate_general_prompt_no_omission(db)
         migrate_template_med_grouping(db)
+        migrate_template_suivi_resume_stays(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

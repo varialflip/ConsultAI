@@ -5,6 +5,23 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-08-25
 
+- **Aucune omission dans les notes.** La consigne générale interdisait
+  l'invention sans interdire symétriquement l'omission : un fait dicté pouvait
+  être condensé jusqu'à disparaître — constaté sur une note de suivi où
+  l'hospitalisation de l'an passé (lieu, année, motif), pourtant dictée, ne
+  figurait nulle part. § 1 porte désormais la règle miroir (condenser
+  raccourcit la formulation d'un fait, jamais sa suppression ni sa fusion avec
+  un autre) et une règle dédiée aux hospitalisations et séjours : chaque
+  hospitalisation, visite ou séjour institutionnel mentionné (lieu, année,
+  motif) figure dans la note, les séjours antérieurs n'étant jamais fusionnés
+  avec le séjour ou la visite actuelle. La vérification finale (§ 6) gagne la
+  couverture inverse : chaque fait clinique dicté est recherché dans le rapport,
+  un fait manquant est rétabli dans sa rubrique. Le gabarit « Suivi -
+  Gériatrie » nomme explicitement les hospitalisations antérieures dans sa
+  règle du Résumé. Migrations livrées pour porter les deux changements en base
+  (consigne générale et copies modifiables du gabarit) sans toucher aux textes
+  déjà personnalisés ; version anglaise alignée.
+
 - **Page de connexion pilotable au clavier.** Sur l'écran de choix de la durée
   de session, les flèches **←/→** basculent entre « usage ponctuel » et
   « rester connecté », et **Entrée** valide l'option sélectionnée puis

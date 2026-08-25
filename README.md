@@ -543,6 +543,15 @@ d'en-tête sans valeur dictée (médecin de famille, lieu) ; le marqueur
 rubrique qui produit par ailleurs du contenu — il ne remplace jamais une rubrique
 ou une ligne vide.
 
+**Fidélité au contenu dicté.** La consigne générale interdit autant l'omission
+que l'invention (§ 1) : toute donnée clinique dictée figure dans la note —
+condenser raccourcit la formulation d'un fait, jamais sa suppression ni sa
+fusion avec un autre — et la vérification finale (§ 6) en vérifie la
+réciproque. Chaque hospitalisation, visite ou séjour institutionnel mentionné
+(lieu, année, motif) y figure, sans être fusionné avec le séjour ou la visite
+actuelle ; le gabarit « Suivi - Gériatrie » nomme explicitement les
+hospitalisations antérieures dans sa règle du Résumé.
+
 Champs de substitution disponibles dans la mise en page : `{{DATE}}`,
 `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. (`{{PATIENT}}` et `{{DOSSIER}}` sont
 conservés pour la compatibilité des gabarits existants, mais ne sont **plus

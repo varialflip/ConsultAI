@@ -9,16 +9,29 @@ Qwen Omni, point de terminaison personnalisé). Branché sur
 
 ## Cycle de déploiement
 
-Deux chemins bien distincts. Un simple push ne déploie rien ; une release
-(tag + déploiement) n'est faite que lorsqu'elle est **demandée explicitement**.
+Deux chemins bien distincts. Une release (tag) n'est faite que lorsqu'elle est
+**demandée explicitement** ; un commit simple redéploie le conteneur
+immédiatement, sans tag ni pull.
 
-### Commit simple — aucun déploiement
+### Commit simple — redéploiement immédiat, sans tag ni pull
 
 1. Éditer le code ici.
 2. `git add` / `git commit` / `git push origin main`.
-3. Rien d'autre : **pas de bump de version, pas de tag, pas de
-   redéploiement**. La CI publie bien `latest` + `sha-…` à chaque push
-   (image de référence), mais la pile reste épinglée à la dernière release.
+3. **Redéployer systématiquement**, même sans tag et sans nouvelle image : le
+   code applicatif du conteneur vient du bind mount local (`/app/app`,
+   lecture seule — voir `/opt/dictai/AGENTS.md`) ; il suffit de recréer le
+   conteneur :
+
+   ```bash
+   cd /opt/dictai && sudo docker compose up -d --force-recreate consultai
+   ```
+
+   `pull` seulement si une nouvelle image est attendue (dépendances changées) ;
+   régénérer la feuille Tailwind avant seulement si `tailwind-src.css` a
+   changé (artefact absent du dépôt).
+4. Pas de bump de version ni de tag sur ce chemin. La CI publie bien
+   `latest` + `sha-…` à chaque push (image de référence), mais la pile reste
+   épinglée à la dernière release.
 
 ### Tag + déploiement — seulement sur demande explicite
 

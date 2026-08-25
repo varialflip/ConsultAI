@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-25
+
+- **Page de connexion pilotable au clavier.** Sur l'écran de choix de la durée
+  de session, les flèches **←/→** basculent entre « usage ponctuel » et
+  « rester connecté », et **Entrée** valide l'option sélectionnée puis
+  enchaîne vers le fournisseur d'identité — sans toucher à la souris. Les
+  comportements existants sont inchangés (clic sur les cartes, bouton
+  Continuer, enchaînement automatique PWA).
+
 ## 2026-08-24
 
 - **Panneau d'administration réorganisé par flux de travail ; recherche de

@@ -286,6 +286,13 @@ Le port du conteneur n'a aucune raison d'être joignable au-delà du proxy :
 
 ## 5. Premier démarrage
 
+### La page de connexion
+
+Avant de partir chez le fournisseur d'identité, `/auth/login` propose le choix
+de la durée de session : usage ponctuel (quelques heures) ou « rester
+connecté » 30 jours. Au clavier aussi : les flèches **←/→** changent d'option,
+**Entrée** valide et enchaîne.
+
 ### Le premier usager devient administrateur
 
 À la première connexion sur une installation vide, le compte est créé et reçoit

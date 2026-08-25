@@ -275,6 +275,49 @@
     });
   });
 
+  // Clavier : ←/→ bascule la durée sélectionnée ; Entrée la valide et
+  // enchaîne vers le fournisseur d'identité. La page n'a aucun champ texte :
+  // Entrée ne peut rien interrompre.
+  (function(){
+    var formulaireVisible = function(){
+      var forms = document.querySelectorAll('form[action="/auth/login"]');
+      for (var i = 0; i < forms.length; i++){
+        if (forms[i].offsetParent !== null) { return forms[i]; }
+      }
+      return null;
+    };
+    document.addEventListener('keydown', function(e){
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Enter') { return; }
+      if (document.getElementById('privacyOverlay').classList.contains('open')) { return; }
+      if (window.__dictaiPwaAutoSubmit) { return; }
+      // Un contrôle ciblé (bouton Continuer, radio…) gère déjà Entrée tout seul.
+      if (e.key === 'Enter' &&
+          /^(button|input|label|a)$/.test((e.target.tagName || '').toLowerCase())) { return; }
+
+      var form = formulaireVisible();
+      if (!form) { return; }
+
+      if (e.key === 'Enter'){
+        e.preventDefault();
+        if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
+        return;
+      }
+
+      var radios = form.querySelectorAll('input[name="stay_logged_in"]');
+      if (!radios.length) { return; }
+      e.preventDefault();
+      var courant = 0;
+      for (var i = 0; i < radios.length; i++){
+        if (radios[i].checked) { courant = i; break; }
+      }
+      var suivant = Math.min(radios.length - 1, Math.max(0,
+                      courant + (e.key === 'ArrowRight' ? 1 : -1)));
+      // .click() coche le radio ET déclenche le gestionnaire « change »
+      // ci-dessus, qui déplace déjà la surbrillance .sel.
+      if (suivant !== courant) { radios[suivant].click(); }
+    });
+  })();
+
   // Politique de confidentialité — ouverture/fermeture de la modale
   (function(){
     var overlay = document.getElementById('privacyOverlay');
@@ -305,6 +348,7 @@
     // Mobile : seule la carte .login-mobile est visible.
     var visible = document.querySelector('.login-mobile form[action="/auth/login"]') ||
                   document.querySelector('form[action="/auth/login"]');
+    window.__dictaiPwaAutoSubmit = true;
     var enchaine = window.setTimeout(function(){ visible.submit(); }, 50);
   })();
 </script>

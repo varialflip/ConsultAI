@@ -19,6 +19,13 @@ entrées du jour et du 25 août ci-dessous.*
   transcription (roue sur le titre pendant la vérification, bascule
   automatique à l'arrivée), conservé avec le brouillon et réaffiché au
   chargement. Coût ~60 % d'une génération en plus ; jamais bloquant.
+- **Requêtes ordonnées pour le cache de préfixe de Gemini.** Le message
+  utilisateur place désormais la mise en page (stable par gabarit) avant le
+  contexte variable : le préfixe partagé entre consultations couvre consigne
+  système + consignes du gabarit + structure exigée, au-delà de la seule
+  consigne système — le cache implicite (défaut Vertex, ~90 % de remise sur
+  les jetons servis) a ainsi plus de matière à réutiliser, sans rien changer
+  à la priorité des consignes (qui reste tranchée côté système).
 
 - **La note démarre plus tôt : l'audio du modèle se prépare pendant la
   dictée.** Le plafonnement des silences + l'encodage de l'audio joint à la

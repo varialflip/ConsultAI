@@ -167,6 +167,17 @@ def build_user_prompt(
     """
     Assemble le message utilisateur.
 
+    ORDRE DES BLOCS — pensé pour le cache de préfixe de Gemini : la mise en
+    page (stable par gabarit) précède le contexte de consultation (variable).
+    Le préfixe partagé d'une consultation à l'autre devient ainsi consigne
+    système + gabarit + mise en page, au lieu de s'arrêter à la consigne
+    système — le cache implicite (actif par défaut sur Vertex, ≥ 2 048
+    jetons, ~90 % de remise sur les jetons servis) couvre alors aussi la
+    structure exigée. Cet ordre ne porte AUCUNE sémantique de priorité :
+    c'est la clôture (« reproduis cette structure exactement ») qui gouverne,
+    et la priorité des consignes reste tranchée dans ``build_system_prompt``
+    (gabarit d'abord, consigne générale du médecin en dernier).
+
     Les délimiteurs explicites (<<< >>>) évitent que le contenu de la dictée
     soit interprété comme une consigne — une forme simple mais efficace de
     protection contre l'injection de prompt, le médecin pouvant très bien
@@ -175,17 +186,19 @@ def build_user_prompt(
     libelles = _USER_PROMPT_LABELS[i18n.normalize(language or runtime_config.language())]
     parts: List[str] = []
 
-    if context_lines:
-        parts.append(
-            f"{libelles['context']}\n" + "\n".join(f"- {c}" for c in context_lines)
-        )
-
+    # Mise en page D'ABORD : bloc stable par gabarit, tête du préfixe
+    # partageable entre consultations (voir la notice d'ordre ci-dessus).
     parts.append(
         f"{libelles['layout']}\n"
         "<<<MISE_EN_PAGE\n"
         f"{layout_format.strip()}\n"
         "MISE_EN_PAGE>>>"
     )
+
+    if context_lines:
+        parts.append(
+            f"{libelles['context']}\n" + "\n".join(f"- {c}" for c in context_lines)
+        )
 
     if extra_instructions.strip():
         parts.append(

@@ -249,6 +249,12 @@ COHERE_LLM_THINKING_BUDGET=1024
 > historique au clic. Le cache ne contient que du dérivé régénérable : hors
 > sauvegarde, purgé avec l'enregistrement, ignoré si les réglages du
 > plafonnement changent. Les jetons servis depuis le **cache de préfixe**
+> implicite de Gemini (`cachedContentTokenCount`) sont journalisés à chaque
+> appel ; le message utilisateur place désormais la **mise en page** (stable
+> par gabarit) AVANT le contexte variable de la consultation, pour que le
+> préfixe partagé couvre consigne système + gabarit + structure exigée et
+> non la seule consigne système.
+
 > **🔎 « 2e jet » — audit factuel de la note.** Bascule à côté du bouton
 > « Mettre en forme » (préférence par usager, désactivée par défaut). Quand
 > elle est active, chaque génération est suivie d'un second appel qui

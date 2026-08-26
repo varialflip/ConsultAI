@@ -2856,6 +2856,17 @@ async def api_generate(
             payload.consultation_id, active_provider,
         )
 
+    # « Validation » demandée mais aucun audio à croiser : prévenir aussitôt
+    # les onglets (évènement « skipped ») plutôt que de laisser la roue
+    # tourner jusqu'au filet de 180 s — sans audio, l'audit ne partira jamais.
+    if payload.second_pass and payload.consultation_id and audio_payload is None:
+        live.publish(user.owner_key, "verification_result", {
+            "consultation_id": payload.consultation_id,
+            "generation_token": payload.generation_token,
+            "origin_tab": request.headers.get("x-consultai-tab", ""),
+            "skipped": True,
+        })
+
     try:
         result = await run_in_threadpool(
             _generate_and_publish,

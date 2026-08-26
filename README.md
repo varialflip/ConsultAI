@@ -267,6 +267,9 @@ COHERE_LLM_THINKING_BUDGET=1024
 > transcription — roue sur le titre pendant la vérification, la vue reste sur
 > la transcription, bascule automatique à l'arrivée ; il est conservé avec le
 > brouillon (`consultations.verification_json`) et réaffiché au chargement.
+> Sans audio joint (note produite à partir de la seule transcription), la
+> bascule active produit immédiatement un « rien à signaler » : l'audit
+> audio↔note est impossible, pas de roue qui tourne dans le vide.
 > Coût observé : ~60 % d'un appel de génération en plus (l'audio domine).
 > Fiabilité : le « Validation » utilise le budget de raisonnement configuré
 > dans le panneau (`gemini_thinking_budget`) — au plancher 128 il hallucine

@@ -39,6 +39,12 @@ visite antérieure était passée sous silence.*
   gabarits existants par migration (fragment intact exigé). Vérifié : la
   régénération de la note concernée contient bien « le traitement par Exelon
   avait été renouvelé et la dose de métoclopramide avait été diminuée ».
+- **« Validation » demandée sans audio (transcription seule) : arrêt immédiat
+  de la roue.** La bascule active mais aucun enregistrement joint à la
+  consultation (note produite à partir de la seule transcription) publie
+  aussitôt un évènement SSE « skipped » : l'onglet affiche « rien à
+  signaler » sans attendre le filet de 180 s. L'audit étant audio↔note, il
+  ne peut de toute façon pas partir sans audio.
 
 ## 2026-08-26 — v2.0.0-rc.1
 

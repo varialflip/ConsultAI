@@ -3,7 +3,10 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-08-26
+## 2026-08-26 — v2.0.0-rc.1
+
+*Première candidate de la version 2 : inclut tout depuis la bêta.84 — les
+entrées du jour et du 25 août ci-dessous.*
 
 - **La note démarre plus tôt : l'audio du modèle se prépare pendant la
   dictée.** Le plafonnement des silences + l'encodage de l'audio joint à la

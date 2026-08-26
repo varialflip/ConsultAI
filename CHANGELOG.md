@@ -8,6 +8,18 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 *Première candidate de la version 2 : inclut tout depuis la bêta.84 — les
 entrées du jour et du 25 août ci-dessous.*
 
+- **« 2e jet » : audit factuel de chaque note contre l'audio.** Nouvelle
+  bascule à côté de « Mettre en forme » (préférence par usager, désactivée
+  par défaut) : après la note, un second appel compare celle-ci à l'AUDIO de
+  la dictée — jamais à la transcription Parakeet, trop imprécise pour servir
+  de référence — et signale en deux listes plates ce qui fut dicté mais
+  manque à la note, et ce que la note affirme sans avoir été dicté.
+  Volontairement permissif (seuls les écarts certains, reformulations
+  acceptées). Résultat diffusé en direct dans un second onglet du panneau de
+  transcription (roue sur le titre pendant la vérification, bascule
+  automatique à l'arrivée), conservé avec le brouillon et réaffiché au
+  chargement. Coût ~60 % d'une génération en plus ; jamais bloquant.
+
 - **La note démarre plus tôt : l'audio du modèle se prépare pendant la
   dictée.** Le plafonnement des silences + l'encodage de l'audio joint à la
   mise en forme (~0,9× le temps réel : 4 s pour 5 min, 32 s pour 35 min)

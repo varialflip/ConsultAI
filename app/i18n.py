@@ -290,6 +290,40 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "pane.dictation": ("Dictée", "Dictation"),
     "pane.note": ("Note structurée", "Structured note"),
     "pane.raw": ("Transcription brute", "Raw transcript"),
+    "secondpass.toggle": ("2e jet", "2nd pass"),
+    "secondpass.tab": ("2e jet", "2nd pass"),
+    "secondpass.title": (
+        "« 2e jet » : après chaque note, comparer la note à l'audio et "
+        "signaler les écarts certains (omissions / éléments non dictés).",
+        "\u201c2nd pass\u201d: after each note, compare it against the audio "
+        "and flag certain discrepancies (omissions / non-dictated items).",
+    ),
+    "secondpass.pending": (
+        "Vérification en cours — comparaison de la note à l'audio…",
+        "Verification in progress — comparing the note against the audio…",
+    ),
+    "secondpass.empty": (
+        "Rien à signaler : aucun écart certain entre la note et l'audio.",
+        "Nothing to report: no certain discrepancy between note and audio.",
+    ),
+    "secondpass.summary": ("Audit factuel de la note", "Factual audit of the note"),
+    "secondpass.omissions": (
+        "Dictés mais absents de la note",
+        "Dictated but missing from the note",
+    ),
+    "secondpass.inventions": (
+        "Dans la note, mais non dictés",
+        "In the note, but not dictated",
+    ),
+    "secondpass.confidence": ("Confiance de l'audit", "Audit confidence"),
+    "secondpass.unavailable": (
+        "Indisponible : le fournisseur actif ne transmet pas d'audio.",
+        "Unavailable: the active provider does not send audio.",
+    ),
+    "secondpass.save_error": (
+        "Préférence « 2e jet » non enregistrée.",
+        "Could not save the \u201c2nd pass\u201d preference.",
+    ),
     "pane.clear": ("Supprimer", "Delete"),
     "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),
     "pane.generate": ("Mettre en forme", "Format"),

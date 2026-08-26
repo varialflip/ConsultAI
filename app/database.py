@@ -264,6 +264,11 @@ class Consultation(Base):
     usage_prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     usage_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     generation_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Résultat du « 2e jet » (audit factuel audio↔note), sérialisé JSON.
+    # Nullable : absent = jamais demandé ; présent mais invalide = ignoré
+    # côté interface, comme si absent. Suit la note qu'il audite et meurt
+    # avec le brouillon, comme elle.
+    verification_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -314,6 +319,7 @@ class Consultation(Base):
                     "raw_transcript": self.raw_transcript,
                     "generated_markdown": self.generated_markdown,
                     "edited_markdown": self.edited_markdown,
+                    "verification_json": self.verification_json,
                 }
             )
         return data
@@ -666,6 +672,9 @@ class UserPreference(Base):
     language: Mapped[str] = mapped_column(String(8), default="", nullable=False)
     #: Thème de couleur : « teal », « blue », … ou vide pour suivre le défaut.
     theme_color: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    #: « 2e jet » : audit factuel de la note après génération. Défaut OFF :
+    #  coûte un second appel modèle, se déclenche sur demande expresse.
+    second_pass: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
@@ -1799,6 +1808,7 @@ _ADDED_COLUMNS = {
     ],
     "user_preferences": [
         ("theme_color", "VARCHAR(32) NOT NULL DEFAULT ''"),
+        ("second_pass", "BOOLEAN NOT NULL DEFAULT 0"),
     ],
     "templates": [
         ("language", "VARCHAR(8) NOT NULL DEFAULT 'fr'"),
@@ -1820,6 +1830,7 @@ _ADDED_COLUMNS = {
         ("usage_output_tokens", "INTEGER"),
         ("generation_seconds", "FLOAT"),
         ("transcript_used", "BOOLEAN NOT NULL DEFAULT 1"),
+        ("verification_json", "TEXT"),
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),

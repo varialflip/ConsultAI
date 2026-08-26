@@ -249,8 +249,19 @@ COHERE_LLM_THINKING_BUDGET=1024
 > historique au clic. Le cache ne contient que du dérivé régénérable : hors
 > sauvegarde, purgé avec l'enregistrement, ignoré si les réglages du
 > plafonnement changent. Les jetons servis depuis le **cache de préfixe**
-> implicite de Gemini (`cachedContentTokenCount`) sont journalisés à chaque
-> appel.
+> **🔎 « 2e jet » — audit factuel de la note.** Bascule à côté du bouton
+> « Mettre en forme » (préférence par usager, désactivée par défaut). Quand
+> elle est active, chaque génération est suivie d'un second appel qui
+> compare la note à l'AUDIO de la dictée (source de vérité — jamais la
+> transcription Parakeet, trop imprécise) et renvoie deux listes plates :
+> ce qui fut dicté mais manque à la note, ce que la note affirme sans avoir
+> été dicté. Volontairement permissif : seuls les écarts certains sont
+> signalés, les reformulations médicales sont acceptées. Le résultat part en
+> direct (SSE `verification_result`) dans un second onglet du panneau de
+> transcription — roue sur le titre pendant la vérification, la vue reste sur
+> la transcription, bascule automatique à l'arrivée ; il est conservé avec le
+> brouillon (`consultations.verification_json`) et réaffiché au chargement.
+> Coût observé : ~60 % d'un appel de génération en plus (l'audio domine).
 
 ---
 

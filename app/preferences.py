@@ -313,6 +313,43 @@ def set_theme(username: str, theme: str) -> str:
     return demande or "teal"
 
 
+def second_pass_for(username: str) -> bool:
+    """
+    Préférence « 2e jet » (contrôle factuel de la note) de l'usager.
+
+    Absente ou illisible = désactivé : c'est le défaut assumé — l'audit
+    coûte un second appel au modèle et se déclenche sur demande expresse.
+    """
+    cle = _key(username)
+    if not cle:
+        return False
+    try:
+        with SessionLocal() as db:
+            row = db.get(UserPreference, cle)
+            return bool(row is not None and row.second_pass)
+    except Exception as exc:
+        logger.warning("Préférence « 2e jet » non lue pour %s : %s", cle, exc)
+        return False
+
+
+def set_second_pass(username: str, enabled: bool) -> bool:
+    """Enregistre la préférence « 2e jet » et retourne la valeur retenue."""
+    cle = _key(username)
+    if not cle:
+        raise ValueError("Identité manquante.")
+
+    with SessionLocal() as db:
+        row = db.get(UserPreference, cle)
+        if row is None:
+            db.add(UserPreference(username=cle, second_pass=bool(enabled)))
+        else:
+            row.second_pass = bool(enabled)
+        db.commit()
+
+    logger.info("« 2e jet » de %s : %s", cle, "activé" if enabled else "désactivé")
+    return bool(enabled)
+
+
 def invalidate() -> None:
     """Vide le cache. Utile aux tests et après une écriture directe en base."""
     with _cache_lock:

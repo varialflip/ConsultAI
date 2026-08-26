@@ -893,6 +893,198 @@ def _gemini_appel(client, model, contents, config) -> "object":
     raise derniere_erreur
 
 
+def verification_capable(provider: Optional[str] = None) -> bool:
+    """
+    « 2e jet » disponible pour ce fournisseur ?
+
+    L'audit compare la note à l'AUDIO (source de vérité — la transcription
+    Parakeet est trop imprécise pour servir de référence) : seul le chemin
+    Gemini reçoit l'audio ici.
+    """
+    return (provider or active_provider()) == "gemini"
+
+
+#: Consignes de l'auditeur factuel (« 2e jet »). Volontairement PERMISSIF :
+#: un contrôle qui crie à tort est pire qu'un contrôle muet — le médecin
+#: doit pouvoir considérer « aucune liste » comme « rien à signaler » sans
+#: vérification systématique. L'audio fait foi ; une transcription éventuelle
+#: n'est fournie qu'à titre indicatif (Parakeet se trompe), jamais comme
+#: référence pour accuser une omission.
+_AUDITOR_PROMPTS = {
+    "fr": (
+        "Tu es auditeur factuel d'une note clinique rédigée à partir d'une "
+        "dictée. L'AUDIO est la seule source de vérité ; une transcription "
+        "éventuellement jointe est APPROXIMATIVE et ne doit jamais servir à "
+        "accuser une omission.\n"
+        "Compare la note à l'audio et signale uniquement les écarts dont tu "
+        "es CERTAIN :\n"
+        "- « omissions » : information clairement dictée dans l'audio et "
+        "totalement absente de la note. Une reformulation, un synonyme "
+        "médical exact ou un regroupement n'est PAS une omission.\n"
+        "- « inventions » : affirmation concrète de la note (médicament, "
+        "dose, diagnostic, antécédent, chiffre…) absente de l'audio.\n"
+        "Sois très permissif avec la note : style, ordre des rubriques, "
+        "généralisations bénignes et mise en forme ne comptent pas. Dans le "
+        "doute, ne signale PAS. Au plus 5 éléments courts par liste ; si "
+        "rien à signaler, listes vides. « confiance » : ta certitude globale "
+        "(haute/moyenne/basse)."
+    ),
+    "en": (
+        "You are a factual auditor of a clinical note written from a "
+        "dictation. The AUDIO is the sole source of truth; any attached "
+        "transcript is APPROXIMATE and must never be used to accuse an "
+        "omission.\n"
+        "Compare the note with the audio and flag ONLY discrepancies you are "
+        "CERTAIN about:\n"
+        "- \"omissions\": information clearly dictated in the audio and "
+        "entirely absent from the note. A reformulation, an exact medical "
+        "synonym, or a grouping is NOT an omission.\n"
+        "- \"inventions\": concrete statements in the note (medication, "
+        "dose, diagnosis, history, number…) absent from the audio.\n"
+        "Be very permissive with the note: style, section order, benign "
+        "generalizations, and formatting do not count. When in doubt, do NOT "
+        "flag. At most 5 short items per list; empty lists if nothing to "
+        "report. \"confiance\": your overall certainty (haute/moyenne/basse)."
+    ),
+}
+
+#: Schéma de sortie contraint du « 2e jet » : listes plates de chaînes,
+#: rien de plus — l'interface affiche des puces, pas une ontologie.
+#: Construit à la demande : le SDK google-genai se charge paresseusement,
+#: comme partout dans ce module.
+
+
+def _verification_schema():
+    from google.genai import types
+
+    chaine = lambda: types.Schema(type=types.Type.STRING)
+    return types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "omissions": types.Schema(
+                type=types.Type.ARRAY, items=chaine()
+            ),
+            "inventions": types.Schema(
+                type=types.Type.ARRAY, items=chaine()
+            ),
+            "confiance": types.Schema(
+                type=types.Type.STRING, enum=["haute", "moyenne", "basse"]
+            ),
+        },
+        required=["omissions", "inventions", "confiance"],
+    )
+
+
+def verify_note(
+    note_markdown: str,
+    langue: str = "fr",
+    audio: Optional[Tuple[bytes, str]] = None,
+    transcript: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
+    """
+    « 2e jet » : audite la note contre l'AUDIO de la dictée.
+
+    Retourne ``(résultat, usage)`` — ``résultat`` vaut ``None`` au moindre
+    doute (pas d'audio, appel impossible, JSON invalide) : l'appelant traite
+    cela comme « rien à afficher », jamais comme une erreur bloquante.
+    """
+    from google.genai import types
+
+    if audio is None:
+        logger.info("« 2e jet » ignoré : aucun audio joint à la consultation")
+        return None, {}
+
+    client = get_client("gemini")
+    nom_modele = model or active_model()
+    langue_norm = i18n.normalize(langue)
+
+    blocs = [
+        f"<NOTE_AUDITER>\n{(note_markdown or '').strip()}\n</NOTE_AUDITER>"
+    ]
+    transcript_propre = (transcript or "").strip()
+    if transcript_propre:
+        # Indicatif seulement : le texte brut peut contenir les erreurs du
+        # service vocal, jamais élevé au rang de référence.
+        blocs.append(
+            "<TRANSCRIPTION_INDICATIVE_approximative_ne_pas_servir_de_reference>\n"
+            f"{transcript_propre}\n"
+            "</TRANSCRIPTION_INDICATIVE_approximative_ne_pas_servir_de_reference>"
+        )
+    contenu: List[object] = [
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="\n\n".join(blocs))],
+        ),
+        types.Part.from_bytes(data=audio[0], mime_type=audio[1]),
+    ]
+
+    config_kwargs: Dict[str, object] = dict(
+        system_instruction=_AUDITOR_PROMPTS.get(langue_norm, _AUDITOR_PROMPTS["fr"]),
+        temperature=0.2,
+        max_output_tokens=settings.gemini_max_output_tokens,
+        safety_settings=_safety_settings(),
+        thinking_config=types.ThinkingConfig(
+            thinking_budget=_GEMINI_THINKING_BUDGET_MIN
+        ),
+        response_mime_type="application/json",
+        response_schema=_verification_schema(),
+    )
+
+    t0 = time.monotonic()
+    try:
+        response = _gemini_appel(
+            client,
+            nom_modele,
+            contenu,
+            types.GenerateContentConfig(**config_kwargs),
+        )
+    except Exception as exc:
+        if _est_think_refusee_gemini(exc):
+            config_kwargs.pop("thinking_config", None)
+            try:
+                response = _gemini_appel(
+                    client,
+                    nom_modele,
+                    contenu,
+                    types.GenerateContentConfig(**config_kwargs),
+                )
+            except Exception as exc2:
+                logger.warning("« 2e jet » refusé (%s) : %s", nom_modele, exc2)
+                return None, {}
+        else:
+            logger.warning("« 2e jet » impossible (%s) : %s", nom_modele, exc)
+            return None, {}
+
+    usage = _gemini_usage(getattr(response, "usage_metadata", None))
+    logger.info(
+        "Gemini %s (contrôle) : %s jetons de prompt (%s audio), %s en réponse, %.1f s",
+        nom_modele, usage.get("prompt_tokens"), usage.get("audio_prompt_tokens"),
+        usage.get("output_tokens"), time.monotonic() - t0,
+    )
+
+    brut = getattr(response, "text", "") or ""
+    try:
+        donnees = json.loads(brut)
+    except ValueError:
+        logger.warning("« 2e jet » : réponse non JSON ignorée (%d caractères)", len(brut))
+        return None, usage
+
+    def _liste(valeur: object) -> List[str]:
+        if not isinstance(valeur, list):
+            return []
+        propres = [str(item).strip() for item in valeur if str(item).strip()]
+        return propres[:8]
+
+    confiance = str(donnees.get("confiance") or "").strip().lower()
+    resultat = {
+        "omissions": _liste(donnees.get("omissions")),
+        "inventions": _liste(donnees.get("inventions")),
+        "confiance": confiance if confiance in ("haute", "moyenne", "basse") else "moyenne",
+    }
+    return resultat, usage
+
+
 def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None) -> Completion:
     from google.genai import types
 

@@ -562,6 +562,9 @@
     // peut s'activer sans transcription, voir updateActionButtons().
     llmBypassStt: false,
     llmBypassSttKeepTranscript: false,
+    // « 2e jet » : préférence usager (serveur), capacité du fournisseur.
+    secondPass: false,
+    verificationCapable: true,
     // Toast « brouillon abandonné » montré pendant CETTE page : remontré à
     // chaque chargement tant qu'un brouillon « abandonnée » existe (voir
     // refreshAbandonedState). Les annonces en direct (SSE) se dédupliquent
@@ -2178,6 +2181,168 @@
     $('transcriptMeta').textContent = parts.join(' · ');
   }
 
+  /* =========================================================================
+   * 2e JET — audit factuel audio↔note
+   * ======================================================================
+   * Bascule à côté de « Mettre en forme » (préférence par usager, défaut
+   * OFF). Quand elle est active, chaque génération est suivie d'un contrôle :
+   * l'AUDIO fait foi (la transcription Parakeet est trop imprécise pour
+   * servir de référence) ; les écarts certains arrivent en SSE
+   * ``verification_result`` et s'affichent en listes plates dans le second
+   * onglet du panneau de transcription.
+   *
+   * Pendant la vérification : roue sur le TITRE de l'onglet, la vue reste sur
+   * la transcription — on ne bascule qu'à l'arrivée du résultat.
+   * ====================================================================== */
+  let secondPassData = null;   // dernier audit affichable, ou null
+
+  function updateSecondPassToggle() {
+    const actif = state.secondPass;
+    for (const id of ['btnSecondPass', 'btnSecondPassMobile']) {
+      const bouton = $(id);
+      if (!bouton) continue;
+      bouton.setAttribute('aria-pressed', actif ? 'true' : 'false');
+      bouton.classList.toggle('secondpass-on', actif);
+    }
+  }
+
+  function updateSecondPassAvailability() {
+    const capable = state.verificationCapable !== false;
+    for (const id of ['btnSecondPass', 'btnSecondPassMobile']) {
+      const bouton = $(id);
+      if (!bouton) continue;
+      bouton.disabled = !capable;
+      bouton.title = capable ? T('secondpass.title') : T('secondpass.unavailable');
+    }
+    if (!capable && state.secondPass) {
+      state.secondPass = false;
+      updateSecondPassToggle();
+    }
+  }
+
+  async function toggleSecondPass() {
+    const cible = !state.secondPass;
+    // Optimiste : retour à l'état précédent si le serveur refuse.
+    state.secondPass = cible;
+    updateSecondPassToggle();
+    try {
+      await api('/api/me/second_pass', { method: 'PUT', body: { enabled: cible } });
+    } catch (err) {
+      state.secondPass = !cible;
+      updateSecondPassToggle();
+      toast(err.message || T('secondpass.save_error'), 'error', 8000);
+    }
+  }
+
+  function selectDicteeTab(tab) {
+    const vueTranscription = $('transcriptView');
+    const vueSecondPass = $('secondPassView');
+    if (!vueTranscription || !vueSecondPass) return;
+    const transcriptionActive = tab !== 'secondpass';
+    vueTranscription.classList.toggle('hidden', !transcriptionActive);
+    vueSecondPass.classList.toggle('hidden', transcriptionActive);
+
+    const ongletTranscription = $('tabTranscript');
+    const ongletSecondPass = $('tabSecondPass');
+    if (ongletTranscription && ongletSecondPass) {
+      ongletTranscription.classList.toggle('accent-tab', transcriptionActive);
+      ongletTranscription.classList.toggle('text-slate-700', transcriptionActive);
+      ongletTranscription.classList.toggle('text-slate-500', !transcriptionActive);
+      ongletSecondPass.classList.toggle('accent-tab', !transcriptionActive);
+      ongletSecondPass.classList.toggle('text-slate-700', !transcriptionActive);
+      ongletSecondPass.classList.toggle('text-slate-500', transcriptionActive);
+    }
+  }
+
+  function setSecondPassSpinner(actif) {
+    const roue = $('secondPassSpinner');
+    if (roue) roue.classList.toggle('hidden', !actif);
+  }
+
+  /** Nouvelle génération avec « 2e jet » : état « en cours », sans basculer. */
+  function enterSecondPassPending() {
+    secondPassData = null;
+    setSecondPassSpinner(true);
+    $('secondPassPending').classList.remove('hidden');
+    $('secondPassContent').classList.add('hidden');
+    $('secondPassEmpty').classList.add('hidden');
+  }
+
+  function stopSecondPassPending() {
+    setSecondPassSpinner(false);
+    $('secondPassPending').classList.add('hidden');
+  }
+
+  /**
+   * Rend les listes plates. ``basculer`` : true à l'ARRIVÉE du résultat en
+   * direct (l'onglet s'ouvre alors), false pour une réaffichage silencieux
+   * (rechargement de page — jamais de saut d'onglet au chargement).
+   */
+  function renderSecondPass(resultat, basculer) {
+    secondPassData = resultat || null;
+    stopSecondPassPending();
+
+    const contenu = $('secondPassContent');
+    const vide = $('secondPassEmpty');
+    const omissions = (resultat && resultat.omissions) || [];
+    const inventions = (resultat && resultat.inventions) || [];
+    const confiance = (resultat && resultat.confiance) || '';
+
+    if (!resultat || (!omissions.length && !inventions.length)) {
+      contenu.classList.add('hidden');
+      contenu.innerHTML = '';
+      vide.classList.remove('hidden');
+      if (basculer) selectDicteeTab('secondpass');
+      return;
+    }
+    vide.classList.add('hidden');
+
+    const lignes = [];
+    lignes.push(`<p class="text-[11px] uppercase tracking-wide text-slate-400">${esc(T('secondpass.summary'))}</p>`);
+    if (omissions.length) {
+      lignes.push(
+        `<div><p class="font-semibold text-slate-700 mb-1">${esc(T('secondpass.omissions'))}</p>` +
+        `<ul class="list-disc pl-5 space-y-0.5">` +
+        omissions.map((item) => `<li>${esc(item)}</li>`).join('') +
+        `</ul></div>`
+      );
+    }
+    if (inventions.length) {
+      lignes.push(
+        `<div><p class="font-semibold text-slate-700 mb-1">${esc(T('secondpass.inventions'))}</p>` +
+        `<ul class="list-disc pl-5 space-y-0.5">` +
+        inventions.map((item) => `<li>${esc(item)}</li>`).join('') +
+        `</ul></div>`
+      );
+    }
+    if (confiance) {
+      lignes.push(`<p class="text-[11px] text-slate-400">${esc(T('secondpass.confidence'))} : ${esc(confiance)}</p>`);
+    }
+    contenu.innerHTML = lignes.join('');
+    contenu.classList.remove('hidden');
+
+    if (basculer) {
+      setMobilePane('dictee');
+      selectDicteeTab('secondpass');
+    }
+  }
+
+  function onVerificationResult(evt) {
+    let donnees;
+    try {
+      donnees = JSON.parse(evt.data || '{}');
+    } catch {
+      return;
+    }
+    if (!donnees.generation_token || donnees.generation_token !== state.generationToken) return;
+    if (String(donnees.consultation_id) !== String(state.consultationId)) return;
+    renderSecondPass({
+      omissions: Array.isArray(donnees.omissions) ? donnees.omissions : [],
+      inventions: Array.isArray(donnees.inventions) ? donnees.inventions : [],
+      confiance: donnees.confiance || '',
+    }, true);
+  }
+
   async function generateNote() {
     // Une dictée encore active (enregistrement ou pause) doit d'abord être
     // conclue : les dernières secondes — celles dites juste avant une pause —
@@ -2250,6 +2415,7 @@
 
     try {
       const consultationId = await ensureConsultation();
+      if (state.secondPass) enterSecondPassPending();
       const result = await api('/api/generate', {
         method: 'POST',
         signal: controller.signal,
@@ -2260,6 +2426,7 @@
           extra_instructions: $('ctxExtra').value.trim(),
           use_pro: false,
           generation_token: state.generationToken,
+          second_pass: state.secondPass,
         }, readMetadata()),
       });
 
@@ -3414,6 +3581,18 @@
         requester: draft.requester,
         accompanied_by: draft.accompanied_by,
       });
+
+      // « 2e jet » : réafficher l'audit existant SILENCIEUSEMENT — jamais de
+      // saut d'onglet au chargement d'un brouillon.
+      if (draft.verification_json) {
+        try {
+          renderSecondPass(JSON.parse(draft.verification_json), false);
+        } catch {
+          renderSecondPass(null, false);
+        }
+      } else {
+        renderSecondPass(null, false);
+      }
 
       if (draft.template_id) {
         $('templateSelect').value = String(draft.template_id);
@@ -5568,6 +5747,11 @@
     state.isAdmin = Boolean(config.is_admin);
     state.llmBypassStt = Boolean(config.llm_bypass_stt);
     state.llmBypassSttKeepTranscript = Boolean(config.llm_bypass_stt_keep_transcript);
+    // « 2e jet » : capable = fournisseur audio ; préférence = valeur usager.
+    state.verificationCapable = Boolean(config.verification_capable);
+    state.secondPass = Boolean(config.second_pass) && state.verificationCapable;
+    updateSecondPassToggle();
+    updateSecondPassAvailability();
     updateActionButtons();
     updateBypassSttNotice();
     renderLanguageChoices(config.languages, config.language || LANG);
@@ -6076,6 +6260,7 @@
     liveSource.addEventListener('generation_chunk', onGenerationChunk);
     liveSource.addEventListener('generation_thought', onGenerationThought);
     liveSource.addEventListener('generation_started', onGenerationStarted);
+    liveSource.addEventListener('verification_result', onVerificationResult);
     liveSource.addEventListener('transcription_progress', onTranscriptionProgress);
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);
     liveSource.addEventListener('consultation_created', onSyncConsultationCreated);
@@ -6094,6 +6279,10 @@
 
     // --- Enregistrement ---
     $('btnRecord').addEventListener('click', startRecording);
+    $('btnSecondPass').addEventListener('click', toggleSecondPass);
+    $('btnSecondPassMobile').addEventListener('click', toggleSecondPass);
+    $('tabTranscript').addEventListener('click', () => selectDicteeTab('transcript'));
+    $('tabSecondPass').addEventListener('click', () => selectDicteeTab('secondpass'));
     $('btnPause').addEventListener('click', togglePause);
     $('btnFinish').addEventListener('click', finishRecording);
     $('btnAbort').addEventListener('click', abortRecording);

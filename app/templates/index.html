@@ -242,11 +242,21 @@
     .accent-btn-bordered { border-color: var(--color-accent); }
     .accent-btn-ghost { border: 1px solid var(--color-accent-border); color: var(--color-accent); }
     .accent-btn-ghost:hover { background-color: var(--color-accent-bg-subtle); }
-    /* Bascule « 2e jet » active : même vocabulaire visuel que les boutons
-       d'accent, en plus discret — c'est un état, pas une action primaire. */
-    .secondpass-on { border-color: var(--color-accent-border) !important;
-                     color: var(--color-accent) !important;
-                     background-color: var(--color-accent-bg-subtle) !important; }
+    /* Interrupteur « 2e jet » : état ON = piste colorée + bouton coulissé à
+       droite. Le switch n'est PAS dans les classes utilitaires (position du
+       bouton traduite en transform), d'où cette règle dédiée. */
+    .secondpass-switch .secondpass-track { background-color: var(--color-slate-200, #e2e8f0); }
+    .secondpass-switch.secondpass-on .secondpass-track {
+      background-color: var(--color-accent);
+    }
+    .secondpass-switch.secondpass-on .secondpass-knob { transform: translateX(16px); }
+    .secondpass-switch.secondpass-on #secondPassLabel { color: var(--color-accent); }
+    /* Variante mobile (bouton-pilule) : état actif en accent discret. */
+    #btnSecondPassMobile.secondpass-on {
+      border-color: var(--color-accent-border);
+      color: var(--color-accent);
+      background-color: var(--color-accent-bg-subtle);
+    }
     .accent-bg-subtle, .hover\:accent-bg-subtle:hover { background-color: var(--color-accent-bg-subtle); }
     .accent-text { color: var(--color-accent); }
     .accent-border { border-color: var(--color-accent-border); }
@@ -717,13 +727,20 @@
           </button>
           <!-- « 2e jet » : audit factuel audio↔note après génération.
                Préférence par usager (PUT /api/me/second_pass), défaut OFF.
-               Grisé quand le fournisseur actif ne peut pas auditer
-               (voir refreshClientConfig/updateSecondPassToggle côté JS). -->
-          <button id="btnSecondPass" type="button" aria-pressed="false"
+               Interrupteur visuel (gauche = hors, droite = en marche), même
+               hauteur que « Mettre en forme », collé à lui. Grisé quand le
+               fournisseur actif ne peut pas auditer (voir
+               refreshClientConfig/updateSecondPassToggle côté JS). -->
+          <button id="btnSecondPass" type="button" role="switch" aria-checked="false"
                   title="{{ t('secondpass.title') }}"
-                  class="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50
-                         text-slate-600 disabled:opacity-40 transition">
-            {{ t('secondpass.toggle') }}
+                  class="secondpass-switch inline-flex items-center gap-1.5 shrink-0
+                         text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition">
+            <span class="secondpass-track relative w-9 h-5 rounded-full bg-slate-200
+                         transition-colors" aria-hidden="true">
+              <span class="secondpass-knob absolute top-0.5 left-0.5 h-4 w-4 rounded-full
+                           bg-white shadow transition-transform"></span>
+            </span>
+            <span id="secondPassLabel" class="text-slate-600">{{ t('secondpass.toggle') }}</span>
           </button>
           <button id="btnGenerate" type="button"
                    class="accent-btn px-4 py-1.5 rounded-lg text-sm font-semibold
@@ -736,6 +753,7 @@
            reçoit l'audit factuel audio↔note quand il arrive (SSE
            ``verification_result``). Pendant la vérification, le titre du
            second onglet porte une roue et la vue reste sur la transcription. -->
+      <div class="flex-1 min-h-0 flex flex-col">
       <div class="flex items-end gap-1 px-2 pt-2 shrink-0 border-b border-slate-200" id="dicteeTabs" role="tablist">
         <button id="tabTranscript" type="button" data-tab="transcript" role="tab" aria-selected="true"
                 class="px-3 py-1.5 rounded-t-md text-xs font-semibold text-slate-700 accent-tab -mb-px">
@@ -798,6 +816,7 @@
         <p id="secondPassEmpty" class="hidden italic text-slate-400">
           {{ t('secondpass.empty') }}
         </p>
+      </div>
       </div>
     </section>
 

@@ -2216,22 +2216,25 @@
 
   function updateSecondPassToggle() {
     const actif = state.secondPass;
-    for (const id of ['btnSecondPass', 'btnSecondPassMobile']) {
-      const bouton = $(id);
-      if (!bouton) continue;
-      bouton.setAttribute('aria-pressed', actif ? 'true' : 'false');
+    const bouton = $('btnSecondPass');
+    if (bouton) {
+      bouton.setAttribute('aria-checked', actif ? 'true' : 'false');
       bouton.classList.toggle('secondpass-on', actif);
+    }
+    // Variante mobile : bouton-pilule à état (pressed).
+    const mobile = $('btnSecondPassMobile');
+    if (mobile) {
+      mobile.setAttribute('aria-pressed', actif ? 'true' : 'false');
+      mobile.classList.toggle('secondpass-on', actif);
     }
   }
 
   function updateSecondPassAvailability() {
     const capable = state.verificationCapable !== false;
-    for (const id of ['btnSecondPass', 'btnSecondPassMobile']) {
-      const bouton = $(id);
-      if (!bouton) continue;
-      bouton.disabled = !capable;
-      bouton.title = capable ? T('secondpass.title') : T('secondpass.unavailable');
-    }
+    const bouton = $('btnSecondPass');
+    const mobile = $('btnSecondPassMobile');
+    if (bouton) bouton.disabled = !capable;
+    if (mobile) mobile.disabled = !capable;
     if (!capable && state.secondPass) {
       state.secondPass = false;
       updateSecondPassToggle();

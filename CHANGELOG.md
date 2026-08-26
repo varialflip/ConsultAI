@@ -8,7 +8,7 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 *Première candidate de la version 2 : inclut tout depuis la bêta.84 — les
 entrées du jour et du 25 août ci-dessous.*
 
-- **« 2e jet » : audit factuel de chaque note contre l'audio.** Nouvelle
+- **« Validation » : audit factuel de chaque note contre l'audio.** Nouvelle
   bascule à côté de « Mettre en forme » (préférence par usager, désactivée
   par défaut) : après la note, un second appel compare celle-ci à l'AUDIO de
   la dictée — jamais à la transcription Parakeet, trop imprécise pour servir

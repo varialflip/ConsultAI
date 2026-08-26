@@ -562,7 +562,7 @@
     // peut s'activer sans transcription, voir updateActionButtons().
     llmBypassStt: false,
     llmBypassSttKeepTranscript: false,
-    // « 2e jet » : préférence usager (serveur), capacité du fournisseur.
+    // « Validation » : préférence usager (serveur), capacité du fournisseur.
     secondPass: false,
     verificationCapable: true,
     // Toast « brouillon abandonné » montré pendant CETTE page : remontré à
@@ -2221,6 +2221,11 @@
       bouton.setAttribute('aria-checked', actif ? 'true' : 'false');
       bouton.classList.toggle('secondpass-on', actif);
     }
+    const goujon = $('secondPassKnob');
+    if (goujon) {
+      goujon.classList.toggle('translate-x-0.5', !actif);
+      goujon.classList.toggle('translate-x-4', actif);
+    }
     // Variante mobile : bouton-pilule à état (pressed).
     const mobile = $('btnSecondPassMobile');
     if (mobile) {
@@ -2285,7 +2290,7 @@
     if (roue) roue.classList.toggle('hidden', !actif);
   }
 
-  /** Nouvelle génération avec « 2e jet » : état « en cours », sans basculer. */
+  /** Nouvelle génération avec « Validation » : état « en cours », sans basculer. */
   function enterSecondPassPending() {
     secondPassData = null;
     // Le jeton de CETTE génération est celui que l'évènement portera — il
@@ -3624,7 +3629,7 @@
         accompanied_by: draft.accompanied_by,
       });
 
-      // « 2e jet » : réafficher l'audit existant SILENCIEUSEMENT — jamais de
+      // « Validation » : réafficher l'audit existant SILENCIEUSEMENT — jamais de
       // saut d'onglet au chargement d'un brouillon.
       if (draft.verification_json) {
         try {
@@ -5793,7 +5798,7 @@
     state.isAdmin = Boolean(config.is_admin);
     state.llmBypassStt = Boolean(config.llm_bypass_stt);
     state.llmBypassSttKeepTranscript = Boolean(config.llm_bypass_stt_keep_transcript);
-    // « 2e jet » : capable = fournisseur audio ; préférence = valeur usager.
+    // « Validation » : capable = fournisseur audio ; préférence = valeur usager.
     state.verificationCapable = Boolean(config.verification_capable);
     state.secondPass = Boolean(config.second_pass) && state.verificationCapable;
     updateSecondPassToggle();
@@ -5830,7 +5835,7 @@
         : `${sttShort} → ${llmShort}`;
       // Infobulle : fournisseur + version EXACTE du code en cours d'exécution
       // — diagnostic de fraîcheur immédiat (un JavaScript périmé s'affiche ici).
-      label.title = `${config.llm_provider || ''} — v${config.version || '?'} + ${config.verification_capable ? '2e jet ✓' : '2e jet ✗'}`;
+      label.title = `${config.llm_provider || ''} — v${config.version || '?'} + ${config.verification_capable ? 'Validation ✓' : 'Validation ✗'}`;
     }
     return config;
   }

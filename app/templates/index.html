@@ -242,15 +242,11 @@
     .accent-btn-bordered { border-color: var(--color-accent); }
     .accent-btn-ghost { border: 1px solid var(--color-accent-border); color: var(--color-accent); }
     .accent-btn-ghost:hover { background-color: var(--color-accent-bg-subtle); }
-    /* Interrupteur « 2e jet » : état ON = piste colorée + bouton coulissé à
-       droite. Le switch n'est PAS dans les classes utilitaires (position du
-       bouton traduite en transform), d'où cette règle dédiée. */
-    .secondpass-switch .secondpass-track { background-color: var(--color-slate-200, #e2e8f0); }
-    .secondpass-switch.secondpass-on .secondpass-track {
+    /* Interrupteur « Validation » : piste colorée quand activé. Le goujon est
+       déplacé par Tailwind (translate-x-*), pas par cette règle. */
+    .secondpass-switch.secondpass-on > span:first-child {
       background-color: var(--color-accent);
     }
-    .secondpass-switch.secondpass-on .secondpass-knob { transform: translateX(16px); }
-    .secondpass-switch.secondpass-on #secondPassLabel { color: var(--color-accent); }
     /* Variante mobile (bouton-pilule) : état actif en accent discret. */
     #btnSecondPassMobile.secondpass-on {
       border-color: var(--color-accent-border);
@@ -725,22 +721,26 @@
                          text-slate-600 disabled:opacity-40">
             {{ t('retranscribe.action') }}
           </button>
-          <!-- « 2e jet » : audit factuel audio↔note après génération.
+          <!-- « Validation » : audit factuel audio↔note après génération.
                Préférence par usager (PUT /api/me/second_pass), défaut OFF.
-               Interrupteur visuel (gauche = hors, droite = en marche), même
-               hauteur que « Mettre en forme », collé à lui. Grisé quand le
-               fournisseur actif ne peut pas auditer (voir
-               refreshClientConfig/updateSecondPassToggle côté JS). -->
+               Interrupteur classique : piste + goujon coulissant (gauche =
+               hors, droite = en marche), bouton de MÊME hauteur que
+               « Mettre en forme » (h-8), collé à lui. Grisé quand le
+               fournisseur actif ne peut pas auditer (voir refreshClientConfig
+               /updateSecondPassToggle côté JS). -->
           <button id="btnSecondPass" type="button" role="switch" aria-checked="false"
                   title="{{ t('secondpass.title') }}"
-                  class="secondpass-switch inline-flex items-center gap-1.5 shrink-0
-                         text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition">
-            <span class="secondpass-track relative w-9 h-5 rounded-full bg-slate-200
-                         transition-colors" aria-hidden="true">
-              <span class="secondpass-knob absolute top-0.5 left-0.5 h-4 w-4 rounded-full
-                           bg-white shadow transition-transform"></span>
+                  class="secondpass-switch inline-flex items-center gap-2 shrink-0
+                         h-8 px-2 rounded border border-slate-200 text-xs font-semibold
+                         text-slate-600 hover:bg-slate-50
+                         disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            <span aria-hidden="true" class="inline-flex items-center w-9 h-5 rounded-full
+                                           bg-slate-300 shrink-0">
+              <span id="secondPassKnob"
+                    class="inline-block h-4 w-4 rounded-full bg-white shadow
+                           translate-x-0.5 transition-transform"></span>
             </span>
-            <span id="secondPassLabel" class="text-slate-600">{{ t('secondpass.toggle') }}</span>
+            <span id="secondPassLabel">{{ t('secondpass.toggle') }}</span>
           </button>
           <button id="btnGenerate" type="button"
                    class="accent-btn px-4 py-1.5 rounded-lg text-sm font-semibold
@@ -749,7 +749,7 @@
           </button>
         </div>
       </div>
-      <!-- ONGLETS DU PANNEAU : « Transcription » par défaut ; « 2e jet »
+      <!-- ONGLETS DU PANNEAU : « Transcription » par défaut ; « Validation »
            reçoit l'audit factuel audio↔note quand il arrive (SSE
            ``verification_result``). Pendant la vérification, le titre du
            second onglet porte une roue et la vue reste sur la transcription. -->

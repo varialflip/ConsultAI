@@ -264,7 +264,7 @@ class Consultation(Base):
     usage_prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     usage_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     generation_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Résultat du « 2e jet » (audit factuel audio↔note), sérialisé JSON.
+    # Résultat du « Validation » (audit factuel audio↔note), sérialisé JSON.
     # Nullable : absent = jamais demandé ; présent mais invalide = ignoré
     # côté interface, comme si absent. Suit la note qu'il audite et meurt
     # avec le brouillon, comme elle.
@@ -672,7 +672,7 @@ class UserPreference(Base):
     language: Mapped[str] = mapped_column(String(8), default="", nullable=False)
     #: Thème de couleur : « teal », « blue », … ou vide pour suivre le défaut.
     theme_color: Mapped[str] = mapped_column(String(32), default="", nullable=False)
-    #: « 2e jet » : audit factuel de la note après génération. Défaut OFF :
+    #: « Validation » : audit factuel de la note après génération. Défaut OFF :
     #  coûte un second appel modèle, se déclenche sur demande expresse.
     second_pass: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

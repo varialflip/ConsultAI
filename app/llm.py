@@ -908,7 +908,7 @@ def _gemini_appel(client, model, contents, config) -> "object":
 
 def verification_capable(provider: Optional[str] = None) -> bool:
     """
-    « 2e jet » disponible pour ce fournisseur ?
+    « Validation » disponible pour ce fournisseur ?
 
     L'audit compare la note à l'AUDIO (source de vérité — la transcription
     Parakeet est trop imprécise pour servir de référence) : seul le chemin
@@ -917,7 +917,7 @@ def verification_capable(provider: Optional[str] = None) -> bool:
     return (provider or active_provider()) == "gemini"
 
 
-#: Consignes de l'auditeur factuel (« 2e jet »). Volontairement PERMISSIF :
+#: Consignes de l'auditeur factuel (« Validation »). Volontairement PERMISSIF :
 #: un contrôle qui crie à tort est pire qu'un contrôle muet — le médecin
 #: doit pouvoir considérer « aucune liste » comme « rien à signaler » sans
 #: vérification systématique. L'audio fait foi ; une transcription éventuelle
@@ -961,7 +961,7 @@ _AUDITOR_PROMPTS = {
     ),
 }
 
-#: Schéma de sortie contraint du « 2e jet » : listes plates de chaînes,
+#: Schéma de sortie contraint du « Validation » : listes plates de chaînes,
 #: rien de plus — l'interface affiche des puces, pas une ontologie.
 #: Construit à la demande : le SDK google-genai se charge paresseusement,
 #: comme partout dans ce module.
@@ -996,7 +996,7 @@ def verify_note(
     model: Optional[str] = None,
 ) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
     """
-    « 2e jet » : audite la note contre l'AUDIO de la dictée.
+    « Validation » : audite la note contre l'AUDIO de la dictée.
 
     Retourne ``(résultat, usage)`` — ``résultat`` vaut ``None`` au moindre
     doute (pas d'audio, appel impossible, JSON invalide) : l'appelant traite
@@ -1005,7 +1005,7 @@ def verify_note(
     from google.genai import types
 
     if audio is None:
-        logger.info("« 2e jet » ignoré : aucun audio joint à la consultation")
+        logger.info("« Validation » ignoré : aucun audio joint à la consultation")
         return None, {}
 
     client = get_client("gemini")
@@ -1063,10 +1063,10 @@ def verify_note(
                     types.GenerateContentConfig(**config_kwargs),
                 )
             except Exception as exc2:
-                logger.warning("« 2e jet » refusé (%s) : %s", nom_modele, exc2)
+                logger.warning("« Validation » refusé (%s) : %s", nom_modele, exc2)
                 return None, {}
         else:
-            logger.warning("« 2e jet » impossible (%s) : %s", nom_modele, exc)
+            logger.warning("« Validation » impossible (%s) : %s", nom_modele, exc)
             return None, {}
 
     usage = _gemini_usage(getattr(response, "usage_metadata", None))
@@ -1080,7 +1080,7 @@ def verify_note(
     try:
         donnees = json.loads(brut)
     except ValueError:
-        logger.warning("« 2e jet » : réponse non JSON ignorée (%d caractères)", len(brut))
+        logger.warning("« Validation » : réponse non JSON ignorée (%d caractères)", len(brut))
         return None, usage
 
     def _liste(valeur: object) -> List[str]:

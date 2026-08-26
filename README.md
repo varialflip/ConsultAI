@@ -255,7 +255,7 @@ COHERE_LLM_THINKING_BUDGET=1024
 > préfixe partagé couvre consigne système + gabarit + structure exigée et
 > non la seule consigne système.
 
-> **🔎 « 2e jet » — audit factuel de la note.** Bascule à côté du bouton
+> **🔎 « Validation » — audit factuel de la note.** Bascule à côté du bouton
 > « Mettre en forme » (préférence par usager, désactivée par défaut). Quand
 > elle est active, chaque génération est suivie d'un second appel qui
 > compare la note à l'AUDIO de la dictée (source de vérité — jamais la

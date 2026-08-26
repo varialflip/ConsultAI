@@ -290,12 +290,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "pane.dictation": ("Dictée", "Dictation"),
     "pane.note": ("Note structurée", "Structured note"),
     "pane.raw": ("Transcription brute", "Raw transcript"),
-    "secondpass.toggle": ("2e jet", "2nd pass"),
-    "secondpass.tab": ("2e jet", "2nd pass"),
+    "secondpass.toggle": ("Validation", "Validation"),
+    "secondpass.tab": ("Validation", "Validation"),
     "secondpass.title": (
-        "« 2e jet » : après chaque note, comparer la note à l'audio et "
+        "Validation : après chaque note, comparer la note à l'audio et "
         "signaler les écarts certains (omissions / éléments non dictés).",
-        "\u201c2nd pass\u201d: after each note, compare it against the audio "
+        "Validation: after each note, compare it against the audio "
         "and flag certain discrepancies (omissions / non-dictated items).",
     ),
     "secondpass.pending": (
@@ -321,8 +321,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Unavailable: the active provider does not send audio.",
     ),
     "secondpass.save_error": (
-        "Préférence « 2e jet » non enregistrée.",
-        "Could not save the \u201c2nd pass\u201d preference.",
+        "Préférence « Validation » non enregistrée.",
+        "Could not save the \u201cValidation\u201d preference.",
     ),
     "pane.clear": ("Supprimer", "Delete"),
     "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),

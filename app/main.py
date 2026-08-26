@@ -489,7 +489,7 @@ class GenerateIn(BaseModel):
     # ne s'appliquer que SES propres morceaux et d'ignorer ceux d'un flux
     # supplanté (voir _generate_and_publish et connectLiveEvents côté JS).
     generation_token: str = ""
-    # « 2e jet » : après la note, auditer audio↔note (listes d'écarts).
+    # « Validation » : après la note, auditer audio↔note (listes d'écarts).
     # Préférence par usager, reflétée par la bascule à côté du bouton.
     second_pass: bool = False
 
@@ -1304,7 +1304,7 @@ class ThemeIn(BaseModel):
 
 
 class SecondPassIn(BaseModel):
-    #: « 2e jet » : auditer chaque note après génération (audio↔note).
+    #: « Validation » : auditer chaque note après génération (audio↔note).
     enabled: bool
 
 
@@ -1353,7 +1353,7 @@ def put_my_theme(payload: ThemeIn, request: Request):
 
 @app.put("/api/me/second_pass")
 def put_my_second_pass(payload: SecondPassIn, request: Request):
-    """Enregistre la préférence « 2e jet » de l'usager courant."""
+    """Enregistre la préférence « Validation » de l'usager courant."""
     user = current_user(request)
     retenu = preferences.set_second_pass(user.owner_key, payload.enabled)
     return {"second_pass": retenu}
@@ -1415,7 +1415,7 @@ async def api_config(request: Request):
         "llm_bypass_stt": audio_opts["bypass_stt"],
         "llm_bypass_stt_keep_transcript": audio_opts["keep_transcript"],
         "gemini_backend": "vertex" if settings.gemini_use_vertex else "api_key",
-        # « 2e jet » : capable (fournisseur audio) et préférence de l'usager.
+        # « Validation » : capable (fournisseur audio) et préférence de l'usager.
         "verification_capable": llm.verification_capable(),
         "second_pass": preferences.second_pass_for(user.owner_key),
         "max_audio_mb": settings.max_audio_mb,
@@ -2730,7 +2730,7 @@ def _generate_and_publish(
 
 #: Références fortes aux tâches de fond : la boucle ne garde qu'une référence
 #: faible aux ``asyncio.Task`` — sans ce set, une tâche peut être ramassée
-#: en pleine course (ici : l'audit « 2e jet » disparaîtrait silencieusement).
+#: en pleine course (ici : l'audit « Validation » disparaîtrait silencieusement).
 _taches_fond: set = set()
 
 
@@ -2748,7 +2748,7 @@ async def _run_second_pass(
     model_name: Optional[str],
 ) -> None:
     """
-    « 2e jet » : audit factuel audio↔note, en tâche de fond.
+    « Validation » : audit factuel audio↔note, en tâche de fond.
 
     Lancé APRÈS la persistance de la note ; ne bloque jamais l'usager. Le
     résultat rejoint la consultation (``verification_json``) puis part en
@@ -2785,20 +2785,20 @@ async def _run_second_pass(
                     audio_prompt_tokens=usage_passe.get("audio_prompt_tokens"),
                 )
             except Exception:  # pragma: no cover — statistiques au mieux
-                logger.exception("Usage du « 2e jet » non journalisé (%s)", consultation_id)
+                logger.exception("Usage du « Validation » non journalisé (%s)", consultation_id)
             db.commit()
         return resultat, usage_passe
 
     try:
         resultat, _usage_passe = await run_in_threadpool(_travail)
     except Exception:  # pragma: no cover — jamais bloquant
-        logger.exception("« 2e jet » impossible (consultation %s)", consultation_id)
+        logger.exception("« Validation » impossible (consultation %s)", consultation_id)
         return
 
     if resultat is None:
         # Audit sans résultat (audio absent, appel impossible, JSON invalide)
         # ou génération supplantée : on prévient quand même les onglets — sans
-        # quoi la roue « 2e jet » tournerait jusqu'au filet du navigateur.
+        # quoi la roue « Validation » tournerait jusqu'au filet du navigateur.
         live.publish(owner_key, "verification_result", {
             "consultation_id": consultation_id,
             "generation_token": generation_token,
@@ -2813,7 +2813,7 @@ async def _run_second_pass(
         **resultat,
     })
     logger.info(
-        "« 2e jet » publié (consultation %s) : %d omission(s), %d invention(s), confiance %s",
+        "« Validation » publié (consultation %s) : %d omission(s), %d invention(s), confiance %s",
         consultation_id, len(resultat["omissions"]),
         len(resultat["inventions"]), resultat["confiance"],
     )
@@ -2965,7 +2965,7 @@ async def api_generate(
         len(result["markdown"]),
     )
 
-    # « 2e jet » : audit factuel audio↔note en tâche de fond — jamais sur le
+    # « Validation » : audit factuel audio↔note en tâche de fond — jamais sur le
     # chemin de la réponse ; le résultat partira en SSE quand il sera prêt.
     if (
         payload.second_pass

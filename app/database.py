@@ -1718,6 +1718,84 @@ def migrate_general_prompt_plan_first_person(db: Session) -> int:
     return touches
 
 
+#: Ancres de la consigne générale pour le placement des hospitalisations
+#: (2026-08-26). La phrase « Hospitalisations et séjours » du § 1 est le
+#: point d'ancrage : on y accole la clause de placement uniquement si elle y
+#: figure encore EXACTEMENT telle que livrée — la consigne est éditée par le
+#: médecin et vit en base, une phrase retravaillée est laissée intacte.
+_ANTECEDENTS_PLACEMENT_OLD_FR = (
+    "- Hospitalisations et séjours : chaque hospitalisation, visite ou séjour "
+    "institutionnel mentionné (lieu, année, motif) figure dans la note ; les "
+    "séjours antérieurs ne sont jamais fusionnés avec le séjour ou la visite "
+    "actuelle."
+)
+_ANTECEDENTS_PLACEMENT_OLD_EN = (
+    "- Hospitalizations and stays: every hospitalization, visit or "
+    "institutional stay mentioned (site, year, reason) appears in the note; "
+    "prior stays are never merged with the current stay or visit."
+)
+
+_ANTECEDENTS_PLACEMENT_NEW_FR = (
+    _ANTECEDENTS_PLACEMENT_OLD_FR
+    + " Le placement suit la dictée : une hospitalisation ou un séjour "
+    "ANTÉRIEUR dicté pendant l'énumération des antécédents figure dans la "
+    "rubrique des antécédents du gabarit, contexte et synthèse dictés compris "
+    "— il n'est pas déplacé vers l'HMA, dont le récit ne couvre que le motif "
+    "actuel de la consultation."
+)
+_ANTECEDENTS_PLACEMENT_NEW_EN = (
+    _ANTECEDENTS_PLACEMENT_OLD_EN
+    + " Placement follows the dictation: a PAST hospitalization or stay "
+    "dictated during the past history listing stays in the past history "
+    "section of the template, including the dictated context and summary — it "
+    "is not moved to the HPI, whose narrative covers only the current reason "
+    "for the consultation."
+)
+
+
+def migrate_general_prompt_antecedents_hospitalisation_placement(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la règle de placement des
+    hospitalisations antérieures (2026-08-26 : une hospitalisation dictée
+    pendant l'énumération des antécédents — lieu, année, motif et synthèse —
+    était déplacée par le modèle vers l'HMA).
+
+    Même mécanique que ``migrate_general_prompt_plan_first_person`` : la
+    consigne générale est éditée par le médecin et vit en base, la clause
+    n'est ajoutée que si la phrase « Hospitalisations et séjours » y figure
+    encore EXACTEMENT telle que livrée. Une phrase retravaillée est laissée
+    intacte et signalée au journal.
+    """
+    touches = 0
+    for cle, ancienne, nouvelle in (
+        ("general_prompt_fr", _ANTECEDENTS_PLACEMENT_OLD_FR, _ANTECEDENTS_PLACEMENT_NEW_FR),
+        ("general_prompt_en", _ANTECEDENTS_PLACEMENT_OLD_EN, _ANTECEDENTS_PLACEMENT_NEW_EN),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if nouvelle in row.value:
+            continue  # déjà en place — idempotent
+        if ancienne not in row.value:
+            logger.info(
+                "Consigne « %s » : phrase « Hospitalisations et séjours » "
+                "modifiée, placement des hospitalisations laissé au panneau.",
+                cle,
+            )
+            continue
+        row.value = row.value.replace(ancienne, nouvelle)
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » : règle de placement des hospitalisations "
+            "appliquée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Ancienne phrase de regroupement des médicaments LIVRÉE dans les gabarits
 #: avant la reformulation « indication dictée ou cliniquement évidente ».
 #: Même mécanique que les migrations de la consigne générale : on ne remplace
@@ -1866,6 +1944,56 @@ def migrate_template_suivi_resume_treatment_stays(db: Session) -> int:
                 "traitement d'une visite antérieure).",
                 row.name,
             )
+    if touches:
+        db.commit()
+    return touches
+
+
+#: Phrases « Antécédents » / « Past medical history » LIVRÉES dans les
+#: gabarits de consultation avant l'ajout de la mention explicite des
+#: hospitalisations antérieures (2026-08-26). Même mécanique que les autres
+#: migrations : on ne remplace une phrase que si elle y figure EXACTEMENT
+#: telle que livrée.
+_ANTECEDENTS_HOSP_OLD = (
+    "**Antécédents.** Liste pointée, une ligne par antécédent dicté (médical, chirurgical, familial) — uniquement ce qui est dicté.",
+    "**Past medical history.** Bulleted list, one line per dictated item (medical, surgical, family) — only what was dictated.",
+    "**Antécédents.** Liste pointée ; antécédents médicaux et chirurgicaux dictés uniquement.",
+)
+
+_ANTECEDENTS_HOSP_NEW = (
+    "**Antécédents.** Liste pointée, une ligne par antécédent dicté (médical, chirurgical, familial) — uniquement ce qui est dicté. Les hospitalisations et séjours antérieurs dictés (lieu, année, motif et synthèse) figurent dans cette liste, jamais dans l'HMA.",
+    "**Past medical history.** Bulleted list, one line per dictated item (medical, surgical, family) — only what was dictated. Past hospitalizations or stays dictated here (site, year, reason and summary) stay in this list, never in the HPI.",
+    "**Antécédents.** Liste pointée ; antécédents médicaux et chirurgicaux dictés uniquement, y compris les hospitalisations et séjours antérieurs dictés (lieu, année, motif et synthèse) — ils figurent ici, jamais dans l'HMA.",
+)
+
+
+def migrate_template_antecedents_hospitalisation_placement(db: Session) -> int:
+    """
+    Porte dans les copies modifiables des gabarits de consultation la mention
+    explicite que les hospitalisations antérieures dictées dans les
+    antécédents y restent (2026-08-26 : le modèle les déplaçait vers l'HMA).
+
+    Les gabarits verrouillés sont déjà rafraîchis depuis ``default_templates``
+    par ``seed_locked_templates`` : cette migration ne concerne donc que les
+    copies dupliquées avant la reformulation. On ne remplace la phrase que si
+    elle y est encore EXACTEMENT le texte livré d'origine — une règle des
+    antécédents déjà retravaillée autrement est laissée intacte et signalée au
+    journal.
+    """
+    touches = 0
+    for row in db.scalars(select(Template)).all():
+        inst = row.system_instructions or ""
+        for ancienne, nouvelle in zip(_ANTECEDENTS_HOSP_OLD, _ANTECEDENTS_HOSP_NEW):
+            if ancienne in inst:
+                row.system_instructions = inst.replace(ancienne, nouvelle)
+                touches += 1
+                logger.info(
+                    "Gabarit « %s » : règle des antécédents enrichie "
+                    "(hospitalisations antérieures conservées ici, jamais "
+                    "dans l'HMA).",
+                    row.name,
+                )
+                break
     if touches:
         db.commit()
     return touches
@@ -2145,9 +2273,11 @@ def init_db() -> None:
         migrate_general_prompt_no_omission(db)
         migrate_general_prompt_treatment_stays(db)
         migrate_general_prompt_plan_first_person(db)
+        migrate_general_prompt_antecedents_hospitalisation_placement(db)
         migrate_template_med_grouping(db)
         migrate_template_suivi_resume_stays(db)
         migrate_template_suivi_resume_treatment_stays(db)
+        migrate_template_antecedents_hospitalisation_placement(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

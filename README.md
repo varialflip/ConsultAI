@@ -606,7 +606,10 @@ fusion avec un autre — et la vérification finale (§ 6) en vérifie la
 réciproque. Chaque hospitalisation, visite ou séjour institutionnel mentionné
 (lieu, année, motif) y figure, sans être fusionné avec le séjour ou la visite
 actuelle ; le gabarit « Suivi - Gériatrie » nomme explicitement les
-hospitalisations antérieures dans sa règle du Résumé. Les modifications de
+hospitalisations antérieures dans sa règle du Résumé. Une hospitalisation
+antérieure dictée dans l'énumération des antécédents reste dans la rubrique
+Antécédents (contexte et synthèse dictés compris), jamais déplacée vers
+l'HMA — qui ne couvre que le motif actuel de la consultation (§ 1). Les modifications de
 traitement d'une visite antérieure (médicament débuté, cessé, renouvelé, dose
 modifiée) sont portées dans la note, dans leur rubrique (Résumé ou HMA selon
 le gabarit), distinctes du plan de traitement actuel.

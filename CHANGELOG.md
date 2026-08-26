@@ -3,6 +3,26 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-26 — Les hospitalisations dictées dans les antécédents y restent
+
+*Correctif suite à l'observation sur une note réelle : une hospitalisation
+antérieure dictée pendant l'énumération des antécédents (lieu, année, motif,
+avec sa synthèse) était déplacée par le modèle vers l'HMA.*
+
+- **Consigne générale (§ 1) : placement des hospitalisations.** Une
+  hospitalisation ou un séjour antérieur dicté pendant l'énumération des
+  antécédents figure dans la rubrique des antécédents du gabarit, contexte et
+  synthèse dictés compris — jamais déplacé vers l'HMA, dont le récit ne couvre
+  que le motif actuel de la consultation.
+- **Gabarits de consultation (règle Antécédents / Past medical history)** :
+  les trois gabarits livrés (Consultation Médicale Générale fr/en,
+  Consultation - Gériatrie) nomment explicitement les hospitalisations et
+  séjours antérieurs dictés parmi les antécédents. Applicable aux gabarits et
+  consignes déjà en service par migration (phrase d'origine intacte exigée —
+  une consigne ou copie personnalisée n'est pas écrasée).
+- Le gabarit « Suivi - Gériatrie » est inchangé : les hospitalisations
+  antérieures y relèvent déjà du Résumé.
+
 ## 2026-08-26 — « Corrections et éléments à valider » déplacée dans l'onglet Validation
 
 *La rubrique finale de la note quittait le document clinique et restait dans

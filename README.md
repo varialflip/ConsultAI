@@ -235,6 +235,23 @@ COHERE_LLM_THINKING_BUDGET=1024
 > fournisseurs, y compris cet endpoint** et l'audio joint au modèle de langage ;
 > coupez la bascule s'il dégrade un modèle local multilingue.
 
+> **⚡ Préparation de l'audio pendant la dictée.** L'audio joint au modèle de
+> langage (plafonnement des silences + encodage) coûte ~0,9× le temps réel —
+> plusieurs secondes autrefois payées AU clic « Mettre en forme ». Désormais,
+> pendant la dictée, le serveur construit régulièrement un **point de
+> contrôle** (passe ffmpeg bornée sur l'audio déjà reçu) ; à « Terminer », il
+> ne reste qu'à préparer la queue (seek jamais tardif, retranché à
+> l'échantillon près) et concaténer sans réencoder (~1 s) — le résultat
+> rejoint un **cache par enregistrement** (`AUDIO_CACHE_DIR`,
+> `/data/audio-cache`). Au clic, l'artefact prêt est servi tel quel ; à
+> défaut, une préparation complète part en tâche de fond dès la conclusion
+> (la génération attend borné), puis retombe en dernier recours sur la voie
+> historique au clic. Le cache ne contient que du dérivé régénérable : hors
+> sauvegarde, purgé avec l'enregistrement, ignoré si les réglages du
+> plafonnement changent. Les jetons servis depuis le **cache de préfixe**
+> implicite de Gemini (`cachedContentTokenCount`) sont journalisés à chaque
+> appel.
+
 ---
 
 ## 4. Le proxy inverse
@@ -958,6 +975,7 @@ app/
 ├── default_templates.py  les quatre gabarits livrés (verrouillés)
 ├── default_prompts.py    consignes générales fr / en
 ├── dictation.py          dictée par tranches
+├── audio_cache.py        cache de l'audio préparé pour la génération
 ├── live.py               synchronisation en direct (SSE) entre appareils
 ├── stt.py                transcodage, découpage, services vocaux
 ├── llm.py                consignes et appel du modèle (audio direct possible)

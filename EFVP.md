@@ -80,7 +80,7 @@ Déploiement en production (2026-08-14) :
 |---|---|---|
 | **Renseignements de santé** | Contenu des consultations : anamnèse, motifs, examens, diagnostics, plans de traitement (champs `reason`, `raw_transcript`, `generated_markdown`, `edited_markdown`) | Très élevée |
 | **Identité des patients** | **Non collectée** : le nom (`patient_name`) et le numéro de dossier (`patient_ref`) ne sont plus saisis ni stockés (dénominalisation, § 7.7). Date de consultation, demandeur (`requester`) et accompagnateur (`accompanied_by`) restent conservés | Très élevée (ce qui reste) |
-| **Voix / enregistrements audio** | Enregistrement brut de la dictée (fichiers sous `/data/audio/<consultation_id>/`) | Très élevée — voix non anonymisable. **Aucune voix de patient n'est attendue** (dictée post-consultation par le clinicien seul, § portée) ; une voix tierce captée par erreur reste traitée comme un renseignement de santé, sous rétention automatique de 12 h |
+| **Voix / enregistrements audio** | Enregistrement brut de la dictée (fichiers sous `/data/audio/<consultation_id>/`) et son dérivé préparé pour la génération (`/data/audio-cache/`, régénérable, suit la même vie que sa source) | Très élevée — voix non anonymisable. **Aucune voix de patient n'est attendue** (dictée post-consultation par le clinicien seul, § portée) ; une voix tierce captée par erreur reste traitée comme un renseignement de santé, sous rétention automatique de 12 h |
 | **Identité des utilisateurs** | `username`, `email`, `display_name`, `avatar_url`, groupes, dates de connexion | Élevée (données d'identité de professionnels de la santé) |
 | **Données d'usage** | `usage_events` : durées audio, fournisseur/modèle utilisés, tokens, coûts, horodatages | Faible à moyenne (révèle l'activité clinique) |
 | **Données de facturation d'usage** | `pricing_rates`, `usage_daily` | Faible |
@@ -148,6 +148,7 @@ Déploiement en production (2026-08-14) :
    ├─ SQLite  consultai.db   (transcriptions, notes, métadonnées non identifiantes, usagers, usage)
    ├─ /data/audio/           (enregistrements, fichier par consultation, purge 12 h par défaut)
    ├─ /data/dictations/      (dictées en cours, purge harmonisée 12 h par défaut)
+   ├─ /data/audio-cache/     (dérivé régénérable de chaque enregistrement : audio plafonné prêt pour la génération ; purgé avec sa source, hors sauvegarde)
    └─ /data/backups/         (sauvegardes sanitisées : ni audio, ni données patient)
 
 Trajet principal (depuis 2026-08-16) : l'audio de la dictée est envoyé

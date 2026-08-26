@@ -36,6 +36,7 @@ ci-dessous, complétée par la correction sémantique faite par Gemini.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -1506,6 +1507,167 @@ def cap_silence_to(source_path: str, fmt: str = "ogg") -> Optional[Tuple[bytes, 
             return None
         return content, mime, probe_duration(dst)
     except OSError:
+        return None
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def first_packet_after(source_path: str, target_seconds: float) -> Optional[float]:
+    """
+    Horloge du premier paquet audio décodé après un seek d'entrée à
+    ``target_seconds``, ou ``None`` si indéterminable.
+
+    Sur un WebM SANS index — l'état d'un fichier de dictée en cours, les Cues
+    n'étant écrites qu'à la conclusion — le demuxer balaye linéairement et
+    s'arrête au DÉBUT du cluster contenant la cible : jamais après (mesuré
+    2026-08-26 : −0,04 s à +0,00 s la plupart du temps, jusqu'à −1,9 s de
+    chevauchement au pire, ~110 ms de coût). Ce côté « trop tôt » est sûr :
+    ``trim_segment`` retranche ensuite l'excédent à l'échantillon près.
+    """
+    if not shutil.which("ffprobe"):
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "a",
+                "-show_entries", "packet=pts_time", "-of", "json",
+                "-read_intervals", f"{max(0.0, target_seconds):.3f}%+#1",
+                source_path,
+            ],
+            capture_output=True, timeout=120,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        logger.warning("Probe du premier paquet impossible (%s) : %s", source_path, exc)
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        packets = json.loads(result.stdout.decode("utf-8", "replace")).get("packets", [])
+        horodatage = packets[0].get("pts_time") if packets else None
+        return float(horodatage) if horodatage is not None else None
+    except (ValueError, TypeError, KeyError, IndexError):
+        return None
+
+
+def trim_segment(
+    source_path: str,
+    fmt: str = "ogg",
+    seek_seconds: Optional[float] = None,
+    cut_relative_seconds: Optional[float] = None,
+    end_seconds: Optional[float] = None,
+) -> Optional[Tuple[bytes, str, float]]:
+    """
+    Passe plafonnement+encodage BORNÉE d'une portion de ``source_path``.
+
+    Même chaîne que ``cap_silence_to`` (bascule, seuils, repli identiques),
+    avec trois bornes optionnelles :
+
+      * ``seek_seconds``   — ``-ss`` d'ENTRÉE : saute le décodage avant ce
+        point (le seek WebM sans index ne tombe jamais après la cible, voir
+        ``first_packet_after``) ;
+      * ``cut_relative_seconds`` — ``atrim`` initial : coupe l'excédent du
+        chevauchement de seek, à l'échantillon près, AVANT que l'état du
+        silenceremove ne démarre ;
+      * ``end_seconds``    — ``-t`` d'ENTRÉE : borne la passe sur l'horloge
+        DU FICHIER SOURCE (points de contrôle pendant la dictée). Attention :
+        ``-to`` côté sortie serait faux — l'horloge de sortie avance au
+        rythme de l'audio RÉTENCI (paisses coupées), la borne tomberait
+        bien au-delà du point voulu (vérifié expérimentalement 2026-08-26).
+
+    Retourne ``(contenu, type_mime, durée)``, ou ``None`` si la bascule est
+    éteinte ou la passe impossible — même contrat de repli que
+    ``cap_silence_to``. Une sortie vide (segment sans parole) vaut ``None``
+    également : l'appelant l'ignore simplement.
+    """
+    if runtime_config.value("stt_trim_silence") != "false" and _ffmpeg_available():
+        keep = max(0.0, runtime_config.value_float(
+            "stt_silence_keep_seconds", settings.stt_silence_keep_seconds
+        ))
+        seuil = f"{settings.stt_silence_threshold_db}dB"
+        filtre_plafonnement = (
+            f"silenceremove=start_periods=1:start_silence={keep:.3f}"
+            f":start_threshold={seuil}"
+            f":stop_periods=-1:stop_duration={keep:.3f}"
+            f":stop_threshold={seuil}"
+        )
+    else:
+        filtre_plafonnement = None
+
+    desc = _SEND_AUDIO_FORMATS.get((fmt or "ogg").strip().lower())
+    if desc is None:
+        desc = _SEND_AUDIO_FORMATS["ogg"]
+    sortie, codec, codec_opts, mime = desc
+
+    etapes: List[str] = []
+    if cut_relative_seconds is not None and cut_relative_seconds > 0:
+        etapes.append(f"atrim=start={float(cut_relative_seconds):.3f}")
+        etapes.append("asetpts=PTS-STARTPTS")
+    if filtre_plafonnement is not None:
+        etapes.append(filtre_plafonnement)
+
+    commande = ["-loglevel", "error"]
+    if seek_seconds is not None and seek_seconds > 0:
+        commande += ["-ss", f"{float(seek_seconds):.3f}"]
+    if end_seconds is not None and end_seconds > 0:
+        # Borne d'ENTRÉE (horloge du fichier lu), jamais ``-to`` de sortie.
+        commande += ["-t", f"{float(end_seconds):.3f}"]
+    commande += ["-i", source_path, "-vn"]
+    if etapes:
+        commande += ["-af", ",".join(etapes)]
+    commande += ["-ac", "1", "-ar", "48000", "-c:a", codec, *codec_opts,
+                 "-f", sortie.rsplit(".", 1)[-1], "-y"]
+
+    workdir = tempfile.mkdtemp(prefix="consultai-segment-")
+    dst = os.path.join(workdir, "segment." + sortie.rsplit(".", 1)[-1])
+    try:
+        _run_ffmpeg(commande + [dst])
+        with open(dst, "rb") as handle:
+            content = handle.read()
+        if not content:
+            return None
+        return content, mime, probe_duration(dst)
+    except (TranscriptionError, subprocess.SubprocessError, OSError) as exc:
+        logger.warning("Passe bornée impossible (%s) : %s", source_path, exc)
+        return None
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def concat_copies(paths: Sequence[str], fmt: str = "ogg") -> Optional[Tuple[bytes, str, float]]:
+    """
+    Concatène des médias de MÊMES paramètres de codage sans réencoder
+    (démuxer concat, ``-c copy``) — flux OGG/MP3/WAV chaînés, déjà expédiés
+    tels quels au modèle pour les consultations dictées en plusieurs prises.
+
+    Retourne ``(contenu, type_mime, durée)`` ou ``None`` en échec.
+    """
+    if not paths or not _ffmpeg_available():
+        return None
+    desc = _SEND_AUDIO_FORMATS.get((fmt or "ogg").strip().lower())
+    if desc is None:
+        desc = _SEND_AUDIO_FORMATS["ogg"]
+    sortie, _codec, _opts, mime = desc
+    workdir = tempfile.mkdtemp(prefix="consultai-concat-")
+    liste = os.path.join(workdir, "liste.txt")
+    dst = os.path.join(workdir, "fusion." + sortie.rsplit(".", 1)[-1])
+    try:
+        with open(liste, "w", encoding="utf-8") as handle:
+            for chemin in paths:
+                # Quotes simples échappées : les chemins ConsultAI sont
+                # générés (uuid/ids), mais ne rien supposer reste plus sûr.
+                handle.write(f"file '{str(chemin).replace(chr(39), chr(39)*2)}'\n")
+        _run_ffmpeg([
+            "-loglevel", "error", "-f", "concat", "-safe", "0",
+            "-i", liste, "-c", "copy",
+            "-f", sortie.rsplit(".", 1)[-1], "-y", dst,
+        ])
+        with open(dst, "rb") as handle:
+            content = handle.read()
+        if not content:
+            return None
+        return content, mime, probe_duration(dst)
+    except (TranscriptionError, subprocess.SubprocessError, OSError) as exc:
+        logger.warning("Concaténation sans réencodage impossible : %s", exc)
         return None
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

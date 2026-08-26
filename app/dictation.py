@@ -54,7 +54,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from app import live, llm, recordings, runtime_config, usage
+from app import audio_cache, live, llm, recordings, runtime_config, stt, usage
 from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
 from sqlalchemy.orm import Session
@@ -634,6 +634,262 @@ def append_chunk(
         session.status = "recording"
         session.save()
         return session
+
+
+# ===========================================================================
+# Points de contrôle de l'audio préparé (pour la génération)
+# ===========================================================================
+#
+# L'audio joint au modèle de langage est plafonné (silences) puis encodé :
+# ~0,9× le temps réel de l'audio (mesuré 2026-08-26 — 4,2 s pour 5 min,
+# 32 s pour 35 min). Payés AU CLIC « Mettre en forme », ces secondes
+# retardaient les premiers mots de la note.
+#
+# Pendant la dictée, une passe bornée (-to) reconstruit régulièrement un
+# « checkpoint » : l'audio préparé de [0, couvert]. À la conclusion, il ne
+# reste qu'à préparer la queue (seek d'entrée jamais tardif + atrim exacte,
+# cf. stt.first_packet_after) et concaténer sans réencoder — l'artefact
+# complet est prêt en ~1 s même après une longue dictée.
+#
+# Tout échec dégrade vers la voie historique : passe complète au moment de
+# la conclusion (finish_audio_artifact), puis préparation à la demande à la
+# génération (audio_cache). Rien de ce qui suit ne peut faire échouer une
+# dictée ni appauvrir l'audio envoyé au modèle.
+
+#: Intervalle minimum entre deux points de contrôle (audio neuf requis).
+_CHECKPOINT_INTERVAL_S = 60.0
+
+#: En deçà de cette durée reçue, aucun point de contrôle : la passe complète
+#: de conclusion est déjà négligeable, inutile dépenser du CPU.
+_CHECKPOINT_MIN_SECONDS = 45.0
+
+#: Marge de recul du seek de queue devant la frontière du point de contrôle :
+#: absorbe la granularité des clusters WebM (jamais après la cible, jusqu'à
+#: ~2 s avant — l'excédent est retranché par ``atrim`` à l'échantillon près).
+_TAIL_SEEK_MARGIN_S = 2.5
+
+#: Attente d'un point de contrôle encore en course à la conclusion.
+_CHECKPOINT_WAIT_S = 45.0
+
+_checkpoint_lock = threading.Lock()
+_checkpoints_en_course: set = set()
+
+
+def _checkpoint_meta_path(session: DictationSession) -> str:
+    return os.path.join(session.directory, "checkpoint.json")
+
+
+def _read_checkpoint(session: DictationSession) -> Optional[dict]:
+    """État du point de contrôle existant, ou ``None``."""
+    try:
+        with open(_checkpoint_meta_path(session), encoding="utf-8") as handle:
+            infos = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    media = os.path.join(
+        session.directory,
+        "checkpoint." + str(infos.get("fmt") or "ogg").strip().lower(),
+    )
+    if not os.path.exists(media) or not infos.get("covered"):
+        return None
+    infos["media"] = media
+    return infos
+
+
+def _write_ready_pair(session: DictationSession, fmt: str,
+                      content: bytes, mime: str, duration: float) -> Optional[str]:
+    """Écrit l'artefact complet de la dictée (« ready.* » + méta), atomique."""
+    ext = {"ogg": ".ogg", "mp3": ".mp3", "wav": ".wav"}.get(fmt, ".ogg")
+    media = os.path.join(session.directory, "ready" + ext)
+    meta = os.path.join(session.directory, "ready.json")
+    tmp_media, tmp_meta = media + ".tmp", meta + ".tmp"
+    try:
+        with open(tmp_media, "wb") as handle:
+            handle.write(content)
+        with open(tmp_meta, "w", encoding="utf-8") as handle:
+            json.dump({"mime": mime, "duration": duration,
+                       "mode": audio_cache.mode_signature(fmt)}, handle)
+        os.replace(tmp_media, media)
+        # La méta en dernier : sa présence vaut engagement de validité.
+        os.replace(tmp_meta, meta)
+        return media
+    except OSError as exc:
+        logger.warning("Dictée %s : artefact audio non écrit — %s", session.id, exc)
+        return None
+
+
+def maybe_schedule_checkpoint(session_id: str, username: str) -> bool:
+    """
+    Lance si besoin une passe de point de contrôle après un fragment reçu.
+
+    Cadencée par l'audio NOUVEAU depuis le dernier contrôle (une dictée en
+    pauses longues ne déclenche rien) ; une seule course par session. Les
+    exceptions sont volontairement muettes : c'est une optimisation pure.
+    """
+    try:
+        session = load_session(session_id, username)
+    except DictationError:
+        return False
+    if session.status != "recording":
+        return False
+    if session.received_seconds < _CHECKPOINT_MIN_SECONDS:
+        return False
+    deja_couvert = (_read_checkpoint(session) or {}).get("covered") or 0.0
+    if session.received_seconds - float(deja_couvert) < _CHECKPOINT_INTERVAL_S:
+        return False
+
+    fmt = llm.audio_settings(llm.active_provider())["send_audio_format"]
+    with _checkpoint_lock:
+        if session_id in _checkpoints_en_course:
+            return False
+        _checkpoints_en_course.add(session_id)
+    threading.Thread(
+        target=_run_checkpoint,
+        args=(session_id, username, fmt),
+        daemon=True,
+        name=f"audio-checkpoint-{session_id}",
+    ).start()
+    return True
+
+
+def _run_checkpoint(session_id: str, username: str, fmt: str) -> None:
+    """Passe bornée [-to reçu] sur le brut → checkpoint.* dans la session."""
+    try:
+        session = load_session(session_id, username)
+        if session.status != "recording":
+            return
+        fin = max(0.0, float(session.received_seconds))
+        result = stt.trim_segment(session.audio_path, fmt, end_seconds=fin)
+        if result is None:
+            return
+        content, mime, duree = result
+        ext = {"ogg": ".ogg", "mp3": ".mp3", "wav": ".wav"}.get(fmt, ".ogg")
+        media_tmp = os.path.join(session.directory, "checkpoint.tmp")
+        media = os.path.join(session.directory, "checkpoint." + fmt.strip().lower())
+        meta = _checkpoint_meta_path(session)
+        with open(media_tmp, "wb") as handle:
+            handle.write(content)
+        os.replace(media_tmp, media)
+        meta_tmp = meta + ".tmp"
+        with open(meta_tmp, "w", encoding="utf-8") as handle:
+            json.dump({"mode": audio_cache.mode_signature(fmt), "fmt": fmt,
+                       "covered": fin, "mime": mime, "duration": duree}, handle)
+        # La méta en dernier : sa présence engage la validité de la paire.
+        os.replace(meta_tmp, meta)
+        logger.info(
+            "Dictée %s : point de contrôle audio à %.0f s (%.1f Mo)",
+            session_id, fin, len(content) / 1048576,
+        )
+    except Exception:  # tâche de fond : jamais fatale, toujours visible
+        logger.exception("Point de contrôle audio impossible (dictée %s)", session_id)
+    finally:
+        with _checkpoint_lock:
+            _checkpoints_en_course.discard(session_id)
+
+
+def finish_audio_artifact(session_id: str, username: str) -> Optional[str]:
+    """
+    Produit l'artefact audio COMPLET de la dictée dans son dossier
+    (« ready.<ext> », méta « ready.json ») ; renvoie le chemin du média ou
+    ``None``.
+
+    Point de contrôle exploitable → queue préparée puis concaténation sans
+    réencodage (~1 s même en dictée longue) ; sinon passe complète historique
+    (plafonnement, repli transcodage). Appelé APRÈS le dernier traitement de
+    transcription, AVANT le déplacement du brut (store_path) — c'est pourquoi
+    l'appel est bloquant : il sérialise avec le move.
+    """
+    session = load_session(session_id, username)
+
+    # Un contrôle encore en course écrit sous nous : attendre borné.
+    deadline = time.monotonic() + _CHECKPOINT_WAIT_S
+    while True:
+        with _checkpoint_lock:
+            if session_id not in _checkpoints_en_course:
+                break
+        if time.monotonic() >= deadline:
+            logger.warning("Dictée %s : point de contrôle toujours en course, ignoré", session_id)
+            break
+        time.sleep(0.25)
+
+    fmt = llm.audio_settings(llm.active_provider())["send_audio_format"]
+    mode = audio_cache.mode_signature(fmt)
+    brut = session.audio_path
+    t0 = time.monotonic()
+    resultat: Optional[Tuple[bytes, str, float]] = None
+
+    controle = _read_checkpoint(session)
+    if controle and controle.get("mode") == mode and controle.get("fmt") == fmt \
+            and os.path.exists(brut):
+        couvert = float(controle["covered"])
+        ecart = max(0.0, float(session.received_seconds)) - couvert
+        if ecart > 2 * _CHECKPOINT_INTERVAL_S:
+            # Contrôle trop en course retard (passe longue interrompue,
+            # machine chargée) : la queue coûterait presque une passe
+            # complète — on rend la main et la préparation partira en tâche
+            # de fond (start_build côté conclusion), sans bloquer « Terminer ».
+            logger.info(
+                "Dictée %s : point de contrôle en retard de %.0f s, "
+                "préparation complète déléguée en tâche de fond",
+                session_id, ecart,
+            )
+            return None
+        seek = max(0.0, couvert - _TAIL_SEEK_MARGIN_S)
+        premier = stt.first_packet_after(brut, seek)
+        if premier is None or premier > couvert:
+            # Seek incertain : voie complète, sans risque.
+            logger.info("Dictée %s : seek de queue incertain, passe complète", session_id)
+        else:
+            retrancher = max(0.0, couvert - premier)
+            queue = stt.trim_segment(
+                brut, fmt, seek_seconds=seek, cut_relative_seconds=retrancher,
+            )
+            if queue is not None:
+                contenu_q, _mime_q, _duree_q = queue
+                travail = os.path.join(session.directory, "queue.tmp")
+                with open(travail, "wb") as handle:
+                    handle.write(contenu_q)
+                try:
+                    resultat = stt.concat_copies([controle["media"], travail], fmt)
+                finally:
+                    try:
+                        os.remove(travail)
+                    except OSError:
+                        pass
+            # ``queue`` indéterminable (échec ffmpeg ou silence pur) : on ne
+            # tente JAMAIS de servir le point de contrôle seul — une vraie
+            # parole manquante serait une perte clinique. Voie complète.
+
+    if resultat is None:
+        if not os.path.exists(brut):
+            return None
+        if float(session.received_seconds) > (
+            2 * _CHECKPOINT_INTERVAL_S + _CHECKPOINT_MIN_SECONDS
+        ):
+            # Passe complète trop chère pour bloquer « Terminer » : la
+            # conclusion déléguera à start_build (tâche de fond), et la
+            # génération attendra borné ou retombera sur sa voie classique.
+            logger.info(
+                "Dictée %s : préparation complète déléguée en tâche de fond",
+                session_id,
+            )
+            return None
+        # Passe complète historique — plafonnement, repli transcodage tel quel.
+        resultat = stt.cap_silence_to(brut, fmt)
+        if resultat is None:
+            resultat = stt.transcode_to(brut, fmt)
+    if resultat is None:
+        logger.info("Dictée %s : pas d'artefact audio (vide ou échec)", session_id)
+        return None
+
+    contenu, mime, duree = resultat
+    chemin = _write_ready_pair(session, fmt, contenu, mime, duree)
+    if chemin:
+        logger.info(
+            "Dictée %s : artefact audio prêt en %.1f s (%.1f Mo, %.1f s)",
+            session_id, time.monotonic() - t0, len(contenu) / 1048576, duree,
+        )
+    return chemin
 
 
 def should_process(session: DictationSession) -> bool:

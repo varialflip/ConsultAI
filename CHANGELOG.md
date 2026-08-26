@@ -3,6 +3,23 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-26
+
+- **La note démarre plus tôt : l'audio du modèle se prépare pendant la
+  dictée.** Le plafonnement des silences + l'encodage de l'audio joint à la
+  mise en forme (~0,9× le temps réel : 4 s pour 5 min, 32 s pour 35 min)
+  étaient payés au clic « Mettre en forme ». Désormais, pendant la dictée, un
+  point de contrôle de l'audio préparé est construit régulièrement en tâche
+  de fond ; « Terminer » n'a plus qu'à préparer la queue et concaténer sans
+  réencoder (~1 s), et le résultat rejoint un cache par enregistrement. Au
+  clic « Mettre en forme », l'artefact prêt est envoyé immédiatement — les
+  replis (préparation complète en fond dès la conclusion, puis voie
+  historique au clic) garantissent le même audio qu'avant, jamais moins.
+  Cache dérivé régénérable (`/data/audio-cache`, `AUDIO_CACHE_DIR`) : hors
+  sauvegarde, purgé avec l'enregistrement, ignoré si les réglages du
+  plafonnement changent. Les jetons servis par le cache de préfixe implicite
+  de Gemini sont désormais journalisés (observation des économies).
+
 ## 2026-08-25
 
 - **Gabarits gériatriques verrouillés : les versions « FD Markdown » deviennent

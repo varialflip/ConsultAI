@@ -235,6 +235,13 @@ class Settings:
     dictation_chunk_seconds: int = 5      # cadence de téléversement (navigateur)
     dictation_segment_seconds: int = 10   # durée visée d'une tranche transcrite
 
+    # --- Cache de préparation audio (plafonnement des silences) ---
+    # L'audio joint au modèle de langage est plafonné/transcodé par ffmpeg :
+    # plusieurs secondes de calcul par piste. Ce cache conserve le résultat
+    # par enregistrement, préparé en tâche de fond dès la fin de la dictée.
+    # Dérivable à volonté : hors sauvegarde, purgé avec les enregistrements.
+    audio_cache_dir: str = "/data/audio-cache"
+
     # --- Temps réel de la dictée ---
     # Une couche d'affichage par-dessus le batch fiable : le VAD du navigateur
     # signale la fin de chaque énoncé, le serveur transcrit immédiatement en
@@ -449,6 +456,7 @@ class Settings:
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
             backup_dir=_env("BACKUP_DIR", "/data/backups"),
             dictation_dir=_env("DICTATION_DIR", "/data/dictations"),
+            audio_cache_dir=_env("AUDIO_CACHE_DIR", "/data/audio-cache"),
             dictation_chunk_seconds=_env_int("DICTATION_CHUNK_SECONDS", 5),
             dictation_segment_seconds=_env_int("DICTATION_SEGMENT_SECONDS", 10),
             stt_realtime_mode=_env("STT_REALTIME_MODE", "off"),

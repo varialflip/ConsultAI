@@ -766,6 +766,13 @@ def _gemini_usage(usage_metadata) -> Dict[str, Optional[int]]:
         "output_tokens": getattr(usage_metadata, "candidates_token_count", None),
         "total_tokens": getattr(usage_metadata, "total_token_count", None),
     }
+    # Jetons servis depuis le cache de préfixe (implicite côté Vertex) :
+    # observation pure pour l'instant — confirme que la consigne système
+    # (~4k jetons, au-dessus du plancher 2 048 des modèles 2.x) est bien
+    # réutilisée d'une consultation à l'autre.
+    cache = getattr(usage_metadata, "cached_content_token_count", None)
+    if cache:
+        usage["cached_tokens"] = cache
     details = getattr(usage_metadata, "prompt_tokens_details", None) or []
     if details and usage["prompt_tokens"] is not None:
         audio_tokens = sum(
@@ -947,6 +954,11 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     finish_reason = str(getattr(candidates[0], "finish_reason", "") or "") if candidates else ""
 
     usage = _gemini_usage(getattr(response, "usage_metadata", None))
+    logger.info(
+        "Gemini %s : %s jetons de prompt (%s audio, %s en cache), %s en réponse",
+        model, usage.get("prompt_tokens"), usage.get("audio_prompt_tokens"),
+        usage.get("cached_tokens"), usage.get("output_tokens"),
+    )
 
     return Completion(
         text=getattr(response, "text", None) or "",
@@ -1105,10 +1117,16 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
         break
 
     finish_reason = str(getattr(candidates[0], "finish_reason", "") or "") if candidates else ""
+    usage = _gemini_usage(usage_metadata)
+    logger.info(
+        "Gemini %s (flux) : %s jetons de prompt (%s audio, %s en cache), %s en réponse",
+        model, usage.get("prompt_tokens"), usage.get("audio_prompt_tokens"),
+        usage.get("cached_tokens"), usage.get("output_tokens"),
+    )
     return Completion(
         text="".join(full),
         model=model, provider="gemini",
-        finish_reason=finish_reason, usage=_gemini_usage(usage_metadata),
+        finish_reason=finish_reason, usage=usage,
     )
 
 

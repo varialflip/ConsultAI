@@ -37,6 +37,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import audio_cache
 from app.config import settings
 from app.database import Consultation, Recording
 
@@ -167,6 +168,9 @@ def delete(db: Session, recording: Recording) -> None:
         pass
     except OSError as exc:
         logger.warning("Enregistrement %s : fichier non supprimé — %s", recording.id, exc)
+    # L'artefact dérivé (cache audio préparé) suit sa source : rien ne doit
+    # survivre au geste unique d'effacement.
+    audio_cache.purge(recording.id)
     db.delete(recording)
     db.commit()
 
@@ -181,6 +185,7 @@ def delete_for_consultation(db: Session, consultation_id: int) -> int:
             pass
         except OSError as exc:
             logger.warning("Enregistrement %s : fichier non supprimé — %s", recording.id, exc)
+        audio_cache.purge(recording.id)
         db.delete(recording)
     # Le dossier de la consultation n'a plus de raison d'être.
     shutil.rmtree(os.path.join(settings.audio_dir, str(consultation_id)), ignore_errors=True)

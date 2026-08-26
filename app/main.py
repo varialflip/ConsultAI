@@ -77,7 +77,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
 from app import __version__
-from app import backup, changelog, dictation, i18n, live, llm, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
+from app import audio_cache, backup, changelog, dictation, i18n, live, llm, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
 from app import users as users_service
 from app.auth import (
     AuthMiddleware,
@@ -663,11 +663,78 @@ def _prepare_audio_for_generation(
         )
         return None
 
+    # Voie rapide : artefacts déjà préparés par le cache (points de contrôle
+    # pendant la dictée, préparation à la conclusion, ou une génération
+    # antérieure). Une piste manquante est lancée puis attendue bornée ;
+    # au-delà — ou en échec — la voie historique reprend ci-dessous, à
+    # l'identique, et remplit le cache pour la fois suivante.
+    clefs = [
+        (piste, audio_cache.key_for(piste.id, recordings.absolute_path(piste), fmt))
+        for piste in pistes
+    ]
+    manquantes = [
+        (piste, clef) for piste, clef in clefs
+        if not audio_cache.ready(clef, fmt)
+    ]
+    for piste, _clef in manquantes:
+        audio_cache.start_build(piste.id, recordings.absolute_path(piste), fmt)
+    for piste, clef in manquantes:
+        if not audio_cache.ensure_ready(clef, fmt):
+            logger.info(
+                "Cache audio absent (enregistrement %s) : voie classique",
+                piste.id,
+            )
+
+    chemins = audio_cache.all_paths([clef for _p, clef in clefs], fmt)
+    if chemins is not None:
+        plafond = max_minutes * 60
+        if len(chemins) == 1:
+            charge = audio_cache.load(clefs[0][1], fmt)
+            if charge is not None:
+                contenu, mime, duree = charge
+                if 0 < duree <= plafond:
+                    logger.info(
+                        "Audio joint (consultation %s, cache) : %.1f s (%s)",
+                        consultation_id, duree, mime,
+                    )
+                    return contenu, mime
+                logger.info(
+                    "Audio non joint (consultation %s, cache) : %.1f s hors "
+                    "bornes (plafond %.0f s)",
+                    consultation_id, duree, plafond,
+                )
+                return None
+        else:
+            fusion_cache = stt.concat_copies(chemins, fmt)
+            if fusion_cache is not None:
+                contenu, mime, duree = fusion_cache
+                if 0 < duree <= plafond:
+                    logger.info(
+                        "Audio joint (consultation %s, cache fusionné) : "
+                        "%.1f s (%s)",
+                        consultation_id, duree, mime,
+                    )
+                    return contenu, mime
+
     if len(pistes) == 1:
-        return _traiter(
-            recordings.absolute_path(pistes[0]),
-            f"enregistrement {pistes[0].id}",
+        piste = pistes[0]
+        resultat_classique = _traiter(
+            recordings.absolute_path(piste), f"enregistrement {piste.id}",
         )
+        if resultat_classique is not None:
+            # Remplit le cache pour la génération suivante (régénération,
+            # reprise) : même source, mêmes réglages — contenu équivalent.
+            try:
+                contenu_c, mime_c, duree_c = resultat_classique
+                audio_cache.store(
+                    audio_cache.key_for(
+                        piste.id, recordings.absolute_path(piste), fmt,
+                    ),
+                    fmt, contenu_c, mime_c, duree_c,
+                )
+            except Exception:  # pragma: no cover — remplissage au mieux
+                logger.exception("Cache audio non rempli (enregistrement %s)", piste.id)
+        return resultat_classique
 
     try:
         fusion = _concat_audio([recordings.absolute_path(p) for p in pistes])
@@ -2261,6 +2328,13 @@ async def upload_dictation_chunk(
     except DictationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # Optimisation pure : préparer l'audio de la génération PENDANT la dictée
+    # (points de contrôle bornés, cf. dictation.maybe_schedule_checkpoint).
+    try:
+        dictation.maybe_schedule_checkpoint(session_id, user.username)
+    except Exception:  # pragma: no cover — ne doit jamais casser un fragment
+        logger.exception("Point de contrôle audio non programmé (%s)", session_id)
+
     if dictation.should_process(session):
         _schedule_dictation_processing(session_id, user.username)
 
@@ -2377,6 +2451,17 @@ async def finish_dictation(session_id: str, request: Request, db: Session = Depe
         result["stt_used"] = " / ".join(
             p for p in (consultation.stt_provider, consultation.stt_model) if p
         )
+        # Artefact audio prêt pour la génération — AVANT le déplacement du
+        # brut : la passe (queue du point de contrôle + concat, ou complète)
+        # lit ``raw`` ; le blocage est borné (~1 s avec un contrôle à jour,
+        # quelques secondes sinon) et sérialise avec le move de store_path.
+        try:
+            artefact = await run_in_threadpool(
+                dictation.finish_audio_artifact, session.id, user.username,
+            )
+        except Exception:  # pragma: no cover — optimisation pure
+            logger.exception("Artefact audio non préparé (dictée %s)", session_id)
+            artefact = None
         try:
             stored = await run_in_threadpool(
                 recordings.store_path, db, consultation, session.audio_path,
@@ -2384,6 +2469,22 @@ async def finish_dictation(session_id: str, request: Request, db: Session = Depe
             )
             result["recording_id"] = stored.id if stored else None
             if stored:
+                # L'artefact rejoint le cache sous la clé définitive ;
+                # sans artefact, la préparation complète part en tâche de
+                # fond — la génération saura attendre ou retombera sur sa
+                # voie historique.
+                fmt = llm.audio_settings(llm.active_provider())["send_audio_format"]
+                adopte = False
+                if artefact is not None:
+                    meta_artefact = os.path.splitext(artefact)[0] + ".json"
+                    adopte = audio_cache.adopt_pair(
+                        artefact, meta_artefact,
+                        stored.id, recordings.absolute_path(stored), fmt,
+                    )
+                if not adopte:
+                    audio_cache.start_build(
+                        stored.id, recordings.absolute_path(stored), fmt,
+                    )
                 live.publish(user.owner_key, "recording_added", {
                     "consultation_id": consultation.id,
                     "recording_id": stored.id,

@@ -750,9 +750,11 @@
         </div>
       </div>
       <!-- ONGLETS DU PANNEAU : « Transcription » par défaut ; « Validation »
-           reçoit l'audit factuel audio↔note quand il arrive (SSE
+           montre la rubrique « Corrections et éléments à valider » dès la
+           génération (bascule automatique sur grand écran, jamais sur mobile)
+           puis reçoit l'audit factuel audio↔note quand il arrive (SSE
            ``verification_result``). Pendant la vérification, le titre du
-           second onglet porte une roue et la vue reste sur la transcription. -->
+           second onglet porte une roue. -->
       <div class="flex-1 min-h-0 flex flex-col">
       <div class="flex items-end gap-1 px-2 pt-2 shrink-0 border-b border-slate-200" id="dicteeTabs" role="tablist">
         <button id="tabTranscript" type="button" data-tab="transcript" role="tab" aria-selected="true"
@@ -802,13 +804,24 @@
         </footer>
       </div>
 
-      <!-- VUE « 2e JET » — audit factuel audio↔note. Listes plates : ce qui
-           fut dicté et manque à la note, ce que la note affirme sans l'avoir
-           été. Remplie par onVerificationResult (SSE) ; réaffichée telle
-           quelle au rechargement depuis ``verification_json``. Jamais
-           imprimée : le document clinique reste la note seule. -->
-      <div id="secondPassView" class="hidden flex flex-1 min-h-0 overflow-y-auto thin-scroll
+      <!-- VUE « VALIDATION » — rubrique « Corrections et éléments à valider »
+           (retirée de la note, remplie pendant la génération puis depuis
+           ``corrections_markdown`` au rechargement) + audit factuel audio↔note
+           (listes plates, remplies par onVerificationResult / ``verification_json``).
+           Jamais imprimée : le document clinique reste la note seule. -->
+      <div id="secondPassView" class="hidden flex flex-col flex-1 min-h-0 overflow-y-auto thin-scroll
                                       p-4 sm:p-6 text-[13px] leading-relaxed text-slate-700">
+        <!-- Corrections et éléments à valider — montrée dès la génération, la
+             roue de l'onglet continue de tourner tant que l'audit n'est pas
+             arrivé. -->
+        <div id="secondPassCorrections" class="hidden mb-4">
+          <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1.5">
+            {{ t('secondpass.corrections') }}
+          </p>
+          <div id="secondPassCorrectionsBody"
+               class="rounded-lg border border-amber-300 bg-amber-50 p-3
+                      prose prose-sm max-w-none text-slate-700"></div>
+        </div>
         <p id="secondPassPending" class="hidden italic text-slate-400">
           {{ t('secondpass.pending') }}
         </p>

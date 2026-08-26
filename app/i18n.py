@@ -292,6 +292,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "pane.raw": ("Transcription brute", "Raw transcript"),
     "secondpass.toggle": ("Validation", "Validation"),
     "secondpass.tab": ("Validation", "Validation"),
+    "secondpass.corrections": (
+        "Corrections et éléments à valider",
+        "Corrections and items to verify",
+    ),
     "secondpass.title": (
         "Validation : après chaque note, comparer la note à l'audio et "
         "signaler les écarts certains (omissions / éléments non dictés).",

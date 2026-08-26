@@ -269,6 +269,10 @@ class Consultation(Base):
     # côté interface, comme si absent. Suit la note qu'il audite et meurt
     # avec le brouillon, comme elle.
     verification_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Rubrique « Corrections et éléments à valider », retirée du corps de la
+    # note à la génération et montrée dans l'onglet « Validation ». Même
+    # rétention que la note : vit et meurt avec le brouillon.
+    corrections_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -320,6 +324,7 @@ class Consultation(Base):
                     "generated_markdown": self.generated_markdown,
                     "edited_markdown": self.edited_markdown,
                     "verification_json": self.verification_json,
+                    "corrections_markdown": self.corrections_markdown,
                 }
             )
         return data
@@ -2049,6 +2054,7 @@ _ADDED_COLUMNS = {
         ("generation_seconds", "FLOAT"),
         ("transcript_used", "BOOLEAN NOT NULL DEFAULT 1"),
         ("verification_json", "TEXT"),
+        ("corrections_markdown", "TEXT"),
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),

@@ -2577,6 +2577,39 @@ def cancel_dictation(session_id: str, request: Request):
 # ===========================================================================
 # Génération de la note
 # ===========================================================================
+
+#: Rubrique « Corrections et éléments à valider » : dernier titre de la note,
+#: détecté par son intitulé (fr « … à valider », en « … items to verify »).
+#: La note conserve le corps ; la rubrique elle-même est déplacée vers
+#: l'onglet « Validation » (stockée dans ``corrections_markdown``) — elle ne
+#: fait jamais partie du document clinique persisté.
+_CORRECTIONS_TITRE_RE = re.compile(
+    r"^#{1,6}\s+[^\n]*(?:valid|vérif|verify|corrections)[^\n]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def split_corrections(markdown: str) -> Tuple[str, str]:
+    """
+    Sépare la note de sa rubrique finale « Corrections et éléments à valider ».
+
+    Retourne ``(note, corrections)`` : ``note`` est le corps sans la rubrique,
+    ``corrections`` le contenu extrait (intitulé compris), ou ``""`` si la
+    rubrique est absente. On coupe au DERNIER titre correspondant — la
+    rubrique est toujours en fin de note ; une reformulation du libellé ne
+    doit pas la faire manquer.
+    """
+    if not markdown:
+        return markdown, ""
+    coupures = [m.start() for m in _CORRECTIONS_TITRE_RE.finditer(markdown)]
+    if not coupures:
+        return markdown, ""
+    coupe = coupures[-1]
+    note = markdown[:coupe].rstrip() + "\n"
+    corrections = markdown[coupe:].strip()
+    return note, corrections
+
+
 def _generate_and_publish(
     user: Principal,
     payload: GenerateIn,
@@ -2889,6 +2922,13 @@ async def api_generate(
         logger.exception("Erreur inattendue pendant la génération")
         raise HTTPException(status_code=502, detail=_t("err.generation", error=exc)) from exc
 
+    # La rubrique « Corrections et éléments à valider » ne fait jamais partie
+    # du document : on la sort du corps de la note (persistance, métadonnées,
+    # audit et réponse) pour l'onglet « Validation ».
+    note, corrections = split_corrections(result["markdown"])
+    result["markdown"] = note
+    result["corrections"] = corrections
+
     # Une régénération plus récente est arrivée pendant que celle-ci
     # attendait le modèle : ce résultat est périmé, on ne l'écrit jamais en
     # base. Le navigateur qui l'a demandé a de toute façon déjà annulé sa
@@ -2917,6 +2957,9 @@ async def api_generate(
     consultation.template_name = template_row.name
     consultation.raw_transcript = payload.transcript
     consultation.generated_markdown = result["markdown"]
+    # Rubrique « Corrections et éléments à valider », retirée du corps : elle
+    # suit la note et meurt avec le brouillon, comme ``verification_json``.
+    consultation.corrections_markdown = result["corrections"]
     # Toujours écrasée, y compris sur une régénération : l'interface ne montre
     # plus jamais cette valeur qu'à l'ouverture (voir loadDraft côté JS) et
     # prévient déjà l'usager AVANT l'appel si des modifications seraient
@@ -3005,6 +3048,7 @@ async def api_generate(
 
     return {
         "markdown": result["markdown"],
+        "corrections": result.get("corrections", ""),
         "model": result["model"],
         "provider": result["provider"],
         "stt_used": " / ".join(

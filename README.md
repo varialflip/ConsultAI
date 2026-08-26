@@ -264,9 +264,18 @@ COHERE_LLM_THINKING_BUDGET=1024
 > été dicté. Volontairement permissif : seuls les écarts certains sont
 > signalés, les reformulations médicales sont acceptées. Le résultat part en
 > direct (SSE `verification_result`) dans un second onglet du panneau de
-> transcription — roue sur le titre pendant la vérification, la vue reste sur
-> la transcription, bascule automatique à l'arrivée ; il est conservé avec le
-> brouillon (`consultations.verification_json`) et réaffiché au chargement.
+> transcription — roue sur le titre pendant la vérification, bascule
+> automatique à l'arrivée (sur mobile, on reste sur la note générée) ; il est
+> conservé avec le brouillon (`consultations.verification_json`) et réaffiché
+> au chargement.
+>
+> Le même onglet « Validation » reçoit la rubrique **« Corrections et
+> éléments à valider »**, retirée de la note à la génération : elle n'est
+> jamais écrite dans le document clinique ni envoyée à l'audit, mais stockée
+> à part (`consultations.corrections_markdown`) et affichée dans l'onglet dès
+> la fin du streaming (bascule automatique sur grand écran, jamais sur
+> mobile). Les brouillons antérieurs qui la portent encore dans leur note la
+> font réextraire à l'ouverture.
 > Sans audio joint (note produite à partir de la seule transcription), la
 > bascule active produit immédiatement un « rien à signaler » : l'audit
 > audio↔note est impossible, pas de roue qui tourne dans le vide.

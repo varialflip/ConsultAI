@@ -3,6 +3,32 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-26 — « Corrections et éléments à valider » déplacée dans l'onglet Validation
+
+*La rubrique finale de la note quittait le document clinique et restait dans
+la note elle-même, à relire au milieu du corps. Elle vit désormais dans
+l'onglet « Validation », séparée de la note à la génération.*
+
+- **Rubrique retirée du corps de la note à la génération** (serveur). La note
+  persistée, ses métadonnées et l'audit « Validation » n'incluent plus la
+  rubrique « Corrections et éléments à valider » ; elle est stockée à part
+  (`consultations.corrections_markdown`, migration ajoutée au démarrage) et
+  renvoyée dans la réponse de `/api/generate`. Détection de l'intitulé
+  (`## Corrections et éléments à valider` fr / `## Corrections and items to
+  verify` en), repli sur le corps entier si absent.
+- **Onglet « Validation » alimenté dès la génération.** Pendant le streaming,
+  la rubrique y défile (jamais dans la fenêtre de note) ; sur grand écran le
+  panneau bascule automatiquement sur l'onglet à la fin de la génération pour
+  la montrer ; la roue du titre continue de tourner jusqu'à l'arrivée de
+  l'audit, dont les résultats s'affichent sous la rubrique. Sur mobile, on
+  reste sur la note générée (aucune bascule forcée, ni à la génération ni à
+  l'arrivée de l'audit).
+- **Brouillons antérieurs** : la rubrique encore présente dans leur note est
+  réextraite à l'ouverture (`corrections_markdown` ou découpe locale) et
+  montrée dans l'onglet sans être écrite dans le document.
+- **README / ÉFVP** mis à jour (champ `corrections_markdown` ajouté aux
+  renseignements de santé, même rétention que la note).
+
 ## 2026-08-26 — Le Plan conserve le « je » dicté à la première personne
 
 *Correctif suite à l'observation sur une note réelle : un plan dicté à la

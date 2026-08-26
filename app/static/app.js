@@ -550,6 +550,7 @@
     // restaure ce contenu — on ne laisse jamais un brouillon écrasé par un
     // texte inachevé.
     preGenerateMarkdown: '',
+    preGenerateCorrections: '',
     // Jeton de corrélation de LA génération en cours dans CET onglet : les
     // évènements ``generation_chunk`` qui ne le portent pas (flux supplanté,
     // autre onglet) sont ignorés. Voir _generate_and_publish côté serveur.
@@ -2185,17 +2186,21 @@
   }
 
   /* =========================================================================
-   * 2e JET — audit factuel audio↔note
+   * VALIDATION — onglet « Validation » du panneau de transcription
    * ======================================================================
-   * Bascule à côté de « Mettre en forme » (préférence par usager, défaut
-   * OFF). Quand elle est active, chaque génération est suivie d'un contrôle :
-   * l'AUDIO fait foi (la transcription Parakeet est trop imprécise pour
-   * servir de référence) ; les écarts certains arrivent en SSE
+   * Deux contenus : la rubrique « Corrections et éléments à valider »
+   * (retirée de la note à la génération, ``renderCorrections``) et l'audit
+   * factuel audio↔note. Bascule à côté de « Mettre en forme » (préférence par
+   * usager, défaut OFF). Quand elle est active, chaque génération est suivie
+   * d'un contrôle : l'AUDIO fait foi (la transcription Parakeet est trop
+   * imprécise pour servir de référence) ; les écarts certains arrivent en SSE
    * ``verification_result`` et s'affichent en listes plates dans le second
    * onglet du panneau de transcription.
    *
-   * Pendant la vérification : roue sur le TITRE de l'onglet, la vue reste sur
-   * la transcription — on ne bascule qu'à l'arrivée du résultat.
+   * Pendant la vérification : roue sur le TITRE de l'onglet. L'onglet
+   * « Validation » est basculé sur grand écran dès la fin de la génération
+   * (la rubrique « Corrections » y est déjà visible) ; sur mobile, on reste
+   * sur la note générée. L'arrivée de l'audit ne force plus aucune bascule.
    * ====================================================================== */
   let secondPassData = null;   // dernier audit affichable, ou null
   let secondPassTimeout = null;
@@ -2293,6 +2298,59 @@
     if (roue) roue.classList.toggle('hidden', !actif);
   }
 
+  /**
+   * Sépare la note de sa rubrique finale « Corrections et éléments à valider »
+   * (fr « … à valider », en « … items to verify »). Coupe au DERNIER titre
+   * correspondant — la rubrique est toujours en fin de note. Sans rubrique :
+   * corrections vide. Le corps seul est le document clinique ; la rubrique
+   * part dans l'onglet « Validation ».
+   */
+  function splitCorrections(md) {
+    const lignes = (md || '').split(/\r?\n/);
+    let coupe = -1;
+    for (let i = lignes.length - 1; i >= 0; i--) {
+      if (/^#{1,6}\s+[^\n]*(?:valid|vérif|verify|corrections)[^\n]*$/i.test(lignes[i])) {
+        coupe = i;
+        break;
+      }
+    }
+    if (coupe === -1) return { note: md || '', corrections: '' };
+    const note = lignes.slice(0, coupe).join('\n').replace(/\s+$/, '') + '\n';
+    const corrections = lignes.slice(coupe).join('\n').trim();
+    return { note, corrections };
+  }
+
+  // Dernière rubrique « Corrections » rendue dans l'onglet Validation : on
+  // évite de re-rendre le markdown à chaque frame de dévoilement tant que le
+  // texte n'a pas bougé (la rubrique ne fait que croître pendant le stream).
+  let correctionsRendu = null;
+
+  /**
+   * Affiche la rubrique « Corrections et éléments à valider » dans l'onglet
+   * Validation. Ne touche JAMAIS à la roue ni à l'état « en cours » : la roue
+   * continue de tourner jusqu'à l'arrivée de l'audit, même quand la rubrique
+   * est déjà visible.
+   */
+  function renderCorrections(md) {
+    const bloc = $('secondPassCorrections');
+    const corps = $('secondPassCorrectionsBody');
+    if (!bloc || !corps) return;
+    const texte = (md || '').trim();
+    if (!texte) {
+      bloc.classList.add('hidden');
+      corps.innerHTML = '';
+      correctionsRendu = null;
+      return;
+    }
+    if (texte === correctionsRendu) return;
+    // L'intitulé de la rubrique est déjà porté par le libellé au-dessus de la
+    // boîte : on ne le re-rend pas en titre Markdown (doublon visuel).
+    const corpsMd = texte.replace(/^#{1,6}\s+[^\n]*\s*\n?/, '').trim();
+    corps.innerHTML = markdownToHtml(corpsMd);
+    correctionsRendu = texte;
+    bloc.classList.remove('hidden');
+  }
+
   /** Nouvelle génération avec « Validation » : état « en cours », sans basculer. */
   function enterSecondPassPending() {
     secondPassData = null;
@@ -2363,7 +2421,8 @@
     contenu.classList.remove('hidden');
 
     if (basculer) {
-      setMobilePane('dictee');
+      // Sur mobile, on ne quitte JAMAIS la note générée à l'arrivée de
+      // l'audit : l'usager bascule lui-même vers l'onglet quand il veut.
       selectDicteeTab('secondpass');
     }
   }
@@ -2442,6 +2501,9 @@
     // morceau diffusé en direct — seuls les morceaux portant CE jeton seront
     // appliqués (voir onGenerationChunk).
     state.preGenerateMarkdown = $('markdownEditor').value;
+    // La rubrique « Corrections » affichée accompagne la note : restituée
+    // aussi si la nouvelle génération échoue.
+    state.preGenerateCorrections = correctionsRendu || '';
     state.generationToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random());
 
     // Le voile plein écran laisserait le texte généré invisible : à la place
@@ -2460,6 +2522,7 @@
     hideThinkingIndicator();
     setGenerating(true);
     $('markdownEditor').value = '';
+    renderCorrections('');
     showPreview();
     setMobilePane('note');
 
@@ -2488,12 +2551,27 @@
       // resynchronisera ce brouillon dans un instant.
       if (result.superseded) return;
       state.consultationId = result.consultation_id;
-      state.lastGeneratedMarkdown = result.markdown;
-      $('markdownEditor').value = result.markdown;
+      // La réponse finale est LA source de vérité. Le serveur y renvoie le
+      // corps sans la rubrique « Corrections » (``markdown``) et la rubrique
+      // elle-même (``corrections``) ; repli sur une découpe locale si un
+      // brouillon plus ancien la portait encore dans le corps.
+      const decoupe = splitCorrections(result.markdown || '');
+      state.lastGeneratedMarkdown = decoupe.note;
+      $('markdownEditor').value = decoupe.note;
+      renderCorrections(result.corrections || decoupe.corrections);
       renderMarkdown();
       showPreview();
       // Sur mobile, on amène l'usager directement au résultat.
       setMobilePane('note');
+
+      // Sur grand écran, on bascule le panneau de dictée sur « Validation »
+      // dès la note générée : la rubrique « Corrections » y est déjà visible,
+      // la roue continue de tourner si l'audit est en cours. Sur mobile on
+      // reste sur la note générée (l'usager bascule lui-même).
+      const correctionsOuAudit = Boolean(result.corrections || state.secondPass);
+      if (!isMobileLayout() && correctionsOuAudit) {
+        selectDicteeTab('secondpass');
+      }
 
       // Les métadonnées viennent d'être relues dans la dictée : on les
       // affiche, et on déplie la section pour que le médecin puisse les
@@ -2528,7 +2606,9 @@
       // erreur, le flux a peut-être déjà rempli l'éditeur de texte partiel :
       // on restitue la note qui s'y trouvait avant cette tentative.
       if (err.name !== 'AbortError') {
-        $('markdownEditor').value = state.preGenerateMarkdown;
+        const { note } = splitCorrections(state.preGenerateMarkdown);
+        $('markdownEditor').value = note;
+        renderCorrections(state.preGenerateCorrections);
         renderMarkdown();
         showPreview();
         toast(err.message, 'error', 10000);
@@ -3622,8 +3702,13 @@
       // (voir api_generate), donc les deux ne divergent plus qu'en cours de
       // relecture — et c'est cet état de relecture qu'on ne veut pas montrer
       // à la réouverture, pour ne jamais rouvrir sur un texte périmé.
-      state.lastGeneratedMarkdown = draft.generated_markdown || '';
-      $('markdownEditor').value = draft.generated_markdown || '';
+      // La note affichée est le corps SANS la rubrique « Corrections », qui
+      // part dans l'onglet « Validation ». Repli sur la découpe locale pour
+      // les brouillons antérieurs (la rubrique était encore dans le corps).
+      const decoupe = splitCorrections(draft.generated_markdown || '');
+      state.lastGeneratedMarkdown = decoupe.note;
+      $('markdownEditor').value = decoupe.note;
+      renderCorrections(draft.corrections_markdown || decoupe.corrections);
       $('timer').textContent = formatDuration(state.recordedSeconds);
 
       clearMetadata();
@@ -3687,6 +3772,7 @@
     $('transcript').value = '';
     resetTranscriptReveal();
     $('markdownEditor').value = '';
+    renderCorrections('');
     $('ctxExtra').value = '';
     clearMetadata();
     $('timer').textContent = '00:00';
@@ -6220,7 +6306,12 @@
 
   /** Applique le texte dévoilé : éditeur, rendu markdown et défilement. */
   function applyGenShown() {
-    $('markdownEditor').value = genShown;
+    // La rubrique « Corrections et éléments à valider » ne s'affiche JAMAIS
+    // dans la fenêtre de note : elle est détachée ici et streamée dans
+    // l'onglet « Validation » à la place (voir renderCorrections).
+    const { note, corrections } = splitCorrections(genShown);
+    $('markdownEditor').value = note;
+    renderCorrections(corrections);
     renderMarkdown();
     // On suit toujours la fin du texte en cours de génération, quelle que
     // soit la vue active (Aperçu ou Éditer).

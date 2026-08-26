@@ -3,6 +3,26 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-26 — Le Plan conserve le « je » dicté à la première personne
+
+*Correctif suite à l'observation sur une note réelle : un plan dicté à la
+première personne (« Je renouvelle son Exelon pour un an. Je cesse le Maxeran…
+je la revois dans un an ») était généré sans pronom, les actions étant réduites
+à l'infinitif ou au passif (« Renouveler son Exelon pour un an », « Cesser le
+Maxeran »).*
+
+- **Consigne générale (§ 3 Impression et Plan) resserrée** : le « je » dicté
+  est **toujours** conservé dans le Plan, jamais effacé, jamais réduit à
+  l'infinitif, au substantif ou à la voix passive. Contre-exemples explicites
+  ajoutés (« Je renouvelle son Exelon pour un an » reste tel quel — jamais
+  « Renouveler son Exelon… » ; « Je cesse le Maxeran » reste tel quel — jamais
+  « Cesser le Maxeran »). Une action dictée sans pronom se transcrit sans
+  pronom : la personne grammaticale dictée est respectée strictement, sans
+  normaliser.
+- **Applicable aux consignes déjà en service** par migration (ancienne puce
+  intacte exigée — une consigne personnalisée n'est pas écrasée). À valider
+  par régénération d'une note dictée à la première personne.
+
 ## 2026-08-26 — Raisonnement (thinking) de retour dans la note, sans réapparition
 
 *Le défilement du raisonnement du modèle dans la fenêtre de note avait été

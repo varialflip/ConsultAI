@@ -579,7 +579,11 @@ signaler. » quand il n'y a rien à rapporter ; jamais « Confirmé ». Au-delà
 forme (§ 1 et § 3), renforcées en 2026-08-17 pour les modèles plus sensibles :
 les sections **narratives** (HMA, histoire sociale, investigations) se rédigent
 en **paragraphes courts et suivis** — jamais en liste à puces — tandis que
-**Impression** et **Plan** restent en **liste numérotée**. Une rubrique ENTIÈRE
+**Impression** et **Plan** restent en **liste numérotée**. Dans le **Plan**, une
+action dictée à la première personne conserve son « je » tel quel (jamais
+réduite à l'infinitif, au substantif ou au passif), et une action dictée sans
+pronom se transcrit sans pronom — la personne grammaticale dictée est respectée
+strictement (§ 3). Une rubrique ENTIÈRE
 sans contenu dicté est **supprimée** (titre compris), de même qu'une ligne
 d'en-tête sans valeur dictée (médecin de famille, lieu) ; le marqueur
 `[inaudible]` ne sert qu'à un passage inintelligible situé À L'INTÉRIEUR d'une

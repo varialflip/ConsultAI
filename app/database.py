@@ -1620,6 +1620,99 @@ def migrate_general_prompt_treatment_stays(db: Session) -> int:
     return touches
 
 
+#: Ancres de la consigne générale pour la règle « le Plan conserve le « je »
+#: dicté » (2026-08-26). Deux versions successives de la même puce du § 3
+#: « Impression et Plan » : la consigne est éditable et vit en base, on ne
+#: remplace l'ancienne puce que si elle est encore EXACTEMENT le texte livré
+#: d'origine, pour ne jamais écraser une instruction personnalisée par le
+#: médecin.
+_PLAN_FIRST_PERSON_OLD_FR = (
+    "Dictées à la première personne, elles se transcrivent telles quelles : "
+    "« Je crois qu'il s'agit d'une maladie d'Alzheimer » reste tel quel — "
+    "jamais « Maladie d'Alzheimer » ni « Le médecin croit… » ; « Je lui donne "
+    "congé de la clinique » reste tel quel — jamais « Congé de la clinique » "
+    "ni « Il lui donne congé »."
+)
+_PLAN_FIRST_PERSON_OLD_EN = (
+    'Dictated in the first person, they are transcribed as-is: "I believe '
+    'this is Alzheimer\'s disease" stays as-is — never "Alzheimer\'s disease" '
+    'nor "The physician believes…" ; "I am discharging her from the clinic" '
+    'stays as-is — never "Discharged from the clinic" nor "She is discharged".'
+)
+_PLAN_FIRST_PERSON_NEW_FR = (
+    "Dictées à la première personne, elles se transcrivent telles quelles : "
+    "le « je » dicté est TOUJOURS conservé, jamais effacé, jamais réduit à "
+    "l'infinitif, au substantif ou à la voix passive. « Je crois qu'il "
+    "s'agit d'une maladie d'Alzheimer » reste tel quel — jamais « Maladie "
+    "d'Alzheimer » ni « Le médecin croit… » ; « Je lui donne congé de la "
+    "clinique » reste tel quel — jamais « Congé de la clinique » ni « Il lui "
+    "donne congé ». Dans le Plan : « Je renouvelle son Exelon pour un an » "
+    "reste tel quel — jamais « Renouveler son Exelon pour un an », "
+    "« Renouvellement de l'Exelon pour un an » ni « Son Exelon est renouvelé "
+    "pour un an » ; « Je cesse le Maxeran » reste tel quel — jamais « Cesser "
+    "le Maxeran ». Une action dictée sans pronom se transcrit sans pronom : "
+    "le Plan respecte strictement la personne grammaticale dictée, sans "
+    "normaliser."
+)
+_PLAN_FIRST_PERSON_NEW_EN = (
+    'Dictated in the first person, they are transcribed as-is: the dictated '
+    '"I" is ALWAYS kept, never dropped, never reduced to an infinitive, a '
+    'noun phrase or the passive voice. "I believe this is Alzheimer\'s '
+    'disease" stays as-is — never "Alzheimer\'s disease" nor "The physician '
+    'believes…" ; "I am discharging her from the clinic" stays as-is — never '
+    '"Discharged from the clinic" nor "She is discharged". In the Plan: "I '
+    'am renewing her Exelon for a year" stays as-is — never "Renew her Exelon '
+    'for a year", "Renewal of Exelon for a year" nor "Her Exelon is renewed '
+    'for a year"; "I am stopping the Maxeran" stays as-is — never "Stop the '
+    'Maxeran". An action dictated without a subject is transcribed without '
+    "one: the Plan strictly respects the dictated grammatical person, "
+    "without normalizing it."
+)
+
+
+def migrate_general_prompt_plan_first_person(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la reformulation de la règle du
+    § 3 « Impression et Plan » : le « je » dicté est TOUJOURS conservé dans
+    le Plan (2026-08-26 : « Je renouvelle son Exelon pour un an » était
+    transcrit « Renouveler son Exelon pour un an »).
+
+    Même mécanique que ``migrate_general_prompt_treatment_stays`` : la
+    consigne générale est éditée par le médecin et vit en base, on ne
+    remplace l'ancienne puce que si elle est encore EXACTEMENT le texte livré
+    d'origine. Une puce retravaillée est laissée intacte et signalée au
+    journal.
+    """
+    touches = 0
+    for cle, ancienne, nouvelle in (
+        ("general_prompt_fr", _PLAN_FIRST_PERSON_OLD_FR, _PLAN_FIRST_PERSON_NEW_FR),
+        ("general_prompt_en", _PLAN_FIRST_PERSON_OLD_EN, _PLAN_FIRST_PERSON_NEW_EN),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if nouvelle in row.value:
+            continue  # déjà en place — idempotent
+        if ancienne not in row.value:
+            logger.info(
+                "Consigne « %s » : puce « Impression et Plan » modifiée, "
+                "règle du « je » conservé laissée au panneau.",
+                cle,
+            )
+            continue
+        row.value = row.value.replace(ancienne, nouvelle)
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » : règle « le Plan conserve le « je » dicté » "
+            "appliquée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Ancienne phrase de regroupement des médicaments LIVRÉE dans les gabarits
 #: avant la reformulation « indication dictée ou cliniquement évidente ».
 #: Même mécanique que les migrations de la consigne générale : on ne remplace
@@ -2045,6 +2138,7 @@ def init_db() -> None:
         migrate_general_prompt_undo_consolidation(db)
         migrate_general_prompt_no_omission(db)
         migrate_general_prompt_treatment_stays(db)
+        migrate_general_prompt_plan_first_person(db)
         migrate_template_med_grouping(db)
         migrate_template_suivi_resume_stays(db)
         migrate_template_suivi_resume_treatment_stays(db)

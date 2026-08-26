@@ -3,6 +3,43 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-26 — Validation fiabilisée + fidélité des visites antérieures
+
+*Correctifs suite à l'observation sur une note réelle : des médicaments
+réellement dictés étaient déclarés « inventions », des phrases déjà présentes
+dans la note « omissions », et une modification de traitement faite à une
+visite antérieure était passée sous silence.*
+
+- **Le budget de raisonnement du « Validation » suit désormais le panneau**
+  (`gemini_thinking_budget`, ex. 2048) au lieu du plancher 128. Avec 128 le
+  modèle hallucine des écarts (il ne croise pas réellement l'audio et la
+  note) ; avec le budget du panneau les faux positifs disparaissent et les
+  vraies omissions (faits dictés absents de la note) sont retrouvées.
+- **Garde-fou déterministe anti-faux-positifs.** Après l'appel, chaque
+  élément signalé est recoupé : une « omission » dont tous les mots
+  distinctifs figurent déjà dans la note est écartée (l'info y est), une
+  « invention » dont la moitié des mots distinctifs figure dans la
+  transcription est écartée (le fait a été dicté). Le seuil est conservateur
+  par construction : un vrai écart a toujours un terme absent, donc rien de
+  réel n'est perdu.
+- **Consignes de l'auditeur resserrées** : méthode obligatoire (écouter
+  l'audio en entier, relire la note en entier, puis comparer), rappel que la
+  liste de médicaments est énoncée dans l'audio (les écarts de prononciation
+  « Lipitar ≈ Lipitor » ne sont pas des inventions), tolérance explicite aux
+  reformulations. Vérifié par re-validation de la note concernée : plus
+  aucun faux positif, la vraie omission (renouvellement Exelon + diminution
+  métoclopramide à la visite précédente) est signalée.
+- **Fidélité des modifications de traitement des visites antérieures.** Une
+  dictée « lors de la visite précédente, j'avais renouvelé l'Exelon et
+  diminué le métoclopramide » était passée sous silence par la génération.
+  La règle du **Résumé** des gabarits « Suivi » exige désormais explicitement
+  toute modification du plan de traitement d'une visite antérieure
+  (médicament débuté, cessé, renouvelé, dose modifiée), distincte du plan
+  actuel ; la consigne générale (§ 1) porte la même règle. Applicable aux
+  gabarits existants par migration (fragment intact exigé). Vérifié : la
+  régénération de la note concernée contient bien « le traitement par Exelon
+  avait été renouvelé et la dose de métoclopramide avait été diminuée ».
+
 ## 2026-08-26 — v2.0.0-rc.1
 
 *Première candidate de la version 2 : inclut tout depuis la bêta.84 — les

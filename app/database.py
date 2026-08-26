@@ -1543,6 +1543,83 @@ def migrate_general_prompt_no_omission(db: Session) -> int:
     return touches
 
 
+#: Ancres de la consigne générale pour la règle « modifications de traitement
+#: d'une visite antérieure » (2026-08-26). Contrairement aux migrations
+#: précédentes, la consigne générale est ici ÉDITÉE par le médecin : on ne
+#: compare pas une empreinte, on vérifie la présence EXACTE de la phrase des
+#: hospitalisations et séjours (dont la règle nouvelle est le prolongement)
+#: pour y accoler la clause — si la phrase a été modifiée ou supprimée, on
+#: laisse la consigne intacte.
+_GENERAL_PROMPT_STAYS_ANCHOR_FR = (
+    "- Hospitalisations et séjours : chaque hospitalisation, visite ou séjour "
+    "institutionnel mentionné (lieu, année, motif) figure dans la note ; les "
+    "séjours antérieurs ne sont jamais fusionnés avec le séjour ou la visite "
+    "actuelle."
+)
+_GENERAL_PROMPT_STAYS_ANCHOR_EN = (
+    "- Hospitalizations and stays: every hospitalization, visit or "
+    "institutional stay mentioned (site, year, reason) appears in the note; "
+    "prior stays are never merged with the current stay or visit."
+)
+
+_GENERAL_PROMPT_TREATMENT_CLAUSE_FR = (
+    "\n- Modifications de traitement d'une visite antérieure : tout "
+    "médicament mentionné comme débuté, cessé, renouvelé ou avec une dose "
+    "modifiée lors d'une consultation antérieure figure dans la note, dans sa "
+    "rubrique (Résumé ou HMA selon le gabarit), distinct du plan de "
+    "traitement actuel."
+)
+_GENERAL_PROMPT_TREATMENT_CLAUSE_EN = (
+    "\n- Prior-visit treatment changes: any medication mentioned as started, "
+    "stopped, renewed, or with a modified dose during an earlier consultation "
+    "appears in the note, in its section (Summary or HPI depending on the "
+    "template), distinct from the current treatment plan."
+)
+
+
+def migrate_general_prompt_treatment_stays(db: Session) -> int:
+    """
+    Ajoute la règle « modifications de traitement d'une visite antérieure »
+    à la consigne générale EN BASE (2026-08-26 : « renouvelé l'Exelon et
+    diminué le métoclopramide » à la visite précédente avait été passé sous
+    silence).
+
+    La consigne générale est éditée par le médecin et vit en base : on ne
+    touche à la valeur que si la phrase « hospitalisations et séjours » — dont
+    la règle nouvelle est le prolongement direct — y figure EXACTEMENT telle
+    que livrée. Une consigne retravaillée est laissée intacte et signalée au
+    journal, comme pour les migrations précédentes.
+    """
+    touches = 0
+    for cle, ancre, clause in (
+        ("general_prompt_fr", _GENERAL_PROMPT_STAYS_ANCHOR_FR, _GENERAL_PROMPT_TREATMENT_CLAUSE_FR),
+        ("general_prompt_en", _GENERAL_PROMPT_STAYS_ANCHOR_EN, _GENERAL_PROMPT_TREATMENT_CLAUSE_EN),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if clause.lstrip("\n") in row.value:
+            continue  # déjà en place — idempotent
+        if ancre not in row.value:
+            logger.info(
+                "Consigne « %s » : phrase des hospitalisations introuvable, "
+                "règle des modifications de traitement laissée au panneau.",
+                cle,
+            )
+            continue
+        row.value = row.value.replace(ancre, ancre + clause)
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » : règle « modifications de traitement d'une "
+            "visite antérieure » ajoutée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Ancienne phrase de regroupement des médicaments LIVRÉE dans les gabarits
 #: avant la reformulation « indication dictée ou cliniquement évidente ».
 #: Même mécanique que les migrations de la consigne générale : on ne remplace
@@ -1643,6 +1720,54 @@ def migrate_template_suivi_resume_stays(db: Session) -> int:
                     row.name,
                 )
                 break
+    if touches:
+        db.commit()
+    return touches
+
+
+#: Fragment « Résumé » LIVRÉ dans le gabarit « Suivi - Gériatrie » avant
+#: l'ajout de la mention des modifications de traitement d'une visite
+#: antérieure. Même mécanique que les migrations précédentes : on ne remplace
+#: le fragment que s'il y figure EXACTEMENT tel que livré. Le fragment est
+#: commun aux trois gabarits « Suivi » (Gériatrie, copie GB, FD) — le milieu
+#: de la phrase du Résumé ne varie pas entre les casses livrées.
+_OLD_SUIVI_RESUME_TREATMENT_FRAGMENT = (
+    "ce qui est nouveau depuis la dernière visite, et l'autonomie fonctionnelle antérieure"
+)
+
+_NEW_SUIVI_RESUME_TREATMENT_FRAGMENT = (
+    "ce qui est nouveau depuis la dernière visite, toute modification du plan de "
+    "traitement mentionnée pour une visite antérieure (médicament débuté, cessé, "
+    "renouvelé, dose modifiée), et l'autonomie fonctionnelle antérieure"
+)
+
+
+def migrate_template_suivi_resume_treatment_stays(db: Session) -> int:
+    """
+    Porte dans les copies modifiables du gabarit « Suivi - Gériatrie » la
+    mention des modifications de traitement effectuées à une visite antérieure
+    dans la règle du Résumé (2026-08-26 : « renouvelé l'Exelon et diminué le
+    métoclopramide » à la visite précédente avait été passé sous silence).
+
+    Même mécanique que ``migrate_template_suivi_resume_stays`` : fragment
+    remplacé seulement s'il y est EXACTEMENT le texte livré, copie intacte
+    sinon (les gabarits verrouillés sont rafraîchis par
+    ``seed_locked_templates`` depuis ``default_templates``).
+    """
+    touches = 0
+    for row in db.scalars(select(Template)).all():
+        inst = row.system_instructions or ""
+        if _OLD_SUIVI_RESUME_TREATMENT_FRAGMENT in inst:
+            row.system_instructions = inst.replace(
+                _OLD_SUIVI_RESUME_TREATMENT_FRAGMENT,
+                _NEW_SUIVI_RESUME_TREATMENT_FRAGMENT,
+            )
+            touches += 1
+            logger.info(
+                "Gabarit « %s » : règle du Résumé enrichie (modifications de "
+                "traitement d'une visite antérieure).",
+                row.name,
+            )
     if touches:
         db.commit()
     return touches
@@ -1919,8 +2044,10 @@ def init_db() -> None:
         migrate_general_prompt_structure(db)
         migrate_general_prompt_undo_consolidation(db)
         migrate_general_prompt_no_omission(db)
+        migrate_general_prompt_treatment_stays(db)
         migrate_template_med_grouping(db)
         migrate_template_suivi_resume_stays(db)
+        migrate_template_suivi_resume_treatment_stays(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

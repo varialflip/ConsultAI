@@ -34,6 +34,7 @@ import json
 import logging
 import re
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -918,46 +919,105 @@ def verification_capable(provider: Optional[str] = None) -> bool:
 
 
 #: Consignes de l'auditeur factuel (« Validation »). Volontairement PERMISSIF :
-#: un contrôle qui crie à tort est pire qu'un contrôle muet — le médecin
+#: un contrôle qui crie au lieu est pire qu'un contrôle muet — le médecin
 #: doit pouvoir considérer « aucune liste » comme « rien à signaler » sans
 #: vérification systématique. L'audio fait foi ; une transcription éventuelle
 #: n'est fournie qu'à titre indicatif (Parakeet se trompe), jamais comme
-#: référence pour accuser une omission.
+#: preuve d'une omission.
+#:
+#: Le biais 3 le plus observé est un EXCÈS de signalements : le modèle signale
+#: comme « invention » un fait RÉELLEMENT dicté (et pourtant présent dans la
+#: note) parce qu'il ne le retrouve pas dans la transcription approximative, ou
+#: signale comme « omission » un élément déjà énoncé ailleurs dans la note.
+#: Les consignes ci-dessous imposent donc un double seuil de preuve : une
+#: omission doit contredire le sens explicite de la note, et une invention doit
+#: être SAPrC une affirmation dont on peut désigner le faux dans l'audio.
 _AUDITOR_PROMPTS = {
     "fr": (
         "Tu es auditeur factuel d'une note clinique rédigée à partir d'une "
         "dictée. L'AUDIO est la seule source de vérité ; une transcription "
-        "éventuellement jointe est APPROXIMATIVE et ne doit jamais servir à "
-        "accuser une omission.\n"
-        "Compare la note à l'audio et signale uniquement les écarts dont tu "
-        "es CERTAIN :\n"
-        "- « omissions » : information clairement dictée dans l'audio et "
-        "totalement absente de la note. Une reformulation, un synonyme "
-        "médical exact ou un regroupement n'est PAS une omission.\n"
-        "- « inventions » : affirmation concrète de la note (médicament, "
-        "dose, diagnostic, antécédent, chiffre…) absente de l'audio.\n"
-        "Sois très permissif avec la note : style, ordre des rubriques, "
-        "généralisations bénignes et mise en forme ne comptent pas. Dans le "
-        "doute, ne signale PAS. Au plus 5 éléments courts par liste ; si "
-        "rien à signaler, listes vides. « confiance » : ta certitude globale "
-        "(haute/moyenne/basse)."
+        "éventuellement jointe est APPROXIMATIVE (le moteur vocal se trompe) "
+        "et ne doit JAMAIS servir de preuve : elle ne peut ni accuser une "
+        "omission, ni confirmer une invention. Seul l'audio fait foi.\n"
+        "\n"
+        "MÉTHODE OBLIGATOIRE, dans cet ordre : 1) écoute l'audio en entier ; "
+        "2) relis la note en entier ; 3) compare alors seulement élément par "
+        "élément.\n"
+        "\n"
+        "La note est une reformulation FIDÈLE de la dictée : presque chaque "
+        "affirmation a une origine dans l'audio. Ton rôle n'est PAS de "
+        "chercher des écarts, mais de ne signaler QUE les écarts dont tu peux "
+        "prouver l'existence. Par défaut, tu ne signales rien.\n"
+        "\n"
+        "- « omissions » : une information CLAIREMENT et EXPLICITEMENT dictée "
+        "dans l'audio ET totalement absente du sens de la note. Toute "
+        "présence équivalente annule le signalement : reformulation, synonyme "
+        "médical, regroupement, généralisation, ou simplement un énoncé qui "
+        "implique le fait. Si l'info est dite ailleurs dans la note (mêmes "
+        "idées), ce n'est PAS une omission. AVANT de signaler, relis la note "
+        "entière et vérifie qu'aucune phrase ne le couvre déjà.\n"
+        "- « inventions » : affirmation CONCRÈTE et DÉTAILLÉE de la note "
+        "(médicament spécifique, dose, chiffre, diagnostic, antécédent) dont "
+        "tu peux déterminer qu'elle est ABSENTE de l'audio dans son "
+        "intégralité. Règle de preuve : si l'affirmation (ou chacun de ses "
+        "constituants) se retrouve dans l'audio — dictée, récapitulatif des "
+        "médicaments énoncé, phrase du plan — ce n'est PAS une invention. "
+        "Chaque médicament de la liste de la note qui est énoncé dans l'audio "
+        "n'est PAS une invention, même avec un écart de prononciation ou "
+        "d'orthographe (ex. « Lipitar » ≈ « Lipitor », « pentoloc » ≈ "
+        "« Pantoloc »). Une assertion déjà présente dans la note et dite dans "
+        "l'audio ne peut JAMAIS être une invention, même si la transcription "
+        "ne la retrouve pas.\n"
+        "\n"
+        "Sois TRÈS permissif : le style, l'ordre des rubriques, la mise en "
+        "forme, les généralisations bénignes et l'explicitation d'un "
+        "détail déjà pris en compte ne comptent JAMAIS comme écart. Dans le "
+        "doute, NE SIGNALE PAS : une liste vide est le résultat normal, "
+        "jamais un échec. Sauf preuve directe dans l'audio, ne signale rien ; "
+        "au plus 5 éléments courts par liste. « confiance » : ta certitude "
+        "globale (haute/moyenne/basse)."
     ),
     "en": (
         "You are a factual auditor of a clinical note written from a "
         "dictation. The AUDIO is the sole source of truth; any attached "
-        "transcript is APPROXIMATE and must never be used to accuse an "
-        "omission.\n"
-        "Compare the note with the audio and flag ONLY discrepancies you are "
-        "CERTAIN about:\n"
-        "- \"omissions\": information clearly dictated in the audio and "
-        "entirely absent from the note. A reformulation, an exact medical "
-        "synonym, or a grouping is NOT an omission.\n"
-        "- \"inventions\": concrete statements in the note (medication, "
-        "dose, diagnosis, history, number…) absent from the audio.\n"
-        "Be very permissive with the note: style, section order, benign "
-        "generalizations, and formatting do not count. When in doubt, do NOT "
-        "flag. At most 5 short items per list; empty lists if nothing to "
-        "report. \"confiance\": your overall certainty (haute/moyenne/basse)."
+        "transcript is APPROXIMATE (speech engines err) and must NEVER be "
+        "used as proof: it can neither accuse an omission nor confirm an "
+        "invention. Only the audio decides.\n"
+        "\n"
+        "MANDATORY METHOD, in this order: 1) listen to the entire audio; "
+        "2) reread the entire note; 3) only then compare element by "
+        "element.\n"
+        "\n"
+        "The note is a FAITHFUL reformulation of the dictation: nearly every "
+        "claim has an origin in the audio. Your role is NOT to hunt for "
+        "discrepancies but to flag ONLY those you can prove. By default you "
+        "flag nothing.\n"
+        "\n"
+        "- \"omissions\": information CLEARLY and EXPLICITLY dictated in the "
+        "audio AND entirely absent from the note's meaning. Any equivalent "
+        "presence cancels the flag: reformulation, exact medical synonym, "
+        "grouping, generalization, or a statement implying the fact. If the "
+        "information is stated elsewhere in the note (same ideas), it is NOT "
+        "an omission. BEFORE flagging, reread the whole note and verify no "
+        "sentence already covers it.\n"
+        "- \"inventions\": a concrete, DETAILED claim in the note (specific "
+        "medication, dose, number, diagnosis, history) that you can determine "
+        "is ABSENT from the audio in its entirety. Proof rule: if the claim "
+        "(or each of its constituents) appears in the audio — in the "
+        "dictation, the spoken medication list, or a plan sentence — it is "
+        "NOT an invention. Every medication in the note's list that is "
+        "spoken in the audio is NOT an invention, even with a pronunciation "
+        "or spelling mismatch (e.g. \"Lipitar\" ≈ \"Lipitor\", \"pentoloc\" ≈ "
+        "\"Pantoloc\"). A statement already present in the note and "
+        "spoken in the audio can NEVER be an invention, even if the "
+        "transcript fails to capture it.\n"
+        "\n"
+        "Be VERY permissive: style, section order, formatting, benign "
+        "generalizations, and spelling out a detail already accounted for "
+        "NEVER count as a discrepancy. When in doubt, DO NOT flag: an empty "
+        "list is the normal outcome, never a failure. Without direct audio "
+        "proof, flag nothing; at most 5 short items per list. \"confiance\": "
+        "your overall certainty (haute/moyenne/basse)."
     ),
 }
 
@@ -1032,13 +1092,22 @@ def verify_note(
         types.Part.from_bytes(data=audio[0], mime_type=audio[1]),
     ]
 
+    # L'audit est une tâche de CROISEMENT (note ↔ audio) : il a besoin de
+    # raisonnement pour ne pas inventer d'écarts. Le budget du panneau
+    # (``gemini_thinking_budget``) s'applique ici comme pour la génération,
+    # pas le plancher 128 qui laisse le modèle halluciner des faux positifs
+    # (observé : des médicaments réellement dictés déclarés « inventions »).
+    # Bascule coupée → budget 0, refusé par gemini-2.5-pro : le repli
+    # ``_est_think_refusee_gemini`` relance alors sans champ, ce qui laisse le
+    # modèle raisonner sur sa valeur par défaut — toujours mieux pour l'audit
+    # qu'un budget au plancher.
     config_kwargs: Dict[str, object] = dict(
         system_instruction=_AUDITOR_PROMPTS.get(langue_norm, _AUDITOR_PROMPTS["fr"]),
         temperature=0.2,
         max_output_tokens=settings.gemini_max_output_tokens,
         safety_settings=_safety_settings(),
         thinking_config=types.ThinkingConfig(
-            thinking_budget=_GEMINI_THINKING_BUDGET_MIN
+            thinking_budget=_gemini_thinking_budget()
         ),
         response_mime_type="application/json",
         response_schema=_verification_schema(),
@@ -1095,7 +1164,77 @@ def verify_note(
         "inventions": _liste(donnees.get("inventions")),
         "confiance": confiance if confiance in ("haute", "moyenne", "basse") else "moyenne",
     }
+    # Garde-fou déterministe : le modèle peut encore halluciner un écart alors
+    # que le fait est déjà présent dans la note (fausse omission) ou, à
+    # l'inverse, que la transcription (rendu de l'audio) le contient déjà
+    # (fausse invention). On neutralise ces cas par recoupement de mots
+    # distinctifs — jamais le contraire : un vrai oubli a toujours un terme
+    # absent de la note, une vraie invention un terme absent de la
+    # transcription, donc rien de réel n'est perdu.
+    resultat["omissions"] = [
+        e for e in resultat["omissions"] if not _element_deja_porte(e, note_markdown or "")
+    ]
+    if transcript:
+        resultat["inventions"] = [
+            e for e in resultat["inventions"] if not _element_deja_porte(e, transcript, seuil=0.5)
+        ]
     return resultat, usage
+
+
+#: Mots-outils à ignorer pour le recoupement « Validation » : trop communs
+#: pour porter la preuve d'un fait clinique (ils abondent aussi bien dans la
+#: note que dans la transcription). Quatre lettres et plus seulement — les
+#: mots plus courts (articles, prépositions) sont déjà exclus par la longueur.
+_VALIDATION_MOTS_OUTILS = set(
+    """
+    avec aussi avoir comme dans cette depuis dont être faire mais même pour
+    quand que qui sans selon sur très une etre mais avec notre votre leurs
+    comme quand alors cela cette tous tout toutes
+    """.split()
+)
+
+
+def _mots_distinctifs(texte: str) -> set:
+    """
+    Mots « distinctifs » d'un élément signalé par la « Validation ».
+
+    Normalisation minuscule + accents retirés, puis on garde les suites
+    d'au moins 4 lettres qui ne sont pas des mots-outils. Ce sont les termes
+    porteurs de sens clinique (médicament, dose, diagnostic, signe…) — ceux
+    dont la présence ou l'absence dans la note / transcription tranche.
+    """
+    mots = re.findall(r"[a-zA-ZÀ-ÿ]{4,}", texte.lower())
+    normes = set()
+    for mot in mots:
+        nfkd = unicodedata.normalize("NFKD", mot)
+        sans = "".join(c for c in nfkd if not unicodedata.combining(c))
+        if len(sans) >= 4:
+            normes.add(sans)
+    return normes - _VALIDATION_MOTS_OUTILS
+
+def _element_deja_porte(element: str, reference: str, seuil: float = 1.0) -> bool:
+    """
+    L'élément signalé par la « Validation » est-il déjà porté par ``reference`` ?
+
+    ``reference`` est la note (pour une fausse omission) ou la transcription
+    (pour une fausse invention). ``seuil`` est la fraction des mots distinctifs
+    de l'élément qu'on exige de retrouver dans ``reference`` :
+
+    - omissions : ``seuil=1.0`` — TOUS les mots doivent être dans la note, un
+      seul absent suffit à conserver le signalement (ne jamais effacer un vrai
+      oubli, dont le terme manquant est par définition absent de la note) ;
+    - inventions : ``seuil=0.5`` — la moitié des mots retrouvée dans la
+      transcription suffit à la ranger comme réellement dictée. Une vraie
+      invention n'a quasiment aucun recoupement avec la transcription (le fait
+      n'a jamais été prononcé) ; une fausse invention, elle, partage ses
+      termes porteurs (médicament, dose, diagnostic) avec ce qui fut dit.
+    """
+    mots = _mots_distinctifs(element)
+    if not mots:
+        return False
+    ref_mots = _mots_distinctifs(reference)
+    partages = len(mots & ref_mots) / len(mots)
+    return partages >= seuil
 
 
 def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None) -> Completion:

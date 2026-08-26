@@ -268,6 +268,12 @@ COHERE_LLM_THINKING_BUDGET=1024
 > la transcription, bascule automatique à l'arrivée ; il est conservé avec le
 > brouillon (`consultations.verification_json`) et réaffiché au chargement.
 > Coût observé : ~60 % d'un appel de génération en plus (l'audio domine).
+> Fiabilité : le « Validation » utilise le budget de raisonnement configuré
+> dans le panneau (`gemini_thinking_budget`) — au plancher 128 il hallucine
+> des écarts inexistants — et un garde-fou déterministe écarte après coup
+> toute « omission » déjà présente dans la note et toute « invention » déjà
+> portée par la transcription (le seuil est conservateur : un vrai écart a
+> toujours un terme absent, il n'est donc jamais effacé).
 
 ---
 
@@ -584,7 +590,10 @@ fusion avec un autre — et la vérification finale (§ 6) en vérifie la
 réciproque. Chaque hospitalisation, visite ou séjour institutionnel mentionné
 (lieu, année, motif) y figure, sans être fusionné avec le séjour ou la visite
 actuelle ; le gabarit « Suivi - Gériatrie » nomme explicitement les
-hospitalisations antérieures dans sa règle du Résumé.
+hospitalisations antérieures dans sa règle du Résumé. Les modifications de
+traitement d'une visite antérieure (médicament débuté, cessé, renouvelé, dose
+modifiée) sont portées dans la note, dans leur rubrique (Résumé ou HMA selon
+le gabarit), distinctes du plan de traitement actuel.
 
 Champs de substitution disponibles dans la mise en page : `{{DATE}}`,
 `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. (`{{PATIENT}}` et `{{DOSSIER}}` sont

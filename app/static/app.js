@@ -489,7 +489,10 @@
   let lastGenRender = 0;
   // Phase « raisonnement du modèle » : le thinking défile dans la même
   // fenêtre que la note, puis est effacé dès le premier morceau de texte.
+  // ``genTextStarted`` verrouille la bascule : dès que le texte de la note a
+  // commencé, toute pensée en retard est ignorée (elle ne réapparaît plus).
   let genThoughtPhase = false;
+  let genTextStarted = false;
 
   // Révélation progressive de la TRANSCRIPTION — même mécanique que la note
   // (voir createTextReveal). ``committedText`` est la base AUTORITAIRE du
@@ -2453,6 +2456,7 @@
     genShown = '';
     lastGenRender = 0;
     genThoughtPhase = false;
+    genTextStarted = false;
     hideThinkingIndicator();
     setGenerating(true);
     $('markdownEditor').value = '';
@@ -2542,6 +2546,7 @@
         if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
         genShown = '';
         genThoughtPhase = false;
+        genTextStarted = false;
         hideThinkingIndicator();
         setGenerating(false);
       }
@@ -6030,6 +6035,10 @@
     if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
 
+    // La note a commencé : verrou — toute pensée encore en retard est ignorée
+    // par onGenerationThought et ne réapparaît plus à l'écran.
+    genTextStarted = true;
+
     // Premier morceau de TEXTE de la note : le raisonnement (thinking) s'est
     // terminé — on efface la pensée de l'écran (elle n'est jamais persistée),
     // puis la note défile à son tour.
@@ -6071,8 +6080,10 @@
   /**
    * Raisonnement (thinking) du modèle, diffusé par le serveur pendant la
    * génération (événement SSE ``generation_thought``). Il défile dans la même
-   * fenêtre que la note, puis est effacé dès le premier morceau de texte
-   * (voir onGenerationChunk) — jamais persisté.
+   * fenêtre que la note, puis est effacé dès le premier morceau de texte de
+   * la note (voir onGenerationChunk) — jamais persisté. Une fois la note
+   * commencée, les éventuels événements de pensée encore en retard sont
+   * ignorés : le raisonnement ne réapparaît jamais pendant le streaming.
    */
   function onGenerationThought(evt) {
     if (!pendingGenerate) return;
@@ -6080,10 +6091,9 @@
     if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
 
-    // Le raisonnement du modèle n'entre JAMAIS dans la fenêtre de la note :
-    // le défilement suivi d'effacement « flashait » pendant la génération et
-    // distrayait. On n'en garde qu'un indicateur discret (le dot statique
-    // « Raisonnement du modèle… »), qui atteste que le modèle travaille.
+    // La note a déjà commencé : la pensée est finie — on ne la réaffiche pas.
+    if (genTextStarted) return;
+
     if (!genThoughtPhase) {
       genThoughtPhase = true;
       showThinkingIndicator();
@@ -6094,6 +6104,18 @@
       state.genStarted = true;
       progressToast.setMessage(T('generate.streaming'));
     }
+
+    if (payload.type === 'snapshot' || !payload.type) {
+      genText = payload.markdown || '';
+      genSeq = payload.seq || 0;
+    } else {
+      if (genSeq + 1 === payload.seq || genSeq === 0) {
+        genText += payload.delta || '';
+      }
+      genSeq = payload.seq || genSeq;
+    }
+
+    startGenReveal();
   }
 
   function showThinkingIndicator() {

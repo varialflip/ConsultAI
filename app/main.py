@@ -2692,7 +2692,11 @@ def _generate_and_publish(
                     "generation_token": payload.generation_token,
                     "origin_tab": origin_tab,
                 })
-                if show_thinking and thought_accum["raw"]:
+                # La pensée ne transite que tant qu'AUCUN texte de note n'a été
+                # émis (``raw`` vide) : dès que la note commence, plus aucun
+                # snapshot de raisonnement — sans quoi le client laisserait la
+                # pensée réapparaître pendant le streaming de la note.
+                if show_thinking and thought_accum["raw"] and not raw:
                     live.publish(user.owner_key, "generation_thought", {
                         "type": "snapshot", "seq": thought_accum["seq"],
                         "markdown": thought_accum["raw"],

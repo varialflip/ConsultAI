@@ -3,6 +3,26 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-26 — Raisonnement (thinking) de retour dans la note, sans réapparition
+
+*Le défilement du raisonnement du modèle dans la fenêtre de note avait été
+retiré (beta.84) parce que, une fois la pensée terminée, elle « flashait » :
+elle réapparaissait pendant le streaming de la note. Le défilement est rétabli,
+et la réapparition supprimée à sa source.*
+
+- **Défilement du raisonnement rétabli** dans la fenêtre de note pendant la
+  génération (toujours régi par `show_thinking_admin` / `show_thinking_users`,
+  désactivés par défaut), puis effacé dès le premier morceau de texte de la
+  note — jamais persisté.
+- **Cause de la réapparition supprimée.** Le serveur re-publiait un snapshot
+  de la pensée toutes les secondes pendant TOUTE la génération, même une fois la
+  note commencée ; le client le rejouait en remplaçant le texte de la note. Le
+  serveur n'émet plus de snapshot de raisonnement dès qu'un premier jeton de
+  texte est sorti (`generation_thought` ne circule plus que pendant la phase de
+  pensée), et le client verrouille la bascule : toute pensée en retard après le
+  début du texte est ignorée. La pensée défile donc une fois, puis la note
+  prend le relais sans retour.
+
 ## 2026-08-26 — Validation fiabilisée + fidélité des visites antérieures
 
 *Correctifs suite à l'observation sur une note réelle : des médicaments

@@ -290,14 +290,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "pane.dictation": ("Dictée", "Dictation"),
     "pane.note": ("Note structurée", "Structured note"),
     "pane.raw": ("Transcription brute", "Raw transcript"),
-    "sw.updated_now": (
-        "Mise à jour prête — rechargement de la page…",
-        "Update ready — reloading the page…",
-    ),
-    "sw.updated_later": (
-        "Nouvelle version disponible : rechargez la page après la dictée.",
-        "New version available: reload the page after your dictation.",
-    ),
     "secondpass.toggle": ("2e jet", "2nd pass"),
     "secondpass.tab": ("2e jet", "2nd pass"),
     "secondpass.title": (

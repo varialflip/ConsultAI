@@ -81,15 +81,7 @@ self.addEventListener('activate', (event) => {
           .filter((name) => !name.startsWith(VERSION))
           .map((name) => caches.delete(name)),
       ))
-      .then(() => self.clients.claim())
-      // Auto-réparation : un onglet ouvert AVANT la mise à jour continue de
-      // tourner sur l'ancien JavaScript même après prise de contrôle. On le
-      // prévient ; c'est LUI qui décide du rechargement (jamais pendant une
-      // dictée ou une génération — voir app.js).
-      .then(() => self.clients.matchAll({ type: 'window' }))
-      .then((clients) => clients.forEach((client) => {
-        client.postMessage({ type: 'consultai-sw-updated', version: VERSION });
-      })),
+      .then(() => self.clients.claim()),
   );
 });
 

@@ -2196,12 +2196,17 @@
    * ====================================================================== */
   let secondPassData = null;   // dernier audit affichable, ou null
   let secondPassTimeout = null;
+  // Jeton attendu pour le PROCHAIN ``verification_result``. Distinct de
+  // ``state.generationToken`` : celui-ci est remis à null dès que la réponse
+  // de /api/generate revient (le ``finally`` de generateNote), or l'audit
+  // part en tâche de fond et publie PLUS TARD — sans ce jeton séparé, tout
+  // résultat était rejeté en silence et la roue tournait indéfiniment.
+  let verificationPendingToken = null;
 
-  /** Filet : la roue ne peut pas tourner indéfiniment (audit échoué,
-      tâche perdue, onglet resté ouvert sur une génération annulée). */
   function armerFiletSecondPass() {
     clearTimeout(secondPassTimeout);
     secondPassTimeout = setTimeout(() => {
+      verificationPendingToken = null;
       setSecondPassSpinner(false);
       $('secondPassPending').classList.add('hidden');
       $('secondPassContent').classList.add('hidden');
@@ -2275,6 +2280,9 @@
   /** Nouvelle génération avec « 2e jet » : état « en cours », sans basculer. */
   function enterSecondPassPending() {
     secondPassData = null;
+    // Le jeton de CETTE génération est celui que l'évènement portera — il
+    // faut le retenir avant que le ``finally`` ne le remette à null.
+    verificationPendingToken = state.generationToken;
     setSecondPassSpinner(true);
     $('secondPassPending').classList.remove('hidden');
     $('secondPassContent').classList.add('hidden');
@@ -2285,6 +2293,7 @@
   function stopSecondPassPending() {
     clearTimeout(secondPassTimeout);
     secondPassTimeout = null;
+    verificationPendingToken = null;
     setSecondPassSpinner(false);
     $('secondPassPending').classList.add('hidden');
   }
@@ -2350,38 +2359,21 @@
     } catch {
       return;
     }
-    if (!donnees.generation_token || donnees.generation_token !== state.generationToken) return;
+    if (!donnees.generation_token || donnees.generation_token !== verificationPendingToken) return;
     if (String(donnees.consultation_id) !== String(state.consultationId)) return;
+    verificationPendingToken = null;
+    if (donnees.skipped) {
+      // Audit impossible côté serveur (pas d'audio, échec) : arrêt immédiat
+      // de la roue, sans bascule d'onglet ni message trompeur.
+      stopSecondPassPending();
+      renderSecondPass(null, false);
+      return;
+    }
     renderSecondPass({
       omissions: Array.isArray(donnees.omissions) ? donnees.omissions : [],
       inventions: Array.isArray(donnees.inventions) ? donnees.inventions : [],
       confiance: donnees.confiance || '',
     }, true);
-  }
-
-  /* -------------------------------------------------------------------------
-   * Mise à jour du service worker — rechargement sûr
-   * ----------------------------------------------------------------------
-   * Le SW prévient quand une nouvelle version est prise en contrôle. Un
-   * onglet resté ouvert continue sinon de tourner sur l'ancien JavaScript.
-   * On ne recharge JAMAIS en pleine dictée ou génération : on propose, et
-   * le rechargement part seulement hors de ces flux (ou au prochain
-   * chargement naturel).
-   * ---------------------------------------------------------------------- */
-  let swUpdateToastShown = false;
-  if (navigator.serviceWorker) {
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      if (!event.data || event.data.type !== 'consultai-sw-updated') return;
-      if (swUpdateToastShown) return;
-      swUpdateToastShown = true;
-      const occupé = state.recording || dictation.active || pendingGenerate;
-      if (occupé) {
-        toast(T('sw.updated_later'), 'info', 12000);
-        return;
-      }
-      toast(T('sw.updated_now'), 'info', 4000);
-      setTimeout(() => window.location.reload(), 1500);
-    });
   }
 
   async function generateNote() {

@@ -2795,7 +2795,16 @@ async def _run_second_pass(
         logger.exception("« 2e jet » impossible (consultation %s)", consultation_id)
         return
 
-    if resultat is None or not _generation_guard.is_current(consultation_id, generation_seq):
+    if resultat is None:
+        # Audit sans résultat (audio absent, appel impossible, JSON invalide)
+        # ou génération supplantée : on prévient quand même les onglets — sans
+        # quoi la roue « 2e jet » tournerait jusqu'au filet du navigateur.
+        live.publish(owner_key, "verification_result", {
+            "consultation_id": consultation_id,
+            "generation_token": generation_token,
+            "origin_tab": origin_tab,
+            "skipped": True,
+        })
         return
     live.publish(owner_key, "verification_result", {
         "consultation_id": consultation_id,

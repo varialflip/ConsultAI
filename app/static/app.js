@@ -2257,6 +2257,9 @@
     const vueSecondPass = $('secondPassView');
     if (!vueTranscription || !vueSecondPass) return;
     const transcriptionActive = tab !== 'secondpass';
+
+    // Seule la classe « hidden » change : chaque vue garde SA disposition
+    // (flex) intacte, la bascule est donc structurellement garantie.
     vueTranscription.classList.toggle('hidden', !transcriptionActive);
     vueSecondPass.classList.toggle('hidden', transcriptionActive);
 
@@ -2269,6 +2272,8 @@
       ongletSecondPass.classList.toggle('accent-tab', !transcriptionActive);
       ongletSecondPass.classList.toggle('text-slate-700', !transcriptionActive);
       ongletSecondPass.classList.toggle('text-slate-500', transcriptionActive);
+      ongletTranscription.setAttribute('aria-selected', transcriptionActive ? 'true' : 'false');
+      ongletSecondPass.setAttribute('aria-selected', transcriptionActive ? 'false' : 'true');
     }
   }
 
@@ -6067,6 +6072,10 @@
     if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
 
+    // Le raisonnement du modèle n'entre JAMAIS dans la fenêtre de la note :
+    // le défilement suivi d'effacement « flashait » pendant la génération et
+    // distrayait. On n'en garde qu'un indicateur discret (le dot statique
+    // « Raisonnement du modèle… »), qui atteste que le modèle travaille.
     if (!genThoughtPhase) {
       genThoughtPhase = true;
       showThinkingIndicator();
@@ -6077,18 +6086,6 @@
       state.genStarted = true;
       progressToast.setMessage(T('generate.streaming'));
     }
-
-    if (payload.type === 'snapshot' || !payload.type) {
-      genText = payload.markdown || '';
-      genSeq = payload.seq || 0;
-    } else {
-      if (genSeq + 1 === payload.seq || genSeq === 0) {
-        genText += payload.delta || '';
-      }
-      genSeq = payload.seq || genSeq;
-    }
-
-    startGenReveal();
   }
 
   function showThinkingIndicator() {

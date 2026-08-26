@@ -2195,6 +2195,19 @@
    * la transcription — on ne bascule qu'à l'arrivée du résultat.
    * ====================================================================== */
   let secondPassData = null;   // dernier audit affichable, ou null
+  let secondPassTimeout = null;
+
+  /** Filet : la roue ne peut pas tourner indéfiniment (audit échoué,
+      tâche perdue, onglet resté ouvert sur une génération annulée). */
+  function armerFiletSecondPass() {
+    clearTimeout(secondPassTimeout);
+    secondPassTimeout = setTimeout(() => {
+      setSecondPassSpinner(false);
+      $('secondPassPending').classList.add('hidden');
+      $('secondPassContent').classList.add('hidden');
+      $('secondPassEmpty').classList.remove('hidden');
+    }, 180000);
+  }
 
   function updateSecondPassToggle() {
     const actif = state.secondPass;
@@ -2266,9 +2279,12 @@
     $('secondPassPending').classList.remove('hidden');
     $('secondPassContent').classList.add('hidden');
     $('secondPassEmpty').classList.add('hidden');
+    armerFiletSecondPass();
   }
 
   function stopSecondPassPending() {
+    clearTimeout(secondPassTimeout);
+    secondPassTimeout = null;
     setSecondPassSpinner(false);
     $('secondPassPending').classList.add('hidden');
   }
@@ -2341,6 +2357,31 @@
       inventions: Array.isArray(donnees.inventions) ? donnees.inventions : [],
       confiance: donnees.confiance || '',
     }, true);
+  }
+
+  /* -------------------------------------------------------------------------
+   * Mise à jour du service worker — rechargement sûr
+   * ----------------------------------------------------------------------
+   * Le SW prévient quand une nouvelle version est prise en contrôle. Un
+   * onglet resté ouvert continue sinon de tourner sur l'ancien JavaScript.
+   * On ne recharge JAMAIS en pleine dictée ou génération : on propose, et
+   * le rechargement part seulement hors de ces flux (ou au prochain
+   * chargement naturel).
+   * ---------------------------------------------------------------------- */
+  let swUpdateToastShown = false;
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (!event.data || event.data.type !== 'consultai-sw-updated') return;
+      if (swUpdateToastShown) return;
+      swUpdateToastShown = true;
+      const occupé = state.recording || dictation.active || pendingGenerate;
+      if (occupé) {
+        toast(T('sw.updated_later'), 'info', 12000);
+        return;
+      }
+      toast(T('sw.updated_now'), 'info', 4000);
+      setTimeout(() => window.location.reload(), 1500);
+    });
   }
 
   async function generateNote() {
@@ -2416,6 +2457,7 @@
     try {
       const consultationId = await ensureConsultation();
       if (state.secondPass) enterSecondPassPending();
+      else stopSecondPassPending();
       const result = await api('/api/generate', {
         method: 'POST',
         signal: controller.signal,

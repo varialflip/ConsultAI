@@ -48,6 +48,7 @@ Routes
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -873,6 +874,33 @@ async def healthz() -> JSONResponse:
 _SW_VERSION_RE = re.compile(r"^const VERSION = '[^']*';", re.MULTILINE)
 
 
+def _empreinte_actifs_navigateur() -> str:
+    """
+    Empreinte courte des actifs du shell navigateur (app.js, tailwind.css).
+
+    Substituée dans /sw.js avec la version : le service worker ne se met à
+    jour que si LE TEXTE de /sw.js change, et __version__ seul ne bouge pas
+    lors des déploiements « commit simple » — l'interface navigait alors sur
+    un JavaScript périmé devant un serveur à jour (trois incidents à ce jour).
+    L'empreinte change dès qu'un actif modifié est servi : purge garantie,
+    release ou pas.
+    """
+    empreinte = hashlib.sha1()
+    for nom in ("static/app.js", "static/tailwind.css", "static/sw.js"):
+        chemin = BASE_DIR / nom
+        try:
+            stat = chemin.stat()
+            empreinte.update(
+                f"{nom}:{stat.st_size}:{stat.st_mtime_ns}".encode("utf-8")
+            )
+        except OSError:
+            empreinte.update(nom.encode("utf-8"))
+    return empreinte.hexdigest()[:8]
+
+
+_SW_EMPREINTE = _empreinte_actifs_navigateur()
+
+
 @app.get("/sw.js", include_in_schema=False)
 async def service_worker() -> Response:
     """
@@ -904,7 +932,8 @@ async def service_worker() -> Response:
     """
     source = (BASE_DIR / "static" / "sw.js").read_text(encoding="utf-8")
     source, remplacees = _SW_VERSION_RE.subn(
-        f"const VERSION = 'consultai-v{__version__}';", source, count=1,
+        f"const VERSION = 'consultai-v{__version__}-{_SW_EMPREINTE}';",
+        source, count=1,
     )
     if not remplacees:
         # Le fichier reste servi tel quel : un service worker qui garde
@@ -2699,6 +2728,12 @@ def _generate_and_publish(
     return result
 
 
+#: Références fortes aux tâches de fond : la boucle ne garde qu'une référence
+#: faible aux ``asyncio.Task`` — sans ce set, une tâche peut être ramassée
+#: en pleine course (ici : l'audit « 2e jet » disparaîtrait silencieusement).
+_taches_fond: set = set()
+
+
 async def _run_second_pass(
     *,
     owner_key: str,
@@ -2768,6 +2803,11 @@ async def _run_second_pass(
         "origin_tab": origin_tab,
         **resultat,
     })
+    logger.info(
+        "« 2e jet » publié (consultation %s) : %d omission(s), %d invention(s), confiance %s",
+        consultation_id, len(resultat["omissions"]),
+        len(resultat["inventions"]), resultat["confiance"],
+    )
 
 
 @app.post("/api/generate")
@@ -2924,7 +2964,7 @@ async def api_generate(
         and audio_payload is not None
         and llm.verification_capable()
     ):
-        asyncio.create_task(_run_second_pass(
+        tache_verif = asyncio.create_task(_run_second_pass(
             owner_key=user.owner_key,
             consultation_id=consultation.id,
             generation_seq=generation_seq,
@@ -2936,6 +2976,8 @@ async def api_generate(
             audio_payload=audio_payload,
             model_name=result["model"],
         ))
+        _taches_fond.add(tache_verif)
+        tache_verif.add_done_callback(_taches_fond.discard)
 
     return {
         "markdown": result["markdown"],

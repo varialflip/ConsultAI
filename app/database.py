@@ -1984,6 +1984,8 @@ def migrate_template_antecedents_hospitalisation_placement(db: Session) -> int:
     for row in db.scalars(select(Template)).all():
         inst = row.system_instructions or ""
         for ancienne, nouvelle in zip(_ANTECEDENTS_HOSP_OLD, _ANTECEDENTS_HOSP_NEW):
+            if nouvelle in inst:
+                continue  # déjà en place — idempotent
             if ancienne in inst:
                 row.system_instructions = inst.replace(ancienne, nouvelle)
                 touches += 1

@@ -3833,7 +3833,11 @@
     // particulière contre les boucles : controllerchange ne se déclenche
     // qu'un changement de contrôleur, jamais au rechargement sous le même.
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (state.recording) return;
+      // Ne JAMAIS recharger en pleine dictée ou génération : un rechargement
+      // ici avorte la requête /api/generate en vol (observé : status 0) et
+      // fait croire à une panne. On remet à plus tard — la page suivante
+      // partira de toute façon sur le nouveau contrôleur.
+      if (state.recording || dictation.active || pendingGenerate) return;
       window.location.reload();
     });
   }
@@ -5816,7 +5820,9 @@
       label.textContent = sttOutOfPipeline
         ? `(${sttShort}) - ${llmShort}`
         : `${sttShort} → ${llmShort}`;
-      label.title = config.llm_provider;
+      // Infobulle : fournisseur + version EXACTE du code en cours d'exécution
+      // — diagnostic de fraîcheur immédiat (un JavaScript périmé s'affiche ici).
+      label.title = `${config.llm_provider || ''} — v${config.version || '?'} + ${config.verification_capable ? '2e jet ✓' : '2e jet ✗'}`;
     }
     return config;
   }

@@ -1042,26 +1042,15 @@
      style="touch-action: manipulation">
   <div class="flex flex-col w-full h-full p-5 sm:p-8"
        style="padding-top: calc(env(safe-area-inset-top) + 1.5rem); padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem)">
-    <!-- En-tête : minuteur + fermeture bien visible (étiquetée, grande). -->
-    <div class="flex items-center justify-between shrink-0">
-      <div id="dictaphoneTimer" class="font-mono text-2xl tabular-nums text-slate-200">00:00</div>
-      <button id="btnDictaphoneExit" type="button" title="{{ t('dictaphone.exit_title') }}"
-              aria-label="{{ t('dictaphone.exit_title') }}"
-              class="flex items-center gap-1.5 h-11 px-4 rounded-full
-                     bg-slate-800 border border-slate-600 text-white
-                     font-medium shadow-lg active:scale-95 transition">
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
-             stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        <span>{{ t('dictaphone.close_label') }}</span>
-      </button>
-    </div>
-
-    <!-- Corps : gros bouton squircle, waveform centrée dans l'espace entre
-         le bouton et le carnet (écart fixe, cluster centré). -->
-    <div class="flex-1 flex flex-col items-center justify-center gap-[6.5rem] min-h-0">
-      <button id="btnDictaphoneMain" type="button"
-              class="w-64 h-64 rounded-[26%] grid place-items-center bg-red-600 shadow-2xl
-                     active:scale-95 transition touch-none"></button>
+    <!-- Corps : bouton squircle, minuteur juste dessous, waveform qui flotte
+         dans l'espace entre le groupe et le carnet (cluster centré). -->
+    <div class="flex-1 flex flex-col items-center justify-center gap-[4.5rem] min-h-0">
+      <div class="flex flex-col items-center gap-4 shrink-0">
+        <button id="btnDictaphoneMain" type="button"
+                class="w-64 h-64 rounded-[26%] grid place-items-center bg-red-600 shadow-2xl
+                       active:scale-95 transition touch-none"></button>
+        <div id="dictaphoneTimer" class="font-mono text-2xl tabular-nums text-slate-200">00:00</div>
+      </div>
       <canvas id="dictaphoneWave" class="w-full max-w-md h-12 rounded-lg bg-slate-800"
               role="img" aria-label="{{ t('rec.level_aria') }}"></canvas>
     </div>
@@ -1077,13 +1066,24 @@
       </p>
     </div>
 
-    <!-- Pied : terminer + choix du mode de conversation (tap / maintenir). -->
+    <!-- Pied : quitter (bas gauche) + terminer, et mode de conversation. -->
     <div class="shrink-0 flex items-center justify-between gap-2 pt-4">
-      <button id="btnDictaphoneFinish" type="button" title="{{ t('rec.finish_title') }}"
-              aria-label="{{ t('rec.finish_title') }}"
-              class="accent-btn w-12 h-12 grid place-items-center rounded-full transition">
-        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-      </button>
+      <div class="flex items-center gap-2">
+        <button id="btnDictaphoneExit" type="button" title="{{ t('dictaphone.exit_title') }}"
+                aria-label="{{ t('dictaphone.exit_title') }}"
+                class="flex items-center gap-1.5 h-11 px-4 rounded-full
+                       bg-slate-800 border border-slate-600 text-white
+                       font-medium shadow-lg active:scale-95 transition">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+               stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          <span>{{ t('dictaphone.close_label') }}</span>
+        </button>
+        <button id="btnDictaphoneFinish" type="button" title="{{ t('rec.finish_title') }}"
+                aria-label="{{ t('rec.finish_title') }}"
+                class="accent-btn w-12 h-12 grid place-items-center rounded-full transition">
+          <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+      </div>
       <div class="flex rounded-full bg-slate-800 border border-slate-700 p-1"
            role="group" aria-label="{{ t('dictaphone.mode_group_aria') }}">
         <button id="btnDphoneModeTap" type="button"

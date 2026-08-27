@@ -99,9 +99,12 @@ zones, avec deux modes de conversation au choix.*
   l'aide ne collent plus au bord de l'écran ;
 - **Bouton central remonté** (≈ 40 px) : le corps du calque centre le bouton
   avec un fond élargi (`pb-20`), pour le rapprocher de l'en-tête ;
-- **Waveform centrée entre le bouton et le carnet** : écart fixe
-  `gap-[6.5rem]` entre le bouton et la courbe (au lieu d'un collage sous le
-  bouton), le tout centré dans le corps du calque ;
+- **Waveform centrée entre le bouton et le carnet** : écart fixe entre le
+  bouton et la courbe (au lieu d'un collage sous le bouton), le tout centré
+  dans le corps du calque ;
+- **Minuteur déplacé sous le gros bouton** (regroupé avec lui) ;
+- **Bouton « Quitter » déplacé en bas à gauche** du calque, à côté du
+  ■ Terminer (le minuteur a quitté l'en-tête, qui disparaît) ;
 - **Waveform : cadence d'échantillonnage passée à 75 ms** (`WAVE_SAMPLE_MS`,
   au lieu de 55) — défilement plus posé.
 

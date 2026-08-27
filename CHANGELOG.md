@@ -23,7 +23,11 @@ zones, avec deux modes de conversation au choix.*
 - **Présentation** : fond en dégradé, bouton central harmonisé, minuteur en
   tête de calque ; nouvelles clés i18n (`dictaphone.close_label`,
   `mode_tap/mode_ptt`, `tap_hint/hold_hint`, `transcript_placeholder`,
-  `mode_group_aria`), retrait de `dictaphone.hint_manual`.
+  `mode_group_aria`), retrait de `dictaphone.hint_manual` ;
+- **Fond du calque opaque** : le dégradé seul pouvait laisser le calque
+  transparent (variable CSS de gradient non résolue selon le navigateur) —
+  une base `bg-slate-900` solide est posée sous le dégradé, et les panneaux
+  internes passent en fonds pleins.
 
 ## 2026-08-27 — Mode dictaphone manuel sur tous les mobiles
 

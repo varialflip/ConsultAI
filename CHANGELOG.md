@@ -50,7 +50,9 @@ zones, avec deux modes de conversation au choix.*
   `p-5 sm:p-8`) pour éloigner les éléments des bords ;
 - **Marges haut et bas du calque augmentées** : + 1,5 rem par-dessus la
   zone sécurisée (`calc(env(safe-area-inset-*) + 1.5rem)`) — l'en-tête et
-  l'aide ne collent plus au bord de l'écran.
+  l'aide ne collent plus au bord de l'écran ;
+- **Bouton central remonté** (≈ 40 px) : le corps du calque centre le bouton
+  avec un fond élargi (`pb-20`), pour le rapprocher de l'en-tête.
 
 ## 2026-08-27 — Mode dictaphone manuel sur tous les mobiles
 

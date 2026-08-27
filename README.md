@@ -634,7 +634,14 @@ Antécédents (contexte et synthèse dictés compris), jamais déplacée vers
 l'HMA — qui ne couvre que le motif actuel de la consultation (§ 1). Les modifications de
 traitement d'une visite antérieure (médicament débuté, cessé, renouvelé, dose
 modifiée) sont portées dans la note, dans leur rubrique (Résumé ou HMA selon
-le gabarit), distinctes du plan de traitement actuel.
+le gabarit), distinctes du plan de traitement actuel. Dans **l'Impression**,
+toute impression ou hypothèse clinique dictée est conservée, même subjective,
+même contradictoire avec un résultat objectif (« MMSE stable voire amélioré,
+mais j'ai l'impression qu'il se détériore au niveau amnésique » conserve les
+deux faits) ; dans le **Plan**, chaque action ou recommandation figure sur sa
+propre ligne numérotée, y compris un délai de suivi (« à revoir dans 6 mois »),
+même bref et même sans verbe (§ 3, renforcé le 2026-08-27 suite à des omissions
+constatées à la validation).
 
 Champs de substitution disponibles dans la mise en page : `{{DATE}}`,
 `{{DEMANDEUR}}`, `{{ACCOMPAGNATEUR}}`. (`{{PATIENT}}` et `{{DOSSIER}}` sont

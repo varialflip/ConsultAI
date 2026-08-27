@@ -1723,6 +1723,104 @@ def migrate_general_prompt_plan_first_person(db: Session) -> int:
     return touches
 
 
+#: Ancres de la consigne générale pour la règle « aucune omission dans
+#: l'Impression ni le Plan » (2026-08-27). La puce du § 3 « Impression et
+#: Plan » « Conserve intégralement le raisonnement clinique dicté » est le
+#: point d'ancrage : on y accole la nouvelle puce uniquement si elle y figure
+#: encore EXACTEMENT telle que livrée — la consigne est éditée par le médecin
+#: et vit en base, une puce retravaillée est laissée intacte.
+_IMPRESSION_PLAN_NO_OMISSION_OLD_FR = (
+    "  - Conserve **intégralement** le raisonnement clinique dicté — revue des "
+    "effets secondaires d'un traitement, cause écartée ou retenue, hypothèse et "
+    "ce qui l'appuie — même long, même s'il ressemble à une justification : ne "
+    "le résume pas, ne le supprime pas. C'est une donnée clinique au même titre "
+    "qu'un diagnostic."
+)
+_IMPRESSION_PLAN_NO_OMISSION_OLD_EN = (
+    '  - Preserve **in full** the dictated clinical reasoning — review of a '
+    "treatment's side effects, cause excluded or retained, hypothesis and what "
+    "supports it — however long, even if it reads like a justification: do not "
+    "summarize it, do not drop it. It is clinical data just like a diagnosis."
+)
+_IMPRESSION_PLAN_NO_OMISSION_NEW_FR = (
+    _IMPRESSION_PLAN_NO_OMISSION_OLD_FR
+    + "\n"
+    + "  - **Aucune omission dans l'Impression ni le Plan** : chaque "
+    "impression, hypothèse ou jugement clinique dicté figure dans "
+    "l'Impression, même subjectif, même contradictoire avec un résultat "
+    "objectif — « MMSE stable voire amélioré, mais j'ai l'impression qu'il se "
+    "détériore au niveau amnésique » conserve les deux faits, le contraste est "
+    "le propos, jamais résolu ni réduit au seul résultat. Chaque action ou "
+    "recommandation dictée figure dans le Plan sur sa propre ligne numérotée : "
+    "délai de suivi (« à revoir dans 6 mois », « retour dans un mois »), "
+    "examen ou investigation demandé, référence, renouvellement, cessation, "
+    "congé — même brefs, même sans verbe. Un délai de suivi est une décision "
+    "clinique : jamais écarté, jamais fusionné dans une autre action, jamais "
+    "résumé dans une formulation plus générale."
+)
+_IMPRESSION_PLAN_NO_OMISSION_NEW_EN = (
+    _IMPRESSION_PLAN_NO_OMISSION_OLD_EN
+    + "\n"
+    + '  - **No omission in the Impression or the Plan** : every dictated '
+    "impression, hypothesis or clinical judgment appears in the Impression, "
+    "even subjective, even contradicting an objective result — \"MMSE stable "
+    "or even improved, but I have the impression he is deteriorating "
+    "cognitively\" keeps both facts; the contrast is the point, never resolved "
+    "or reduced to the sole result. Every dictated action or recommendation "
+    "appears in the Plan on its own numbered line: follow-up interval (\"to be "
+    "seen again in 6 months\", \"return in one month\"), requested test or "
+    "investigation, referral, renewal, stop, discharge — however brief, even "
+    "without a verb. A follow-up interval is a clinical decision: never "
+    "dropped, never merged into another action, never summarized into a "
+    "broader formulation."
+)
+
+
+def migrate_general_prompt_impression_plan_no_omission(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la règle « aucune omission dans
+    l'Impression ni le Plan » (2026-08-27 : l'impression subjective du médecin
+    contradictoire avec un résultat objectif — « j'ai l'impression qu'il se
+    détériore au niveau amnésique » malgré un MMSE stable — et le délai de
+    suivi dicté « à revoir à six mois » avaient été omis de la note).
+
+    Même mécanique que ``migrate_general_prompt_plan_first_person`` : la
+    consigne générale est éditée par le médecin et vit en base, la nouvelle
+    puce n'est ajoutée que si la puce « Conserve intégralement le raisonnement
+    clinique dicté » y figure encore EXACTEMENT telle que livrée. Une puce
+    retravaillée est laissée intacte et signalée au journal.
+    """
+    touches = 0
+    for cle, ancienne, nouvelle in (
+        ("general_prompt_fr", _IMPRESSION_PLAN_NO_OMISSION_OLD_FR, _IMPRESSION_PLAN_NO_OMISSION_NEW_FR),
+        ("general_prompt_en", _IMPRESSION_PLAN_NO_OMISSION_OLD_EN, _IMPRESSION_PLAN_NO_OMISSION_NEW_EN),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if nouvelle in row.value:
+            continue  # déjà en place — idempotent
+        if ancienne not in row.value:
+            logger.info(
+                "Consigne « %s » : puce « Impression et Plan » modifiée, "
+                "règle « aucune omission dans l'Impression ni le Plan » "
+                "laissée au panneau.",
+                cle,
+            )
+            continue
+        row.value = row.value.replace(ancienne, nouvelle)
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » : règle « aucune omission dans l'Impression ni "
+            "le Plan » appliquée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Ancres de la consigne générale pour le placement des hospitalisations
 #: (2026-08-26). La phrase « Hospitalisations et séjours » du § 1 est le
 #: point d'ancrage : on y accole la clause de placement uniquement si elle y
@@ -2282,6 +2380,7 @@ def init_db() -> None:
         migrate_general_prompt_no_omission(db)
         migrate_general_prompt_treatment_stays(db)
         migrate_general_prompt_plan_first_person(db)
+        migrate_general_prompt_impression_plan_no_omission(db)
         migrate_general_prompt_antecedents_hospitalisation_placement(db)
         migrate_template_med_grouping(db)
         migrate_template_suivi_resume_stays(db)

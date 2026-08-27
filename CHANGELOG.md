@@ -3,6 +3,31 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — Consigne générale : aucune omission dans l'Impression ni le Plan
+
+*Correctif suite à l'audit « Validation » d'une note réelle (suivi gériatrie,
+M. Framand) : deux omissions significatives y étaient signalées — l'impression
+subjective du médecin (« j'ai l'impression qu'il se détériore au niveau
+amnésique », malgré un MMSE stable voire amélioré) et le délai de suivi dicté
+(« à revoir à six mois ») avaient été écartés de la note générée.*
+
+- **Consigne générale (§ 3 Impression et Plan) enrichie** d'une règle
+  explicite « aucune omission dans l'Impression ni le Plan » :
+  - l'Impression conserve **toute** impression, hypothèse ou jugement clinique
+    dicté, même subjectif, même contradictoire avec un résultat objectif — les
+    deux faits sont conservés, le contraste n'est jamais résolu ni réduit au
+    seul résultat (« MMSE stable voire amélioré, mais j'ai l'impression qu'il
+    se détériore au niveau amnésique ») ;
+  - le Plan conserve **toute** action ou recommandation dictée sur sa propre
+    ligne numérotée — délai de suivi (« à revoir dans 6 mois »), examen
+    demandé, référence, renouvellement, cessation, congé — même brève, même
+    sans verbe. Un délai de suivi est une décision clinique, jamais écarté,
+    fusionné ni résumé.
+- **Applicable aux consignes déjà en service** par migration (ancienne puce
+  intacte exigée — une consigne personnalisée n'est pas écrasée). À valider
+  par régénération d'une note dictée avec impression subjective et délai de
+  suivi.
+
 ## 2026-08-27 — Onglet du panneau de dictée choisi selon la note à chaque ouverture
 
 *En ouvrant une consultation (clic « Suivre » d'une dictée commencée sur un

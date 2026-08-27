@@ -3372,7 +3372,9 @@
   // L'ordre de la liste vient du modèle dans un ordre clinique précis. La
   // coupe en DEUX MOITIÉS (colonne de gauche = première moitié) préserve cet
   // ordre à la lecture : on descend la colonne de gauche, puis celle de
-  // droite — jamais de gauche à droite rangée par rangée.
+  // droite — jamais de gauche à droite rangée par rangée. Les colonnes
+  // s'écoulent indépendamment (voir renderMedsColumns) : le repli d'une
+  // entrée n'y laisse aucune « cellule » vide.
   const MEDS_COLUMN_WIDTH = 44;
   const MEDS_COLUMN_GAP = 2;
   //: Titre de rubrique (niveau 2) qui déclenche les deux colonnes.
@@ -3380,19 +3382,31 @@
 
   /** Coupe un texte à la largeur donnée, de préférence sur les espaces. */
   function wrapText(text, width, creux = '') {
+    const retrait = creux.length;
+    //: La première ligne tient dans `width` ; les lignes de continuation
+    //: portent le retrait suspendu et sont repliées à `width - retrait`, pour
+    //: que retrait inclus aucune ligne ne dépasse la colonne : l'alignement de
+    //: la colonne de droite reste ainsi exact (padEnd de l'appelant).
+    const largeurLigne = (i) => (i === 0 ? width : width - retrait);
     const lignes = [];
+    let nLignes = 0;
+    const pousse = (l) => { lignes.push(l); nLignes += 1; };
+
     let courante = '';
     for (const mot of text.split(/\s+/)) {
-      if (courante.length + (courante ? 1 : 0) + mot.length <= width) {
+      const maxL = largeurLigne(nLignes);
+      if (courante.length + (courante ? 1 : 0) + mot.length <= maxL) {
         courante += (courante ? ' ' : '') + mot;
       } else {
-        if (courante) lignes.push(courante);
-        if (mot.length > width) {
-          //: Un mot plus large que la colonne est cassé en plein mot.
+        if (courante) pousse(courante);
+        //: Largeur de la ligne suivante, celle où le mot va se placer.
+        const maxN = largeurLigne(nLignes);
+        if (mot.length > maxN) {
+          //: Un mot plus large que la ligne est cassé en plein mot.
           let reste = mot;
-          while (reste.length > width) {
-            lignes.push(reste.slice(0, width));
-            reste = reste.slice(width);
+          while (reste.length > maxN) {
+            pousse(reste.slice(0, maxN));
+            reste = reste.slice(maxN);
           }
           courante = reste;
         } else {
@@ -3400,7 +3414,7 @@
         }
       }
     }
-    if (courante) lignes.push(courante);
+    if (courante) pousse(courante);
     if (creux) return lignes.map((l, i) => (i === 0 ? l : `${creux}${l}`));
     return lignes;
   }
@@ -3410,25 +3424,22 @@
     if (!items.length) return [];
     const cellules = items.map((item) => `• ${item}`);
     const moitie = Math.ceil(cellules.length / 2);
-    const gauche = cellules.slice(0, moitie);
-    const droite = cellules.slice(moitie);
-
+    //: Chaque colonne s'écoule VERTICALEMENT et de façon INDÉPENDANTE : les
+    //: entrées s'y empilent à la suite, chacune repliée à la largeur de la
+    //: colonne. Le repli d'une entrée ne laisse donc jamais de « cellule » vide
+    //: dans la colonne opposée : son contenu remonte dans le vide (ex. plus de
+    //: trou sous Lipitor), et la lecture verticale reste dans l'ordre du modèle.
     const blocs = [
-      gauche.map((c) => wrapText(c, MEDS_COLUMN_WIDTH, `${NBSP}${NBSP}`)),
-      droite.map((c) => wrapText(c, MEDS_COLUMN_WIDTH, `${NBSP}${NBSP}`)),
-    ];
-    const rangees = Math.max(...blocs.map((col) => col.length));
+      cellules.slice(0, moitie),
+      cellules.slice(moitie),
+    ].map((col) => col.flatMap((c) => wrapText(c, MEDS_COLUMN_WIDTH, `${NBSP}${NBSP}`)));
 
     const lignes = [];
-    for (let i = 0; i < rangees; i += 1) {
-      const g = blocs[0][i] || [];
-      const d = blocs[1][i] || [];
-      const haut = Math.max(g.length, d.length);
-      for (let j = 0; j < haut; j += 1) {
-        const gl = (g[j] || '').padEnd(MEDS_COLUMN_WIDTH, NBSP);
-        const dl = d[j] || '';
-        lignes.push(`${gl}${NBSP.repeat(MEDS_COLUMN_GAP)}${dl}`.trimEnd());
-      }
+    const rangees = Math.max(...blocs.map((col) => col.length));
+    for (let j = 0; j < rangees; j += 1) {
+      const gl = (blocs[0][j] || '').padEnd(MEDS_COLUMN_WIDTH, NBSP);
+      const dl = blocs[1][j] || '';
+      lignes.push(`${gl}${NBSP.repeat(MEDS_COLUMN_GAP)}${dl}`.trimEnd());
     }
     return lignes;
   }

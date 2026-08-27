@@ -3,6 +3,23 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — « Texte simple » : colonnes des médicaments en écoulement continu
+
+*Quand un médicament se repliait sur deux lignes, la colonne opposée laissait
+une « cellule » vide (visible même dans Notepad, ex. sous Lipitor). Les deux
+colonnes s'écoulent désormais indépendamment : une entrée repliée ne crée plus
+aucun vide, le contenu de la colonne suivante remonte dans le trou.*
+
+- **`renderMedsColumns`** : les entrées s'empilent verticalement dans chaque
+  colonne (coupée en deux moitiés, ordre du modèle préservé) puis les deux
+  colonnes sont intercalées ligne par ligne — plus aucune rangée ne reste à
+  moitié vide.
+- **`wrapText`** : les lignes de continuation (retrait suspendu) sont repliées
+  à `largeur − retrait` : aucune ligne ne dépasse la colonne, l'alignement de
+  la colonne de droite reste exactement à 46 caractères même pour un repli
+  « plein ». Insécables, lecture verticale et deux colonnes inchangés ; aucun
+  coût en jetons.
+
 ## 2026-08-27 — Mode dictaphone repensé : fermeture étiquetée, push-to-talk, carnet
 
 *Le calque dictaphone (téléphone retourné) gardait une colonne « gros bouton

@@ -1053,12 +1053,19 @@ def _verification_requete(
     langue: str,
     audio: Tuple[bytes, str],
     transcript: Optional[str],
+    system_instruction: str,
     model: Optional[str],
 ) -> Tuple[object, str, List[object], Dict[str, object]]:
     """
     Construit la requête d'audit « Validation » : client, modèle, contenus et
     configuration — la même pour l'appel simple (``verify_note``) et le flux
     (``verify_note_stream``).
+
+    La consigne système est celle de la MISE EN FORME (``system_instruction``,
+    injectée par ``api_generate``) : les deux passes partagent alors le même
+    préfixe [consigne système + audio], réutilisé par le cache implicite de
+    Gemini — l'audio n'est re-facturé que sur la fin du message. Les consignes
+    d'audit elles-mêmes ouvrent le message utilisateur (juste après l'audio).
     """
     from google.genai import types
 
@@ -1067,7 +1074,11 @@ def _verification_requete(
     langue_norm = i18n.normalize(langue)
 
     blocs = [
-        f"<NOTE_AUDITER>\n{(note_markdown or '').strip()}\n</NOTE_AUDITER>"
+        # Consignes d'audit EN TÊTE du message utilisateur : avec l'audio, elles
+        # suivent le préfixe partagé [consigne système + audio]. Le texte est le
+        # même qu'avant (``_AUDITOR_PROMPTS``) — seule sa position change.
+        _AUDITOR_PROMPTS.get(langue_norm, _AUDITOR_PROMPTS["fr"]),
+        f"<NOTE_AUDITER>\n{(note_markdown or '').strip()}\n</NOTE_AUDITER>",
     ]
     transcript_propre = (transcript or "").strip()
     if transcript_propre:
@@ -1096,7 +1107,12 @@ def _verification_requete(
     # modèle raisonner sur sa valeur par défaut — toujours mieux pour l'audit
     # qu'un budget au plancher.
     config_kwargs: Dict[str, object] = dict(
-        system_instruction=_AUDITOR_PROMPTS.get(langue_norm, _AUDITOR_PROMPTS["fr"]),
+        # Sans ``system_instruction`` (appelant hors pipeline de mise en forme),
+        # on retombe sur l'auditeur comme consigne système — comportement d'avant
+        # le partage de préfixe.
+        system_instruction=system_instruction or _AUDITOR_PROMPTS.get(
+            langue_norm, _AUDITOR_PROMPTS["fr"]
+        ),
         temperature=0.2,
         max_output_tokens=settings.gemini_max_output_tokens,
         safety_settings=_safety_settings(),
@@ -1160,6 +1176,7 @@ def verify_note(
     langue: str = "fr",
     audio: Optional[Tuple[bytes, str]] = None,
     transcript: Optional[str] = None,
+    system_instruction: Optional[str] = None,
     model: Optional[str] = None,
 ) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
     """
@@ -1168,6 +1185,10 @@ def verify_note(
     Retourne ``(résultat, usage)`` — ``résultat`` vaut ``None`` au moindre
     doute (pas d'audio, appel impossible, JSON invalide) : l'appelant traite
     cela comme « rien à afficher », jamais comme une erreur bloquante.
+
+    ``system_instruction`` — la consigne système de la MISE EN FORME, injectée
+    par ``api_generate`` : partagée avec la génération, elle fait de l'audio un
+    préfixe candidat au cache implicite de Gemini (cf. ``_verification_requete``).
     """
     from google.genai import types
 
@@ -1176,7 +1197,7 @@ def verify_note(
         return None, {}
 
     client, nom_modele, contenu, config_kwargs = _verification_requete(
-        note_markdown, langue, audio, transcript, model
+        note_markdown, langue, audio, transcript, system_instruction, model
     )
 
     t0 = time.monotonic()
@@ -1223,6 +1244,7 @@ def verify_note_stream(
     langue: str = "fr",
     audio: Optional[Tuple[bytes, str]] = None,
     transcript: Optional[str] = None,
+    system_instruction: Optional[str] = None,
     model: Optional[str] = None,
     on_chunk: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
@@ -1233,6 +1255,9 @@ def verify_note_stream(
 
     ``on_chunk(texte)`` reçoit le texte JSON ACCUMULÉ (jamais des deltas) : le
     client re-parse et réaffiche sans état — un morceau perdu se répare seul.
+
+    ``system_instruction`` — idem ``verify_note`` : la consigne système de la
+    mise en forme, partagée pour faire de l'audio un préfixe du cache implicite.
     """
     from google.genai import types
 
@@ -1241,7 +1266,7 @@ def verify_note_stream(
         return None, {}
 
     client, nom_modele, contenu, config_kwargs = _verification_requete(
-        note_markdown, langue, audio, transcript, model
+        note_markdown, langue, audio, transcript, system_instruction, model
     )
     config = types.GenerateContentConfig(**config_kwargs)
     sans_thinking = False
@@ -1417,7 +1442,11 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     contents = user
     if audio is not None:
         audio_bytes, mime_type = audio
-        contents = [user, types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)]
+        # L'audio en TÊTE du message : avec la consigne système, il forme le
+        # préfixe [consigne système + audio] partagé entre la mise en forme et
+        # l'audit « Validation » — réutilisé d'une passe à l'autre par le cache
+        # de préfixe implicite de Gemini (voir CHANGELOG 2026-08-27).
+        contents = [types.Part.from_bytes(data=audio_bytes, mime_type=mime_type), user]
 
     try:
         response = _gemini_appel(
@@ -1504,7 +1533,11 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     contents = user
     if audio is not None:
         audio_bytes, mime_type = audio
-        contents = [user, types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)]
+        # L'audio en TÊTE du message : avec la consigne système, il forme le
+        # préfixe [consigne système + audio] partagé entre la mise en forme et
+        # l'audit « Validation » — réutilisé d'une passe à l'autre par le cache
+        # de préfixe implicite de Gemini (voir CHANGELOG 2026-08-27).
+        contents = [types.Part.from_bytes(data=audio_bytes, mime_type=mime_type), user]
 
     config = types.GenerateContentConfig(**config_kwargs)
     sans_thinking = False
@@ -1931,6 +1964,7 @@ def generate_note_stream(
     audio: Optional[Tuple[bytes, str]] = None,
     on_stream_started: Optional[Callable[[], None]] = None,
     on_thought: Optional[Callable[[str], None]] = None,
+    system_override: Optional[str] = None,
 ):
     """
     Version en continu de ``generate_note``.
@@ -1949,6 +1983,11 @@ def generate_note_stream(
 
     ``on_thought`` reçoit le raisonnement du modèle au fil de l'eau (jamais
     dans la note) ; transmis au flux, qui ne le produit que si on le demande.
+
+    ``system_override`` — consigne système déjà assemblée par l'appelant
+    (``api_generate``) : utilisée telle quelle, sans ré-assemblage, pour que la
+    mise en forme et l'audit « Validation » partagent le MÊME texte et fassent
+    de l'audio un préfixe du cache implicite de Gemini.
     """
     provider = active_provider()
     opts = audio_settings(provider)
@@ -1982,6 +2021,17 @@ def generate_note_stream(
         user_prompt = f"{user_prompt}\n\n{note[langue]}"
 
     t0 = time.monotonic()
+    # Consigne système : par défaut assemblée ici ; injectée en ``system_override``
+    # par ``api_generate`` pour que la mise en forme et l'audit « Validation »
+    # partagent EXACTEMENT le même texte — c'est ce qui fait du préfixe
+    # [consigne système + audio] un candidat au cache implicite de Gemini.
+    system_prompt = (
+        system_override
+        if system_override is not None
+        else build_system_prompt(
+            system_instructions, runtime_config.general_prompt(langue), langue
+        )
+    )
     # Budget de sortie propre aux fournisseurs à raisonnement : un modèle
     # (DeepSeek, Cohere command-a…) consomme une large part dans sa pensée, et
     # un budget trop bas (celui de Gemini) produisait une note vide (« motif :
@@ -2003,9 +2053,7 @@ def generate_note_stream(
     result = None
     for tentative in range(tentatives):
         stream = complete_stream(
-            build_system_prompt(
-                system_instructions, runtime_config.general_prompt(langue), langue
-            ),
+            system_prompt,
             user_prompt,
             model=model_name,
             temperature=active_temperature(),

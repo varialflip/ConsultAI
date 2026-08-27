@@ -2618,6 +2618,7 @@ def _generate_and_publish(
     audio_payload: Optional[Tuple[bytes, str]],
     generation_seq: int,
     origin_tab: str,
+    system_prompt: str,
 ) -> dict:
     """
     Génère la note en continu et diffuse les morceaux en direct (SSE).
@@ -2690,6 +2691,7 @@ def _generate_and_publish(
         audio_payload,
         on_stream_started=_publish_started,
         on_thought=_on_thought if show_thinking else None,
+        system_override=system_prompt,
     )
 
     raw = ""
@@ -2783,6 +2785,7 @@ async def _run_second_pass(
     langue: str,
     audio_payload,
     model_name: Optional[str],
+    system_instruction: str,
 ) -> None:
     """
     « Validation » : audit factuel audio↔note, en tâche de fond.
@@ -2826,6 +2829,7 @@ async def _run_second_pass(
             langue=langue,
             audio=audio_payload,
             transcript=transcript or None,
+            system_instruction=system_instruction,
             model=model_name,
             on_chunk=_publier_chunk,
         )
@@ -2901,6 +2905,17 @@ async def api_generate(
 
     model_name = settings.gemini_model_pro if payload.use_pro else None
 
+    # Consigne système partagée entre la mise en forme et l'audit « Validation »
+    # (la MÊME chaîne, pour que [consigne système + audio] soit un préfixe
+    # commun réutilisé par le cache implicite de Gemini — voir CHANGELOG
+    # 2026-08-27).
+    langue = i18n.normalize(template_row.language or runtime_config.language())
+    system_prompt = llm.build_system_prompt(
+        template_row.system_instructions,
+        runtime_config.general_prompt(langue),
+        langue,
+    )
+
     active_provider = llm.active_provider()
     audio_opts = llm.audio_settings(active_provider)
     need_audio = audio_opts["send_audio"] or audio_opts["bypass_stt"]
@@ -2939,6 +2954,7 @@ async def api_generate(
             audio_payload,
             generation_seq,
             request.headers.get("x-consultai-tab", ""),
+            system_prompt,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -3067,6 +3083,7 @@ async def api_generate(
             langue=template_row.language,
             audio_payload=audio_payload,
             model_name=result["model"],
+            system_instruction=system_prompt,
         ))
         _taches_fond.add(tache_verif)
         tache_verif.add_done_callback(_taches_fond.discard)

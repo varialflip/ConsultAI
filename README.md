@@ -253,7 +253,12 @@ COHERE_LLM_THINKING_BUDGET=1024
 > appel ; le message utilisateur place désormais la **mise en page** (stable
 > par gabarit) AVANT le contexte variable de la consultation, pour que le
 > préfixe partagé couvre consigne système + gabarit + structure exigée et
-> non la seule consigne système.
+> non la seule consigne système. La **mise en forme place l'audio en tête**
+> du message, et l'audit « Validation » tourne sous la MÊME consigne système
+> (assemblée une fois, injectée aux deux passes) : le préfixe
+> [consigne système + audio] est donc lu depuis le cache implicite au second
+> passage — l'audio, plus grosse part du prompt, n'est re-facturé que sur la
+> fin du message.
 
 > **🔎 « Validation » — audit factuel de la note.** Bascule à côté du bouton
 > « Mettre en forme » (préférence par usager, désactivée par défaut). Quand
@@ -281,7 +286,9 @@ COHERE_LLM_THINKING_BUDGET=1024
 > Sans audio joint (note produite à partir de la seule transcription), la
 > bascule active produit immédiatement un « rien à signaler » : l'audit
 > audio↔note est impossible, pas de roue qui tourne dans le vide.
-> Coût observé : ~60 % d'un appel de génération en plus (l'audio domine).
+> Coût observé : ~60 % d'un appel de génération en plus (l'audio domine),
+> atténué par le cache de préfixe implicite — l'audio et la consigne système
+> étant relus depuis le cache au second passage (cf. ci-dessus).
 > Fiabilité : le « Validation » utilise le budget de raisonnement configuré
 > dans le panneau (`gemini_thinking_budget`) — au plancher 128 il hallucine
 > des écarts inexistants — et un garde-fou déterministe écarte après coup

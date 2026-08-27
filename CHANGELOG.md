@@ -3,6 +3,32 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — L'audio n'est envoyé qu'une fois au modèle : cache de préfixe
+
+*L'audio — la plus grosse part du prompt — était envoyé deux fois par
+consultation (mise en forme, puis « Validation »). Il est désormais relu depuis
+le cache de préfixe implicite de Gemini au second passage.*
+
+- **Préfixe [consigne système + audio] partagé entre les deux passes.** La
+  mise en forme place l'audio en tête du message utilisateur, et l'audit
+  « Validation » tourne sous la MÊME consigne système (assemblée une fois par
+  `api_generate`, injectée aux deux passes via `system_override` /
+  `system_instruction`) — les consignes d'audit ouvrent alors le message
+  utilisateur, juste après l'audio. Les deux requêtes partagent donc le même
+  préfixe, servi depuis le cache implicite de Gemini (~4× moins cher que
+  l'entrée fraîche) : l'audio n'est re-facturé que sur la fin du message. Sans
+  `system_instruction` (appelant hors pipeline), l'audit retombe sur l'auditeur
+  en consigne système — comportement antérieur.
+- **Mesuré avant livraison** (gemini-2.5-pro, Vertex, Montréal) : le flux de
+  mise en forme remplit et lit le cache ; l'audit, lancé ~20-45 s plus tard,
+  en tire la quasi-totalité de son prompt — 10 017/10 382 jetons pour une
+  dictée de ~4 min, 28 425/29 427 pour ~14 min. L'économie suit la durée de
+  la dictée.
+- **Qualité de l'audit inchangée.** Comparaison contrôlée (prompt d'audit
+  courant vs déplacé dans le message, mêmes entrées, même session) sur trois
+  consultations : aucune régression systématique — l'audit garde la même
+  variabilité d'un appel à l'autre qu'avant.
+
 ## 2026-08-27 — v2.0.0-rc.2
 
 *Deuxième candidate de la version 2 : inclut tout depuis la rc.1 — les

@@ -3363,10 +3363,86 @@
     return out;
   }
 
+  // -------------------------------------------------------------------------
+  // Médicaments sur deux colonnes (lecture verticale)
+  // -------------------------------------------------------------------------
+  // Le DME de l'hôpital affiche en monospace : la rubrique Médicaments peut
+  // donc être rendue sur DEUX colonnes pour économiser de la place, sans que
+  // la structure ne repose que sur l'alignement des espaces.
+  //
+  // L'ordre de la liste vient du modèle dans un ordre clinique précis. La
+  // coupe en DEUX MOITIÉS (colonne de gauche = première moitié) préserve cet
+  // ordre à la lecture : on descend la colonne de gauche, puis celle de
+  // droite — jamais de gauche à droite rangée par rangée.
+  const MEDS_COLUMN_WIDTH = 44;
+  const MEDS_COLUMN_GAP = 2;
+  //: Titre de rubrique (niveau 2) qui déclenche les deux colonnes.
+  const MEDS_HEADING_RE = /m[ée]dicaments?|medications?|meds|rx|prescriptions?/i;
+
+  /** Coupe un texte à la largeur donnée, de préférence sur les espaces. */
+  function wrapText(text, width, creux = '') {
+    const lignes = [];
+    let courante = '';
+    for (const mot of text.split(/\s+/)) {
+      if (courante.length + (courante ? 1 : 0) + mot.length <= width) {
+        courante += (courante ? ' ' : '') + mot;
+      } else {
+        if (courante) lignes.push(courante);
+        if (mot.length > width) {
+          //: Un mot plus large que la colonne est cassé en plein mot.
+          let reste = mot;
+          while (reste.length > width) {
+            lignes.push(reste.slice(0, width));
+            reste = reste.slice(width);
+          }
+          courante = reste;
+        } else {
+          courante = mot;
+        }
+      }
+    }
+    if (courante) lignes.push(courante);
+    if (creux) return lignes.map((l, i) => (i === 0 ? l : `${creux}${l}`));
+    return lignes;
+  }
+
+  /** Rend la liste des médicaments en deux colonnes, lecture verticale. */
+  function renderMedsColumns(items) {
+    if (!items.length) return [];
+    const cellules = items.map((item) => `- ${item}`);
+    const moitie = Math.ceil(cellules.length / 2);
+    const gauche = cellules.slice(0, moitie);
+    const droite = cellules.slice(moitie);
+
+    const blocs = [
+      gauche.map((c) => wrapText(c, MEDS_COLUMN_WIDTH, '  ')),
+      droite.map((c) => wrapText(c, MEDS_COLUMN_WIDTH, '  ')),
+    ];
+    const rangees = Math.max(...blocs.map((col) => col.length));
+
+    const lignes = [];
+    for (let i = 0; i < rangees; i += 1) {
+      const g = blocs[0][i] || [];
+      const d = blocs[1][i] || [];
+      const haut = Math.max(g.length, d.length);
+      for (let j = 0; j < haut; j += 1) {
+        const gl = (g[j] || '').padEnd(MEDS_COLUMN_WIDTH);
+        const dl = d[j] || '';
+        lignes.push(`${gl}${' '.repeat(MEDS_COLUMN_GAP)}${dl}`.trimEnd());
+      }
+    }
+    return lignes;
+  }
+
   function markdownToPlainText(markdown) {
     const lignes = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
     const out = [];
     let tableau = [];
+    //: Cellules « Médicaments » en attente de mise en colonnes, et indicateur
+    //: de rubrique. On ne peut pas décider de l'alignement ligne à ligne : il
+    //: faut d'abord voir toute la liste pour la couper en deux moitiés.
+    const meds = [];
+    let inMeds = false;
 
     const viderTableau = () => {
       if (tableau.length) {
@@ -3375,11 +3451,19 @@
       }
     };
 
+    const viderMeds = () => {
+      if (meds.length) {
+        out.push(...renderMedsColumns(meds));
+        meds.length = 0;
+      }
+    };
+
     lignes.forEach((brute) => {
       const ligne = brute.replace(/\s+$/, '');
 
       // --- Tableaux : accumulés puis alignés d'un bloc ---
       if (/^\s*\|/.test(ligne)) {
+        viderMeds();
         if (!TABLE_SEPARATOR.test(ligne)) tableau.push(splitTableRow(ligne));
         return;
       }
@@ -3389,6 +3473,9 @@
       if (titre) {
         const niveau = titre[1].length;
         const texte = stripInlineMarkdown(titre[2]).replace(/[:\s]+$/, '');
+        viderMeds();
+        //: Rubrique « Médicaments » de niveau 2 → rendue sur deux colonnes.
+        inMeds = niveau === 2 && MEDS_HEADING_RE.test(texte);
         if (out.length) out.push('');
         if (niveau === 1) {
           out.push(texte.toUpperCase(), '='.repeat(Math.max(texte.length, 3)));
@@ -3404,6 +3491,7 @@
 
       // --- Filet horizontal ---
       if (/^\s*([-*_])\1{2,}\s*$/.test(ligne)) {
+        viderMeds();
         out.push('', '-'.repeat(60), '');
         return;
       }
@@ -3412,11 +3500,20 @@
       const puce = ligne.match(/^(\s*)[-*+]\s+(.*)$/);
       if (puce) {
         const creux = '  '.repeat(Math.floor(puce[1].length / 2));
-        out.push(`${creux}- ${stripInlineMarkdown(puce[2])}`);
+        const contenu = stripInlineMarkdown(puce[2]);
+        if (inMeds && puce[1].length === 0) {
+          //: Puces de premier niveau de la rubrique : accumulées, elles seront
+          //: rendues deux par rangée (lecture verticale) à la fin de la rubrique.
+          meds.push(contenu);
+        } else {
+          if (inMeds) viderMeds();
+          out.push(`${creux}- ${contenu}`);
+        }
         return;
       }
       const numero = ligne.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
       if (numero) {
+        viderMeds();
         const creux = '  '.repeat(Math.floor(numero[1].length / 2));
         out.push(`${creux}${numero[2]}. ${stripInlineMarkdown(numero[3])}`);
         return;
@@ -3425,14 +3522,21 @@
       // --- Citation ---
       const citation = ligne.match(/^\s*>\s?(.*)$/);
       if (citation) {
+        viderMeds();
         out.push(`  | ${stripInlineMarkdown(citation[1])}`);
         return;
       }
 
+      //: Dans la rubrique Médicaments, les lignes vides ne coupent pas la
+      //: liste : on continue d'accumuler jusqu'au prochain contenu réel.
+      if (inMeds && ligne === '') return;
+
+      viderMeds();
       out.push(stripInlineMarkdown(ligne));
     });
 
     viderTableau();
+    viderMeds();
 
     // Deux sauts de ligne consécutifs au maximum : au-delà, le DME étire la
     // note sur des écrans inutiles.

@@ -3,6 +3,21 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — « Texte simple » : médicaments sur deux colonnes
+
+*Quand la note est copiée en texte simple pour le DME de l'hôpital (champ en
+monospace), la rubrique Médicaments prenait beaucoup de place. Elle est
+désormais rendue sur DEUX colonnes — lecture verticale : on descend la
+colonne de gauche, puis celle de droite. L'ordre des médicaments, déterminé
+par le modèle, est ainsi préservé à la lecture.*
+
+- **Rendu sur deux colonnes** dans `markdownToPlainText` (conversion locale au
+  navigateur, aucun coût en jetons) : la liste est coupée en deux moitiés
+  (colonne de gauche = première moitié), chaque cellule est repliée à
+  44 caractères en coupant de préférence sur les espaces. S'applique au bouton
+  « Texte simple » et au repli texte du copier « Mise en forme ». Aucune autre
+  rubrique (antécédents, examen, plan…) n'est touchée.
+
 ## 2026-08-27 — Nouvelle consultation : retour systématique à « Transcription brute »
 
 *Après une mise en forme, le panneau de dictée restait sur l'onglet

@@ -502,6 +502,23 @@
   let genThoughtPhase = false;
   let genTextStarted = false;
 
+  // Jeton d'une génération lancée sur un AUTRE appareil et suivie ici
+  // (« suiveur ») : tant qu'il est posé, les ``generation_chunk`` /
+  // ``generation_thought`` portant ce jeton sont appliqués à la note affichée,
+  // comme le ferait l'onglet émetteur. ``null`` hors de tout suivi. L'émetteur
+  // n'utilise jamais ce jeton (il passe par ``pendingGenerate`` /
+  // ``state.generationToken``) ; un clic « Mettre en forme » local le retire
+  // avant de lancer sa propre génération.
+  let followerGenToken = null;
+  // Consultation sur laquelle porte le suivi (égale à ``state.consultationId``
+  // à l'armement) : si l'usager change de consultation pendant le suivi, on
+  // referme la machinerie plutôt que de laisser un toast/spinner sans fin.
+  let followerGenConsultationId = null;
+  // Filet du suivi : arrête le toast/spinner si la génération étrangère ne
+  // se conclut jamais (flux SSE coupé). Remis à zéro à chaque événement et à
+  // la fin (``generated`` / audit).
+  let followerGenTimer = null;
+
   // Révélation progressive de la TRANSCRIPTION — même mécanique que la note
   // (voir createTextReveal). ``committedText`` est la base AUTORITAIRE du
   // texte committé, jamais la valeur live de la boîte : pendant une
@@ -2571,6 +2588,13 @@
     if (!texte.trim()) return;
     const donnees = parseProgressiveJson(texte);
     if (!donnees) return;
+    // Suiveur : l'audit coule pour la note qu'on regarde — le toast de
+    // génération passe en phase « Validation » (il partira au résultat final).
+    if (!emetteur && progressToast && progressToast.setMessage) {
+      clearTimeout(followerGenTimer);
+      followerGenTimer = null;
+      progressToast.setMessage(T('generate.validating'));
+    }
     // Rendu en direct, sans toucher à la roue : la vérification continue.
     renderSecondPassAudit({
       omissions: Array.isArray(donnees.omissions) ? donnees.omissions : [],
@@ -2589,6 +2613,13 @@
     if (String(donnees.consultation_id) !== String(state.consultationId)) return;
     const emetteur = estEmetteurVerification(donnees);
     if (verificationPendingToken && !emetteur) return;
+    // Suiveur : la vérification est terminée pour la note qu'on regarde — le
+    // toast de génération (passé en « Validation » par les morceaux) s'éteint.
+    if (!emetteur) {
+      clearTimeout(followerGenTimer);
+      followerGenTimer = null;
+      if (progressToast) { progressToast.dismiss(); progressToast = null; }
+    }
     verificationPendingToken = null;
     if (donnees.skipped) {
       // Audit impossible côté serveur (pas d'audio, échec) : arrêt immédiat
@@ -2675,6 +2706,10 @@
     state.preGenerateCorrections = correctionsRendu || '';
     state.generationToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random());
 
+    // Une génération étrangère éventuellement suivie cède la place à la
+    // nôtre : on referme la machinerie de suivi (jeton, filet, toast) avant
+    // de réarmer le rendu pour CE flux.
+    terminateFollowerGen();
     // Le voile plein écran laisserait le texte généré invisible : à la place
     // on force la vue « Aperçu » (où le texte défilera en direct) et on pose
     // le toast de progression unifié (connexion → génération). Une note déjà
@@ -3231,7 +3266,8 @@
     // (raisonnement du modèle puis note en streaming) : on n'en persiste
     // jamais d'état intermédiaire. La note finale est écrite par le serveur
     // (POST /api/generate) ; un sauvegarde reprendra normalement ensuite.
-    if (pendingGenerate) return;
+    // Idem pendant le SUIVI d'une génération lancée sur un autre appareil.
+    if (pendingGenerate || followerGenToken) return;
     const snapshot = workspaceSnapshot();
     if (snapshot === state.lastSavedSnapshot) return;
 
@@ -4006,6 +4042,11 @@
       toast(T('drafts.busy_open'), 'warning');
       return;
     }
+    // Changer de consultation pendant qu'on suit une génération étrangère :
+    // on referme le suivi (jeton, toast) plutôt que de le laisser pendre.
+    if (followerGenConsultationId && String(followerGenConsultationId) !== String(id)) {
+      terminateFollowerGen();
+    }
     clearLiveLines();
     try {
       const draft = await api(`/api/consultations/${id}`);
@@ -4082,6 +4123,7 @@
   /** Réinitialise l'espace de travail pour une nouvelle consultation. */
   /** Remise à zéro complète de l'écran, sans confirmation ni garde. */
   function resetWorkspace() {
+    terminateFollowerGen();
     state.consultationId = null;
     state.recordedSeconds = 0;
     state.lastSavedSnapshot = '';
@@ -6400,12 +6442,94 @@
       }
       return;
     }
+    // Fin d'une génération suivie : refermer la machinerie de rendu et le
+    // toast AVANT la relecture — la note finale repart de loadDraft.
+    if (evt.type === 'generated') finishFollowerGen();
     if (hasUnsavedChanges()) {
       showBlockingSyncModal('sync.conflict_generic');
       return;
     }
     loadDraft(state.consultationId);
     if (!$('draftsModal').classList.contains('hidden')) openDraftsModal();
+  }
+
+  /** (Ré)arme le filet du suivi : arrête le toast si la génération étrangère
+   * ne se conclut jamais (flux SSE coupé). Rafraîchi à chaque événement suivi. */
+  function filetFollowerGen() {
+    clearTimeout(followerGenTimer);
+    followerGenTimer = setTimeout(() => {
+      if (followerGenToken) terminateFollowerGen();
+    }, 5 * 60 * 1000);
+  }
+
+  /**
+   * Prépare l'écran à suivre en direct la génération lancée par un autre
+   * appareil : l'espace de travail passe sur la note (aperçu), la machinerie
+   * de rendu est réarmée et le toast de progression s'ouvre. Le jeton posé
+   * identifie la génération suivie — les morceaux d'un autre jeton sont
+   * ignorés, et un clic « Mettre en forme » local le retire d'abord.
+   */
+  function armFollowerGen(token) {
+    followerGenToken = token;
+    followerGenConsultationId = state.consultationId;
+    if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
+    genText = ''; genSeq = 0; genShown = ''; lastGenRender = 0;
+    genThoughtPhase = false; genTextStarted = false;
+    hideThinkingIndicator();
+    showPreview();
+    setMobilePane('note');
+    setGenerating(true);
+    if (progressToast && progressToast.setMessage) {
+      progressToast.setMessage(T('generate.processing'));
+    }
+    filetFollowerGen();
+  }
+
+  /** Enlève la teinte « génération en cours » (voir setGenerating). */
+  function effacerGenPane() {
+    $('previewPane').classList.remove('gen-pane');
+    $('markdownEditor').classList.remove('gen-pane');
+  }
+
+  /** Arrête le suivi d'une génération étrangère (fin, échec, abandon). */
+  function terminateFollowerGen() {
+    clearTimeout(followerGenTimer);
+    followerGenTimer = null;
+    if (!followerGenToken) return;
+    followerGenToken = null;
+    followerGenConsultationId = null;
+    if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
+    hideThinkingIndicator();
+    effacerGenPane();
+    if (progressToast) { progressToast.dismiss(); progressToast = null; }
+  }
+
+  /**
+   * Fin de la génération suivie (événement ``generated``) : la note finale
+   * repart de ``loadDraft`` juste après ; on referme la machinerie de rendu et
+   * le toast bascule sur « Validation » si l'audit se met à couler aussitôt,
+   * sinon il s'éteint dans un instant.
+   */
+  function finishFollowerGen() {
+    if (!followerGenToken) return;
+    const t = progressToast;
+    clearTimeout(followerGenTimer);
+    followerGenTimer = null;
+    followerGenToken = null;
+    followerGenConsultationId = null;
+    if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
+    hideThinkingIndicator();
+    effacerGenPane();
+    // Le flux a rempli l'éditeur de la version transitoire : on la considère
+    // « sauvegardée » pour que la relecture de loadDraft ne s'étrangle pas
+    // dans la modale de conflit (voir onSyncGeneratedOrPatched).
+    state.lastSavedSnapshot = workspaceSnapshot();
+    followerGenTimer = setTimeout(() => {
+      if (progressToast === t) {
+        progressToast.dismiss();
+        progressToast = null;
+      }
+    }, 3000);
   }
 
   /**
@@ -6417,12 +6541,22 @@
    * « La note se génère… » (garde-fou si cet événement se perd).
    */
   function onGenerationStarted(evt) {
-    if (!pendingGenerate) return;
     const payload = JSON.parse(evt.data || '{}');
-    if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    if (pendingGenerate) {
+      if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
+      state.genStarted = true;
+      if (!genTextStarted && progressToast && progressToast.setMessage) {
+        progressToast.setMessage(T('generate.processing'));
+      }
+      return;
+    }
+    // Suiveur : une génération démarre sur un autre appareil, sur la
+    // consultation ouverte — l'écran se prépare à la recevoir en direct.
+    if (!payload.generation_token) return;
+    if (followerGenToken !== payload.generation_token) armFollowerGen(payload.generation_token);
     state.genStarted = true;
-    if (!genTextStarted && progressToast && progressToast.setMessage) {
+    if (progressToast && progressToast.setMessage) {
       progressToast.setMessage(T('generate.processing'));
     }
   }
@@ -6438,19 +6572,65 @@
    * vérité : elle remplace ce texte brut par la version définitive.
    */
   function onGenerationChunk(evt) {
-    if (!pendingGenerate) return;
     const payload = JSON.parse(evt.data || '{}');
-    if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    if (pendingGenerate) {
+      if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
 
-    // La note a commencé : verrou — toute pensée encore en retard est ignorée
-    // par onGenerationThought et ne réapparaît plus à l'écran.
+      // La note a commencé : verrou — toute pensée encore en retard est ignorée
+      // par onGenerationThought et ne réapparaît plus à l'écran.
+      const debutNote = !genTextStarted;
+      genTextStarted = true;
+
+      // Premier morceau de TEXTE de la note : le raisonnement (thinking) s'est
+      // terminé — on efface la pensée de l'écran (elle n'est jamais persistée),
+      // puis la note défile à son tour.
+      if (genThoughtPhase) {
+        genThoughtPhase = false;
+        hideThinkingIndicator();
+        if (genRaf) { cancelAnimationFrame(genRaf); genRaf = null; }
+        genText = '';
+        genSeq = 0;
+        genShown = '';
+        lastGenRender = 0;
+        applyGenShown();
+      }
+
+      // Le premier morceau de texte est LA preuve que le modèle a répondu : il
+      // fait avancer le toast vers la phase « La note se génère… » même si
+      // l'événement dédié `generation_started` s'est perdu (file SSE saturée).
+      if (debutNote) {
+        state.genStarted = true;
+        if (progressToast && progressToast.setMessage) {
+          progressToast.setMessage(T('generate.streaming'));
+        }
+      }
+
+      if (payload.type === 'snapshot' || !payload.type) {
+        // Snapshot (ou ancien format, texte complet) : remplace tout.
+        genText = payload.markdown || '';
+        genSeq = payload.seq || 0;
+      } else {
+        // Delta : on n'ajoute que s'il est contigu au précédent, sinon on
+        // attend le prochain snapshot — un trou se répare tout seul.
+        if (genSeq + 1 === payload.seq || genSeq === 0) {
+          genText += payload.delta || '';
+        }
+        genSeq = payload.seq || genSeq;
+      }
+
+      startGenReveal();
+      return;
+    }
+
+    // Suiveur : on applique le flux d'une génération étrangère sur la
+    // consultation ouverte — mêmes règles que l'émetteur (verrou de pensée,
+    // snapshots/deltas, révélation).
+    if (!payload.generation_token) return;
+    if (followerGenToken !== payload.generation_token) armFollowerGen(payload.generation_token);
+    filetFollowerGen();
     const debutNote = !genTextStarted;
     genTextStarted = true;
-
-    // Premier morceau de TEXTE de la note : le raisonnement (thinking) s'est
-    // terminé — on efface la pensée de l'écran (elle n'est jamais persistée),
-    // puis la note défile à son tour.
     if (genThoughtPhase) {
       genThoughtPhase = false;
       hideThinkingIndicator();
@@ -6461,30 +6641,21 @@
       lastGenRender = 0;
       applyGenShown();
     }
-
-    // Le premier morceau de texte est LA preuve que le modèle a répondu : il
-    // fait avancer le toast vers la phase « La note se génère… » même si
-    // l'événement dédié `generation_started` s'est perdu (file SSE saturée).
     if (debutNote) {
       state.genStarted = true;
       if (progressToast && progressToast.setMessage) {
         progressToast.setMessage(T('generate.streaming'));
       }
     }
-
     if (payload.type === 'snapshot' || !payload.type) {
-      // Snapshot (ou ancien format, texte complet) : remplace tout.
       genText = payload.markdown || '';
       genSeq = payload.seq || 0;
     } else {
-      // Delta : on n'ajoute que s'il est contigu au précédent, sinon on
-      // attend le prochain snapshot — un trou se répare tout seul.
       if (genSeq + 1 === payload.seq || genSeq === 0) {
         genText += payload.delta || '';
       }
       genSeq = payload.seq || genSeq;
     }
-
     startGenReveal();
   }
 
@@ -6497,27 +6668,55 @@
    * ignorés : le raisonnement ne réapparaît jamais pendant le streaming.
    */
   function onGenerationThought(evt) {
-    if (!pendingGenerate) return;
     const payload = JSON.parse(evt.data || '{}');
-    if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    if (pendingGenerate) {
+      if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
 
-    // La note a déjà commencé : la pensée est finie — on ne la réaffiche pas.
+      // La note a déjà commencé : la pensée est finie — on ne la réaffiche pas.
+      if (genTextStarted) return;
+
+      if (!genThoughtPhase) {
+        genThoughtPhase = true;
+        showThinkingIndicator();
+      }
+
+      // Même preuve d'activité que le texte de la note : le modèle a répondu —
+      // le toast reste en phase « Traitement en cours… » (le raisonnement
+      // précède la note).
+      if (!state.genStarted && progressToast && progressToast.setMessage) {
+        state.genStarted = true;
+        progressToast.setMessage(T('generate.processing'));
+      }
+
+      if (payload.type === 'snapshot' || !payload.type) {
+        genText = payload.markdown || '';
+        genSeq = payload.seq || 0;
+      } else {
+        if (genSeq + 1 === payload.seq || genSeq === 0) {
+          genText += payload.delta || '';
+        }
+        genSeq = payload.seq || genSeq;
+      }
+
+      startGenReveal();
+      return;
+    }
+
+    // Suiveur : le raisonnement d'une génération étrangère défile sur la
+    // consultation ouverte, jusqu'au premier morceau de texte de la note.
+    if (!payload.generation_token) return;
+    if (followerGenToken !== payload.generation_token) armFollowerGen(payload.generation_token);
+    filetFollowerGen();
     if (genTextStarted) return;
-
     if (!genThoughtPhase) {
       genThoughtPhase = true;
       showThinkingIndicator();
     }
-
-    // Même preuve d'activité que le texte de la note : le modèle a répondu —
-    // le toast reste en phase « Traitement en cours… » (le raisonnement
-    // précède la note).
     if (!state.genStarted && progressToast && progressToast.setMessage) {
       state.genStarted = true;
       progressToast.setMessage(T('generate.processing'));
     }
-
     if (payload.type === 'snapshot' || !payload.type) {
       genText = payload.markdown || '';
       genSeq = payload.seq || 0;
@@ -6527,7 +6726,6 @@
       }
       genSeq = payload.seq || genSeq;
     }
-
     startGenReveal();
   }
 
@@ -6640,6 +6838,10 @@
     $('markdownEditor').value = note;
     renderCorrections(corrections);
     renderMarkdown();
+    // Suivi d'une génération étrangère : le flux est déjà durable côté
+    // serveur — il ne doit jamais déclencher de faux conflit à la relecture
+    // ni de sauvegarde automatique intermédiaire (voir scheduleSave).
+    if (followerGenToken) state.lastSavedSnapshot = workspaceSnapshot();
     // On suit toujours la fin du texte en cours de génération, quelle que
     // soit la vue active (Aperçu ou Éditer).
     if (state.editingMarkdown) {

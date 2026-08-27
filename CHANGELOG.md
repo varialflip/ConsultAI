@@ -113,6 +113,26 @@ par le modèle, est ainsi préservé à la lecture.*
   « Texte simple » et au repli texte du copier « Mise en forme ». Aucune autre
   rubrique (antécédents, examen, plan…) n'est touchée.
 
+## 2026-08-27 — La génération de la note se suit en direct sur tous les appareils
+
+*Lancée depuis le téléphone, la génération n'était visible que sur l'appareil
+émetteur : les `generation_chunk` / `generation_thought` exigeaient le jeton de
+corrélation local, et le second appareil n'apercevait la note qu'au tout dernier
+moment, sans aucune indication de progression.*
+
+- **Tout onglet du même usager qui a la consultation ouverte suit désormais le
+  flux en direct** : la note défile dans l'aperçu (raisonnement du modèle puis
+  texte, révélés par le même mécanisme que l'émetteur), le toast de progression
+  s'ouvre et traverse les mêmes phases — « Traitement en cours… »,
+  « La note se génère… », puis « Validation en cours… » quand l'audit coule, et
+  s'éteint au résultat final.
+- L'émetteur garde exactement son comportement (jeton local) ; un onglet qui
+  génère lui-même ignore les flux étrangers et referme d'abord le suivi en
+  cours. Un « suiveur » qui change de consultation ou repart à zéro referme
+  aussi la machinerie (spinner arrêté).
+- Aucun changement de fournisseur, de prix, de politique de données ni de
+  stockage : ni EFVP ni README impactés.
+
 ## 2026-08-27 — L'audit « Validation » suit la consultation sur tous les appareils
 
 *Lancée depuis le téléphone et suivie sur un autre appareil, la vérification

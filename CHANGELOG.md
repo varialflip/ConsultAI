@@ -3,6 +3,19 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — « Texte simple » : rendu soigné (casse d'origine, glyphes Unicode)
+
+*Le rendu texte restait « dactylo » : titres en majuscules, filets `=`/`-`,
+puces `-`. Le DME accepte pourtant l'Unicode (accents, « µ ») : le rendu passe
+en casse d'origine et se pare de glyphes soignés, sans rien changer à
+l'alignement (toujours en espaces insécables).*
+
+- **Titres en casse d'origine** (tels qu'écrits dans le gabarit) avec filets
+  `═` (titre) et `─` (rubriques) au lieu de `=`/`-` ;
+- **Puces `•`** dans les listes et dans les deux colonnes des médicaments ;
+- **Filet horizontal `─`** ; tableaux et deux colonnes inchangés (NBSP).
+  Conversion locale au navigateur, aucun coût en jetons.
+
 ## 2026-08-27 — « Texte simple » : alignement par espaces insécables (DME riche)
 
 *Au collage dans le champ du DME, les suites d'espaces du rendu deux colonnes

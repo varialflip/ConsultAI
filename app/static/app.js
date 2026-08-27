@@ -3321,9 +3321,12 @@
    * La conversion est faite ici, dans le navigateur, à partir du Markdown déjà
    * généré : elle ne coûte aucun appel au modèle et donc aucun jeton.
    *
-   * ASCII pur, volontairement : un champ de DME hérité peut ne pas accepter
-   * les caractères de filet Unicode, et un « ═ » remplacé par « ? » serait
-   * pire que le tiret qu'il remplace.
+   * Le rendu fut longtemps ASCII pur — un champ de DME hérité pouvait rejeter
+   * les caractères de filet Unicode, et un « ═ » devenu « ? » était pire que le
+   * tiret remplacé. Le DME actuel accepte l'Unicode (les accents et le « µ » y
+   * passent) : les rubriques se parent donc de glyphes soignés (« ═ », « ─ »,
+   * « • »). L'ALIGNEMENT, lui, tient sur des espaces insécables (NBSP), un
+   * champ riche aplatissant les espaces ordinaires — jamais de tabulation.
    * ---------------------------------------------------------------------- */
 
   /** Retire les marqueurs de style d'une ligne, en gardant le texte. */
@@ -3416,7 +3419,7 @@
   /** Rend la liste des médicaments en deux colonnes, lecture verticale. */
   function renderMedsColumns(items) {
     if (!items.length) return [];
-    const cellules = items.map((item) => `- ${item}`);
+    const cellules = items.map((item) => `• ${item}`);
     const moitie = Math.ceil(cellules.length / 2);
     const gauche = cellules.slice(0, moitie);
     const droite = cellules.slice(moitie);
@@ -3485,9 +3488,9 @@
         inMeds = niveau === 2 && MEDS_HEADING_RE.test(texte);
         if (out.length) out.push('');
         if (niveau === 1) {
-          out.push(texte.toUpperCase(), '='.repeat(Math.max(texte.length, 3)));
+          out.push(texte, '═'.repeat(Math.max(texte.length, 3)));
         } else if (niveau === 2) {
-          out.push(texte.toUpperCase(), '-'.repeat(Math.max(texte.length, 3)));
+          out.push(texte, '─'.repeat(Math.max(texte.length, 3)));
         } else {
           // Au-delà du deuxième niveau, un filet de plus nuirait à la
           // lisibilité : la position et le deux-points suffisent.
@@ -3499,7 +3502,7 @@
       // --- Filet horizontal ---
       if (/^\s*([-*_])\1{2,}\s*$/.test(ligne)) {
         viderMeds();
-        out.push('', '-'.repeat(60), '');
+        out.push('', '─'.repeat(60), '');
         return;
       }
 
@@ -3514,7 +3517,7 @@
           meds.push(contenu);
         } else {
           if (inMeds) viderMeds();
-          out.push(`${creux}- ${contenu}`);
+          out.push(`${creux}• ${contenu}`);
         }
         return;
       }

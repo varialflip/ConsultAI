@@ -3,6 +3,28 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — Mode dictaphone repensé : fermeture étiquetée, push-to-talk, carnet
+
+*Le calque dictaphone (téléphone retourné) gardait une colonne « gros bouton
+seul » : fermeture ✕ minuscule et grise, aucun retour de transcription pendant
+la dictée, un seul mode d'enregistrement (tap-tap). Il est repensé en quatre
+zones, avec deux modes de conversation au choix.*
+
+- **Fermeture étiquetée et grande** : pilule « Quitter » (fond contrasté,
+  bordure, ombre) en tête de calque — impossible à rater ;
+- **Push-to-talk** : contrôle segmenté « Toucher / Maintenir ». En mode
+  Maintenir, presser le bouton central enregistre (ou reprend) et relâcher
+  (ou glisser hors du bouton) met en pause. Relâcher ne conclut jamais — le
+  ■ Terminer reste l'unique moyen de clore. Préférence persistée
+  (`consultai.dictaphoneMode`), défaut Toucher ;
+- **Carnet de transcription** : les 3 dernières lignes (texte committé +
+  provisoire en cours de reconnaissance) s'affichent en direct sous le bouton,
+  avec un placeholder quand la dictée n'a rien produit ;
+- **Présentation** : fond en dégradé, bouton central harmonisé, minuteur en
+  tête de calque ; nouvelles clés i18n (`dictaphone.close_label`,
+  `mode_tap/mode_ptt`, `tap_hint/hold_hint`, `transcript_placeholder`,
+  `mode_group_aria`), retrait de `dictaphone.hint_manual`.
+
 ## 2026-08-27 — Mode dictaphone manuel sur tous les mobiles
 
 *Le mode dictaphone (téléphone retourné) existait en deux variantes : manuelle

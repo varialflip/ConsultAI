@@ -1489,7 +1489,10 @@
       if (!state.paused) {
         state.recordedSeconds += 1;
         $('timer').textContent = formatDuration(state.recordedSeconds);
-        if (dphone.active) $('dictaphoneTimer').textContent = formatDuration(state.recordedSeconds);
+        if (dphone.active) {
+          $('dictaphoneTimer').textContent = formatDuration(state.recordedSeconds);
+          refreshDictaphoneTranscript();
+        }
       }
     }, 1000);
   }
@@ -1551,16 +1554,27 @@
    * Mode dictaphone (téléphone retourné)
    * ----------------------------------------------------------------------
    * Le micro du téléphone est en bas : retourné, il fait face à qui parle.
-   * L'écran devient alors un unique gros bouton Enregistrer / Pause.
+   * L'écran devient alors un gros bouton + un carnet de transcription.
    *
    * Uniquement manuel, sur tous les mobiles (à la iOS) : le bouton
    * « Mode retourné » affiche le calque, tourné de 180° en CSS pour se lire
-   * à l'endroit une fois le téléphone retourné, et le ✕ le quitte. Fini
-   * l'auto-détection par capteurs (deviceorientation), qui exigeait une
-   * permission Android et dont le comportement variait d'une plateforme à
-   * l'autre.
+   * à l'endroit une fois le téléphone retourné, et la pilule « Quitter »
+   * le ferme. Fini l'auto-détection par capteurs (deviceorientation), qui
+   * exigeait une permission Android et dont le comportement variait d'une
+   * plateforme à l'autre.
+   *
+   * Deux modes de conversation, choisis par le contrôle segmenté :
+   *  * 'tap' — toucher pour enregistrer, retoucher pour mettre en pause ;
+   *  * 'ptt' — maintenir pour enregistrer, relâcher pour mettre en pause
+   *    (push-to-talk). Relâcher ne « termine » jamais : le ■ Terminer reste
+   *    le seul moyen de conclure la dictée.
    * ---------------------------------------------------------------------- */
-  const dphone = { active: false };
+  const dphone = {
+    active: false,
+    mode: localStorage.getItem('consultai.dictaphoneMode') === 'ptt' ? 'ptt' : 'tap',
+  };
+  /** Garde-fous du push-to-talk : pas de double démarrage ni de double pause. */
+  const ptt = { held: false, starting: false };
 
   const ICON_MIC_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
     + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
@@ -1585,12 +1599,12 @@
   function syncDictaphoneUI() {
     const main = $('btnDictaphoneMain');
     if (!main) return;
-    const actions = $('dictaphoneActions');
     $('dictaphoneTimer').textContent = formatDuration(state.recordedSeconds);
-    // Visibilité seule (jamais display:none) : le slot conserve sa hauteur et
-    // le gros bouton reste centré quand les actions apparaissent.
-    actions.classList.toggle('invisible', !state.recording);
-    const base = 'w-56 h-56 rounded-full grid place-items-center shadow-2xl active:scale-95 transition ';
+    // Le bouton Terminer n'a de sens qu'en cours de dictée. Affichage par
+    // visibilité (invisible), jamais display:none, pour ne pas décaler le pied.
+    const finish = $('btnDictaphoneFinish');
+    if (finish) finish.classList.toggle('invisible', !state.recording);
+    const base = 'w-48 h-48 rounded-full grid place-items-center shadow-2xl active:scale-95 transition touch-none ';
     if (state.recording && !state.paused) {
       main.className = base + 'bg-red-600 rec-dot';
       main.innerHTML = ICON_PAUSE_BIG;
@@ -1604,6 +1618,43 @@
       main.innerHTML = ICON_MIC_BIG;
       main.title = T('rec.record');
     }
+    renderDictaphoneMode();
+    refreshDictaphoneTranscript();
+  }
+
+  /** Segments du mode de conversation : actif en pastille claire + aide. */
+  function renderDictaphoneMode() {
+    const tap = $('btnDphoneModeTap');
+    const pttBtn = $('btnDphoneModePtt');
+    const hint = $('dictaphoneHint');
+    const active = 'px-3 h-8 rounded-full text-xs font-medium text-slate-900 bg-white transition';
+    const idle = 'px-3 h-8 rounded-full text-xs font-medium text-slate-300 transition';
+    if (tap) tap.className = dphone.mode === 'tap' ? active : idle;
+    if (pttBtn) pttBtn.className = dphone.mode === 'ptt' ? active : idle;
+    if (hint) hint.textContent = dphone.mode === 'ptt'
+      ? T('dictaphone.hold_hint')
+      : T('dictaphone.tap_hint');
+  }
+
+  /** Carnet du mode dictaphone : les 3 dernières lignes (committé + provisoire). */
+  function refreshDictaphoneTranscript() {
+    const box = $('dictaphoneTranscript');
+    if (!box) return;
+    let text = $('transcript').value;
+    const live = liveLinesBox();
+    if (live) {
+      const parts = [];
+      live.querySelectorAll('.live-line').forEach((el) => {
+        const t = el.textContent.trim();
+        if (t) parts.push(t);
+      });
+      if (parts.length) text = text ? `${text} ${parts.join(' ')}` : parts.join(' ');
+    }
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const shown = lines.slice(-3).join('\n');
+    box.textContent = shown;
+    const empty = $('dictaphoneTranscriptEmpty');
+    if (empty) empty.classList.toggle('hidden', Boolean(shown));
   }
 
   /* -------------------------------------------------------------------------
@@ -6691,15 +6742,54 @@
     $('btnAbort').addEventListener('click', abortRecording);
 
     // --- Mode dictaphone (téléphone retourné) ---
-    $('btnDictaphoneMain').addEventListener('click', () => {
+    const dphoneMain = $('btnDictaphoneMain');
+    // Toucher : un clic démarre / met en pause.
+    dphoneMain.addEventListener('click', () => {
+      if (dphone.mode !== 'tap') return;
       if (!state.recording) startRecording();
       else togglePause();
     });
+    // Maintenir (push-to-talk) : presser = enregistrer/reprendre, relâcher
+    // ou glisser hors du bouton = pause. Relâcher ne conclut jamais : le
+    // ■ Terminer reste le seul moyen de clore la dictée.
+    const onPTTDown = () => {
+      if (dphone.mode !== 'ptt' || ptt.held) return;
+      ptt.held = true;
+      if (state.recording) {
+        if (state.paused) togglePause();
+        return;
+      }
+      if (ptt.starting) return;
+      ptt.starting = true;
+      startRecording().finally(() => { ptt.starting = false; });
+    };
+    const onPTTUp = () => {
+      ptt.held = false;
+      if (dphone.mode !== 'ptt') return;
+      if (state.recording && !state.paused) togglePause();
+    };
+    dphoneMain.addEventListener('pointerdown', onPTTDown);
+    dphoneMain.addEventListener('pointerup', onPTTUp);
+    dphoneMain.addEventListener('pointerleave', onPTTUp);
+    dphoneMain.addEventListener('pointercancel', onPTTUp);
+    dphoneMain.addEventListener('contextmenu', (e) => e.preventDefault());
+
     $('btnDictaphoneFinish').addEventListener('click', finishRecording);
+
+    // Contrôle segmenté du mode de conversation : Toucher / Maintenir.
+    const setDictaphoneMode = (mode) => {
+      dphone.mode = mode;
+      localStorage.setItem('consultai.dictaphoneMode', mode);
+      renderDictaphoneMode();
+    };
+    const tapSeg = $('btnDphoneModeTap');
+    const pttSeg = $('btnDphoneModePtt');
+    if (tapSeg) tapSeg.addEventListener('click', () => setDictaphoneMode('tap'));
+    if (pttSeg) pttSeg.addEventListener('click', () => setDictaphoneMode('ptt'));
+    renderDictaphoneMode();
+
     // Manuel sur tous les mobiles (à la iOS) : le bouton « Mode retourné »
-    // affiche le calque renversé de 180°, le ✕ le quitte. Aucune
-    // auto-détection. Le bouton n'apparaît que sur écran tactile — le mode
-    // retourné n'a de sens que sur un téléphone.
+    // affiche le calque renversé de 180°, la pilule « Quitter » le ferme.
     const flipBtn = $('btnFlipMode');
     const exitBtn = $('btnDictaphoneExit');
     if (flipBtn) {

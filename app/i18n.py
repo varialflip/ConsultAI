@@ -210,10 +210,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "rec.abort_title": ("Arrêter sans envoyer", "Stop without sending"),
     "rec.import_title": ("Importer un fichier audio", "Import an audio file"),
     "rec.level_aria": ("Niveau sonore du micro", "Microphone level"),
-    "dictaphone.hint_manual": (
-        "Bouton ✕ pour quitter ce mode",
-        "Tap ✕ to leave this mode",
-    ),
+    "dictaphone.close_label": ("Quitter", "Close"),
     "dictaphone.toggle_title": (
         "Mode retourné (grand bouton)",
         "Flip mode (big button)",
@@ -221,6 +218,24 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "dictaphone.exit_title": (
         "Quitter le mode retourné",
         "Exit flip mode",
+    ),
+    "dictaphone.mode_group_aria": (
+        "Mode de conversation",
+        "Recording mode",
+    ),
+    "dictaphone.mode_tap": ("Toucher", "Tap"),
+    "dictaphone.mode_ptt": ("Maintenir", "Hold"),
+    "dictaphone.tap_hint": (
+        "Touchez pour enregistrer, touchez encore pour mettre en pause",
+        "Tap to record, tap again to pause",
+    ),
+    "dictaphone.hold_hint": (
+        "Maintenez pour enregistrer, relâchez pour mettre en pause",
+        "Hold to record, release to pause",
+    ),
+    "dictaphone.transcript_placeholder": (
+        "La transcription apparaîtra ici…",
+        "The transcription will appear here…",
     ),
 
     # --- Détails ------------------------------------------------------------

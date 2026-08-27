@@ -562,10 +562,9 @@
             <input id="audioFileInput" type="file" accept="audio/*" class="hidden">
           </label>
 
-          <!-- Mode retourné : visible UNIQUEMENT sur iOS (JS), où il n'y a
-               ni détection automatique ni permission capteur. Affiche le
-               calque renversé de 180°. Masqué sur Android : l'auto-détection
-               du retournement y suffit. -->
+          <!-- Mode retourné : manuel sur tous les mobiles (à la iOS). Le bouton
+               affiche le calque renversé de 180°, le ✕ le quitte. Révélé par le
+               JS sur écran tactile uniquement (voir app.js). -->
           <button id="btnFlipMode" type="button" title="{{ t('dictaphone.toggle_title') }}"
                   class="hidden w-12 lg:w-10 grid place-items-center rounded-lg border transition border-slate-300 hover:bg-slate-50 active:bg-slate-100">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1030,20 +1029,19 @@
 <div id="printArea" class="hidden absolute -left-[9999px]"></div>
 
 <!-- ===================================================================
-     MODE DICTAPHONE — plein écran quand le téléphone est retourné
+     MODE DICTAPHONE — plein écran, manuel (à la iOS)
      Le micro est en bas du téléphone : retourné, il fait face à qui
      parle. L'écran devient alors un unique gros bouton
-     Enregistrer / Pause / Reprendre. Si le système n'a pas lui-même
-     pivoté l'affichage (iPhone ne pivote jamais à 180°), le JS tourne
-     ce calque de 180° en CSS pour qu'il se lise à l'endroit.
+     Enregistrer / Pause / Reprendre. Le JS tourne ce calque de 180° en
+     CSS pour qu'il se lise à l'endroit une fois le téléphone retourné.
+     Sortie par le ✕ (plus aucune détection de retournement).
      =================================================================== -->
 <div id="dictaphoneOverlay" class="no-print hidden fixed inset-0 z-50 bg-slate-900 text-white
                                   select-none" style="touch-action: manipulation">
-  <!-- Sortie du mode : visible UNIQUEMENT sur iOS (JS), où l'on ne peut pas
-       compter sur le retournement pour quitter. -->
+  <!-- Sortie du mode : seul moyen de quitter, toujours visible. -->
   <button id="btnDictaphoneExit" type="button" title="{{ t('dictaphone.exit_title') }}"
           aria-label="{{ t('dictaphone.exit_title') }}"
-          class="hidden absolute top-2 right-2 w-10 h-10 grid place-items-center rounded-full
+          class="absolute top-2 right-2 w-10 h-10 grid place-items-center rounded-full
                  text-slate-400 hover:text-white active:bg-slate-800 transition">
     <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -1072,7 +1070,7 @@
         <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
       </button>
     </div>
-    <p id="dictaphoneHint" class="text-xs text-slate-500">{{ t('dictaphone.hint') }}</p>
+    <p id="dictaphoneHint" class="text-xs text-slate-500">{{ t('dictaphone.hint_manual') }}</p>
   </div>
 </div>
 

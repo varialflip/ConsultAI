@@ -3,6 +3,26 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — Mode dictaphone manuel sur tous les mobiles
+
+*Le mode dictaphone (téléphone retourné) existait en deux variantes : manuelle
+sur iOS (bouton « Mode retourné » + ✕) et automatique sur Android (détection
+du retournement par capteurs, boutons masqués). La détection automatique
+exigeait une permission capteur sur Android, variait d'une plateforme à
+l'autre et ne laissait aucun contrôle — elle est retirée. Un seul mode,
+manuel, sur tous les mobiles.*
+
+- **Bouton « Mode retourné »** affiché sur tout écran tactile : il ouvre le
+  calque plein écran (gros bouton Enregistrer/Pause), tourné de 180° en CSS
+  pour se lire à l'endroit une fois le téléphone retourné ;
+- **Bouton ✕** toujours visible pour quitter — c'est désormais le seul moyen
+  de sortir, plus de retournement auto ;
+- **Fin de l'auto-détection** : écouteurs `deviceorientation` /
+  `screen.orientation` / `orientationchange` et demande de permission capteur
+  supprimés (app.js) ; l'aide du calque devient « Bouton ✕ pour quitter ce
+  mode » ; la clé i18n `dictaphone.hint` (repli « retournez le téléphone »)
+  est retirée.
+
 ## 2026-08-27 — « Texte simple » : rendu soigné (casse d'origine, glyphes Unicode)
 
 *Le rendu texte restait « dactylo » : titres en majuscules, filets `=`/`-`,

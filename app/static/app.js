@@ -1553,25 +1553,14 @@
    * Le micro du téléphone est en bas : retourné, il fait face à qui parle.
    * L'écran devient alors un unique gros bouton Enregistrer / Pause.
    *
-   * Deux détections, car les plateformes ne se comportent pas pareil :
-   *
-   * * screen.orientation à 180° — Android laisse (parfois) l'écran pivoter
-   *   tête en bas ; l'affichage est alors DÉJÀ à l'endroit, le calque est
-   *   posé tel quel ;
-   * * deviceorientation — iOS ne pivote jamais l'écran à 180°, mais les
-   *   capteurs voient le téléphone physiquement retourné : le calque est
-   *   alors tourné de 180° en CSS. Sur iOS 13+, ces événements exigent une
-   *   permission demandée sur un geste (voir maybeRequestOrientationPermission).
-   *
-   * Anti-rebond : un état ne s'applique qu'après 400 ms stables, pour ne
-   * pas faire clignoter le calque pendant le mouvement de bascule.
+   * Uniquement manuel, sur tous les mobiles (à la iOS) : le bouton
+   * « Mode retourné » affiche le calque, tourné de 180° en CSS pour se lire
+   * à l'endroit une fois le téléphone retourné, et le ✕ le quitte. Fini
+   * l'auto-détection par capteurs (deviceorientation), qui exigeait une
+   * permission Android et dont le comportement variait d'une plateforme à
+   * l'autre.
    * ---------------------------------------------------------------------- */
-  /** iOS : aucune demande de permission capteur ; le mode retourné
-   * s'y active uniquement par le bouton « Mode retourné ». */
-  const isIOSDevice = /iPhone|iPad|iPod/.test(navigator.userAgent)
-    || (/Macintosh/.test(navigator.userAgent) && 'ontouchstart' in window);
-
-  const dphone = { active: false, rotate: false, candidate: null, since: 0 };
+  const dphone = { active: false };
 
   const ICON_MIC_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
     + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
@@ -1582,66 +1571,15 @@
   const ICON_RESUME_BIG = '<svg class="w-16 h-16" viewBox="0 0 24 24" fill="currentColor">'
     + '<path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l10.7-6.86a1 1 0 0 0 0-1.7L9.53 4.29A1 1 0 0 0 8 5.14z"/></svg>';
 
-  function screenIsUpsideDown() {
-    const angle = (screen.orientation && typeof screen.orientation.angle === 'number')
-      ? screen.orientation.angle
-      : (typeof window.orientation === 'number' ? window.orientation : 0);
-    return Math.abs(angle) === 180;
-  }
-
-  /** Téléphone vertical, tête en bas : beta ≈ -90°, quelle que soit la bascule. */
-  function sensorSaysUpsideDown(ev) {
-    if (!ev || ev.beta === null || ev.beta === undefined) return false;
-    return ev.beta < -45 && ev.beta > -135 && Math.abs(ev.gamma || 0) < 45;
-  }
-
-  function setDictaphone(active, rotate) {
-    if (dphone.active === active && dphone.rotate === rotate) return;
+  function setDictaphone(active) {
+    if (dphone.active === active) return;
     dphone.active = active;
-    dphone.rotate = active ? rotate : false;
     const overlay = $('dictaphoneOverlay');
     if (!overlay) return;
     overlay.classList.toggle('hidden', !active);
-    overlay.style.transform = dphone.rotate ? 'rotate(180deg)' : '';
+    overlay.style.transform = active ? 'rotate(180deg)' : '';
     if (active) syncDictaphoneUI();
   }
-
-  function applyDictaphoneCandidate(ev) {
-    // L'écran pivoté par l'OS prime : l'affichage est déjà à l'endroit.
-    const c = screenIsUpsideDown()
-      ? { active: true, rotate: false }
-      : sensorSaysUpsideDown(ev)
-        ? { active: true, rotate: true }
-        : { active: false, rotate: false };
-    const now = Date.now();
-    if (!dphone.candidate || dphone.candidate.active !== c.active || dphone.candidate.rotate !== c.rotate) {
-      dphone.candidate = c;
-      dphone.since = now;
-      return;
-    }
-    if (now - dphone.since >= 400) setDictaphone(c.active, c.rotate);
-  }
-
-  window.addEventListener('deviceorientation', applyDictaphoneCandidate);
-  if (screen.orientation && screen.orientation.addEventListener) {
-    screen.orientation.addEventListener('change', () => applyDictaphoneCandidate(null));
-  } else {
-    // Safari ancien : l'événement fenêtre tient lieu de change.
-    window.addEventListener('orientationchange',
-      () => setTimeout(() => applyDictaphoneCandidate(null), 100));
-  }
-
-  /** iOS 13+ n'émet deviceorientation qu'après une permission, sur un geste. */
-  let orientationPermissionAsked = false;
-  function maybeRequestOrientationPermission() {
-    if (isIOSDevice) return; // iOS : aucune demande de permission
-    if (orientationPermissionAsked) return;
-    if (typeof DeviceOrientationEvent === 'undefined'
-        || typeof DeviceOrientationEvent.requestPermission !== 'function') return;
-    orientationPermissionAsked = true;
-    DeviceOrientationEvent.requestPermission().catch(() => {});
-  }
-  document.addEventListener('pointerdown', maybeRequestOrientationPermission);
 
   /** Calque du mode dictaphone : miroir de updateRecordingUI(). */
   function syncDictaphoneUI() {
@@ -6758,24 +6696,17 @@
       else togglePause();
     });
     $('btnDictaphoneFinish').addEventListener('click', finishRecording);
-    // iOS : pas de détection automatique (aucune permission demandée). Un
-    // bouton « Mode retourné » affiche le calque RENVERSÉ de 180° — à se
-    // lire à l'endroit une fois le téléphone retourné — et un ✕ permet d'en
-    // sortir. Android garde l'auto-détection seule : boutons masqués.
-    if (isIOSDevice) {
-      const flipBtn = $('btnFlipMode');
-      const exitBtn = $('btnDictaphoneExit');
-      const hint = $('dictaphoneHint');
-      if (flipBtn) {
-        flipBtn.classList.remove('hidden');
-        flipBtn.addEventListener('click', () => setDictaphone(!dphone.active, true));
-      }
-      if (exitBtn) {
-        exitBtn.classList.remove('hidden');
-        exitBtn.addEventListener('click', () => setDictaphone(false, false));
-      }
-      if (hint) hint.textContent = T('dictaphone.hint_manual');
+    // Manuel sur tous les mobiles (à la iOS) : le bouton « Mode retourné »
+    // affiche le calque renversé de 180°, le ✕ le quitte. Aucune
+    // auto-détection. Le bouton n'apparaît que sur écran tactile — le mode
+    // retourné n'a de sens que sur un téléphone.
+    const flipBtn = $('btnFlipMode');
+    const exitBtn = $('btnDictaphoneExit');
+    if (flipBtn) {
+      flipBtn.addEventListener('click', () => setDictaphone(!dphone.active));
+      if (matchMedia('(pointer: coarse)').matches) flipBtn.classList.remove('hidden');
     }
+    if (exitBtn) exitBtn.addEventListener('click', () => setDictaphone(false));
 
     // --- Import d'un fichier audio existant ---
     $('audioFileInput').addEventListener('change', async (event) => {

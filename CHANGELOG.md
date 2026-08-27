@@ -113,6 +113,36 @@ par le modèle, est ainsi préservé à la lecture.*
   « Texte simple » et au repli texte du copier « Mise en forme ». Aucune autre
   rubrique (antécédents, examen, plan…) n'est touchée.
 
+## 2026-08-27 — L'audit « Validation » réutilise enfin le cache de préfixe
+
+*En pratique, l'audit « Validation » ne profitait presque jamais du cache de
+préfixe implicite de Gemini : sur gemini-2.5-pro (Vertex), il se heurtait à
+trois obstacles qui empêchaient la resservie du préfixe [consigne système +
+audio] partagé avec la mise en forme — vérifiés un à un par des appels réels
+(le compteur `cached_content_token_count` passait de 0 à ~2 000+ jetons après
+chaque correctif).*
+
+- **Le mode JSON cassait la resservie.** `response_mime_type="application/json"`
+  et `response_schema` plaçaient l'audit dans une partition du cache distincte
+  de celle de la mise en forme (hors mode JSON) : aucun préfixe partagé n'était
+  resservi. Le JSON est désormais demandé par instruction dans
+  `_AUDITOR_PROMPTS` (fr/en), et l'extraction est rendue tolérante
+  (`_extraire_json` : clôtures de code markdown retirées, repli sur la tranche
+  du premier « { » au dernier « } ») — le garde-fou déterministe est inchangé.
+- **La température doit coïncider avec la mise en forme.** L'audit fixait 0,2 ;
+  la mise en forme suit `active_temperature()` (0,0) : à 0,2 fixe, le préfixe
+  n'était pas resservi. L'audit suit désormais `active_temperature()` lui aussi.
+- **Le message doit avoir la même structure.** L'audit enveloppait le texte dans
+  un `Content` explicite, produisant deux messages [audio] / [texte] ; il passe
+  désormais la chaîne brute comme la mise en forme (`[Part(audio), texte]`), qui
+  s'aplanti en un seul message [audio, texte] identique.
+- Mesuré en réel : l'audit lancé juste après une mise en forme voit son préfixe
+  [consigne + audio] resservi du cache (~2 000 jetons) au lieu de rien, et une
+  seconde passe répétée resservie en quasi-totalité. Le coût d'entrée de la
+  vérification redevient celui prévu par le tarif `token_input_cached_1m`.
+- Aucun changement de fournisseur, de prix, de politique de données ni de
+  stockage : ni EFVP ni README impactés.
+
 ## 2026-08-27 — La génération de la note se suit en direct sur tous les appareils
 
 *Lancée depuis le téléphone, la génération n'était visible que sur l'appareil

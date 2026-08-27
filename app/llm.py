@@ -975,7 +975,12 @@ _AUDITOR_PROMPTS = {
         "doute, NE SIGNALE PAS : une liste vide est le résultat normal, "
         "jamais un échec. Sauf preuve directe dans l'audio, ne signale rien ; "
         "au plus 5 éléments courts par liste. « confiance » : ta certitude "
-        "globale (haute/moyenne/basse)."
+        "globale (haute/moyenne/basse).\n"
+        "\n"
+        "RÉPONSE OBLIGATOIRE : renvoie UNIQUEMENT un objet JSON strict, sans "
+        "aucun autre texte ni commentaire, de la forme : "
+        "{\"omissions\": [\"...\"], \"inventions\": [\"...\"], \"confiance\": "
+        "\"haute\"} — « confiance » parmi haute/moyenne/basse."
     ),
     "en": (
         "You are a factual auditor of a clinical note written from a "
@@ -1017,35 +1022,14 @@ _AUDITOR_PROMPTS = {
         "NEVER count as a discrepancy. When in doubt, DO NOT flag: an empty "
         "list is the normal outcome, never a failure. Without direct audio "
         "proof, flag nothing; at most 5 short items per list. \"confiance\": "
-        "your overall certainty (haute/moyenne/basse)."
+        "your overall certainty (haute/moyenne/basse).\n"
+        "\n"
+        "MANDATORY RESPONSE: return ONLY a strict JSON object, no other text "
+        "or commentary, of the form: {\"omissions\": [\"...\"], "
+        "\"inventions\": [\"...\"], \"confiance\": \"haute\"} — \"confiance\" "
+        "is one of haute/moyenne/basse."
     ),
 }
-
-#: Schéma de sortie contraint du « Validation » : listes plates de chaînes,
-#: rien de plus — l'interface affiche des puces, pas une ontologie.
-#: Construit à la demande : le SDK google-genai se charge paresseusement,
-#: comme partout dans ce module.
-
-
-def _verification_schema():
-    from google.genai import types
-
-    chaine = lambda: types.Schema(type=types.Type.STRING)
-    return types.Schema(
-        type=types.Type.OBJECT,
-        properties={
-            "omissions": types.Schema(
-                type=types.Type.ARRAY, items=chaine()
-            ),
-            "inventions": types.Schema(
-                type=types.Type.ARRAY, items=chaine()
-            ),
-            "confiance": types.Schema(
-                type=types.Type.STRING, enum=["haute", "moyenne", "basse"]
-            ),
-        },
-        required=["omissions", "inventions", "confiance"],
-    )
 
 
 def _verification_requete(
@@ -1092,12 +1076,12 @@ def _verification_requete(
     # L'AUDIO en TÊTE du message utilisateur : avec la consigne système (celle
     # de la mise en forme), il forme le préfixe [consigne système + audio]
     # partagé entre les deux passes — servi depuis le cache implicite de Gemini.
+    # Le texte suit IMMÉDIATEMENT l'audio, en CHAÎNE brute comme la mise en
+    # forme (``[Part(audio), user]``) : un ``Content`` explicite produirait deux
+    # messages [audio] / [texte] et romprait la resservie du préfixe.
     contenu: List[object] = [
         types.Part.from_bytes(data=audio[0], mime_type=audio[1]),
-        types.Content(
-            role="user",
-            parts=[types.Part.from_text(text="\n\n".join(blocs))],
-        ),
+        "\n\n".join(blocs),
     ]
 
     # L'audit est une tâche de CROISEMENT (note ↔ audio) : il a besoin de
@@ -1109,6 +1093,14 @@ def _verification_requete(
     # ``_est_think_refusee_gemini`` relance alors sans champ, ce qui laisse le
     # modèle raisonner sur sa valeur par défaut — toujours mieux pour l'audit
     # qu'un budget au plancher.
+    # PAS de ``response_mime_type="application/json"`` ni de ``response_schema`` :
+    # vérifié en réel sur gemini-2.5-pro (Vertex), une requête en mode JSON ne
+    # réutilise PAS le cache de préfixe implicite d'une requête hors mode JSON
+    # (la mise en forme). Le JSON est donc demandé par instruction (voir
+    # ``_AUDITOR_PROMPTS``) et l'extraction est tolérante (voir ``_extraire_json``).
+    # Même exigence pour la température : elle doit coïncider avec celle de la
+    # mise en forme (``active_temperature``), sinon le préfixe [consigne + audio]
+    # n'est pas resservi du cache — un audit à 0,2 fixe raté chaque cache.
     config_kwargs: Dict[str, object] = dict(
         # Sans ``system_instruction`` (appelant hors pipeline de mise en forme),
         # on retombe sur l'auditeur comme consigne système — comportement d'avant
@@ -1116,16 +1108,40 @@ def _verification_requete(
         system_instruction=system_instruction or _AUDITOR_PROMPTS.get(
             langue_norm, _AUDITOR_PROMPTS["fr"]
         ),
-        temperature=0.2,
+        temperature=active_temperature(),
         max_output_tokens=settings.gemini_max_output_tokens,
         safety_settings=_safety_settings(),
         thinking_config=types.ThinkingConfig(
             thinking_budget=_gemini_thinking_budget()
         ),
-        response_mime_type="application/json",
-        response_schema=_verification_schema(),
     )
     return client, nom_modele, contenu, config_kwargs
+
+
+def _extraire_json(brut: str) -> Optional[dict]:
+    """Extrait un objet JSON de la réponse brute de l'auditeur.
+
+    Sans le ``response_schema`` (retiré pour réutiliser le cache de préfixe de
+    la mise en forme), le modèle peut rarement envelopper le JSON dans une
+    clôture de code markdown ou l'entourer de prose. On nettoie les clôtures
+    puis on tente le JSON complet ; en dernier recours, la tranche du premier
+    « { » au dernier « } ».
+    """
+    texte = (brut or "").strip()
+    texte = re.sub(r"^```(?:json)?\s*", "", texte, flags=re.IGNORECASE)
+    texte = re.sub(r"\s*```$", "", texte)
+    try:
+        return json.loads(texte)
+    except ValueError:
+        pass
+    debut = texte.find("{")
+    fin = texte.rfind("}")
+    if debut != -1 and fin > debut:
+        try:
+            return json.loads(texte[debut:fin + 1])
+        except ValueError:
+            return None
+    return None
 
 
 def _assainir_verification(
@@ -1139,10 +1155,9 @@ def _assainir_verification(
     ``None`` si la réponse n'est pas un JSON exploitable. Partagé par l'appel
     simple et le flux : la source de vérité reste la même dans les deux cas.
     """
-    try:
-        donnees = json.loads(brut)
-    except ValueError:
-        logger.warning("« Validation » : réponse non JSON ignorée (%d caractères)", len(brut))
+    donnees = _extraire_json(brut)
+    if donnees is None:
+        logger.warning("« Validation » : réponse non JSON ignorée (%d caractères)", len(brut or ""))
         return None
 
     def _liste(valeur: object) -> List[str]:

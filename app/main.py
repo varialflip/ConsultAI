@@ -682,8 +682,8 @@ def _prepare_audio_for_generation(
     ]
     for piste, _clef in manquantes:
         audio_cache.start_build(piste.id, recordings.absolute_path(piste), fmt)
-    for piste, clef in manquantes:
-        if not audio_cache.ensure_ready(clef, fmt):
+    for piste, _clef in manquantes:
+        if not audio_cache.ensure_ready(piste.id, recordings.absolute_path(piste), fmt):
             logger.info(
                 "Cache audio absent (enregistrement %s) : voie classique",
                 piste.id,

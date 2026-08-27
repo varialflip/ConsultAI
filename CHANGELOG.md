@@ -31,6 +31,13 @@ autour de ce que le médecin voit pendant l'attente.*
   génération (429, refus `thinking_config`), même parse et même garde-fou
   déterministe à l'arrivée du résultat final. `verification_json` reste
   structuré, aucune migration.
+- **Correctif — 500 sur « Mettre en forme » quand un artefact audio manque.**
+  La voie rapide du cache audio (`_prepare_audio_for_generation`) appelait
+  `audio_cache.ensure_ready(clef, fmt)` avec les mauvais arguments (la clé
+  comme identifiant d'enregistrement, `fmt` comme chemin source) : dès qu'un
+  artefact du cache manquait, la génération échouait en 500 au lieu de
+  retomber sur la voie historique. Appel corrigé — `ensure_ready(identifiant,
+  chemin, fmt)` — et repli restauré.
 
 ## 2026-08-26 — Les hospitalisations dictées dans les antécédents y restent
 

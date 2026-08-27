@@ -3,6 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — v2.0.0-rc.2
+
+*Deuxième candidate de la version 2 : inclut tout depuis la rc.1 — les
+entrées du jour ci-dessous.*
+
+- **Le panneau « Détails » ne s'ouvre plus tout seul après la mise en
+  forme.** Les métadonnées (date, raison, requérant, accompagnement)
+  continuent d'être renseignées depuis la dictée et affichées, mais la
+  section reste repliée — le médecin l'ouvre lui-même quand il veut les
+  vérifier. L'ouverture automatique n'avait plus de sens depuis que l'onglet
+  « Validation » capte l'attention au même moment.
+
 ## 2026-08-27 — « Validation » en markdown, en direct, au bon moment
 
 *Le panneau « Validation » et le déroulement de « Mettre en forme » repensés

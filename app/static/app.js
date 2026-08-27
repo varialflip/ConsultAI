@@ -2759,9 +2759,8 @@
       }
 
       // Les métadonnées viennent d'être relues dans la dictée : on les
-      // affiche, et on déplie la section pour que le médecin puisse les
-      // vérifier d'un coup d'œil plutôt que de les découvrir plus tard dans
-      // la liste des brouillons.
+      // affiche, sans déplier la section — le médecin l'ouvre lui-même quand
+      // il veut les vérifier.
       showNoteEngines(result.stt_used, result.llm_used, result.audio_used);
       showDebugInfo({
         llm: result.llm_used,
@@ -2774,9 +2773,7 @@
       });
       flashElement('noteFooter');
       updateActionButtons();
-      if (applyMetadata(result.metadata)) {
-        $('metaDetails').open = true;
-      }
+      applyMetadata(result.metadata);
 
       if (result.truncated) {
         toast(T('generate.truncated'), 'warning', 10000);

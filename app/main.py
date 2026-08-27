@@ -2844,7 +2844,7 @@ async def _run_second_pass(
             consultation.verification_json = json.dumps(resultat, ensure_ascii=False)
             try:
                 usage.log_llm_usage(
-                    db, owner=owner, consultation_id=consultation_id,
+                    db, owner=owner_key, consultation_id=consultation_id,
                     provider="gemini", model=model_name or "",
                     prompt_tokens=usage_passe.get("prompt_tokens"),
                     output_tokens=usage_passe.get("output_tokens"),

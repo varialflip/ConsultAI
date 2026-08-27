@@ -3,6 +3,21 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — Correctif : la consommation de l'audit « Validation » était perdue
+
+*Le commit du cache de préfixe avait remplacé `owner_key` par un identifiant
+inexistant (`owner`) dans la journalisation de l'audit : chaque passage en
+« Validation » levait une `NameError` avalée par le filet d'exception, et la
+consommation Gemini de la seconde passe (jetons + coût) n'était jamais
+persistée dans `usage_events` / le panneau admin.*
+
+- **Restauration du comportement antérieur** : `log_llm_usage` reçoit à nouveau
+  `owner_key` (le même identifiant que la mise en forme et les autres appels).
+  L'audit était déjà publié et persisté normalement (aucun impact sur les
+  notes) — seule la statistique de consommation manquait.
+- Aucun changement de fournisseur, de prix, de politique de données ni de
+  stockage : ni EFVP ni README impactés.
+
 ## 2026-08-27 — L'audio n'est envoyé qu'une fois au modèle : cache de préfixe
 
 *L'audio — la plus grosse part du prompt — était envoyé deux fois par

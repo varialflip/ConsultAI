@@ -1576,13 +1576,13 @@
   /** Garde-fous du push-to-talk : pas de double démarrage ni de double pause. */
   const ptt = { held: false, starting: false };
 
-  const ICON_MIC_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+  const ICON_MIC_BIG = '<svg class="w-24 h-24" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
     + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
     + '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>'
     + '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
-  const ICON_PAUSE_BIG = '<svg class="w-16 h-16" viewBox="0 0 24 24" fill="currentColor">'
+  const ICON_PAUSE_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="currentColor">'
     + '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
-  const ICON_RESUME_BIG = '<svg class="w-16 h-16" viewBox="0 0 24 24" fill="currentColor">'
+  const ICON_RESUME_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="currentColor">'
     + '<path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l10.7-6.86a1 1 0 0 0 0-1.7L9.53 4.29A1 1 0 0 0 8 5.14z"/></svg>';
 
   function setDictaphone(active) {
@@ -1604,7 +1604,7 @@
     // visibilité (invisible), jamais display:none, pour ne pas décaler le pied.
     const finish = $('btnDictaphoneFinish');
     if (finish) finish.classList.toggle('invisible', !state.recording);
-    const base = 'w-48 h-48 rounded-full grid place-items-center shadow-2xl active:scale-95 transition touch-none ';
+    const base = 'w-64 h-64 rounded-[26%] grid place-items-center shadow-2xl active:scale-95 transition touch-none ';
     if (state.recording && !state.paused) {
       main.className = base + 'bg-red-600 rec-dot';
       main.innerHTML = ICON_PAUSE_BIG;

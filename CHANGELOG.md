@@ -27,7 +27,10 @@ zones, avec deux modes de conversation au choix.*
 - **Fond du calque opaque** : le dégradé seul pouvait laisser le calque
   transparent (variable CSS de gradient non résolue selon le navigateur) —
   une base `bg-slate-900` solide est posée sous le dégradé, et les panneaux
-  internes passent en fonds pleins.
+  internes passent en fonds pleins ;
+- **Bouton central agrandi en « squircle »** (192 → 256 px, coins arrondis
+  `26 %` à la iOS) avec icônes harmonisées ; calque plus aéré (padding
+  `p-5 sm:p-8`) pour éloigner les éléments des bords.
 
 ## 2026-08-27 — Mode dictaphone manuel sur tous les mobiles
 

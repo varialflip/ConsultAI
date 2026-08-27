@@ -1089,12 +1089,15 @@ def _verification_requete(
             f"{transcript_propre}\n"
             "</TRANSCRIPTION_INDICATIVE_approximative_ne_pas_servir_de_reference>"
         )
+    # L'AUDIO en TÊTE du message utilisateur : avec la consigne système (celle
+    # de la mise en forme), il forme le préfixe [consigne système + audio]
+    # partagé entre les deux passes — servi depuis le cache implicite de Gemini.
     contenu: List[object] = [
+        types.Part.from_bytes(data=audio[0], mime_type=audio[1]),
         types.Content(
             role="user",
             parts=[types.Part.from_text(text="\n\n".join(blocs))],
         ),
-        types.Part.from_bytes(data=audio[0], mime_type=audio[1]),
     ]
 
     # L'audit est une tâche de CROISEMENT (note ↔ audio) : il a besoin de

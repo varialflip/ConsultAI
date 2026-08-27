@@ -47,7 +47,10 @@ zones, avec deux modes de conversation au choix.*
   internes passent en fonds pleins ;
 - **Bouton central agrandi en « squircle »** (192 → 256 px, coins arrondis
   `26 %` à la iOS) avec icônes harmonisées ; calque plus aéré (padding
-  `p-5 sm:p-8`) pour éloigner les éléments des bords.
+  `p-5 sm:p-8`) pour éloigner les éléments des bords ;
+- **Marges haut et bas du calque augmentées** : + 1,5 rem par-dessus la
+  zone sécurisée (`calc(env(safe-area-inset-*) + 1.5rem)`) — l'en-tête et
+  l'aide ne collent plus au bord de l'écran.
 
 ## 2026-08-27 — Mode dictaphone manuel sur tous les mobiles
 

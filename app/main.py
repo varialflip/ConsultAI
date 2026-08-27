@@ -2844,11 +2844,12 @@ async def _run_second_pass(
             consultation.verification_json = json.dumps(resultat, ensure_ascii=False)
             try:
                 usage.log_llm_usage(
-                    db, owner=owner_key, consultation_id=consultation_id,
+                    db, owner=owner, consultation_id=consultation_id,
                     provider="gemini", model=model_name or "",
                     prompt_tokens=usage_passe.get("prompt_tokens"),
                     output_tokens=usage_passe.get("output_tokens"),
                     audio_prompt_tokens=usage_passe.get("audio_prompt_tokens"),
+                    cached_tokens=usage_passe.get("cached_tokens"),
                 )
             except Exception:  # pragma: no cover — statistiques au mieux
                 logger.exception("Usage du « Validation » non journalisé (%s)", consultation_id)
@@ -3049,6 +3050,7 @@ async def api_generate(
         prompt_tokens=result["usage"].get("prompt_tokens"),
         output_tokens=result["usage"].get("output_tokens"),
         audio_prompt_tokens=result["usage"].get("audio_prompt_tokens"),
+        cached_tokens=result["usage"].get("cached_tokens"),
     )
     db.commit()
     db.refresh(consultation)

@@ -258,7 +258,9 @@ COHERE_LLM_THINKING_BUDGET=1024
 > (assemblée une fois, injectée aux deux passes) : le préfixe
 > [consigne système + audio] est donc lu depuis le cache implicite au second
 > passage — l'audio, plus grosse part du prompt, n'est re-facturé que sur la
-> fin du message.
+> fin du message. Les jetons servis depuis le cache sont journalisés et
+> persistés (`usage_events.cached_tokens`), et le coût applique la remise
+> (tarif `token_input_cached_1m`, ~90 %).
 
 > **🔎 « Validation » — audit factuel de la note.** Bascule à côté du bouton
 > « Mettre en forme » (préférence par usager, désactivée par défaut). Quand

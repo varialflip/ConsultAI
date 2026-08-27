@@ -473,6 +473,10 @@ class UsageEvent(Base):
     # chez les fournisseurs qui ne ventilent pas — ``prompt_tokens`` reste
     # alors le total d'entrée, comme avant.
     audio_prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Jetons d'entrée servis depuis le cache de préfixe implicite de Gemini
+    # (``cached_content_token_count``) : facturés à un tarif réduit, ils sont
+    # rangés ici pour que le coût journalisé reflète la remise réelle.
+    cached_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     audio_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
@@ -498,6 +502,7 @@ class UsageDaily(Base):
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     audio_prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     audio_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     cost: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
@@ -2188,9 +2193,11 @@ _ADDED_COLUMNS = {
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),
+        ("cached_tokens", "INTEGER"),
     ],
     "usage_daily": [
         ("audio_prompt_tokens", "INTEGER NOT NULL DEFAULT 0"),
+        ("cached_tokens", "INTEGER NOT NULL DEFAULT 0"),
     ],
 }
 

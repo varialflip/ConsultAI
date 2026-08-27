@@ -1227,9 +1227,9 @@ def verify_note(
 
     usage = _gemini_usage(getattr(response, "usage_metadata", None))
     logger.info(
-        "Gemini %s (contrôle) : %s jetons de prompt (%s audio), %s en réponse, %.1f s",
+        "Gemini %s (contrôle) : %s jetons de prompt (%s audio, %s en cache), %s en réponse, %.1f s",
         nom_modele, usage.get("prompt_tokens"), usage.get("audio_prompt_tokens"),
-        usage.get("output_tokens"), time.monotonic() - t0,
+        usage.get("cached_tokens"), usage.get("output_tokens"), time.monotonic() - t0,
     )
 
     brut = getattr(response, "text", "") or ""
@@ -1345,10 +1345,11 @@ def verify_note_stream(
     usage = _gemini_usage(usage_metadata)
     brut = "".join(parties)
     logger.info(
-        "Gemini %s (contrôle, flux) : %s jetons de prompt (%s audio), %s en "
-        "réponse, %.1f s, %d caractères",
+        "Gemini %s (contrôle, flux) : %s jetons de prompt (%s audio, %s en cache), "
+        "%s en réponse, %.1f s, %d caractères",
         nom_modele, usage.get("prompt_tokens"), usage.get("audio_prompt_tokens"),
-        usage.get("output_tokens"), time.monotonic() - t0, len(brut),
+        usage.get("cached_tokens"), usage.get("output_tokens"), time.monotonic() - t0,
+        len(brut),
     )
     resultat = _assainir_verification(brut, note_markdown, transcript)
     if resultat is None:

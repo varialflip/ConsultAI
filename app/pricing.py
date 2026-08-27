@@ -36,6 +36,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_RATES: Tuple[Tuple[str, str, str, str, float, str], ...] = (
     # --- LLM (texte → note), $ / 1M jetons ---------------------------------
     ("gemini", "", "llm", "token_input_1m", 1.25),
+    # Jetons d'entrée servis depuis le cache de préfixe implicite (Vertex) :
+    # gemini-2.5-pro 0,125 $ ≤200K (0,25 $ >200K) — ~90 % de remise sur
+    # l'entrée fraîche. Tarif unique par modèle, indépendant de la modalité.
+    ("gemini", "", "llm", "token_input_cached_1m", 0.125),
     ("gemini", "", "llm", "token_output_1m", 5.00),
     # Jetons d'entrée audio (bypass STT : la dictée part directement au
     # LLM). Tarif distinct du texte chez Gemini 2.5 Flash comme chez Qwen
@@ -116,6 +120,41 @@ def rate_for(db: Session, provider: str, model: str, kind: str, unit: str) -> Op
     )
 
 
+def _cache_rebate(
+    db: Session,
+    kind: str,
+    provider: str,
+    model: str,
+    prompt_tokens: Optional[int],
+    audio_prompt_tokens: Optional[int],
+    cached_tokens: Optional[int],
+) -> float:
+    """
+    Rabais de la remise « cache » pour un appel qui a servi un préfixe depuis le
+    cache implicite de Vertex : ``cached_tokens × (tarif frais − tarif cache)``.
+
+    Le cache est facturé à un tarif unique par modèle, indépendamment de la
+    modalité, mais on ne connaît pas la ventilation texte/audio du préfixe
+    servi. On n'applique donc la remise que lorsque l'entrée fraîche paie le
+    même tarif pour le texte et l'audio (gemini-2.5-pro : 1,25 $ les deux) ;
+    ailleurs, le coût reste calculé au frais (l'erreur serait de sous-facturer).
+    """
+    if not cached_tokens:
+        return 0.0
+    rate_cache = rate_for(db, provider, model, kind, "token_input_cached_1m")
+    if rate_cache is None:
+        return 0.0
+    text_rate = rate_for(db, provider, model, kind, "token_input_1m")
+    audio_rate = rate_for(db, provider, model, kind, "token_audio_input_1m") or text_rate
+    if text_rate is None or audio_rate is None or text_rate.rate != audio_rate.rate:
+        return 0.0
+    total_frais = (prompt_tokens or 0) + (audio_prompt_tokens or 0)
+    if total_frais <= 0:
+        return 0.0
+    servis = min(cached_tokens, total_frais)
+    return (servis / 1_000_000) * (text_rate.rate - rate_cache.rate)
+
+
 def compute_cost(
     db: Session,
     kind: str,
@@ -126,6 +165,7 @@ def compute_cost(
     output_tokens: Optional[int] = None,
     audio_prompt_tokens: Optional[int] = None,
     audio_seconds: Optional[int] = None,
+    cached_tokens: Optional[int] = None,
 ) -> Tuple[Optional[float], str]:
     """
     Coût estimé en USD, ou ``(None, "USD")`` si aucun tarif ne correspond —
@@ -136,6 +176,10 @@ def compute_cost(
     ventile par modalité (Gemini, Qwen Omni) — l'audio entrant voyage dans
     ``audio_prompt_tokens`` et se paie au tarif ``token_audio_input_1m``.
     Sans ventilation, ``prompt_tokens`` reste le total d'entrée.
+
+    ``cached_tokens`` (préfixe servi depuis le cache implicite de Gemini) réduit
+    le coût d'entrée du rabais cache, quand les tarifs frais texte/audio
+    coïncident (voir ``_cache_rebate``).
     """
     total = 0.0
     matched = False
@@ -161,7 +205,12 @@ def compute_cost(
             total += (audio_seconds / 60) * rate.rate
             matched = True
 
+    rabais = _cache_rebate(db, kind, provider, model, prompt_tokens, audio_prompt_tokens, cached_tokens)
+    if rabais:
+        total -= rabais
+        matched = True
+
     if not matched:
         logger.debug("Aucun tarif pour %s/%s (%s) — coût non calculé", provider, model, kind)
         return None, "USD"
-    return total, "USD"
+    return max(total, 0.0), "USD"

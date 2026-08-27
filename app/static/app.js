@@ -5463,7 +5463,11 @@
         return e.segments ? `${min} min · ${e.segments} ${esc(T('admin.stats.segments'))}` : `${min} min`;
       }
       const total = (e.prompt_tokens || 0) + (e.output_tokens || 0) + (e.audio_prompt_tokens || 0);
-      return total ? `${e.prompt_tokens}${e.audio_prompt_tokens ? `+${e.audio_prompt_tokens}♪` : ''}/${e.output_tokens}` : '—';
+      if (!total) return '—';
+      const cache = e.cached_tokens
+        ? ` <span class="text-slate-400" title="${esc(T('admin.stats.cached'))}">·${e.cached_tokens}</span>`
+        : '';
+      return `${e.prompt_tokens}${e.audio_prompt_tokens ? `+${e.audio_prompt_tokens}♪` : ''}/${e.output_tokens}${cache}`;
     };
     const consultation = (e) => {
       if (!e.consultation_id) return '—';
@@ -5548,7 +5552,7 @@
         <td class="px-2 py-1.5 text-slate-500">${esc(r.model || '—')}</td>
         <td class="px-2 py-1.5">${esc(T(`admin.stats.kind.${r.kind}`))}</td>
         <td class="px-2 py-1.5 tabular-nums">${r.event_count || 0}</td>
-        <td class="px-2 py-1.5 tabular-nums">${(r.prompt_tokens + r.output_tokens + (r.audio_prompt_tokens || 0)) ? `${r.prompt_tokens}${r.audio_prompt_tokens ? `+${r.audio_prompt_tokens}♪` : ''}/${r.output_tokens}` : '—'}</td>
+        <td class="px-2 py-1.5 tabular-nums">${(r.prompt_tokens + r.output_tokens + (r.audio_prompt_tokens || 0)) ? `${r.prompt_tokens}${r.audio_prompt_tokens ? `+${r.audio_prompt_tokens}♪` : ''}/${r.output_tokens}${r.cached_tokens ? ` <span class="text-slate-400" title="${esc(T('admin.stats.cached'))}">·${r.cached_tokens}</span>` : ''}` : '—'}</td>
         <td class="px-2 py-1.5 tabular-nums">${r.audio_seconds ? (r.audio_seconds / 60).toFixed(1) : '—'}</td>
         <td class="px-2 py-1.5 tabular-nums">${r.cost.toFixed(4)} $</td>
       </tr>`).join('');

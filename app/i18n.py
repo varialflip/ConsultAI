@@ -1293,6 +1293,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "admin.stats.col_events": ("Générations", "Generations"),
     "admin.stats.segments": ("segments", "segments"),
     "admin.stats.col_tokens": ("Jetons (texte+♪audio/sortie)", "Tokens (text+♪audio/output)"),
+    "admin.stats.cached": ("en cache", "cached"),
     "admin.stats.col_audio": ("Audio", "Audio"),
     "admin.stats.col_cost": ("Coût", "Cost"),
     "admin.stats.kind.llm": ("Modèle de langage", "Language model"),

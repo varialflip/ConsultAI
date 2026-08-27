@@ -47,17 +47,19 @@ def log_llm_usage(
     prompt_tokens: Optional[int],
     output_tokens: Optional[int],
     audio_prompt_tokens: Optional[int] = None,
+    cached_tokens: Optional[int] = None,
 ) -> None:
     cost, currency = pricing.compute_cost(
         db, "llm", provider, model,
         prompt_tokens=prompt_tokens, output_tokens=output_tokens,
         audio_prompt_tokens=audio_prompt_tokens,
+        cached_tokens=cached_tokens,
     )
     db.add(UsageEvent(
         owner=owner, consultation_id=consultation_id, kind="llm",
         provider=provider, model=model,
         prompt_tokens=prompt_tokens, output_tokens=output_tokens,
-        audio_prompt_tokens=audio_prompt_tokens,
+        audio_prompt_tokens=audio_prompt_tokens, cached_tokens=cached_tokens,
         cost=cost, currency=currency,
     ))
 
@@ -144,7 +146,7 @@ def compact_old_events() -> None:
 
         buckets: dict[tuple, dict] = defaultdict(lambda: {
             "prompt_tokens": 0, "output_tokens": 0, "audio_seconds": 0,
-            "audio_prompt_tokens": 0,
+            "audio_prompt_tokens": 0, "cached_tokens": 0,
             "cost": 0.0, "currency": "USD", "event_count": 0,
         })
         for row in rows:
@@ -154,6 +156,7 @@ def compact_old_events() -> None:
             bucket["prompt_tokens"] += row.prompt_tokens or 0
             bucket["output_tokens"] += row.output_tokens or 0
             bucket["audio_prompt_tokens"] += row.audio_prompt_tokens or 0
+            bucket["cached_tokens"] += row.cached_tokens or 0
             bucket["audio_seconds"] += row.audio_seconds or 0
             bucket["cost"] += row.cost or 0.0
             bucket["currency"] = row.currency or "USD"
@@ -173,6 +176,7 @@ def compact_old_events() -> None:
             daily.prompt_tokens += agg["prompt_tokens"]
             daily.output_tokens += agg["output_tokens"]
             daily.audio_prompt_tokens += agg["audio_prompt_tokens"]
+            daily.cached_tokens += agg["cached_tokens"]
             daily.audio_seconds += agg["audio_seconds"]
             daily.cost += agg["cost"]
             daily.currency = agg["currency"]
@@ -189,7 +193,7 @@ def compact_old_events() -> None:
 
 def _empty_summary() -> dict:
     return {"prompt_tokens": 0, "output_tokens": 0, "audio_seconds": 0, "audio_prompt_tokens": 0,
-            "cost": 0.0, "currency": "USD",
+            "cached_tokens": 0, "cost": 0.0, "currency": "USD",
             "by_provider": []}
 
 
@@ -204,7 +208,7 @@ def summary_for_owner(
     until_day = until.date().isoformat() if until else None
     totals: dict[tuple, dict] = defaultdict(lambda: {
         "prompt_tokens": 0, "output_tokens": 0, "audio_seconds": 0,
-        "audio_prompt_tokens": 0, "cost": 0.0,
+        "audio_prompt_tokens": 0, "cached_tokens": 0, "cost": 0.0,
     })
 
     event_query = select(UsageEvent).where(UsageEvent.owner == owner, UsageEvent.created_at >= since)
@@ -215,6 +219,7 @@ def summary_for_owner(
         totals[key]["prompt_tokens"] += row.prompt_tokens or 0
         totals[key]["output_tokens"] += row.output_tokens or 0
         totals[key]["audio_prompt_tokens"] += row.audio_prompt_tokens or 0
+        totals[key]["cached_tokens"] += row.cached_tokens or 0
         totals[key]["audio_seconds"] += row.audio_seconds or 0
         totals[key]["cost"] += row.cost or 0.0
 
@@ -226,6 +231,7 @@ def summary_for_owner(
         totals[key]["prompt_tokens"] += row.prompt_tokens
         totals[key]["output_tokens"] += row.output_tokens
         totals[key]["audio_prompt_tokens"] += row.audio_prompt_tokens
+        totals[key]["cached_tokens"] += row.cached_tokens
         totals[key]["audio_seconds"] += row.audio_seconds
         totals[key]["cost"] += row.cost
 
@@ -234,6 +240,7 @@ def summary_for_owner(
         result["prompt_tokens"] += agg["prompt_tokens"]
         result["output_tokens"] += agg["output_tokens"]
         result["audio_prompt_tokens"] += agg["audio_prompt_tokens"]
+        result["cached_tokens"] += agg["cached_tokens"]
         result["audio_seconds"] += agg["audio_seconds"]
         result["cost"] += agg["cost"]
         result["by_provider"].append({
@@ -328,7 +335,7 @@ def admin_breakdown(
 
     totals: dict[tuple, dict] = defaultdict(lambda: {
         "prompt_tokens": 0, "output_tokens": 0, "audio_seconds": 0,
-        "audio_prompt_tokens": 0, "cost": 0.0, "event_count": 0,
+        "audio_prompt_tokens": 0, "cached_tokens": 0, "cost": 0.0, "event_count": 0,
     })
 
     event_query = select(UsageEvent).where(UsageEvent.created_at >= from_dt, UsageEvent.created_at < to_dt)
@@ -340,6 +347,7 @@ def admin_breakdown(
         totals[key]["prompt_tokens"] += row.prompt_tokens or 0
         totals[key]["output_tokens"] += row.output_tokens or 0
         totals[key]["audio_prompt_tokens"] += row.audio_prompt_tokens or 0
+        totals[key]["cached_tokens"] += row.cached_tokens or 0
         totals[key]["audio_seconds"] += row.audio_seconds or 0
         totals[key]["cost"] += row.cost or 0.0
 
@@ -352,6 +360,7 @@ def admin_breakdown(
         totals[key]["prompt_tokens"] += row.prompt_tokens
         totals[key]["output_tokens"] += row.output_tokens
         totals[key]["audio_prompt_tokens"] += row.audio_prompt_tokens
+        totals[key]["cached_tokens"] += row.cached_tokens
         totals[key]["audio_seconds"] += row.audio_seconds
         totals[key]["cost"] += row.cost
 
@@ -389,8 +398,8 @@ def admin_log(
     titres = {row.id: row.title for row in db.scalars(select(Consultation))}
 
     def rend(created_at, kind, owner_key, consultation_id, provider, model,
-             prompt_tokens, output_tokens, audio_prompt_tokens, audio_seconds,
-             cost, currency, segments):
+             prompt_tokens, output_tokens, audio_prompt_tokens, cached_tokens,
+             audio_seconds, cost, currency, segments):
         return {
             "created_at": _iso(created_at),
             "kind": kind, "owner": owner_key,
@@ -399,6 +408,7 @@ def admin_log(
             "provider": provider, "model": model,
             "prompt_tokens": prompt_tokens, "output_tokens": output_tokens,
             "audio_prompt_tokens": audio_prompt_tokens,
+            "cached_tokens": cached_tokens,
             "audio_seconds": audio_seconds,
             "cost": cost, "currency": currency or "USD",
             "segments": segments,
@@ -434,14 +444,14 @@ def admin_log(
                 row.created_at, row.kind, row.owner, row.consultation_id,
                 row.provider, row.model,
                 row.prompt_tokens, row.output_tokens, row.audio_prompt_tokens,
-                row.audio_seconds, row.cost, row.currency, None,
+                row.cached_tokens, row.audio_seconds, row.cost, row.currency, None,
             ))
 
     for (owner_key, cid), bucket in stt_buckets.items():
         entrees.append(rend(
             bucket["created_at"], "stt", bucket["owner"], bucket["consultation_id"],
             bucket["provider"], bucket["model"],
-            None, None, None, bucket["audio_seconds"],
+            None, None, None, None, bucket["audio_seconds"],
             bucket["cost"], bucket["currency"], bucket["segments"],
         ))
 

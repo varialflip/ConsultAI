@@ -28,6 +28,14 @@ le cache de préfixe implicite de Gemini au second passage.*
   courant vs déplacé dans le message, mêmes entrées, même session) sur trois
   consultations : aucune régression systématique — l'audit garde la même
   variabilité d'un appel à l'autre qu'avant.
+- **La remise « cache » devient observable.** Les jetons servis depuis le
+  cache sont journalisés sur la ligne de l'audit (comme ils l'étaient déjà
+  sur la mise en forme), persistés dans `usage_events.cached_tokens`
+  (colonne ajoutée par migration, idem `usage_daily`), agrégés dans les
+  statistiques admin et appliqués au coût : le tarif `token_input_cached_1m`
+  (gemini 0,125 $/1M — ~90 % de remise) réduit la facturation d'entrée quand
+  texte et audio frais paient le même tarif (gemini-2.5-pro). Le coût
+  journalisé reflète désormais la remise réelle, pas le pire cas.
 
 ## 2026-08-27 — v2.0.0-rc.2
 

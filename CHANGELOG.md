@@ -101,7 +101,9 @@ zones, avec deux modes de conversation au choix.*
   avec un fond élargi (`pb-20`), pour le rapprocher de l'en-tête ;
 - **Waveform centrée entre le bouton et le carnet** : écart fixe
   `gap-[6.5rem]` entre le bouton et la courbe (au lieu d'un collage sous le
-  bouton), le tout centré dans le corps du calque.
+  bouton), le tout centré dans le corps du calque ;
+- **Waveform : cadence d'échantillonnage passée à 75 ms** (`WAVE_SAMPLE_MS`,
+  au lieu de 55) — défilement plus posé.
 
 ## 2026-08-27 — Mode dictaphone manuel sur tous les mobiles
 

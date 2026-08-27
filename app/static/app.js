@@ -1246,7 +1246,7 @@
   const WAVE_BAR = 3;
   const WAVE_GAP = 1;
   /** Cadence d'échantillonnage : le défilement doit être indépendant du FPS. */
-  const WAVE_SAMPLE_MS = 55;
+  const WAVE_SAMPLE_MS = 75;
 
   const wave = {
     canvases: [],     // { canvas, ctx, capacity, resizeObserver } — barre d'outils ET dictaphone

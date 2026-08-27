@@ -275,7 +275,11 @@ COHERE_LLM_THINKING_BUDGET=1024
 > roue sur le titre à partir de la FIN de la génération (jamais avant),
 > bascule automatique sur grand écran à ce même moment (sur mobile, on reste
 > sur la note générée) ; il est conservé avec le brouillon
-> (`consultations.verification_json`) et réaffiché au chargement.
+> (`consultations.verification_json`) et réaffiché au chargement. À l'ouverture
+> d'un brouillon, l'onglet du panneau est choisi selon l'état de la note :
+> **« Transcription brute »** tant qu'aucune note n'existe (on suit la dictée
+> en direct), **« Validation »** dès que la note est générée et que la
+> rubrique « Corrections » ou l'audit a quelque chose à y montrer.
 >
 > Le même onglet « Validation » reçoit la rubrique **« Corrections et
 > éléments à valider »**, retirée de la note à la génération : elle n'est
@@ -336,6 +340,13 @@ court que ce signal fermera quand même la connexion. Si la synchronisation
 semble se couper puis reprendre sans cesse, augmentez ce délai côté proxy
 (`proxy_read_timeout` sur nginx, par exemple) plutôt que du côté de
 l'application.
+
+Quand une dictée démarre sur un autre appareil et que le médecin clique
+**Suivre** (de même qu'en rouvrant un brouillon depuis « Mes brouillons » ou
+après une génération reçue en direct), le panneau de transcription s'ouvre sur
+l'onglet **« Transcription brute »** s'il n'y a pas encore de note — pour voir
+la dictée arriver —, sinon sur l'onglet **« Validation »** dès que la rubrique
+« Corrections » ou l'audit a quelque chose à y montrer (jamais d'onglet vide).
 
 ### Pare-feu
 

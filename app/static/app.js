@@ -4077,8 +4077,10 @@
         accompanied_by: draft.accompanied_by,
       });
 
-      // « Validation » : réafficher l'audit existant SILENCIEUSEMENT — jamais de
-      // saut d'onglet au chargement d'un brouillon.
+      // « Validation » : réafficher l'audit existant SILENCIEUSEMENT — ce
+      // réaffichage ne saute jamais d'onglet seul ; le choix de l'onglet est
+      // explicite plus bas, selon la présence d'une note et d'un contenu à
+      // valider.
       if (draft.verification_json) {
         try {
           renderSecondPass(JSON.parse(draft.verification_json), false);
@@ -4099,6 +4101,17 @@
       showPreview();
       // On ouvre sur la note si elle existe déjà, sinon sur la dictée.
       setMobilePane($('markdownEditor').value.trim() ? 'note' : 'dictee');
+      // Onglet du panneau de dictée dérivé de l'état de la note, pour TOUTE
+      // ouverture d'un brouillon (Suivre, liste, relecture après génération…) :
+      // pas de note → Transcription (on suit la dictée en direct) ; note déjà
+      // générée → Validation dès que la rubrique « Corrections » ou l'audit a
+      // quelque chose à y montrer (sinon on reste sur Transcription plutôt que
+      // d'afficher un onglet vide — même règle que le post-génération).
+      const notePresente = $('markdownEditor').value.trim();
+      const contenuValidation = Boolean(
+        (draft.corrections_markdown || decoupe.corrections || '').trim() || draft.verification_json,
+      );
+      selectDicteeTab(notePresente && contenuValidation ? 'secondpass' : 'transcript');
       state.lastSavedSnapshot = workspaceSnapshot();
       loadRecordings();
       showNoteEngines(draft.stt_used, draft.llm_used, draft.audio_used);

@@ -3,6 +3,27 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — Onglet du panneau de dictée choisi selon la note à chaque ouverture
+
+*En ouvrant une consultation (clic « Suivre » d'une dictée commencée sur un
+autre appareil, « Mes brouillons », relecture après génération), l'onglet du
+panneau de transcription restait sur son état précédent : suivre une dictée en
+cours pouvait ouvrir sur l'onglet « Validation », et rouvrir un brouillon noté
+restait sur « Transcription brute ». Le choix est désormais dérivé de l'état
+de la note.*
+
+- **Pas de note générée → onglet « Transcription brute »** : en suivant une
+  dictée en cours, on voit la transcription arriver en direct ;
+- **Note déjà générée → onglet « Validation »** dès que la rubrique
+  « Corrections et éléments à valider » ou l'audit a quelque chose à y
+  montrer (sinon on reste sur « Transcription » plutôt que d'afficher un
+  onglet vide) — même règle que la bascule du post-génération sur grand
+  écran ;
+- Règle uniforme appliquée à **toute** ouverture d'un brouillon via
+  `loadDraft` : « Suivre », liste « Mes brouillons », fin de dictée récupérée,
+  événement `generated`/`consultation_patched`, rechargement après conflit de
+  synchronisation. L'onglet cliqué manuellement n'est jamais forcé.
+
 ## 2026-08-27 — « Texte simple » : colonnes des médicaments en écoulement continu
 
 *Quand un médicament se repliait sur deux lignes, la colonne opposée laissait

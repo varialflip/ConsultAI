@@ -3346,6 +3346,12 @@
 
   const TABLE_SEPARATOR = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 
+  //: Alignement par espaces INSÉCABLES (U+00A0) : un champ de DME riche aplatit
+  //: les suites d'espaces ordinaires (et de tabulations) en une seule au rendu ;
+  //: l'insécable y survit, tout en gardant la même largeur qu'une espace dans un
+  //: champ monospace. Le nom du médicament, lui, garde ses espaces ordinaires.
+  const NBSP = '\u00A0';
+
   /** Rend un tableau en colonnes alignées par des espaces. */
   function renderPlainTable(rows) {
     if (!rows.length) return [];
@@ -3355,10 +3361,10 @@
       widths.push(Math.max(...rows.map((r) => (r[c] || '').length)));
     }
     const ligne = (cells) => cells
-      .map((cell, c) => (cell || '').padEnd(c === columns - 1 ? 0 : widths[c]))
-      .join('  ').trimEnd();
+      .map((cell, c) => (cell || '').padEnd(c === columns - 1 ? 0 : widths[c], NBSP))
+      .join(`${NBSP}${NBSP}`).trimEnd();
 
-    const out = [ligne(rows[0]), widths.map((w) => '-'.repeat(w)).join('  ').trimEnd()];
+    const out = [ligne(rows[0]), widths.map((w) => '-'.repeat(w)).join(`${NBSP}${NBSP}`).trimEnd()];
     rows.slice(1).forEach((r) => out.push(ligne(r)));
     return out;
   }
@@ -3367,8 +3373,9 @@
   // Médicaments sur deux colonnes (lecture verticale)
   // -------------------------------------------------------------------------
   // Le DME de l'hôpital affiche en monospace : la rubrique Médicaments peut
-  // donc être rendue sur DEUX colonnes pour économiser de la place, sans que
-  // la structure ne repose que sur l'alignement des espaces.
+  // donc être rendue sur DEUX colonnes pour économiser de la place. L'alignement
+  // tient sur des espaces insécables (voir NBSP) : un champ riche du DME les
+  // préserve alors qu'il aplatit les espaces ordinaires.
   //
   // L'ordre de la liste vient du modèle dans un ordre clinique précis. La
   // coupe en DEUX MOITIÉS (colonne de gauche = première moitié) préserve cet
@@ -3415,8 +3422,8 @@
     const droite = cellules.slice(moitie);
 
     const blocs = [
-      gauche.map((c) => wrapText(c, MEDS_COLUMN_WIDTH, '  ')),
-      droite.map((c) => wrapText(c, MEDS_COLUMN_WIDTH, '  ')),
+      gauche.map((c) => wrapText(c, MEDS_COLUMN_WIDTH, `${NBSP}${NBSP}`)),
+      droite.map((c) => wrapText(c, MEDS_COLUMN_WIDTH, `${NBSP}${NBSP}`)),
     ];
     const rangees = Math.max(...blocs.map((col) => col.length));
 
@@ -3426,9 +3433,9 @@
       const d = blocs[1][i] || [];
       const haut = Math.max(g.length, d.length);
       for (let j = 0; j < haut; j += 1) {
-        const gl = (g[j] || '').padEnd(MEDS_COLUMN_WIDTH);
+        const gl = (g[j] || '').padEnd(MEDS_COLUMN_WIDTH, NBSP);
         const dl = d[j] || '';
-        lignes.push(`${gl}${' '.repeat(MEDS_COLUMN_GAP)}${dl}`.trimEnd());
+        lignes.push(`${gl}${NBSP.repeat(MEDS_COLUMN_GAP)}${dl}`.trimEnd());
       }
     }
     return lignes;

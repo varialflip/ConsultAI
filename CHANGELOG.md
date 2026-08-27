@@ -3,6 +3,22 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — « Texte simple » : alignement par espaces insécables (DME riche)
+
+*Au collage dans le champ du DME, les suites d'espaces du rendu deux colonnes
+étaient aplaties en une seule espace — le champ est un éditeur riche (HTML),
+qui applique la règle CSS d'aplatissement des blancs ; un champ texte brut ne
+le fait pas. Les colonnes des médicaments s'effondraient donc au collage.
+L'alignement se fait désormais avec des espaces insécables (U+00A0), que le
+rendu HTML préserve et qui gardent la même largeur qu'une espace en monospace.*
+
+- **Rembourrage, écart entre colonnes et retrait suspendu en insécables** dans
+  `renderMedsColumns` (médicaments) et `renderPlainTable` (tableaux de
+  résultats) : les colonnes survivent au collage dans le DME. Les espaces
+  ordinaires restent en place dans le texte (noms, posologies, cellules) —
+  repli à 44 et recherche inchangés. Aucun coût en jetons ; s'applique au
+  bouton « Texte simple » et au repli texte du copier « Mise en forme ».
+
 ## 2026-08-27 — « Texte simple » : médicaments sur deux colonnes
 
 *Quand la note est copiée en texte simple pour le DME de l'hôpital (champ en

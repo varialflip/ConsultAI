@@ -2545,11 +2545,28 @@
     return null;
   }
 
+  /**
+   * L'audit « Validation » est diffusé à TOUS les onglets du même usager.
+   * Seul l'onglet qui a ARMÉ la vérification porte le jeton attendu
+   * (``verificationPendingToken``) ; les autres — « suiveurs », un autre
+   * appareil suivant la même consultation — n'ont pas ce jeton mais
+   * n'en appliquent pas moins les évènements : sans quoi un onglet qui suit
+   * la dictée lancée sur un autre appareil ne verrait jamais la vérification
+   * arriver sans rafraîchir. Un onglet qui a SA PROPRE vérification en
+   * attente, en revanche, n'applique que la sienne (il ignore les jetons
+   * étrangers tant que la sienne n'est pas résolue).
+   */
+  function estEmetteurVerification(donnees) {
+    return Boolean(donnees.generation_token)
+      && donnees.generation_token === verificationPendingToken;
+  }
+
   function onVerificationChunk(evt) {
-    if (!verificationPendingToken || verificationSkipped) return;
     const payload = JSON.parse(evt.data || '{}');
-    if (!payload.generation_token || payload.generation_token !== verificationPendingToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    const emetteur = estEmetteurVerification(payload);
+    if (verificationPendingToken && !emetteur) return;
+    if (verificationSkipped && !emetteur) return;
     const texte = payload.text || '';
     if (!texte.trim()) return;
     const donnees = parseProgressiveJson(texte);
@@ -2569,14 +2586,18 @@
     } catch {
       return;
     }
-    if (!donnees.generation_token || donnees.generation_token !== verificationPendingToken) return;
     if (String(donnees.consultation_id) !== String(state.consultationId)) return;
+    const emetteur = estEmetteurVerification(donnees);
+    if (verificationPendingToken && !emetteur) return;
     verificationPendingToken = null;
     if (donnees.skipped) {
       // Audit impossible côté serveur (pas d'audio, échec) : arrêt immédiat
       // de la roue et du toast, sans bascule d'onglet ni message trompeur.
       // Souvent publié AVANT la réponse de /api/generate : ``verificationSkipped``
       // empêche alors d'armer la roue pour rien à la fin de la génération.
+      // Seul l'onglet émetteur réagit : un suiveur garde ce que ``loadDraft``
+      // a déjà affiché depuis l'état persisté — rien de nouveau à montrer.
+      if (!emetteur) return;
       verificationSkipped = true;
       const verifEnCours = secondPassRunning;
       renderSecondPass(null, false);

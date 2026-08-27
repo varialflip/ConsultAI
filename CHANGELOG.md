@@ -113,6 +113,24 @@ par le modèle, est ainsi préservé à la lecture.*
   « Texte simple » et au repli texte du copier « Mise en forme ». Aucune autre
   rubrique (antécédents, examen, plan…) n'est touchée.
 
+## 2026-08-27 — L'audit « Validation » suit la consultation sur tous les appareils
+
+*Lancée depuis le téléphone et suivie sur un autre appareil, la vérification
+ne rejoignait jamais l'onglet « suiveur » : son résultat n'était diffusé qu'à
+l'onglet qui avait généré la note (le jeton de corrélation y était exigé), et
+le second appareil ne voyait que la note et les corrections — l'audit
+n'apparaissait qu'après un rafraîchissement.*
+
+- **L'audit est désormais appliqué par tous les onglets du même usager** qui
+  ont la consultation ouverte : le flux `verification_chunk` s'y affiche en
+  direct et le `verification_result` final bascule le panneau sur l'onglet
+  « Validation » comme sur l'émetteur. Un onglet qui a sa PROPRE vérification
+  en attente continue d'ignorer les jetons étrangers (il attend la sienne).
+- Un « skipped » n'est répercuté que sur l'émetteur (arrêt de sa roue) : un
+  suiveur garde ce que la relecture du brouillon a déjà affiché.
+- Aucun changement de fournisseur, de prix, de politique de données ni de
+  stockage : ni EFVP ni README impactés.
+
 ## 2026-08-27 — Récupération d'un audit « Validation » manqué par le flux en direct
 
 *Si la connexion SSE était interrompue au moment précis de la publication du

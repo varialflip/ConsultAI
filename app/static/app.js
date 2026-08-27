@@ -6710,6 +6710,29 @@
     }
   }
 
+  /** Récupère un audit « Validation » dont l'évènement de résultat a été manqué.
+   *
+   * Le résultat final part en SSE ``verification_result`` ; si le flux était
+   * interrompu au moment de la publication (redémarrage du conteneur,
+   * coupure réseau), l'onglet ne reçoit jamais l'audit — la roue retombe au
+   * filet et la section reste vide alors que le serveur a persisté le JSON.
+   * À la reconnexion, on relit la consultation : si un audit est déjà écrit
+   * pour une vérification toujours en attente, on l'affiche (sans saut
+   * d'onglet). S'il n'est pas encore persisté (vérification en vol), on
+   * laisse le flux et le filet terminer le travail.
+   */
+  function recoverMissedVerification() {
+    if (!state.consultationId || verificationPendingToken === null) return;
+    api(`/api/consultations/${state.consultationId}`)
+      .then((draft) => {
+        if (!draft || !draft.verification_json) return;
+        try {
+          renderSecondPass(JSON.parse(draft.verification_json), false);
+        } catch (_) { /* JSON invalide : le filet reste maître. */ }
+      })
+      .catch(() => { /* Relecture au mieux : jamais bloquante. */ });
+  }
+
   /** Ouvre (ou rouvre) le flux SSE de cet usager. Un seul à la fois. */
   function connectLiveEvents() {
     if (liveSource) liveSource.close();
@@ -6731,6 +6754,9 @@
     liveSource.addEventListener('consultation_created', onSyncConsultationCreated);
     liveSource.addEventListener('consultation_deleted', onSyncConsultationDeleted);
     liveSource.addEventListener('consultation_abandoned', onSyncConsultationAbandoned);
+    // À chaque (ré)ouverture du flux : un « Verification » qui attendait encore
+    // pendant une coupure reçoit ici son résultat déjà persisté.
+    liveSource.onopen = recoverMissedVerification;
     // EventSource se reconnecte déjà tout seul (avec le délai « retry: » du
     // serveur) : on se contente de journaliser plutôt que de dupliquer cette
     // logique.

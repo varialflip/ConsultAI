@@ -113,6 +113,21 @@ par le modèle, est ainsi préservé à la lecture.*
   « Texte simple » et au repli texte du copier « Mise en forme ». Aucune autre
   rubrique (antécédents, examen, plan…) n'est touchée.
 
+## 2026-08-27 — Récupération d'un audit « Validation » manqué par le flux en direct
+
+*Si la connexion SSE était interrompue au moment précis de la publication du
+résultat (redémarrage du conteneur, coupure réseau), l'audit « Validation »
+n'atteignait jamais l'onglet : la roue retombait au filet et la section restait
+vide alors que le serveur avait pourtant persisté le JSON.*
+
+- **Relance à chaque (ré)ouverture du flux en direct** : si une vérification
+  est toujours en attente (`verificationPendingToken` posé) et que le serveur
+  a déjà écrit l'audit, la consultation est relue et le résultat affiché sans
+  saut d'onglet. Une vérification encore en vol (JSON pas encore persisté)
+  n'est pas interrompue : le flux et le filet restent maîtres.
+- Aucun changement de fournisseur, de prix, de politique de données ni de
+  stockage : ni EFVP ni README impactés.
+
 ## 2026-08-27 — Nouvelle consultation : retour systématique à « Transcription brute »
 
 *Après une mise en forme, le panneau de dictée restait sur l'onglet

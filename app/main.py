@@ -2788,21 +2788,46 @@ async def _run_second_pass(
     « Validation » : audit factuel audio↔note, en tâche de fond.
 
     Lancé APRÈS la persistance de la note ; ne bloque jamais l'usager. Le
-    résultat rejoint la consultation (``verification_json``) puis part en
-    évènement SSE ``verification_result`` — porteur du même jeton de
-    génération, pour que l'onglet émetteur seul l'applique. Supplanté ou en
-    échec : silencieux, la note reste telle quelle.
+    JSON brut de l'audit est diffusé en direct (évènements SSE
+    ``verification_chunk``, texte accumulé) puis le résultat rejoint la
+    consultation (``verification_json``) et part en évènement SSE final
+    ``verification_result`` — les deux porteurs du même jeton de génération,
+    pour que l'onglet émetteur seul les applique. Supplanté ou en échec :
+    silencieux, la note reste telle quelle.
     """
     if not _generation_guard.is_current(consultation_id, generation_seq):
         return
 
     def _travail():
-        resultat, usage_passe = llm.verify_note(
+        # Diffusion en flux : chaque fragment JSON rejoint les onglets par
+        # évènement SSE ``verification_chunk`` (texte ACCUMULÉ — le client
+        # re-parse et réaffiche sans état, un morceau perdu se répare seul).
+        # Écrêtée ~5/s : le navigateur re-parse le JSON à chaque morceau,
+        # inutile de l'inonder (``live.publish`` est sûr depuis ce thread,
+        # voir app/live.py).
+        derniere = {"t": float("-inf")}
+
+        def _publier_chunk(texte: str) -> None:
+            if not _generation_guard.is_current(consultation_id, generation_seq):
+                return
+            maintenant = time.monotonic()
+            if maintenant - derniere["t"] < 0.2:
+                return
+            derniere["t"] = maintenant
+            live.publish(owner_key, "verification_chunk", {
+                "consultation_id": consultation_id,
+                "generation_token": generation_token,
+                "origin_tab": origin_tab,
+                "text": texte,
+            })
+
+        resultat, usage_passe = llm.verify_note_stream(
             note_markdown,
             langue=langue,
             audio=audio_payload,
             transcript=transcript or None,
             model=model_name,
+            on_chunk=_publier_chunk,
         )
         if resultat is None:
             return None, usage_passe

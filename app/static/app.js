@@ -290,19 +290,27 @@
   /**
    * État « génération en cours » — la note arrive en direct dans l'aperçu,
    * donc pas de voile plein écran : on fond le texte en gris pâle
-   * (`.gen-pane`) et on affiche le toast de progression unifié en mode
-   * indéterminé — d'abord « Connexion au modèle… », basculé en « La note se
-   * génère… » dès que le serveur a fini d'envoyer la requête au fournisseur
-   * LLM (événement `generation_started`), sinon dès le premier morceau
-   * `generation_chunk`.
+   * (`.gen-pane`) et on affiche le toast de progression unifié. Le libellé
+   * défile à travers les PHASES successives : « Préparation… » (clic →
+   * requête prête, ``generateNote`` passe à « Envoi au modèle… » juste avant
+   * le POST), « Traitement en cours… » dès que le serveur a fini d'envoyer la
+   * requête au fournisseur (évènement ``generation_started``, sinon au
+   * premier ``generation_thought``), « La note se génère… » dès le premier
+   * morceau ``generation_chunk``, puis « Validation en cours… » à la fin de
+   * la génération quand le contrôle « Validation » est actif.
+   *
+   * Le toast n'est retiré par ``setGenerating(false)`` que si aucune
+   * vérification n'est encore en cours : pendant la phase « Validation », il
+   * reste affiché et partira quand le ``verification_result`` arrivera (ou au
+   * filet de 180 s).
    */
   function setGenerating(active) {
     $('previewPane').classList.toggle('gen-pane', active);
     $('markdownEditor').classList.toggle('gen-pane', active);
     if (active) {
       state.genStarted = false;
-      showProgressToast(T('generate.connecting'));
-    } else if (progressToast) {
+      showProgressToast(T('generate.preparing'));
+    } else if (progressToast && !secondPassRunning) {
       progressToast.dismiss();
       progressToast = null;
     }
@@ -2188,37 +2196,53 @@
   /* =========================================================================
    * VALIDATION — onglet « Validation » du panneau de transcription
    * ======================================================================
-   * Deux contenus : la rubrique « Corrections et éléments à valider »
-   * (retirée de la note à la génération, ``renderCorrections``) et l'audit
-   * factuel audio↔note. Bascule à côté de « Mettre en forme » (préférence par
-   * usager, défaut OFF). Quand elle est active, chaque génération est suivie
-   * d'un contrôle : l'AUDIO fait foi (la transcription Parakeet est trop
-   * imprécise pour servir de référence) ; les écarts certains arrivent en SSE
-   * ``verification_result`` et s'affichent en listes plates dans le second
-   * onglet du panneau de transcription.
+   * Deux contenus, tous deux en simple markdown comme le reste de
+   * l'application : la rubrique « Corrections et éléments à valider »
+   * (retirée de la note à la génération, ``renderCorrections``) puis l'audit
+   * factuel audio↔note, section « Validation - 2e passe » (``renderSecondPassAudit``).
+   * Bascule à côté de « Mettre en forme » (préférence par usager, défaut
+   * OFF). Quand elle est active, chaque génération est suivie d'un contrôle :
+   * l'AUDIO fait foi (la transcription Parakeet est trop imprécise pour servir
+   * de référence) ; les écarts certains arrivent en SSE ``verification_chunk``
+   * (JSON brut accumulé, re-rendu au fil de l'eau) et ``verification_result``.
    *
-   * Pendant la vérification : roue sur le TITRE de l'onglet. L'onglet
-   * « Validation » est basculé sur grand écran dès la fin de la génération
-   * (la rubrique « Corrections » y est déjà visible) ; sur mobile, on reste
-   * sur la note générée. L'arrivée de l'audit ne force plus aucune bascule.
+   * Pendant la vérification : roue sur le TITRE de l'onglet. La roue ne se
+   * met à tourner qu'à la FIN de la génération (``showSecondPassPending``),
+   * au moment où la rubrique « Corrections » vient d'être extraite — c'est
+   * aussi là que l'onglet bascule sur grand écran. Sur mobile, on reste sur
+   * la note générée. L'arrivée de l'audit ne force plus aucune bascule.
    * ====================================================================== */
-  let secondPassData = null;   // dernier audit affichable, ou null
   let secondPassTimeout = null;
-  // Jeton attendu pour le PROCHAIN ``verification_result``. Distinct de
-  // ``state.generationToken`` : celui-ci est remis à null dès que la réponse
-  // de /api/generate revient (le ``finally`` de generateNote), or l'audit
-  // part en tâche de fond et publie PLUS TARD — sans ce jeton séparé, tout
-  // résultat était rejeté en silence et la roue tournait indéfiniment.
+  // Vrai seulement quand la vérification tourne VRAIMENT (après la fin de la
+  // génération) : c'est la garde du toast de progression, qui doit survivre
+  // au ``finally`` de generateNote tant que « Validation en cours… » s'affiche.
+  let secondPassRunning = false;
+  // Jeton attendu pour le PROCHAIN ``verification_chunk`` / ``verification_result``.
+  // Distinct de ``state.generationToken`` : celui-ci est remis à null dès que
+  // la réponse de /api/generate revient (le ``finally`` de generateNote), or
+  // l'audit part en tâche de fond et publie PLUS TARD — sans ce jeton séparé,
+  // tout résultat était rejeté en silence et la roue tournait indéfiniment.
+  // Capturé AVANT le POST (``captureSecondPassToken``) : le « skipped » sans
+  // audio est publié par le serveur avant même le début de la génération.
   let verificationPendingToken = null;
+  // Un « skipped » est-il déjà arrivé pour CE jeton ? Stické pour toute la
+  // tentative : il arrive souvent AVANT la réponse de /api/generate et doit
+  // empêcher d'armer la roue pour rien à la fin de la génération.
+  let verificationSkipped = false;
 
   function armerFiletSecondPass() {
     clearTimeout(secondPassTimeout);
     secondPassTimeout = setTimeout(() => {
       verificationPendingToken = null;
+      verificationSkipped = false;
+      secondPassRunning = false;
       setSecondPassSpinner(false);
       $('secondPassPending').classList.add('hidden');
-      $('secondPassContent').classList.add('hidden');
-      $('secondPassEmpty').classList.remove('hidden');
+      $('secondPassAudit').classList.add('hidden');
+      if (progressToast) {
+        progressToast.dismiss();
+        progressToast = null;
+      }
     }, 180000);
   }
 
@@ -2327,40 +2351,65 @@
 
   /**
    * Affiche la rubrique « Corrections et éléments à valider » dans l'onglet
-   * Validation. Ne touche JAMAIS à la roue ni à l'état « en cours » : la roue
-   * continue de tourner jusqu'à l'arrivée de l'audit, même quand la rubrique
-   * est déjà visible.
+   * Validation, en simple markdown (intitulé de la rubrique compris). Ne
+   * touche JAMAIS à la roue ni à l'état « en cours » : la roue ne démarre
+   * qu'à la fin de la génération (``showSecondPassPending``).
    */
   function renderCorrections(md) {
     const bloc = $('secondPassCorrections');
-    const corps = $('secondPassCorrectionsBody');
-    if (!bloc || !corps) return;
+    if (!bloc) return;
     const texte = (md || '').trim();
     if (!texte) {
       bloc.classList.add('hidden');
-      corps.innerHTML = '';
+      bloc.innerHTML = '';
       correctionsRendu = null;
       return;
     }
     if (texte === correctionsRendu) return;
-    // L'intitulé de la rubrique est déjà porté par le libellé au-dessus de la
-    // boîte : on ne le re-rend pas en titre Markdown (doublon visuel).
-    const corpsMd = texte.replace(/^#{1,6}\s+[^\n]*\s*\n?/, '').trim();
-    corps.innerHTML = markdownToHtml(corpsMd);
+    bloc.innerHTML = markdownToHtml(texte);
     correctionsRendu = texte;
     bloc.classList.remove('hidden');
   }
 
-  /** Nouvelle génération avec « Validation » : état « en cours », sans basculer. */
-  function enterSecondPassPending() {
-    secondPassData = null;
-    // Le jeton de CETTE génération est celui que l'évènement portera — il
-    // faut le retenir avant que le ``finally`` ne le remette à null.
+  /**
+   * Retient le jeton de CETTE génération avant le POST : les évènements
+   * ``verification_chunk`` / ``verification_result`` le porteront. Ne démarre
+   * ni la roue ni le filet — la vérification n'a pas encore commencé.
+   */
+  function captureSecondPassToken() {
+    clearTimeout(secondPassTimeout);
+    secondPassTimeout = null;
     verificationPendingToken = state.generationToken;
+    verificationSkipped = false;
+    secondPassRunning = false;
+  }
+
+  /** Remise à zéro de la vue « Validation » au début d'une nouvelle tentative. */
+  function clearSecondPassView() {
+    clearTimeout(secondPassTimeout);
+    secondPassTimeout = null;
+    verificationPendingToken = null;
+    verificationSkipped = false;
+    secondPassRunning = false;
+    setSecondPassSpinner(false);
+    $('secondPassPending').classList.add('hidden');
+    const audit = $('secondPassAudit');
+    if (audit) {
+      audit.classList.add('hidden');
+      audit.innerHTML = '';
+    }
+  }
+
+  /** Fin de génération + « Validation » : la vérification COMMENCE — roue et filet. */
+  function showSecondPassPending() {
+    secondPassRunning = true;
     setSecondPassSpinner(true);
     $('secondPassPending').classList.remove('hidden');
-    $('secondPassContent').classList.add('hidden');
-    $('secondPassEmpty').classList.add('hidden');
+    const audit = $('secondPassAudit');
+    if (audit) {
+      audit.classList.add('hidden');
+      audit.innerHTML = '';
+    }
     armerFiletSecondPass();
   }
 
@@ -2368,63 +2417,160 @@
     clearTimeout(secondPassTimeout);
     secondPassTimeout = null;
     verificationPendingToken = null;
+    secondPassRunning = false;
     setSecondPassSpinner(false);
     $('secondPassPending').classList.add('hidden');
   }
 
   /**
-   * Rend les listes plates. ``basculer`` : true à l'ARRIVÉE du résultat en
-   * direct (l'onglet s'ouvre alors), false pour une réaffichage silencieux
-   * (rechargement de page — jamais de saut d'onglet au chargement).
+   * Rend la section « Validation - 2e passe » en markdown, au fil de l'eau
+   * (``verification_chunk``) comme à l'arrivée du résultat final. Un
+   * ``resultat`` nul (audit jamais exécuté ou sauté) masque la section.
    */
-  function renderSecondPass(resultat, basculer) {
-    secondPassData = resultat || null;
-    stopSecondPassPending();
-
-    const contenu = $('secondPassContent');
-    const vide = $('secondPassEmpty');
+  function renderSecondPassAudit(resultat) {
+    const audit = $('secondPassAudit');
+    if (!audit) return;
     const omissions = (resultat && resultat.omissions) || [];
     const inventions = (resultat && resultat.inventions) || [];
     const confiance = (resultat && resultat.confiance) || '';
 
-    if (!resultat || (!omissions.length && !inventions.length)) {
-      contenu.classList.add('hidden');
-      contenu.innerHTML = '';
-      vide.classList.remove('hidden');
-      if (basculer) selectDicteeTab('secondpass');
+    if (!resultat) {
+      audit.classList.add('hidden');
+      audit.innerHTML = '';
       return;
     }
-    vide.classList.add('hidden');
 
-    const lignes = [];
-    lignes.push(`<p class="text-[11px] uppercase tracking-wide text-slate-400">${esc(T('secondpass.summary'))}</p>`);
-    if (omissions.length) {
-      lignes.push(
-        `<div><p class="font-semibold text-slate-700 mb-1">${esc(T('secondpass.omissions'))}</p>` +
-        `<ul class="list-disc pl-5 space-y-0.5">` +
-        omissions.map((item) => `<li>${esc(item)}</li>`).join('') +
-        `</ul></div>`
-      );
-    }
-    if (inventions.length) {
-      lignes.push(
-        `<div><p class="font-semibold text-slate-700 mb-1">${esc(T('secondpass.inventions'))}</p>` +
-        `<ul class="list-disc pl-5 space-y-0.5">` +
-        inventions.map((item) => `<li>${esc(item)}</li>`).join('') +
-        `</ul></div>`
-      );
+    const lignes = [`## ${T('secondpass.audit_title')}`];
+    if (!omissions.length && !inventions.length) {
+      lignes.push('', `*${T('secondpass.empty')}*`);
+    } else {
+      if (omissions.length) {
+        lignes.push('', `**${T('secondpass.omissions')}**`);
+        for (const item of omissions) lignes.push(`- ${item}`);
+      }
+      if (inventions.length) {
+        lignes.push('', `**${T('secondpass.inventions')}**`);
+        for (const item of inventions) lignes.push(`- ${item}`);
+      }
     }
     if (confiance) {
-      lignes.push(`<p class="text-[11px] text-slate-400">${esc(T('secondpass.confidence'))} : ${esc(confiance)}</p>`);
+      lignes.push('', `*${T('secondpass.confidence')} : ${confiance}*`);
     }
-    contenu.innerHTML = lignes.join('');
-    contenu.classList.remove('hidden');
+    audit.innerHTML = markdownToHtml(lignes.join('\n'));
+    audit.classList.remove('hidden');
+  }
 
+  /**
+   * Rend les listes plates en markdown. ``basculer`` : true à l'ARRIVÉE du
+   * résultat en direct (l'onglet s'ouvre alors), false pour un réaffichage
+   * silencieux (rechargement de page — jamais de saut d'onglet au chargement).
+   */
+  function renderSecondPass(resultat, basculer) {
+    stopSecondPassPending();
+    renderSecondPassAudit(resultat);
     if (basculer) {
       // Sur mobile, on ne quitte JAMAIS la note générée à l'arrivée de
       // l'audit : l'usager bascule lui-même vers l'onglet quand il veut.
       selectDicteeTab('secondpass');
     }
+  }
+
+  /**
+   * Parse progressif d'un JSON tronqué en cours de diffusion.
+   *
+   * Cas complet : parse strict. Sinon, le schéma de l'audit est FIXE
+   * (``{"omissions":[...],"inventions":[...],"confiance":"..."}``) : on
+   * récupère ce qui est déjà complet — chaque item fermé de liste, la
+   * confiance une fois son guillemet fermé — et on ignore le reste encore
+   * en écriture. Les listes se complètent ainsi item par item au fil des
+   * morceaux, sans jamais afficher une ligne à moitié écrite.
+   */
+  function parseProgressiveJson(texte) {
+    try {
+      return JSON.parse(texte);
+    } catch (_) { /* tronqué : récupération ci-dessous */ }
+
+    const donnees = { omissions: [], inventions: [], confiance: '' };
+
+    // Lit une chaîne JSON complète débutant au guillemet ``debut`` (gère les
+    // échappements). Retourne ``{ valeur, fin }`` ou ``null`` si non fermée.
+    const lireChaine = (debut) => {
+      let i = debut + 1;
+      while (i < texte.length) {
+        const c = texte[i];
+        if (c === '\\') { i += 2; continue; }
+        if (c === '"') {
+          try { return { valeur: JSON.parse(texte.slice(debut, i + 1)), fin: i + 1 }; }
+          catch (_) { return null; }
+        }
+        i++;
+      }
+      return null;
+    };
+
+    const extraireListe = (cle) => {
+      const posCle = texte.indexOf(`"${cle}"`);
+      if (posCle < 0) return;
+      const posDeuxPoints = texte.indexOf(':', posCle + cle.length + 2);
+      if (posDeuxPoints < 0) return;
+      const posCrochet = texte.indexOf('[', posDeuxPoints);
+      if (posCrochet < 0) return;
+      let i = posCrochet + 1;
+      while (i < texte.length) {
+        const c = texte[i];
+        if (c === ']') return;   // liste fermée : on n'absorbe jamais la suite
+        if (c === ',') { i++; continue; }
+        if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { i++; continue; }
+        if (c === '"') {
+          const item = lireChaine(i);
+          if (item === null) return;   // item en cours d'écriture : on s'arrête
+          donnees[cle].push(item.valeur);
+          i = item.fin;
+        } else {
+          return;   // format inattendu : on s'arrête
+        }
+      }
+    };
+
+    const extraireConfiance = () => {
+      const posCle = texte.indexOf('"confiance"');
+      if (posCle < 0) return;
+      const posDeuxPoints = texte.indexOf(':', posCle + '"confiance"'.length);
+      if (posDeuxPoints < 0) return;
+      let i = posDeuxPoints + 1;
+      while (i < texte.length && (texte[i] === ' ' || texte[i] === '\t')) i++;
+      if (texte[i] !== '"') return;
+      i++;
+      const debut = i;
+      while (i < texte.length && texte[i] !== '"') i++;
+      if (i >= texte.length) return;   // valeur non fermée
+      donnees.confiance = texte.slice(debut, i);
+    };
+
+    extraireListe('omissions');
+    extraireListe('inventions');
+    extraireConfiance();
+    if (donnees.omissions.length || donnees.inventions.length || donnees.confiance) {
+      return donnees;
+    }
+    return null;
+  }
+
+  function onVerificationChunk(evt) {
+    if (!verificationPendingToken || verificationSkipped) return;
+    const payload = JSON.parse(evt.data || '{}');
+    if (!payload.generation_token || payload.generation_token !== verificationPendingToken) return;
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    const texte = payload.text || '';
+    if (!texte.trim()) return;
+    const donnees = parseProgressiveJson(texte);
+    if (!donnees) return;
+    // Rendu en direct, sans toucher à la roue : la vérification continue.
+    renderSecondPassAudit({
+      omissions: Array.isArray(donnees.omissions) ? donnees.omissions : [],
+      inventions: Array.isArray(donnees.inventions) ? donnees.inventions : [],
+      confiance: donnees.confiance || '',
+    });
   }
 
   function onVerificationResult(evt) {
@@ -2439,9 +2585,18 @@
     verificationPendingToken = null;
     if (donnees.skipped) {
       // Audit impossible côté serveur (pas d'audio, échec) : arrêt immédiat
-      // de la roue, sans bascule d'onglet ni message trompeur.
-      stopSecondPassPending();
+      // de la roue et du toast, sans bascule d'onglet ni message trompeur.
+      // Souvent publié AVANT la réponse de /api/generate : ``verificationSkipped``
+      // empêche alors d'armer la roue pour rien à la fin de la génération.
+      verificationSkipped = true;
+      const verifEnCours = secondPassRunning;
       renderSecondPass(null, false);
+      if (verifEnCours) {
+        if (progressToast) {
+          progressToast.dismiss();
+          progressToast = null;
+        }
+      }
       return;
     }
     renderSecondPass({
@@ -2449,6 +2604,10 @@
       inventions: Array.isArray(donnees.inventions) ? donnees.inventions : [],
       confiance: donnees.confiance || '',
     }, true);
+    if (progressToast) {
+      progressToast.dismiss();
+      progressToast = null;
+    }
   }
 
   async function generateNote() {
@@ -2523,13 +2682,18 @@
     setGenerating(true);
     $('markdownEditor').value = '';
     renderCorrections('');
+    clearSecondPassView();
     showPreview();
     setMobilePane('note');
 
     try {
       const consultationId = await ensureConsultation();
-      if (state.secondPass) enterSecondPassPending();
-      else stopSecondPassPending();
+      // Phase « envoi » : la requête part réellement vers le serveur.
+      if (progressToast && progressToast.setMessage) progressToast.setMessage(T('generate.sending'));
+      // La vérification ne commence qu'à la FIN de la génération (la roue de
+      // l'onglet aussi) ; on ne fait ici que retenir le jeton — le
+      // « skipped » sans audio est publié par le serveur dès le début.
+      if (state.secondPass) captureSecondPassToken();
       const result = await api('/api/generate', {
         method: 'POST',
         signal: controller.signal,
@@ -2549,7 +2713,12 @@
       // n'a rien persisté : on ne touche à rien — l'écran garde le texte déjà
       // affiché, et l'évènement ``generated`` de l'onglet gagnant
       // resynchronisera ce brouillon dans un instant.
-      if (result.superseded) return;
+      if (result.superseded) {
+        // Aucune vérification ne suivra : le jeton retenu avant le POST ne
+        // servira plus.
+        stopSecondPassPending();
+        return;
+      }
       state.consultationId = result.consultation_id;
       // La réponse finale est LA source de vérité. Le serveur y renvoie le
       // corps sans la rubrique « Corrections » (``markdown``) et la rubrique
@@ -2559,6 +2728,22 @@
       state.lastGeneratedMarkdown = decoupe.note;
       $('markdownEditor').value = decoupe.note;
       renderCorrections(result.corrections || decoupe.corrections);
+      // Fin de la génération = extraction de la rubrique « Corrections » :
+      // c'est LE moment où la vérification commence — roue du titre de
+      // l'onglet, état « en cours » et phase « Validation » du toast. Un
+      // « skipped » déjà reçu (pas d'audio) n'arme rien.
+      if (state.secondPass) {
+        if (verificationSkipped) {
+          stopSecondPassPending();
+        } else {
+          showSecondPassPending();
+          if (progressToast && progressToast.setMessage) {
+            progressToast.setMessage(T('generate.validating'));
+          }
+        }
+      } else {
+        stopSecondPassPending();
+      }
       renderMarkdown();
       showPreview();
       // Sur mobile, on amène l'usager directement au résultat.
@@ -6089,10 +6274,10 @@
   /**
    * Le serveur a fini d'envoyer la requête au fournisseur LLM (ConsultAI
    * n'exécute pas le modèle : le signal part à la soumission de l'appel, pas
-   * au lancement interne). Le toast de génération bascule de « Connexion au
-   * modèle… » à « La note se génère… ». Le premier morceau `generation_chunk`
-   * bascule aussi (garde-fou si cet événement se perd), donc ne rien faire
-   * ici n'est jamais bloquant.
+   * au lancement interne). Le toast de génération passe à la phase
+   * « Traitement en cours… » — le modèle raisonne, la note n'a pas encore
+   * commencé. Le premier morceau `generation_chunk` fera avancer vers
+   * « La note se génère… » (garde-fou si cet événement se perd).
    */
   function onGenerationStarted(evt) {
     if (!pendingGenerate) return;
@@ -6100,8 +6285,8 @@
     if (!payload.generation_token || payload.generation_token !== state.generationToken) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
     state.genStarted = true;
-    if (progressToast && progressToast.setMessage) {
-      progressToast.setMessage(T('generate.streaming'));
+    if (!genTextStarted && progressToast && progressToast.setMessage) {
+      progressToast.setMessage(T('generate.processing'));
     }
   }
 
@@ -6123,6 +6308,7 @@
 
     // La note a commencé : verrou — toute pensée encore en retard est ignorée
     // par onGenerationThought et ne réapparaît plus à l'écran.
+    const debutNote = !genTextStarted;
     genTextStarted = true;
 
     // Premier morceau de TEXTE de la note : le raisonnement (thinking) s'est
@@ -6140,11 +6326,13 @@
     }
 
     // Le premier morceau de texte est LA preuve que le modèle a répondu : il
-    // bascule le toast en phase « génération » même si l'événement dédié
-    // `generation_started` s'est perdu (file SSE saturée, reconnexion).
-    if (!state.genStarted && progressToast && progressToast.setMessage) {
+    // fait avancer le toast vers la phase « La note se génère… » même si
+    // l'événement dédié `generation_started` s'est perdu (file SSE saturée).
+    if (debutNote) {
       state.genStarted = true;
-      progressToast.setMessage(T('generate.streaming'));
+      if (progressToast && progressToast.setMessage) {
+        progressToast.setMessage(T('generate.streaming'));
+      }
     }
 
     if (payload.type === 'snapshot' || !payload.type) {
@@ -6185,10 +6373,12 @@
       showThinkingIndicator();
     }
 
-    // Même preuve d'activité que le texte de la note : le modèle a répondu.
+    // Même preuve d'activité que le texte de la note : le modèle a répondu —
+    // le toast reste en phase « Traitement en cours… » (le raisonnement
+    // précède la note).
     if (!state.genStarted && progressToast && progressToast.setMessage) {
       state.genStarted = true;
-      progressToast.setMessage(T('generate.streaming'));
+      progressToast.setMessage(T('generate.processing'));
     }
 
     if (payload.type === 'snapshot' || !payload.type) {
@@ -6418,6 +6608,7 @@
     liveSource.addEventListener('generation_chunk', onGenerationChunk);
     liveSource.addEventListener('generation_thought', onGenerationThought);
     liveSource.addEventListener('generation_started', onGenerationStarted);
+    liveSource.addEventListener('verification_chunk', onVerificationChunk);
     liveSource.addEventListener('verification_result', onVerificationResult);
     liveSource.addEventListener('transcription_progress', onTranscriptionProgress);
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);

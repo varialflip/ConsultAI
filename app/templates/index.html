@@ -806,29 +806,29 @@
 
       <!-- VUE « VALIDATION » — rubrique « Corrections et éléments à valider »
            (retirée de la note, remplie pendant la génération puis depuis
-           ``corrections_markdown`` au rechargement) + audit factuel audio↔note
-           (listes plates, remplies par onVerificationResult / ``verification_json``).
-           Jamais imprimée : le document clinique reste la note seule. -->
+           ``corrections_markdown`` au rechargement) suivie de l'audit factuel
+           audio↔note (« Validation - 2e passe », diffusé en direct par
+           ``verification_chunk`` puis finalisé par ``verification_result`` /
+           ``verification_json``). Le tout en simple markdown, comme le reste
+           de l'application. Jamais imprimée : le document clinique reste la
+           note seule. -->
       <div id="secondPassView" class="hidden flex flex-col flex-1 min-h-0 overflow-y-auto thin-scroll
-                                      p-4 sm:p-6 text-[13px] leading-relaxed text-slate-700">
-        <!-- Corrections et éléments à valider — montrée dès la génération, la
-             roue de l'onglet continue de tourner tant que l'audit n'est pas
-             arrivé. -->
-        <div id="secondPassCorrections" class="hidden mb-4">
-          <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1.5">
-            {{ t('secondpass.corrections') }}
-          </p>
-          <div id="secondPassCorrectionsBody"
-               class="rounded-lg border border-amber-300 bg-amber-50 p-3
-                      prose prose-sm max-w-none text-slate-700"></div>
-        </div>
+                                      p-4 sm:p-6 text-[13px] leading-relaxed text-slate-700 space-y-4">
+        <!-- Corrections et éléments à valider — la rubrique défile ici pendant
+             la génération (markdown complet, intitulé compris). -->
+        <div id="secondPassCorrections"
+             class="hidden prose prose-slate prose-sm max-w-none prose-headings:font-semibold
+                    prose-h1:text-base prose-h2:text-sm prose-h2:uppercase prose-h2:tracking-wide
+                    prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-1 prose-h3:text-xs"></div>
         <p id="secondPassPending" class="hidden italic text-slate-400">
           {{ t('secondpass.pending') }}
         </p>
-        <div id="secondPassContent" class="hidden space-y-4"></div>
-        <p id="secondPassEmpty" class="hidden italic text-slate-400">
-          {{ t('secondpass.empty') }}
-        </p>
+        <!-- Validation - 2e passe — audit factuel audio↔note, reçu en direct
+             (streaming du JSON, re-rendu au fil des morceaux) puis finalisé. -->
+        <div id="secondPassAudit"
+             class="hidden prose prose-slate prose-sm max-w-none prose-headings:font-semibold
+                    prose-h1:text-base prose-h2:text-sm prose-h2:uppercase prose-h2:tracking-wide
+                    prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-1 prose-h3:text-xs"></div>
       </div>
       </div>
     </section>

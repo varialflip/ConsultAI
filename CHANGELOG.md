@@ -3,6 +3,35 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — « Validation » en markdown, en direct, au bon moment
+
+*Le panneau « Validation » et le déroulement de « Mettre en forme » repensés
+autour de ce que le médecin voit pendant l'attente.*
+
+- **Indicateur de « Mettre en forme » en cinq phases.** Le toast de
+  progression déroule désormais « Préparation… » → « Envoi au modèle… » →
+  « Traitement en cours… » → « La note se génère… », puis « Validation en
+  cours… » à la fin de la génération quand la bascule « Validation » est
+  active (le toast reste alors affiché jusqu'à l'arrivée de l'audit).
+- **La roue de l'onglet « Validation » ne tourne plus pendant la génération.**
+  Elle ne démarre qu'à la fin de la note — au moment où la rubrique
+  « Corrections et éléments à valider » est extraite — qui est aussi, sur
+  grand écran, celui où l'onglet bascule sur « Validation ». Sur mobile, on
+  reste sur la note générée. Un « Validation » sans audio (transcription
+  seule) n'arme toujours rien.
+- **Panneau « Validation » en simple markdown.** La boîte jaune disparaît :
+  la rubrique « Corrections et éléments à valider » s'affiche en markdown
+  (intitulé compris), comme le reste de l'application. L'audit factuel suit
+  sous une section titrée **« Validation - 2e passe »**, elle aussi en
+  markdown.
+- **Audit diffusé en direct.** Le second appel Gemini est désormais un flux
+  (`verification_chunk`, JSON brut accumulé) : la section « Validation - 2e
+  passe » se remplit au fil de l'eau (préfixe JSON exploitable re-rendu à
+  chaque morceau), sans rafraîchissement — même mécanique de reprise que la
+  génération (429, refus `thinking_config`), même parse et même garde-fou
+  déterministe à l'arrivée du résultat final. `verification_json` reste
+  structuré, aucune migration.
+
 ## 2026-08-26 — Les hospitalisations dictées dans les antécédents y restent
 
 *Correctif suite à l'observation sur une note réelle : une hospitalisation

@@ -259,23 +259,25 @@ COHERE_LLM_THINKING_BUDGET=1024
 > « Mettre en forme » (préférence par usager, désactivée par défaut). Quand
 > elle est active, chaque génération est suivie d'un second appel qui
 > compare la note à l'AUDIO de la dictée (source de vérité — jamais la
-> transcription Parakeet, trop imprécise) et renvoie deux listes plates :
-> ce qui fut dicté mais manque à la note, ce que la note affirme sans avoir
-> été dicté. Volontairement permissif : seuls les écarts certains sont
-> signalés, les reformulations médicales sont acceptées. Le résultat part en
-> direct (SSE `verification_result`) dans un second onglet du panneau de
-> transcription — roue sur le titre pendant la vérification, bascule
-> automatique à l'arrivée (sur mobile, on reste sur la note générée) ; il est
-> conservé avec le brouillon (`consultations.verification_json`) et réaffiché
-> au chargement.
+> transcription Parakeet, trop imprécise) et renvoie deux listes : ce qui
+> fut dicté mais manque à la note, ce que la note affirme sans avoir été
+> dicté. Volontairement permissif : seuls les écarts certains sont signalés,
+> les reformulations médicales sont acceptées. Le résultat est diffusé en
+> direct (SSE `verification_chunk`, JSON brut re-rendu au fil de l'eau, puis
+> `verification_result`) dans un second onglet du panneau de transcription —
+> roue sur le titre à partir de la FIN de la génération (jamais avant),
+> bascule automatique sur grand écran à ce même moment (sur mobile, on reste
+> sur la note générée) ; il est conservé avec le brouillon
+> (`consultations.verification_json`) et réaffiché au chargement.
 >
 > Le même onglet « Validation » reçoit la rubrique **« Corrections et
 > éléments à valider »**, retirée de la note à la génération : elle n'est
 > jamais écrite dans le document clinique ni envoyée à l'audit, mais stockée
 > à part (`consultations.corrections_markdown`) et affichée dans l'onglet dès
-> la fin du streaming (bascule automatique sur grand écran, jamais sur
-> mobile). Les brouillons antérieurs qui la portent encore dans leur note la
-> font réextraire à l'ouverture.
+> la fin du streaming. Les deux contenus — corrections puis section
+> **« Validation - 2e passe »** — se présentent en simple markdown, comme le
+> reste de l'application. Les brouillons antérieurs qui portent encore la
+> rubrique dans leur note la font réextraire à l'ouverture.
 > Sans audio joint (note produite à partir de la seule transcription), la
 > bascule active produit immédiatement un « rien à signaler » : l'audit
 > audio↔note est impossible, pas de roue qui tourne dans le vide.
@@ -664,14 +666,15 @@ fichier (§ 7.4) en bénéficie aussi.
 > harmonisé + message + pourcentage à droite s'il est connu) et une piste fine
 > — déterministe quand un avancement réel existe (`transcription_progress`),
 > indéterminée sinon, sans jamais afficher de faux pourcentage. La génération
-> s'appuie en outre sur l'événement SSE `generation_started`, publié par le
-> serveur dès qu'il a fini d'envoyer la requête au fournisseur LLM (ConsultAI
-> n'exécute pas le modèle : le signal part à la soumission de l'appel, pas au
-> lancement interne) : le toast passe alors de « Connexion au modèle… » à
-> « La note se génère… » (ou dès le premier morceau `generation_chunk` si
-> l'événement se perd). Plus aucun voile plein écran bloquant. Sur mobile,
-> tous les toasts tiennent sur une seule ligne (message tronqué avec des
-> points de suspension).
+> déroule une séquence de PHASES sur ce toast : « Préparation… » (au clic),
+> « Envoi au modèle… » (juste avant le POST), « Traitement en cours… » dès
+> l'événement SSE `generation_started` (le serveur a fini d'envoyer la
+> requête au fournisseur — ConsultAI n'exécute pas le modèle), « La note se
+> génère… » dès le premier morceau `generation_chunk`, puis « Validation en
+> cours… » à la fin de la génération quand la bascule « Validation » est
+> active (jusqu'à l'arrivée du `verification_result`). Plus aucun voile plein
+> écran bloquant. Sur mobile, tous les toasts tiennent sur une seule ligne
+> (message tronqué avec des points de suspension).
 
 > Rien de tout cela n'est automatique. Retranscrire écrase du texte que le
 > médecin a pu déjà corriger à la main.

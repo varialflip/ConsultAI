@@ -1048,25 +1048,19 @@ def _verification_schema():
     )
 
 
-def verify_note(
+def _verification_requete(
     note_markdown: str,
-    langue: str = "fr",
-    audio: Optional[Tuple[bytes, str]] = None,
-    transcript: Optional[str] = None,
-    model: Optional[str] = None,
-) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
+    langue: str,
+    audio: Tuple[bytes, str],
+    transcript: Optional[str],
+    model: Optional[str],
+) -> Tuple[object, str, List[object], Dict[str, object]]:
     """
-    « Validation » : audite la note contre l'AUDIO de la dictée.
-
-    Retourne ``(résultat, usage)`` — ``résultat`` vaut ``None`` au moindre
-    doute (pas d'audio, appel impossible, JSON invalide) : l'appelant traite
-    cela comme « rien à afficher », jamais comme une erreur bloquante.
+    Construit la requête d'audit « Validation » : client, modèle, contenus et
+    configuration — la même pour l'appel simple (``verify_note``) et le flux
+    (``verify_note_stream``).
     """
     from google.genai import types
-
-    if audio is None:
-        logger.info("« Validation » ignoré : aucun audio joint à la consultation")
-        return None, {}
 
     client = get_client("gemini")
     nom_modele = model or active_model()
@@ -1112,6 +1106,78 @@ def verify_note(
         response_mime_type="application/json",
         response_schema=_verification_schema(),
     )
+    return client, nom_modele, contenu, config_kwargs
+
+
+def _assainir_verification(
+    brut: str,
+    note_markdown: str,
+    transcript: Optional[str],
+) -> Optional[dict]:
+    """
+    Parse la réponse JSON de l'auditeur et applique le garde-fou déterministe.
+
+    ``None`` si la réponse n'est pas un JSON exploitable. Partagé par l'appel
+    simple et le flux : la source de vérité reste la même dans les deux cas.
+    """
+    try:
+        donnees = json.loads(brut)
+    except ValueError:
+        logger.warning("« Validation » : réponse non JSON ignorée (%d caractères)", len(brut))
+        return None
+
+    def _liste(valeur: object) -> List[str]:
+        if not isinstance(valeur, list):
+            return []
+        propres = [str(item).strip() for item in valeur if str(item).strip()]
+        return propres[:8]
+
+    confiance = str(donnees.get("confiance") or "").strip().lower()
+    resultat = {
+        "omissions": _liste(donnees.get("omissions")),
+        "inventions": _liste(donnees.get("inventions")),
+        "confiance": confiance if confiance in ("haute", "moyenne", "basse") else "moyenne",
+    }
+    # Garde-fou déterministe : le modèle peut encore halluciner un écart alors
+    # que le fait est déjà présent dans la note (fausse omission) ou, à
+    # l'inverse, que la transcription (rendu de l'audio) le contient déjà
+    # (fausse invention). On neutralise ces cas par recoupement de mots
+    # distinctifs — jamais le contraire : un vrai oubli a toujours un terme
+    # absent de la note, une vraie invention un terme absent de la
+    # transcription, donc rien de réel n'est perdu.
+    resultat["omissions"] = [
+        e for e in resultat["omissions"] if not _element_deja_porte(e, note_markdown or "")
+    ]
+    if transcript:
+        resultat["inventions"] = [
+            e for e in resultat["inventions"] if not _element_deja_porte(e, transcript, seuil=0.5)
+        ]
+    return resultat
+
+
+def verify_note(
+    note_markdown: str,
+    langue: str = "fr",
+    audio: Optional[Tuple[bytes, str]] = None,
+    transcript: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
+    """
+    « Validation » : audite la note contre l'AUDIO de la dictée.
+
+    Retourne ``(résultat, usage)`` — ``résultat`` vaut ``None`` au moindre
+    doute (pas d'audio, appel impossible, JSON invalide) : l'appelant traite
+    cela comme « rien à afficher », jamais comme une erreur bloquante.
+    """
+    from google.genai import types
+
+    if audio is None:
+        logger.info("« Validation » ignoré : aucun audio joint à la consultation")
+        return None, {}
+
+    client, nom_modele, contenu, config_kwargs = _verification_requete(
+        note_markdown, langue, audio, transcript, model
+    )
 
     t0 = time.monotonic()
     try:
@@ -1146,38 +1212,122 @@ def verify_note(
     )
 
     brut = getattr(response, "text", "") or ""
-    try:
-        donnees = json.loads(brut)
-    except ValueError:
-        logger.warning("« Validation » : réponse non JSON ignorée (%d caractères)", len(brut))
+    resultat = _assainir_verification(brut, note_markdown, transcript)
+    if resultat is None:
         return None, usage
+    return resultat, usage
 
-    def _liste(valeur: object) -> List[str]:
-        if not isinstance(valeur, list):
-            return []
-        propres = [str(item).strip() for item in valeur if str(item).strip()]
-        return propres[:8]
 
-    confiance = str(donnees.get("confiance") or "").strip().lower()
-    resultat = {
-        "omissions": _liste(donnees.get("omissions")),
-        "inventions": _liste(donnees.get("inventions")),
-        "confiance": confiance if confiance in ("haute", "moyenne", "basse") else "moyenne",
-    }
-    # Garde-fou déterministe : le modèle peut encore halluciner un écart alors
-    # que le fait est déjà présent dans la note (fausse omission) ou, à
-    # l'inverse, que la transcription (rendu de l'audio) le contient déjà
-    # (fausse invention). On neutralise ces cas par recoupement de mots
-    # distinctifs — jamais le contraire : un vrai oubli a toujours un terme
-    # absent de la note, une vraie invention un terme absent de la
-    # transcription, donc rien de réel n'est perdu.
-    resultat["omissions"] = [
-        e for e in resultat["omissions"] if not _element_deja_porte(e, note_markdown or "")
-    ]
-    if transcript:
-        resultat["inventions"] = [
-            e for e in resultat["inventions"] if not _element_deja_porte(e, transcript, seuil=0.5)
-        ]
+def verify_note_stream(
+    note_markdown: str,
+    langue: str = "fr",
+    audio: Optional[Tuple[bytes, str]] = None,
+    transcript: Optional[str] = None,
+    model: Optional[str] = None,
+    on_chunk: Optional[Callable[[str], None]] = None,
+) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
+    """
+    « Validation » en flux : audite la note contre l'AUDIO en diffusant le
+    JSON brut au fil de l'eau, puis renvoie ``(résultat, usage)`` exactement
+    comme ``verify_note`` (même requête, même parse, même garde-fou).
+
+    ``on_chunk(texte)`` reçoit le texte JSON ACCUMULÉ (jamais des deltas) : le
+    client re-parse et réaffiche sans état — un morceau perdu se répare seul.
+    """
+    from google.genai import types
+
+    if audio is None:
+        logger.info("« Validation » ignoré : aucun audio joint à la consultation")
+        return None, {}
+
+    client, nom_modele, contenu, config_kwargs = _verification_requete(
+        note_markdown, langue, audio, transcript, model
+    )
+    config = types.GenerateContentConfig(**config_kwargs)
+    sans_thinking = False
+
+    t0 = time.monotonic()
+    # Même mécanique de reprise que la génération (voir generate_note_stream) :
+    # un refus de quota (429) survient souvent au premier morceau plutôt qu'à
+    # la création du flux ; un refus du ``thinking_config`` se rattrape une
+    # fois, sans le champ — jamais après qu'un texte a été diffusé.
+    for tentative in range(1, _GEMINI_TENTATIVES + 1):
+        try:
+            stream = client.models.generate_content_stream(
+                model=nom_modele, contents=contenu, config=config
+            )
+        except Exception as exc:
+            if _est_think_refusee_gemini(exc):
+                if not sans_thinking:
+                    logger.warning(
+                        "Gemini (%s) refuse thinking_config (audit en flux) : "
+                        "nouvel essai sans raisonnement configuré.", nom_modele,
+                    )
+                    config_kwargs.pop("thinking_config", None)
+                    config = types.GenerateContentConfig(**config_kwargs)
+                    sans_thinking = True
+                    continue
+            if not _est_quota_gemini(exc) or tentative == _GEMINI_TENTATIVES:
+                logger.warning("« Validation » impossible (%s) : %s", nom_modele, exc)
+                return None, {}
+            _gemini_pause_retry(tentative, exc, "audit en flux")
+            continue
+
+        parties: List[str] = []
+        usage_metadata = None
+        deja_diffuse = False
+        try:
+            for chunk in stream:
+                for piece in (getattr(chunk, "parts", None) or []):
+                    part = getattr(piece, "text", None) or ""
+                    if not part:
+                        continue
+                    parties.append(part)
+                    deja_diffuse = True
+                    if on_chunk is not None:
+                        on_chunk("".join(parties))
+                if getattr(chunk, "usage_metadata", None) is not None:
+                    usage_metadata = chunk.usage_metadata
+        except Exception as exc:
+            if _est_think_refusee_gemini(exc):
+                if not sans_thinking and not deja_diffuse:
+                    logger.warning(
+                        "Gemini (%s) refuse thinking_config (audit en flux) : "
+                        "nouvel essai sans raisonnement configuré.", nom_modele,
+                    )
+                    config_kwargs.pop("thinking_config", None)
+                    config = types.GenerateContentConfig(**config_kwargs)
+                    sans_thinking = True
+                    continue
+            if (
+                _est_quota_gemini(exc)
+                and not deja_diffuse
+                and tentative < _GEMINI_TENTATIVES
+            ):
+                _gemini_pause_retry(tentative, exc, "audit en flux")
+                continue
+            logger.warning("« Validation » impossible (%s) : %s", nom_modele, exc)
+            return None, {}
+        finally:
+            fermeture = getattr(stream, "close", None)
+            if callable(fermeture):
+                try:
+                    fermeture()
+                except Exception:
+                    pass
+        break
+
+    usage = _gemini_usage(usage_metadata)
+    brut = "".join(parties)
+    logger.info(
+        "Gemini %s (contrôle, flux) : %s jetons de prompt (%s audio), %s en "
+        "réponse, %.1f s, %d caractères",
+        nom_modele, usage.get("prompt_tokens"), usage.get("audio_prompt_tokens"),
+        usage.get("output_tokens"), time.monotonic() - t0, len(brut),
+    )
+    resultat = _assainir_verification(brut, note_markdown, transcript)
+    if resultat is None:
+        return None, usage
     return resultat, usage
 
 

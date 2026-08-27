@@ -311,6 +311,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Nothing to report: no certain discrepancy between note and audio.",
     ),
     "secondpass.summary": ("Audit factuel de la note", "Factual audit of the note"),
+    "secondpass.audit_title": (
+        "Validation - 2e passe",
+        "Validation - 2nd pass",
+    ),
     "secondpass.omissions": (
         "Dictés mais absents de la note",
         "Dictated but missing from the note",
@@ -760,13 +764,25 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Sélectionnez un gabarit de consultation.",
         "Select a consultation template.",
     ),
-    "generate.connecting": (
-        "Connexion au modèle…",
-        "Connecting to model…",
+    "generate.preparing": (
+        "Préparation…",
+        "Preparing…",
+    ),
+    "generate.sending": (
+        "Envoi au modèle…",
+        "Sending to model…",
+    ),
+    "generate.processing": (
+        "Traitement en cours…",
+        "Processing…",
     ),
     "generate.streaming": (
         "La note se génère…",
         "Generating the note…",
+    ),
+    "generate.validating": (
+        "Validation en cours…",
+        "Validating…",
     ),
     "generate.truncated": (
         "La note a été tronquée : le modèle a atteint sa limite de longueur. "

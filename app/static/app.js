@@ -3967,6 +3967,7 @@
     loadRecordings();
     showPreview();
     setMobilePane('dictee');
+    selectDicteeTab('transcript');
   }
 
   function newConsultation() {

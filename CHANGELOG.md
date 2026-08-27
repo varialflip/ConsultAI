@@ -3,6 +3,19 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-27 — Nouvelle consultation : retour systématique à « Transcription brute »
+
+*Après une mise en forme, le panneau de dictée restait sur l'onglet
+« Validation » (bascule automatique au grand écran) même quand une nouvelle
+consultation était ouverte : l'espace de travail était réinitialisé mais pas
+l'onglet actif.*
+
+- **Restauration de l'onglet « Transcription brute »** à chaque remise à zéro
+  de l'espace de travail (`resetWorkspace`) : bouton « Nouvelle », consultation
+  supprimée, et suppression reçue en direct depuis un autre onglet. Aucun
+  changement de comportement pendant une consultation en cours — seule la
+  bascule automatique du grand écran à l'arrivée de l'audit est conservée.
+
 ## 2026-08-27 — Correctif : la consommation de l'audit « Validation » était perdue
 
 *Le commit du cache de préfixe avait remplacé `owner_key` par un identifiant

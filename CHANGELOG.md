@@ -3,6 +3,162 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-28 — Audit « Validation » : affichage garanti côté émetteur (relecture périodique)
+
+*Sur une régénération réelle (consultation 1), la section « Validation - 2e
+passe » n'apparaissait qu'après un rechargement de page : le serveur avait
+publié et persisté l'audit, mais l'onglet émetteur ne reçoit normalement le
+résultat que par un seul événement SSE ``verification_result`` — une chute de
+la connexion SSE (pile proxy, file saturée) laissait la section vide jusqu'au
+F5.*
+
+- **Relecture périodique pour l'émetteur** : dès la fin de la génération
+  (``showSecondPassPending``), l'onglet relit la consultation persistée toutes
+  les ~5 s ; l'audit s'affiche dès qu'il y est écrit, sans saut d'onglet. Le
+  chemin SSE gagnant coupe le sondage (``stopSecondPassPending``) : aucun doublon.
+- **`verification_json` réinitialisée à chaque génération** : une régénération
+  efface l'audit de la note précédente au moment où la nouvelle note est
+  persistée — la base ne porte jamais un audit périmé pendant la fenêtre de
+  vérification (relecture poll ou rechargement en cours de régénération).
+- Redéploiement : commit simple (aucun tag, aucune image, source servie par le
+  bind mount).
+
+## 2026-08-28 — Examen en liste pointée : consigne générale explicite
+
+*La rubrique « Examen » devait être une liste pointée (tous les gabarits le
+prescrivent), mais la consigne générale laissait le choix à la prose : sa règle
+montrait un exemple rédigé en phrase (« directement « Calme, collabore et
+orientée » ») et la consigne générale est placée APRÈS celles du gabarit, donc
+prioritaire. Avec un modèle rapide, la rubrique sortait en paragraphes (notes
+réelles du 2026-08-28).*
+
+- La règle exige désormais **une puce « - » par ligne** et interdit
+  explicitement le paragraphe suivi, FR et EN (`app/default_prompts.py`, et
+  valeur correspondante appliquée en base `general_prompt_fr` /
+  `general_prompt_en` — la base fait foi à l'exécution).
+- Renfort (même date) : **aucun score dicté n'est omis** — MMSE, MoCA, MIS et
+  tout test/score dicté figurent dans la liste de l'Examen avec leur date, **y
+  compris les scores ANCIENS dictés dans la même dictée** (pour comparer
+  l'évolution). Un score douteux reste dans la liste ET est signalé « à
+  confirmer » en Corrections. Appliqué à la consigne générale (FR/EN) **et** aux
+  gabarits verrouillés 4, 8, 9, 10 (source `app/default_templates.py` + lignes
+  en base). Motivation : note réelle du 2026-08-28 où le modèle pro (audio
+  direct) a omis les MMSE/MoCA/MIS pourtant dictés, alors que l'audit
+  « Validation » les signalait comme omissions.
+
+## 2026-08-28 — Contournement du STT : la transcription conservée guide le modèle
+
+*En contournement du STT (audio direct, Gemini/Qwen/…), la note se générait à
+partir de l'audio seul — la transcription conservée pour l'affichage
+(`<fournisseur>_bypass_stt_keep_transcript`) était délibérément exclue du
+prompt. Sur un enregistrement long, même un modèle pro oubliait des éléments
+dictés (constaté en réel : discussion génétique, TEP/p-tau217, délai de suivi,
+prénom du patient omis, signalés par l'audit « Validation »), alors que la
+transcription conservée les contenait.*
+
+- Nouveau mode **guide** : quand une transcription a été conservée pendant
+  l'enregistrement, elle accompagne désormais la note (`_AUDIO_GUIDED_NOTE`) —
+  l'audio reste la source autoritaire (il fait foi en cas de divergence), le
+  texte sert de filet anti-omission. Sans transcription conservée, le
+  comportement historique (audio seul) est inchangé.
+- `transcript_used` devient vrai dans ce mode (la transcription a pris part à
+  la note) : `stt_used` s'affiche alors comme avant.
+- Appliqué aux deux chemins (`generate_note` et `generate_note_stream`) ; texte
+  d'aide du réglage « Conserver une transcription… » mis à jour.
+
+## 2026-08-28 — Extraction des métadonnées : retentative après réponse muette
+
+*L'extraction des champs d'identification (date, raison, demandeur…) échouait
+silencieusement quand le modèle rapide renvoyait une réponse vide ou illisible
+— observation réelle avec `moonshotai/kimi-k3` et `z-ai/glm-4.7` sur un appel
+isolé. Une retentative unique récupère le cas transitoire ; si les deux
+tentatives échouent, les champs restent vides comme avant (jamais bloquant).*
+
+## 2026-08-28 — Génération : garde-fou anti-blocage du flux (modèle qui se fige en pleine réflexion)
+
+*Une génération avec un modèle à raisonnement (observé : `z-ai/glm-4.7-flash`
+via OpenRouter) pouvait se figer sur « Raisonnement du modèle… » : le
+fournisseur cessait d'envoyer et l'écran restait bloqué jusqu'au timeout global
+(5 min). Deux garde-fous.*
+
+- **Chien de garde de blocage** : sans aucun progrès (texte ou raisonnement)
+  pendant 90 s, la génération s'interrompt avec un message explicite —
+  « … n'a plus rien envoyé pendant la génération, réessayez ou réduisez
+  l'effort de raisonnement ».
+- **Timeout de lecture borné** pour les flux OpenAI-compatibles (OpenAI,
+  OpenRouter, point de terminaison personnalisé, Qwen Omni) : 120 s entre deux
+  morceaux au lieu du timeout global de 300 s — une coupure silencieuse se
+  manifeste en 2 min au lieu de 5.
+
+## 2026-08-28 — « Modèles disponibles » étendu à la reconnaissance vocale
+
+*Le bouton « Modèles disponibles » (panneau d'administration) n'était proposé
+que sur l'onglet du modèle de langage. Il l'est désormais aussi sur l'onglet
+Dictée : il interroge le fournisseur de transcription consulté et propose ses
+modèles dans le champ « Modèle ».*
+
+- **Fournisseurs couverts** : Deepgram (liste `type=stt`), Cohere, Mistral
+  (modèles `voxtral*`), OpenAI (Whisper / `*transcribe`), point de terminaison
+  personnalisé (`GET {base_url}/models`, clé facultative — Parakeet local
+  compris) et OpenRouter (modèles acceptant l'audio). Google, Soniox,
+  AssemblyAI et Modulate n'exposent pas de liste : le panneau le signale et le
+  nom se saisit à la main.
+- **Diagnostic** : si le modèle configuré ne figure pas dans la liste, un
+  avertissement indique que la transcription échouera — même mécanique que le
+  contrôle du modèle de langage.
+- Nouvelle route `/api/stt/models` (jumeau de `/api/models`).
+
+## 2026-08-28 — Fournisseur OpenRouter : note (audio direct possible) et STT
+
+*Ajout d'OpenRouter comme fournisseur de modèle de langage **et** de
+reconnaissance vocale, pré-populé avec la clé du compte. Modèle par défaut :
+`thinkingmachines/inkling-small` (Thinking Machines), multimodal, open-weight.*
+
+- **Modèle de langage (onglet Note → OpenRouter)** : même panoplie que le point
+  de terminaison personnalisé — clé dédiée (`openrouter_api_key`, une seule clé
+  pour la note et le STT), modèle (`openrouter_model`,
+  `thinkingmachines/inkling-small` par défaut), modèle rapide, température,
+  budget de sortie (`openrouter_llm_max_tokens`, 32768 par défaut — inkling
+  raisonne, une relance automatique double le budget si la pensée le sature),
+  effort de raisonnement (`openrouter_llm_reasoning_effort`), **audio joint**
+  (`openrouter_send_audio`, format OGG/MP3/WAV — OGG vérifié accepté) et
+  **contournement du STT / note directe** (`openrouter_bypass_stt`) : l'audio
+  part seul au modèle, comme avec Gemini.
+- **Reconnaissance vocale (onglet Dictée → OpenRouter)** : la transcription
+  passe par `/chat/completions` avec une part audio `input_audio` (OpenRouter
+  refuse inkling-small derrière `/audio/transcriptions` — constaté 2026-08-27).
+  Modèle `openrouter_stt_model`, langue `openrouter_stt_language`. Le lexique
+  clinique prioritaire est passé en consigne (liste bornée, faute d'API
+  d'adaptation).
+- **Env** : `OPENROUTER_API_KEY` (ajoutée à `/etc/dictai/.env` pour ce
+  déploiement). Tarifs par défaut ajoutés à `pricing.py` (texte, cache, audio).
+- ⚠ **Confidentialité** : OpenRouter est un service cloud — l'audio (note
+  directe ou STT) quitte alors la machine. **Aucun mode par défaut ne
+  l'utilise** : l'activer dans le panneau est une décision de conformité
+  (ÉFVP § 5, 1.7).
+- *Validation réelle* : transcription STT (note test #5, 189 s) jugée
+  **supérieure à Parakeet** sur plusieurs points (« 146 sur 91 », « logopénique »,
+  « Reisberg 4 ») ; note directe structurée fidèle. Faiblesse connue : le modèle
+  **invente un numéro de dossier** s'il est inaudible — point à surveiller.
+
+## 2026-08-28 — Consigne générale : l'erreur de reconnaissance est phonétique, pas une faute de frappe
+
+*La consigne générale (§ 2) gagne un § 2.0 qui explicite le mode d'erreur de la
+reconnaissance vocale, pour que la correction ne soit plus un compromis entre
+« corriger » et « ne rien inventer ».*
+
+- **Erreurs phonétiques, pas fautes de frappe** : la transcription vient d'une
+  reconnaissance vocale, pas d'un texte tapé — le modèle doit chercher des
+  homophones (souvent des mots courants parfaitement orthographiés, ex. « un
+  casseur de saint droit ») et non des fautes de frappe.
+- **Corriger ≠ ajouter une information** : une correction rétablit le mot dicté
+  (substitution des mots mal captés par le terme voulu) ; elle n'introduit aucun
+  fait jamais dicté. Doute → règle des deux lectures (lecture la plus probable
+  dans le corps, autre lecture en Corrections et éléments à valider).
+- Migration en base pour la consigne générale fr/en (la consigne stockée reçoit
+  le nouveau § 2.0) ; une consigne personnalisée dans le panneau n'est pas
+  modifiée — la règle s'ajoute alors depuis le panneau.
+
 ## 2026-08-27 — Consigne générale : aucune omission dans l'Impression ni le Plan
 
 *Correctif suite à l'audit « Validation » d'une note réelle (suivi gériatrie,

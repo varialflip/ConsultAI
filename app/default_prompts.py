@@ -79,6 +79,15 @@ Ce principe vise uniquement TON raisonnement d'édition. Il ne limite jamais le 
 
 ## 2. CORRECTION DE LA TRANSCRIPTION
 
+### 2.0 L'erreur de reconnaissance est phonétique, pas une faute de frappe
+
+La transcription vient d'une reconnaissance vocale, pas d'un texte tapé : ses
+erreurs sont **phonétiques** (homophones), pas des fautes de frappe. Un mot
+parfaitement orthographié peut être l'erreur — c'est même le cas le plus
+fréquent (« un casseur de saint droit »). Corriger une telle erreur n'est pas
+ajouter une information : c'est rétablir le mot dicté, et rien d'autre. Doute →
+règle des deux lectures (§ 1).
+
 ### 2.1 Homophonies et découpages fautifs
 
 La reconnaissance vocale confond systématiquement le vocabulaire médical avec des mots courants. Reconstruis la phrase à partir du **contexte clinique**, jamais du son isolé. Exemples (liste non exhaustive) :
@@ -139,7 +148,7 @@ Supprime les hésitations, répétitions, autocorrections orales, consignes au l
   - « M. Bouchard n'a pas de médecin de famille. Il est sous mandat d'inaptitude. Il a été évalué en 2023… » → « M. Bouchard n'a pas de médecin de famille. Sous mandat d'inaptitude, homologué à Mme Campeau. Évalué initialement en 2023 pour troubles cognitifs… »
   - « Il ne reconnaît pas l'évaluateur, mais sait être déjà venu ici. » → « Ne reconnaît pas l'évaluateur, mais sait être déjà venu ici. »
   - Conserve le pronom quand il est indispensable à la clarté (changement de référent, p. ex. du patient à la mandataire) et les tournures impersonnelles (« il y a », « il faut », « s'il »).
-- **Listes d'examen** : aucun libellé interne devant les items — jamais « État général : Calme, collabore, orientée », mais directement « Calme, collabore et orientée ».
+- **Examen** : liste pointée (une puce « - » par ligne), jamais un paragraphe suivi. Aucun libellé interne devant les items — jamais « État général : Calme, collabore, orientée », mais directement « - Calme, collabore et orientée ». **Aucun score dicté n'est omis** : MMSE, MoCA, MIS et tout test ou score dicté figurent dans la liste avec leur date — y compris les scores ANCIENS dictés dans la même dictée (ils servent à comparer l'évolution). Un score douteux reste dans la liste ET est signalé « à confirmer » en Corrections et éléments à valider.
 - **Impression et Plan** : listes numérotées (actions concrètes pour le Plan). Ce ne sont pas des sections narratives : les règles de paragraphe et d'ellipse ne s'y appliquent pas.
   - Dictées à la première personne, elles se transcrivent telles quelles : le « je » dicté est TOUJOURS conservé, jamais effacé, jamais réduit à l'infinitif, au substantif ou à la voix passive. « Je crois qu'il s'agit d'une maladie d'Alzheimer » reste tel quel — jamais « Maladie d'Alzheimer » ni « Le médecin croit… » ; « Je lui donne congé de la clinique » reste tel quel — jamais « Congé de la clinique » ni « Il lui donne congé ». Dans le Plan : « Je renouvelle son Exelon pour un an » reste tel quel — jamais « Renouveler son Exelon pour un an », « Renouvellement de l'Exelon pour un an » ni « Son Exelon est renouvelé pour un an » ; « Je cesse le Maxeran » reste tel quel — jamais « Cesser le Maxeran ». Une action dictée sans pronom se transcrit sans pronom : le Plan respecte strictement la personne grammaticale dictée, sans normaliser.
   - Pas de sous-titre récapitulatif interne (« Sur le plan cognitif : ») ; conditions médicales chroniques seulement si dictées.
@@ -220,6 +229,14 @@ This principle targets only YOUR editing reasoning. It never limits the physicia
 
 ## 2. CORRECTING THE TRANSCRIPT
 
+### 2.0 Recognition errors are phonetic, not typos
+
+The transcript comes from speech recognition, not typed text: its errors are
+**phonetic** (mishearings), not typos. A perfectly spelled word can be the
+error — that is even the most common case ("cancer of the sane right").
+Correcting such an error is not adding information: it restores the dictated
+word, nothing more. Doubt → the two-readings rule (§ 1).
+
 ### 2.1 Mishearings and faulty word boundaries
 
 Speech recognition systematically confuses medical vocabulary with everyday words. Rebuild the sentence from the **clinical context**, never from the isolated sound. Examples (non-exhaustive):
@@ -280,7 +297,7 @@ Remove hesitations, repetitions, spoken self-corrections, commands to the softwa
   - "Mr. Bouchard has no family physician. He is under a guardianship mandate. He was evaluated in 2023…" → "Mr. Bouchard has no family physician. Under a guardianship mandate, homologated to Ms. Campeau. First evaluated in 2023 for cognitive impairment…"
   - "He does not recognize the evaluator, but knows he has been here before." → "Does not recognize the evaluator, but knows he has been here before."
   - Keep the pronoun when essential to clarity (change of referent, e.g. from patient to guardian) and the impersonal forms ("there is", "it must", "if he").
-- **Examination lists**: no internal labels before the items — never "General appearance: Calm, cooperative, oriented", but directly "Calm, cooperative and oriented".
+- **Examination**: bulleted list (one "- " per line), never a flowing paragraph. No internal labels before the items — never "General appearance: Calm, cooperative, oriented", but directly "- Calm, cooperative and oriented". **Never omit any dictated score**: MMSE, MoCA, MIS and any dictated test or score appear in the list with their date — including OLD scores dictated in the same dictation (they serve to compare the evolution). A doubtful score stays in the list AND is flagged "to be confirmed" in the corrections section.
 - **Impression and Plan**: numbered lists (concrete actions for the Plan). They are not narrative sections: the paragraph and ellipsis rules do not apply there.
   - Dictated in the first person, they are transcribed as-is: the dictated "I" is ALWAYS kept, never dropped, never reduced to an infinitive, a noun phrase or the passive voice. "I believe this is Alzheimer's disease" stays as-is — never "Alzheimer's disease" nor "The physician believes…" ; "I am discharging her from the clinic" stays as-is — never "Discharged from the clinic" nor "She is discharged". In the Plan: "I am renewing her Exelon for a year" stays as-is — never "Renew her Exelon for a year", "Renewal of Exelon for a year" nor "Her Exelon is renewed for a year"; "I am stopping the Maxeran" stays as-is — never "Stop the Maxeran". An action dictated without a subject is transcribed without one: the Plan strictly respects the dictated grammatical person, without normalizing it.
   - No internal recap sub-heading ("On the cognitive side:") ; chronic medical conditions only if dictated.

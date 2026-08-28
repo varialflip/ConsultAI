@@ -1,8 +1,8 @@
 # Évaluation des facteurs relatifs à la vie privée (ÉFVP)
 
 **Système** : ConsultAI (DictAI.ca) — dictée et rédaction de notes de consultations cliniques
-**Version du document** : 1.6
-**Date** : 2026-08-16
+**Version du document** : 1.7
+**Date** : 2026-08-28
 **Base légale** : *Loi sur la protection des renseignements personnels dans le secteur privé* (RLRQ, c. P-39.1), notamment ses articles 3.1 à 3.5 (Loi 25).
 
 > ℹ️ Le présent document constitue l'évaluation des facteurs relatifs à la vie
@@ -31,7 +31,7 @@
 | Personne en charge du suivi | Dr Frederick Duong |
 | Titulaire des renseignements | Les patients dont les consultations sont dictées |
 | Utilisateurs du système | Médecins et cliniciennes de la pratique (actuellement : `frederick.duong`, `genevieve.belanger`) |
-| Fournisseurs de services (tiers) | Google Vertex AI (mise en forme : Gemini, région `northamerica-northeast1` — Montréal, Québec), Pocket ID (auto-hébergé), SMTP2GO (courriels), Cloudflare (Turnstile), GitHub Container Registry (distribution de l'image). La reconnaissance vocale est effectuée au Québec, sur le serveur local |
+| Fournisseurs de services (tiers) | Google Vertex AI (mise en forme : Gemini, région `northamerica-northeast1` — Montréal, Québec), Pocket ID (auto-hébergé), SMTP2GO (courriels), Cloudflare (Turnstile), GitHub Container Registry (distribution de l'image). La reconnaissance vocale est effectuée au Québec, sur le serveur local. **OpenRouter (optionnel, non actif)** : fournisseur cloud de modèle et de STT — son activation exige une décision de conformité (voir § 5) |
 
 ---
 
@@ -178,6 +178,7 @@ Autres flux :
 | Mise en forme de la note (depuis 2026-08-16) | **Audio de la dictée** (trajet principal) ; texte recoupé par le gabarit | Google Vertex AI — Gemini `gemini-2.5-pro` | Québec (région `northamerica-northeast1`, Montréal) — voir § 7.4 |
 | Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (Parakeet local, mode par défaut) |
 | Reconnaissance vocale — fournisseur cloud (Modulate, si sélectionné) | Tranches de dictée (~10 s) | API Modulate (Velma STT) | Traitement hébergé par Modulate — **aucun mode par défaut ne l'envoie** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |
+| OpenRouter — modèle de langage **et/ou** STT (si sélectionné) | Audio de la dictée (note directe **ou** transcription), texte | API OpenRouter (modèle multimodal, ex. `thinkingmachines/inkling-small`) | Traitement hébergé par OpenRouter (cloud) — **aucun mode par défaut ne l'utilise** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |
 | Reconnaissance vocale temps réel — mode « streaming » (`STT_REALTIME_MODE=sse`, **désactivé par défaut**) | Énoncé de la dictée (quelques secondes d'audio) | API Mistral (Voxtral realtime) | Traitement hors Québec — décision de conformité à revalider avant activation (voir § 5). Seul le mode « sse » exporte l'audio ; « vad » reste local |
 | OIDC → Pocket ID | Identité, groupes | `login.dictai.ca` / `login.loki.casa` (auto-hébergé) | Locale |
 | Courriels (notifications compte) | Courriel, lien | SMTP2GO | Traitement américain (vérifier l'entente) |

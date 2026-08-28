@@ -50,7 +50,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence, Tuple
 
 from app import i18n, preferences, runtime_config
-from app.config import settings
+from app.config import OPENROUTER_DEFAULT_STT_MODEL, settings
 
 logger = logging.getLogger(__name__)
 
@@ -562,6 +562,8 @@ def transcribe_payload(
         return _transcribe_modulate(payload, extra_phrase_hints)
     if provider == "custom":
         return _transcribe_custom(payload, extra_phrase_hints, on_progress)
+    if provider == "openrouter":
+        return _transcribe_openrouter(payload, extra_phrase_hints)
     return _transcribe_google(payload, extra_phrase_hints, boost)
 
 
@@ -2246,6 +2248,15 @@ def _transcribe_mistral(payload: AudioPayload, extra_phrase_hints: Optional[str]
                 "Mistral refuse la clé API. Vérifiez-la dans le panneau "
                 "d'administration."
             ) from exc
+        if exc.code == 400 and "invalid_model" in detail:
+            # Le nom existe au catalogue mais pas pour l'endpoint audio (ex.
+            # voxtral-small-latest) : seuls les voxtral-mini-* sont servis.
+            raise TranscriptionError(
+                f"Le modèle « {model} » n'est pas accepté par l'endpoint de "
+                "transcription audio de Mistral : seuls les modèles "
+                "« voxtral-mini-* » le sont. Utilisez « Modèles disponibles » "
+                "dans le panneau pour choisir un modèle valide."
+            ) from exc
         raise TranscriptionError(f"Erreur Mistral ({exc.code}) : {detail}") from exc
     except Exception as exc:
         logger.exception("Échec de l'appel Mistral")
@@ -2784,3 +2795,349 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         "provider": "custom",
         "model": model,
     }
+
+
+# ===========================================================================
+# OpenRouter (modèle multimodal, ex. Thinking Machines Inkling)
+# ===========================================================================
+#
+# OpenRouter ne sert PAS inkling-small derrière /audio/transcriptions
+# (« Model does not exist », vérifié 2026-08-27) : la transcription passe par
+# /chat/completions avec une part audio « input_audio » (base64 brut), comme
+# la note directe — mais bornée à la transcription verbatim. L'audio est le
+# OGG/Opus déjà normalisé par la chaîne commune (silences plafonnés inclus),
+# format que le modèle accepte (vérifié in vivo, 2026-08-27).
+#
+# LA CLÉ EST CELLE DU MODÈLE DE LANGAGE
+# -------------------------------------
+# ``openrouter_api_key`` sert aux deux usages (voir llm._api_key) : un seul
+# compte, un seul champ dans le panneau — répété sous Note → OpenRouter.
+# ===========================================================================
+_OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+
+#: Budget de sortie de la transcription. Inkling raisonne : une large part
+#: peut partir dans la pensée sur un très long passage ; la transcription
+#: elle-même tient en quelques centaines de jetons.
+_OPENROUTER_STT_MAX_TOKENS = 8192
+_OPENROUTER_STT_TIMEOUT = 300
+
+
+def _transcribe_openrouter(payload: AudioPayload, extra_phrase_hints: Optional[str] = None) -> dict:
+    """
+    Transcription par OpenRouter (chat/completions + part audio).
+
+    ``extra_phrase_hints`` n'est pas un vrai mécanisme de vocabulaire : il est
+    passé en consigne au modèle (liste bornée), faute d'API d'adaptation.
+    """
+    import base64 as _b64
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    api_key = runtime_config.value("openrouter_api_key")
+    if not api_key:
+        raise TranscriptionError(
+            "OpenRouter est sélectionné mais aucune clé API n'est renseignée. "
+            "Panneau d'administration → Reconnaissance vocale."
+        )
+
+    model = runtime_config.value("openrouter_stt_model") or OPENROUTER_DEFAULT_STT_MODEL
+    langue = runtime_config.stt_language("openrouter")
+
+    francais = (langue or "").startswith("fr") or (
+        not langue and i18n.uses_french_lexicon(preferences.document_language())
+    )
+    consigne = (
+        "Tu transcribes verbatim, en français, la dictée médicale de cet "
+        "enregistrement. Ne réponds QUE par la transcription exacte des mots "
+        "prononcés : aucune reformulation, aucune correction, aucune omission, "
+        "aucun commentaire."
+    ) if francais else (
+        "Transcribe verbatim, in English, the medical dictation in this "
+        "recording. Reply ONLY with the exact words spoken: no rewording, no "
+        "correction, no omission, no commentary."
+    )
+    termes = _termes_prioritaires(extra_phrase_hints, 40)
+    if termes:
+        consigne += (
+            " Prête une attention particulière à la bonne transcription de ces "
+            "termes médicaux : " + ", ".join(termes) + "."
+        )
+
+    b64 = _b64.b64encode(payload.content).decode("ascii")
+    corps = {
+        "model": model,
+        "temperature": 0,
+        # Greedy sampling : top_p doit valoir 1, sinon le provider Mistral
+        # refuse (« top_p must be 1 when using greedy sampling », vérifié
+        # 2026-08-28 avec mistralai/voxtral-small-24b-2507).
+        "top_p": 1,
+        "messages": [
+            {"role": "system", "content": consigne},
+            {"role": "user", "content": [
+                {"type": "input_audio", "input_audio": {"data": b64, "format": "ogg"}},
+                {"type": "text", "text": (
+                    "Transcris mot pour mot cet enregistrement."
+                    if francais else "Transcribe this recording word for word."
+                )},
+            ]},
+        ],
+        "max_tokens": _OPENROUTER_STT_MAX_TOKENS,
+    }
+
+    logger.info(
+        "Envoi à OpenRouter (STT) : %.2f Mo, %s s facturées, modèle %s, langue %s",
+        len(payload.content) / 1048576,
+        round(payload.effective_seconds, 1) or "?", model, langue or "auto",
+    )
+
+    requete = urllib.request.Request(
+        f"{_OPENROUTER_BASE}/chat/completions",
+        data=_json.dumps(corps).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(requete, timeout=_OPENROUTER_STT_TIMEOUT) as reponse:
+            data = _json.loads(reponse.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = (exc.read() or b"").decode("utf-8", "replace")[:400]
+        logger.error("OpenRouter a refusé la requête (%s) : %s", exc.code, detail)
+        if exc.code in (401, 403):
+            raise TranscriptionError(
+                "OpenRouter refuse la clé API. Vérifiez-la dans le panneau "
+                "d'administration."
+            ) from exc
+        if exc.code == 429:
+            raise TranscriptionError(
+                "OpenRouter a refusé la requête : limite de débit atteinte. "
+                "Patientez quelques instants puis réessayez."
+            ) from exc
+        if exc.code == 400 and (
+            "input_audio" in detail.lower()
+            or "did not match any variant" in detail.lower()
+            or "usermessagecontent" in detail.lower()
+        ):
+            # Le fournisseur derrière ce modèle n'implémente pas la part audio
+            # « input_audio » du schéma OpenAI : le modèle EST audio-capable au
+            # catalogue (modalité « audio »), mais son provider refuse l'audio
+            # sur OpenRouter. Aucun signal du catalogue ne le distingue à
+            # l'avance — seul l'essai le révèle (vérifié 2026-08-28 avec
+            # nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free).
+            logger.warning(
+                "Le modèle %s refuse la part audio (400) : %s", model, detail
+            )
+            raise TranscriptionError(
+                f"Le modèle « {model} » n'accepte pas l'audio via OpenRouter : "
+                "le fournisseur refuse le format audio envoyé. Essayez le "
+                f"modèle par défaut « {OPENROUTER_DEFAULT_STT_MODEL} », ou "
+                "vérifiez que le modèle choisi supporte l'audio."
+            ) from exc
+        raise TranscriptionError(f"Erreur OpenRouter ({exc.code}) : {detail}") from exc
+    except Exception as exc:
+        logger.exception("Échec de l'appel OpenRouter")
+        raise TranscriptionError(f"Erreur OpenRouter : {exc}") from exc
+
+    choix = ((data.get("choices") or [None])[0] or {}).get("message") or {}
+    transcript = str(choix.get("content") or "").strip()
+    if not transcript and not payload.allow_silence:
+        raise TranscriptionError(
+            "Aucune parole n'a été détectée. Vérifiez le micro et le volume "
+            "de l'enregistrement, puis réessayez."
+        )
+
+    return {
+        "transcript": transcript,
+        "confidence": 0.0,
+        "duration_seconds": int(round(payload.duration_seconds)),
+        "segments": 1 if transcript else 0,
+        "provider": "openrouter",
+        "model": model,
+    }
+
+
+# ===========================================================================
+# Liste des modèles de transcription (bouton « Modèles disponibles », onglet
+# Dictée)
+# ===========================================================================
+# Jumeau de ``llm.list_available_models`` côté reconnaissance vocale. Seuls
+# les fournisseurs qui exposent une liste de modèles répondent ; les autres
+# (Google, Soniox, AssemblyAI, Modulate) n'ont rien à interroger — le champ
+# modèle se saisit à la main, comme avant, et le panneau le signale
+# (``supported: false`` côté route).
+
+#: Fournisseurs STT sans API de liste de modèles.
+_STT_NO_MODELS_API = frozenset({"google", "soniox", "assemblyai", "modulate"})
+
+_DEEPGRAM_MODELS_URL = "https://api.deepgram.com/v1/models"
+_COHERE_MODELS_URL = "https://api.cohere.com/v1/models"
+_MISTRAL_MODELS_URL = "https://api.mistral.ai/v1/models"
+
+
+def list_available_stt_models(provider: Optional[str] = None) -> Optional[List[str]]:
+    """
+    Modèles de transcription réellement accessibles avec la clé configurée.
+
+    ``None`` pour un fournisseur sans API de liste — le nom se saisit alors à
+    la main. Une clé manquante ou un refus du fournisseur lèvent une
+    ``TranscriptionError`` (message affichable), comme une transcription.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    provider = provider or runtime_config.value("stt_provider")
+    if provider in _STT_NO_MODELS_API:
+        return None
+
+    def _get_json(url: str, headers: dict, timeout: int = 30) -> dict:
+        requete = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(requete, timeout=timeout) as reponse:
+            return _json.loads(reponse.read().decode("utf-8"))
+
+    try:
+        if provider == "deepgram":
+            api_key = runtime_config.value("deepgram_api_key")
+            if not api_key:
+                raise TranscriptionError("Aucune clé Deepgram enregistrée.")
+            data = _get_json(
+                _DEEPGRAM_MODELS_URL, {"Authorization": f"Token {api_key}"}
+            )
+            return sorted({
+                str(m.get("model_id") or "")
+                for m in (data.get("models") or [])
+                if m.get("type") == "stt" and m.get("model_id")
+            })
+
+        if provider == "cohere":
+            api_key = runtime_config.value("cohere_api_key")
+            if not api_key:
+                raise TranscriptionError("Aucune clé Cohere enregistrée.")
+            try:
+                data = _get_json(
+                    f"{_COHERE_MODELS_URL}?endpoint=transcribe&page_size=100",
+                    {"Authorization": f"Bearer {api_key}"},
+                )
+            except urllib.error.HTTPError as exc:
+                # « transcribe » n'est pas un endpoint accepté par tous les
+                # comptes : on retombe sur la liste complète plutôt que de
+                # bloquer le bouton.
+                if exc.code != 400:
+                    raise
+                data = _get_json(
+                    f"{_COHERE_MODELS_URL}?page_size=100",
+                    {"Authorization": f"Bearer {api_key}"},
+                )
+            return sorted({
+                str(m.get("name") or "")
+                for m in (data.get("models") or [])
+                if m.get("name")
+            })
+
+        if provider == "mistral":
+            api_key = runtime_config.value("mistral_api_key")
+            if not api_key:
+                raise TranscriptionError("Aucune clé Mistral enregistrée.")
+            data = _get_json(
+                _MISTRAL_MODELS_URL,
+                {"Authorization": f"Bearer {api_key}"},
+            )
+            # Seuls les voxtral-mini (hors realtime / tts) sont servis par
+            # l'endpoint de transcription audio : les voxtral-small existent
+            # au catalogue mais y sont refusés (« Invalid model », vérifié
+            # 2026-08-28).
+            return sorted({
+                str(m.get("id") or "")
+                for m in (data.get("data") or [])
+                if m.get("id") and (
+                    "voxtral-mini" in str(m["id"]).lower()
+                    and "realtime" not in str(m["id"]).lower()
+                    and "tts" not in str(m["id"]).lower()
+                )
+            })
+
+        if provider == "openai":
+            api_key = runtime_config.value("openai_api_key")
+            if not api_key:
+                raise TranscriptionError("Aucune clé OpenAI enregistrée.")
+            data = _get_json(
+                f"{_OPENAI_STT_BASE}/models",
+                {"Authorization": f"Bearer {api_key}"},
+            )
+            return sorted({
+                str(m.get("id") or "")
+                for m in (data.get("data") or [])
+                if m.get("id") and (
+                    "whisper" in str(m["id"]).lower()
+                    or "transcribe" in str(m["id"]).lower()
+                )
+            })
+
+        if provider == "custom":
+            base = runtime_config.value("custom_stt_base_url").strip().rstrip("/")
+            if not base:
+                raise TranscriptionError(
+                    "Point de terminaison personnalisé : aucune adresse "
+                    "renseignée (custom_stt_base_url)."
+                )
+            # Clé facultative : un serveur local (ex. Parakeet) n'en demande pas.
+            api_key = runtime_config.value("custom_stt_api_key")
+            data = _get_json(
+                f"{base}/models",
+                {"Authorization": f"Bearer {api_key}"} if api_key else {},
+            )
+            return sorted({
+                str(m.get("id") or "")
+                for m in (data.get("data") or [])
+                if m.get("id")
+            })
+
+        if provider == "openrouter":
+            api_key = runtime_config.value("openrouter_api_key")
+            if not api_key:
+                raise TranscriptionError("Aucune clé OpenRouter enregistrée.")
+            data = _get_json(
+                f"{_OPENROUTER_BASE}/models",
+                {"Authorization": f"Bearer {api_key}"},
+            )
+            noms = []
+            for m in (data.get("data") or []):
+                identifiant = str(m.get("id") or "")
+                if not identifiant:
+                    continue
+                # La transcription passe par une part audio (chat/completions) :
+                # seuls les modèles acceptant l'audio sont proposés. La modalité
+                # est une CHAÎNE chez OpenRouter (« text+image+audio->text ») ou
+                # une liste chez d'autres : on teste le sous-mot « audio », ce
+                # qui couvre les deux formes sans dépendre du séparateur.
+                modality = (m.get("architecture") or {}).get("modality")
+                if modality and "audio" not in str(modality).lower():
+                    continue
+                noms.append(identifiant)
+            return sorted(set(noms))
+
+    except urllib.error.HTTPError as exc:
+        detail = (exc.read() or b"").decode("utf-8", "replace")[:300]
+        logger.error(
+            "%s a refusé la liste des modèles (%s) : %s", provider, exc.code, detail
+        )
+        if exc.code in (401, 403):
+            raise TranscriptionError(
+                f"{provider} refuse la clé API. Vérifiez-la dans le panneau "
+                "d'administration."
+            ) from exc
+        raise TranscriptionError(
+            f"Erreur lors de la liste des modèles ({exc.code}) : {detail}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise TranscriptionError(f"{provider} injoignable : {exc}") from exc
+    except TranscriptionError:
+        raise
+    except Exception as exc:
+        logger.exception("Échec de la liste des modèles (%s)", provider)
+        raise TranscriptionError(f"Erreur lors de la liste des modèles : {exc}") from exc
+
+    raise TranscriptionError(f"Fournisseur de reconnaissance inconnu : {provider}")

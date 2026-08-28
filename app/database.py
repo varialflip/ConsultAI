@@ -1899,6 +1899,64 @@ def migrate_general_prompt_antecedents_hospitalisation_placement(db: Session) ->
     return touches
 
 
+#: Empreintes des consignes générales LIVRÉES avant l'ajout du § 2.0
+#: « l'erreur de reconnaissance est phonétique, pas une faute de frappe »
+#: (2026-08-28). Même mécanique que les migrations précédentes : on ne remplace
+#: la valeur en base que si elle est encore EXACTEMENT le défaut livré, pour ne
+#: jamais écraser une consigne personnalisée. Vérifié le 2026-08-28 contre
+#: ``default_prompts`` : la copie en base des deux langues était strictement
+#: identique au module avant l'édition.
+_OLD_GENERAL_PROMPT_SHA_PHONETIC = {
+    "general_prompt_fr": "3540a19fde206b533eb96497ef7a84f50c5da81125495b8e4c9494d280bba045",
+    "general_prompt_en": "55d1446373714625d05218895a3bc914e3065e792e4cae3a024313338ca32bec",
+}
+
+
+def migrate_general_prompt_phonetic_origin(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE le § 2.0 « l'erreur de
+    reconnaissance est phonétique, pas une faute de frappe ».
+
+    (2026-08-28 : les modèles traitent la transcription comme un texte tapé et
+    cherchent des fautes de frappe, alors que les erreurs de la reconnaissance
+    vocale sont phonétiques — homophones souvent parfaitement orthographiés —
+    et qu'une correction est un rétablissement du mot dicté, pas un ajout
+    d'information.) La consigne générale est éditable et vit en base : corriger
+    le module seul laisserait l'installation en service avec l'ancien texte.
+    Comme pour les migrations précédentes, la valeur n'est remplacée que si elle
+    est encore EXACTEMENT le défaut livré (comparaison par empreinte) ; une
+    consigne personnalisée est laissée intacte et signalée au journal.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA_PHONETIC.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : migration du § 2.0 "
+                "« erreurs phonétiques » ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : § 2.0 « l'erreur de reconnaissance "
+            "est phonétique, pas une faute de frappe » ajouté.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Ancienne phrase de regroupement des médicaments LIVRÉE dans les gabarits
 #: avant la reformulation « indication dictée ou cliniquement évidente ».
 #: Même mécanique que les migrations de la consigne générale : on ne remplace
@@ -2382,6 +2440,7 @@ def init_db() -> None:
         migrate_general_prompt_plan_first_person(db)
         migrate_general_prompt_impression_plan_no_omission(db)
         migrate_general_prompt_antecedents_hospitalisation_placement(db)
+        migrate_general_prompt_phonetic_origin(db)
         migrate_template_med_grouping(db)
         migrate_template_suivi_resume_stays(db)
         migrate_template_suivi_resume_treatment_stays(db)

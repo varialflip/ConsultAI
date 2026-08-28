@@ -56,6 +56,12 @@ DEFAULT_RATES: Tuple[Tuple[str, str, str, str, float, str], ...] = (
     ("qwen_omni", "", "llm", "token_input_1m", 0.50),
     ("qwen_omni", "", "llm", "token_output_1m", 1.50),
     ("qwen_omni", "", "llm", "token_audio_input_1m", 1.50),
+    # OpenRouter — inkling-small (Thinking Machines) : l'audio entre au même
+    # tarif que le texte (facturé comme jetons d'entrée multimodaux).
+    ("openrouter", "", "llm", "token_input_1m", 0.45),
+    ("openrouter", "", "llm", "token_input_cached_1m", 0.10),
+    ("openrouter", "", "llm", "token_output_1m", 1.20),
+    ("openrouter", "", "llm", "token_audio_input_1m", 0.45),
 
     # --- STT (audio → texte) -------------------------------------------------
     # Facturés à la durée : google, deepgram, assemblyai, soniox, modulate.
@@ -71,6 +77,10 @@ DEFAULT_RATES: Tuple[Tuple[str, str, str, str, float, str], ...] = (
     ("cohere", "", "stt", "token_input_1m", 0.50),
     ("mistral", "", "stt", "token_input_1m", 2.00),
     ("openai", "", "stt", "audio_minute", 0.006),
+    # OpenRouter STT : la transcription se facture en jetons audio, mais
+    # log_stt_usage ne connaît que la durée — placeholder par minute, à
+    # corriger depuis le panneau (Statistiques) si la précision compte.
+    ("openrouter", "", "stt", "audio_minute", 0.001),
 )
 
 

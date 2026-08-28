@@ -2,7 +2,7 @@
 
 Dépôt source de vérité de l'application **ConsultAI** (dictée de consultations
 cliniques : STT + LLM, audio envoyé directement au modèle en option — Gemini,
-Qwen Omni, point de terminaison personnalisé). Branché sur
+Qwen Omni, point de terminaison personnalisé, OpenRouter). Branché sur
 `github.com/varialflip/ConsultAI` (branche `main`), publié via CI sur
 `ghcr.io/varialflip/consultai`, déployé par la pile `/opt/dictai` (voir
 `/opt/dictai/AGENTS.md` pour le déploiement).
@@ -65,9 +65,9 @@ immédiatement, sans tag ni pull.
 Tout changement de code (release **ou pas**) doit garder à jour, **dans le
 même commit** :
 
-- **`README.md`** — fonctionnalités, fournisseurs STT/LLM (neuf vocaux, sept
-  modèles — audio direct aux multimodaux), configuration, procédures,
-  structure. Aucune nouveauté n'est ajoutée sans y être décrite.
+- **`README.md`** — fonctionnalités, fournisseurs STT/LLM (dix vocaux, huit
+  modèles — audio direct aux multimodaux, dont OpenRouter), configuration,
+  procédures, structure. Aucune nouveauté n'est ajoutée sans y être décrite.
 - **`CHANGELOG.md`** — entrée datée, copiée dans l'image et affichée sur la
   **page de connexion** (version logicielle + « Nouveautés » des 7 derniers
   jours). Les entrées sont **condensées par date quand c'est possible** : la

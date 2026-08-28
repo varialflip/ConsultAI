@@ -38,8 +38,15 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
+import httpx
+
 from app import i18n, runtime_config
-from app.config import COHERE_DEFAULT_LLM_MODEL, MISTRAL_DEFAULT_LLM_MODEL, settings
+from app.config import (
+    COHERE_DEFAULT_LLM_MODEL,
+    MISTRAL_DEFAULT_LLM_MODEL,
+    OPENROUTER_DEFAULT_LLM_MODEL,
+    settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +280,7 @@ def active_provider() -> str:
 #: liste à tenir à jour pour étendre « Joindre l'audio » / « Contourner le
 #: STT » à un futur fournisseur — ``audio_settings`` s'en sert pour tout le
 #: reste (panneau, dictée, génération).
-_AUDIO_CAPABLE_PROVIDERS = ("gemini", "qwen_omni", "custom")
+_AUDIO_CAPABLE_PROVIDERS = ("gemini", "qwen_omni", "custom", "openrouter")
 
 
 def audio_settings(provider: Optional[str] = None) -> Dict[str, object]:
@@ -322,6 +329,7 @@ _MODEL_KEYS = {
     "mistral": "mistral_llm_model",
     "qwen_omni": "qwen_omni_model",
     "custom": "custom_llm_model",
+    "openrouter": "openrouter_model",
 }
 
 #: Réglage « température », par fournisseur.
@@ -333,6 +341,7 @@ _TEMPERATURE_KEYS = {
     "mistral": "mistral_llm_temperature",
     "qwen_omni": "qwen_omni_temperature",
     "custom": "custom_llm_temperature",
+    "openrouter": "openrouter_temperature",
 }
 
 
@@ -392,6 +401,7 @@ def _missing_key(provider: str) -> GenerationError:
         "openai": "OpenAI", "cohere": "Cohere", "mistral": "Mistral AI",
         "qwen_omni": "Qwen Omni",
         "custom": "du point de terminaison personnalisé",
+        "openrouter": "OpenRouter",
     }
     return GenerationError(
         f"Aucune clé API {labels.get(provider, provider)} n'est configurée. "
@@ -405,6 +415,28 @@ def _missing_key(provider: str) -> GenerationError:
 #: d'une note longue.
 _CUSTOM_LLM_TIMEOUT_SECONDS = 300
 
+#: Lecture d'une réponse EN CONTINU : le timeout global (300 s) borne la
+#: requête entière, pas l'attente entre deux morceaux. Au-delà de ce silence
+#: entre deux lectures, le flux est déclaré bloqué — fournisseur en panne, ou
+#: modèle qui se fige en pleine réflexion (observé avec z-ai/glm-4.7-flash :
+#: l'écran restait sur « Raisonnement du modèle… » sans jamais repartir, le
+#: socket ne recevant plus rien pendant des minutes).
+_STREAM_READ_TIMEOUT_SECONDS = 120
+
+#: Sans AUCUN progrès (texte ou raisonnement) pendant ce délai, la génération
+#: est déclarée bloquée, même si le fournisseur continue d'émettre des
+#: événements vides (coupure silencieuse en plein raisonnement).
+_STREAM_STALL_SECONDS = 90
+
+#: Message de blocage du flux, commun au chien de garde et au ReadTimeout.
+def _erreur_flux_bloque(provider: str, model: str) -> "GenerationError":
+    return GenerationError(
+        f"{provider} n'a plus rien envoyé pendant la génération — le modèle "
+        f"« {model} » semble bloqué en pleine réflexion. Réessayez, ou réduisez "
+        "l'effort de raisonnement dans le panneau si le modèle réfléchit très "
+        "longtemps."
+    )
+
 
 def get_client(provider: Optional[str] = None):
     """Client du fournisseur demandé, mis en cache."""
@@ -417,6 +449,8 @@ def get_client(provider: Optional[str] = None):
         base_url = runtime_config.value("custom_llm_base_url").strip()
     elif provider == "qwen_omni":
         base_url = runtime_config.value("qwen_omni_base_url").strip()
+    elif provider == "openrouter":
+        base_url = "https://openrouter.ai/api/v1"
     else:
         base_url = ""
     cache_key = (provider, key, base_url)
@@ -499,6 +533,18 @@ def get_client(provider: Optional[str] = None):
         except ImportError as exc:  # pragma: no cover
             raise GenerationError("La bibliothèque openai n'est pas installée.") from exc
         client = openai.OpenAI(api_key=key, base_url=base_url)
+
+    elif provider == "openrouter":
+        if not key:
+            raise _missing_key(provider)
+        try:
+            import openai
+        except ImportError as exc:  # pragma: no cover
+            raise GenerationError("La bibliothèque openai n'est pas installée.") from exc
+        client = openai.OpenAI(
+            api_key=key, base_url="https://openrouter.ai/api/v1",
+            timeout=_CUSTOM_LLM_TIMEOUT_SECONDS,
+        )
 
     else:
         raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
@@ -617,9 +663,16 @@ def _clamp_max_tokens(provider: str, model: str, requested: int) -> int:
 #: budget trop bas produit une réponse vide (« finish_reason: length »).
 _CUSTOM_MAX_TOKENS_DEFAUT = 32768
 
+#: Budget de sortie par défaut d'OpenRouter. Inkling (Thinking Machines)
+#: raisonne lui aussi : le budget de Gemini (8192) suffit pour une note courte,
+#: mais une dictée longue le sature avant la fin du texte — même mécanique de
+#: relance qu'au point de terminaison personnalisé (voir ``generate_note_stream``).
+_OPENROUTER_MAX_TOKENS_DEFAUT = 32768
+
 #: Plafond de la relance automatique (raisonnement débordé) — voir
 #: ``generate_note_stream``.
 _CUSTOM_MAX_TOKENS_PLAFOND = 65536
+_OPENROUTER_MAX_TOKENS_PLAFOND = 65536
 
 #: Budget de sortie par défaut pour Cohere. La famille command-a raisonne elle
 #: aussi (elle l'a déjà montré : une note vide « MAX_TOKENS » avec le budget de
@@ -653,6 +706,25 @@ def _custom_reasoning_effort() -> Optional[str]:
     ``reasoning.effort`` — sur v4, low/minimal augmentent la pensée.
     """
     effort = (runtime_config.value("custom_llm_reasoning_effort") or "").strip().lower()
+    return effort if effort in ("none", "minimal", "low", "medium", "high") else None
+
+
+def _openrouter_max_tokens() -> int:
+    """Budget de sortie du fournisseur OpenRouter (raisonnement + texte)."""
+    valeur = runtime_config.value("openrouter_llm_max_tokens").strip()
+    try:
+        entier = int(float(valeur))
+    except (TypeError, ValueError):
+        return _OPENROUTER_MAX_TOKENS_DEFAUT
+    return entier if entier > 0 else _OPENROUTER_MAX_TOKENS_DEFAUT
+
+
+def _openrouter_reasoning_effort() -> Optional[str]:
+    """
+    Effort de raisonnement OpenRouter — même sémantique que
+    ``_custom_reasoning_effort``, réglé sous le même panneau.
+    """
+    effort = (runtime_config.value("openrouter_llm_reasoning_effort") or "").strip().lower()
     return effort if effort in ("none", "minimal", "low", "medium", "high") else None
 
 
@@ -713,6 +785,8 @@ def complete(
     provider = provider or active_provider()
     if provider == "custom":
         max_tokens = max(max_tokens, _custom_max_tokens())
+    elif provider == "openrouter":
+        max_tokens = max(max_tokens, _openrouter_max_tokens())
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
     if provider == "gemini":
         return _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio)
@@ -726,8 +800,8 @@ def complete(
         return _complete_mistral(system, user, model, temperature, max_tokens, json_mode)
     if provider == "qwen_omni":
         return _complete_qwen_omni(system, user, model, temperature, max_tokens, json_mode, audio=audio)
-    if provider == "custom":
-        return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio)
+    if provider in ("custom", "openrouter"):
+        return _complete_openai(system, user, model, temperature, max_tokens, json_mode, provider=provider, audio=audio)
     raise GenerationError(f"Fournisseur de modèle inconnu : {provider}")
 
 
@@ -760,6 +834,11 @@ def _translate_error(provider: str, model: str, exc: Exception) -> GenerationErr
         )
     if "credit" in lowered or "billing" in lowered or "quota" in lowered:
         return GenerationError(f"Problème de facturation côté {provider} : {message}")
+    if "read timeout" in lowered or "timed out" in lowered:
+        # Le fournisseur a cessé d'envoyer pendant le flux (voir le chien de
+        # garde ``_STREAM_STALL_SECONDS``) : ce n'est pas une erreur de clé ni
+        # de modèle, mais un blocage du modèle en pleine génération.
+        return _erreur_flux_bloque(provider, model)
     return GenerationError(f"Erreur {provider} : {message}")
 
 
@@ -1770,6 +1849,7 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         "openai": "OpenAI",
         "custom": "Point de terminaison personnalisé",
         "qwen_omni": "Qwen Omni",
+        "openrouter": "OpenRouter",
     }.get(provider) or "Point de terminaison personnalisé"
 
     if audio is not None:
@@ -1788,6 +1868,12 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         "temperature": temperature,
         "stream": True,
         "stream_options": {"include_usage": True},
+        # Un fournisseur qui cesse d'envoyer (blocage en pleine réflexion) doit
+        # se manifester vite : on borne l'attente entre deux morceaux, le
+        # timeout global du client (300 s) restant pour la connexion.
+        "timeout": httpx.Timeout(
+            connect=30.0, read=_STREAM_READ_TIMEOUT_SECONDS, write=60.0, pool=30.0,
+        ),
     }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
@@ -1796,8 +1882,11 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
             # y gaspille des jetons sur cette tâche mécanique.
             kwargs["enable_thinking"] = False
 
-    if provider == "custom":
-        effort = _custom_reasoning_effort()
+    if provider in ("custom", "openrouter"):
+        effort = (
+            _custom_reasoning_effort() if provider == "custom"
+            else _openrouter_reasoning_effort()
+        )
         if effort and not json_mode:
             # Modèles à raisonnement (DeepSeek…) : effort demandé, s'il est
             # honoré par le point de terminaison (OpenRouter ``reasoning.effort``).
@@ -1844,8 +1933,20 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
     full: List[str] = []
     finish_reason = ""
     usage_data = None
+    # Chien de garde anti-blocage : si le fournisseur n'émet PLUS RIEN de
+    # signifiant (texte, raisonnement, fin, usage) pendant ``_STREAM_STALL_SECONDS``,
+    # la génération est déclarée bloquée. Sans lui, une coupure silencieuse en
+    # plein raisonnement (observée avec glm-4.7-flash) figeait l'écran sur
+    # « Raisonnement du modèle… » jusqu'au timeout de lecture (5 min).
+    dernier_progres = time.monotonic()
     try:
         for chunk in stream:
+            if time.monotonic() - dernier_progres > _STREAM_STALL_SECONDS:
+                logger.error(
+                    "%s (%s) : flux bloqué — rien de reçu depuis %d s",
+                    label, model, _STREAM_STALL_SECONDS,
+                )
+                raise _erreur_flux_bloque(provider, model)
             choice = (getattr(chunk, "choices", None) or [None])[0]
             # Streaming : le SDK OpenAI expose le texte dans ``choice.delta``
             # (un ``ChoiceDelta``), pas dans ``choice.message`` qui n'existe que
@@ -1865,14 +1966,20 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
                 )
                 if thinking:
                     on_thought(str(thinking))
-            if delta_content:
-                full.append(delta_content)
-                yield delta_content
+            else:
+                thinking = ""
             fr = getattr(choice, "finish_reason", "") or ""
             if fr:
                 finish_reason = str(fr)
             if getattr(chunk, "usage", None) is not None:
                 usage_data = chunk.usage
+            if delta_content or thinking or fr or usage_data is not None:
+                dernier_progres = time.monotonic()
+            if delta_content:
+                full.append(delta_content)
+                yield delta_content
+    except GenerationError:
+        raise
     except Exception as exc:
         logger.exception("Échec du flux %s", label)
         raise _translate_error(label, model, exc) from exc
@@ -1946,6 +2053,8 @@ def complete_stream(
     provider = provider or active_provider()
     if provider == "custom":
         max_tokens = max(max_tokens, _custom_max_tokens())
+    elif provider == "openrouter":
+        max_tokens = max(max_tokens, _openrouter_max_tokens())
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
 
     if provider == "gemini":
@@ -1954,8 +2063,8 @@ def complete_stream(
         gen = _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider == "openai":
         gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
-    elif provider == "custom":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="custom", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
+    elif provider in ("custom", "openrouter"):
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider=provider, audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider == "qwen_omni":
         gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider in ("cohere", "mistral"):
@@ -2031,12 +2140,22 @@ def generate_note_stream(
     )
     audio_to_send = audio if (audio is not None and provider in _AUDIO_CAPABLE_PROVIDERS) else None
 
+    # En contournement du STT, une transcription conservée pour l'affichage
+    # (``<fournisseur>_bypass_stt_keep_transcript``) devient un GUIDE pour le
+    # modèle : l'audio reste la source autoritaire, mais le texte en soutien
+    # réduit les omissions d'un modèle qui écouterait seul un enregistrement
+    # long. Sans transcription conservée, l'audio reste la seule source.
+    transcript_guide = audio_only and bool(transcript_clean)
+
     user_prompt = build_user_prompt(
-        "" if audio_only else transcript,
+        transcript if (not audio_only or transcript_guide) else "",
         layout_format, context_lines, extra_instructions, langue,
     )
     if audio_to_send is not None:
-        note = _AUDIO_PRIMARY_NOTE if audio_only else _AUDIO_CROSSCHECK_NOTE
+        if audio_only:
+            note = _AUDIO_GUIDED_NOTE if transcript_guide else _AUDIO_PRIMARY_NOTE
+        else:
+            note = _AUDIO_CROSSCHECK_NOTE
         user_prompt = f"{user_prompt}\n\n{note[langue]}"
 
     t0 = time.monotonic()
@@ -2059,6 +2178,10 @@ def generate_note_stream(
     if provider == "custom":
         budget = _custom_max_tokens()
         budget_plafond = _CUSTOM_MAX_TOKENS_PLAFOND
+        tentatives = 3
+    elif provider == "openrouter":
+        budget = _openrouter_max_tokens()
+        budget_plafond = _OPENROUTER_MAX_TOKENS_PLAFOND
         tentatives = 3
     elif provider == "cohere":
         budget = _COHERE_MAX_TOKENS_DEFAUT
@@ -2145,7 +2268,7 @@ def generate_note_stream(
         "truncated": result.truncated,
         "usage": result.usage,
         "audio_used": audio_to_send is not None,
-        "transcript_used": not audio_only,
+        "transcript_used": not audio_only or transcript_guide,
         "elapsed_seconds": round(elapsed_seconds, 2),
     }
 
@@ -2247,6 +2370,7 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
     client = get_client(provider)
     label = {
         "openai": "OpenAI",
+        "openrouter": "OpenRouter",
     }.get(provider) or "Point de terminaison personnalisé"
     if audio is not None:
         audio_bytes, mime_type = audio
@@ -2265,8 +2389,11 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
     }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
-    if provider == "custom":
-        effort = _custom_reasoning_effort()
+    if provider in ("custom", "openrouter"):
+        effort = (
+            _custom_reasoning_effort() if provider == "custom"
+            else _openrouter_reasoning_effort()
+        )
         if effort and not json_mode:
             # ``reasoning`` passe par ``extra_body`` : le SDK OpenAI refuse les
             # kwargs inconnus (cf. ``_stream_openai_like``). Jamais en mode JSON
@@ -2496,6 +2623,36 @@ _AUDIO_PRIMARY_NOTE = {
     ),
 }
 
+#: Utilisé quand le STT a été contourné MAIS une transcription a été conservée
+#: pour l'affichage (``<fournisseur>_bypass_stt_keep_transcript``) : l'audio
+#: reste la source autoritaire, la transcription n'est qu'un guide de lecture.
+#: Un modèle qui écoute seul un enregistrement long peut omettre des éléments
+#: dictés (constaté sur des notes réelles) ; lui donner la transcription en
+#: soutien réduit ces omissions tout en gardant l'audio pour lever les doutes
+#: (homophonies, noms propres, doses).
+_AUDIO_GUIDED_NOTE = {
+    "fr": (
+        "LA RECONNAISSANCE VOCALE A ÉTÉ CONTOURNÉE, MAIS UNE TRANSCRIPTION "
+        "AUTOMATIQUE DE LA DICTÉE EST FOURNIE EN GUIDE ci-dessous (elle sert "
+        "normalement à l'affichage pendant l'enregistrement). L'AUDIO JOINT À "
+        "CETTE REQUÊTE RESTE LA SOURCE AUTORITAIRE : écoute-le d'abord, puis "
+        "reviens sur la transcription pour vérifier qu'aucun élément dicté "
+        "n'a été oublié. Toute information présente dans l'audio, même absente "
+        "de la transcription (ou mal transcrite), figure dans la note. En cas "
+        "de divergence entre l'audio et la transcription, l'audio fait foi."
+    ),
+    "en": (
+        "SPEECH RECOGNITION WAS BYPASSED, BUT AN AUTOMATIC TRANSCRIPT OF THE "
+        "DICTATION IS PROVIDED AS A GUIDE below (it normally serves the on-"
+        "screen display during recording). THE AUDIO ATTACHED TO THIS REQUEST "
+        "REMAINS THE AUTHORITATIVE SOURCE: listen to it first, then come back "
+        "to the transcript to make sure no dictated item was missed. Any "
+        "information present in the audio, even absent from the transcript (or "
+        "mis-transcribed), belongs in the note. Where the audio and the "
+        "transcript disagree, the audio prevails."
+    ),
+}
+
 
 def generate_note(
     transcript: str,
@@ -2516,11 +2673,13 @@ def generate_note(
     avec tout autre fournisseur il est silencieusement ignoré (voir
     ``complete``). Dès que ce même fournisseur a activé le contournement du
     STT (``<fournisseur>_bypass_stt``) ET qu'un audio est fourni, l'audio
-    devient la SEULE source envoyée au modèle — que la transcription soit
-    vide ou non. Une transcription conservée pour l'affichage (voir
-    ``<fournisseur>_bypass_stt_keep_transcript``) reste donc visible à
-    l'écran mais n'est jamais transmise : c'est le comportement documenté
-    du réglage, pas seulement le cas où rien n'a été transcrit.
+    devient la source AUTORITAIRE — que la transcription soit vide ou non.
+    Une transcription conservée pour l'affichage (voir
+    ``<fournisseur>_bypass_stt_keep_transcript``) reste visible à l'écran ET
+    accompagne la note comme guide (`_AUDIO_GUIDED_NOTE`) : le modèle écoute
+    l'audio d'abord puis relit la transcription pour ne rien omettre. Sans
+    transcription conservée, l'audio est la seule source
+    (`_AUDIO_PRIMARY_NOTE`).
 
     Lève ``GenerationError`` avec un message en français prêt à afficher.
     """
@@ -2550,17 +2709,22 @@ def generate_note(
     )
     audio_to_send = audio if (audio is not None and provider in _AUDIO_CAPABLE_PROVIDERS) else None
 
-    # En audio seul, la transcription — même non vide (voir keep_transcript
-    # ci-dessus) — reste hors du prompt : elle n'existe que pour l'affichage
-    # à l'écran pendant la dictée, jamais comme entrée du modèle. Sans ce
-    # blanc, _AUDIO_PRIMARY_NOTE (« aucune transcription n'est fournie »)
-    # mentirait dès qu'une transcription conservée traînait encore.
+    # En contournement du STT, une transcription conservée pour l'affichage
+    # (``<fournisseur>_bypass_stt_keep_transcript``) devient un GUIDE pour le
+    # modèle : l'audio reste la source autoritaire, mais le texte en soutien
+    # réduit les omissions d'un modèle qui écouterait seul un enregistrement
+    # long. Sans transcription conservée, l'audio reste la seule source.
+    transcript_guide = audio_only and bool(transcript_clean)
+
     user_prompt = build_user_prompt(
-        "" if audio_only else transcript,
+        transcript if (not audio_only or transcript_guide) else "",
         layout_format, context_lines, extra_instructions, langue,
     )
     if audio_to_send is not None:
-        note = _AUDIO_PRIMARY_NOTE if audio_only else _AUDIO_CROSSCHECK_NOTE
+        if audio_only:
+            note = _AUDIO_GUIDED_NOTE if transcript_guide else _AUDIO_PRIMARY_NOTE
+        else:
+            note = _AUDIO_CROSSCHECK_NOTE
         user_prompt = f"{user_prompt}\n\n{note[langue]}"
 
     t0 = time.monotonic()
@@ -2598,11 +2762,10 @@ def generate_note(
         "truncated": result.truncated,
         "usage": result.usage,
         "audio_used": audio_to_send is not None,
-        # Faux dès que le contournement du STT est actif et qu'un audio est
-        # fourni — y compris avec une transcription conservée pour
-        # l'affichage : elle n'a alors pris aucune part dans cette note (voir
-        # audio_only ci-dessus).
-        "transcript_used": not audio_only,
+        # Vrai quand la transcription a pris part à la note : hors contournement
+        # du STT, ou en contournement avec une transcription conservée fournie
+        # en guide (``transcript_guide``). Faux seulement en audio pur.
+        "transcript_used": not audio_only or transcript_guide,
         "elapsed_seconds": round(elapsed_seconds, 2),
     }
 
@@ -2745,25 +2908,35 @@ def extract_metadata(transcript: str, note_markdown: str = "") -> Dict[str, str]
     if note_markdown.strip():
         parts.append(f"{etiquettes[1]}\n<<<NOTE\n{note_markdown.strip()[:4000]}\nNOTE>>>")
 
-    try:
-        result = complete(
-            _METADATA_PROMPTS[langue],
-            "\n\n".join(parts),
-            # Le modèle rapide : la tâche est triviale et se paie au jeton,
-            # même quand la note est générée avec un modèle « pro ».
-            model=fast_model(),
-            temperature=0.0,
-            # Large au regard des ~150 jetons du JSON attendu : sur les modèles
-            # récents, le raisonnement interne est facturé sur cette même
-            # limite. Trop juste, elle laisse sortir un JSON coupé au milieu
-            # d'une chaîne.
-            max_tokens=2048,
-            json_mode=True,
-        )
-        payload = _parse_metadata_json(result)
-    except Exception as exc:
-        logger.warning("Extraction des métadonnées impossible : %s", exc)
-        return _coerce_metadata(None)
+    # Le modèle rapide : la tâche est triviale et se paie au jeton, même quand
+    # la note est générée avec un modèle « pro ». Une retentative si la réponse
+    # revient vide ou illisible : les fournisseurs laissent parfois partir un
+    # appel muet (observé avec moonshotai/kimi-k3 et z-ai/glm-4.7, 2026-08-28)
+    # sans qu'il y ait de quoi faire à part réessayer.
+    modele = fast_model()
+    payload = None
+    for tentative in range(2):
+        try:
+            result = complete(
+                _METADATA_PROMPTS[langue],
+                "\n\n".join(parts),
+                model=modele,
+                temperature=0.0,
+                # Large au regard des ~150 jetons du JSON attendu : sur les modèles
+                # récents, le raisonnement interne est facturé sur cette même
+                # limite. Trop juste, elle laisse sortir un JSON coupé au milieu
+                # d'une chaîne.
+                max_tokens=2048,
+                json_mode=True,
+            )
+            payload = _parse_metadata_json(result)
+            break
+        except Exception as exc:
+            payload = None
+            logger.warning(
+                "Extraction des métadonnées impossible (%s, tentative %d) : %s",
+                modele, tentative + 1, exc,
+            )
 
     metadata = _coerce_metadata(payload)
     # On journalise les champs trouvés, jamais leur contenu : les journaux du

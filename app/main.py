@@ -12,7 +12,8 @@ Routes
     GET    /api/me                       identité de l'utilisateur courant
     PUT    /api/me/language              langue de l'utilisateur courant
     GET    /api/config                   configuration visible côté client
-    GET    /api/models                   modèles Gemini accessibles (diagnostic)
+    GET    /api/models                   modèles du fournisseur LLM accessibles (diagnostic)
+    GET    /api/stt/models                modèles de transcription accessibles (diagnostic)
 
     GET    /api/templates                liste des gabarits (partagés + les miens)
     POST   /api/templates                création d'un gabarit personnel
@@ -104,7 +105,7 @@ from app.database import (
 )
 from app.dictation import DictationError, SequenceMismatch, SessionNotFound
 from app.llm import GenerationError, extract_metadata, list_available_models
-from app.stt import TranscriptionError, transcribe
+from app.stt import TranscriptionError, list_available_stt_models, transcribe
 
 configure_logging()
 logger = logging.getLogger("consultai")
@@ -1483,6 +1484,39 @@ async def api_models(request: Request, provider: Optional[str] = None):
         "configured_available": configured in models,
         "fast_model": rapide,
         "fast_model_available": (not rapide) or rapide in models,
+        "models": models,
+    }
+
+
+@app.get("/api/stt/models")
+async def api_stt_models(request: Request, provider: Optional[str] = None):
+    """
+    Modèles de transcription réellement accessibles avec la clé configurée.
+
+    Jumeau de /api/models pour l'onglet Dictée : c'est la source du bouton
+    « Modèles disponibles » quand il interroge un fournisseur de
+    reconnaissance vocale. ``supported`` est false pour un fournisseur sans
+    API de liste (Google, Soniox, AssemblyAI, Modulate) — le nom du modèle se
+    saisit alors à la main.
+    """
+    current_user(request)
+    target = provider or runtime_config.value("stt_provider")
+    try:
+        models = await run_in_threadpool(list_available_stt_models, target)
+    except TranscriptionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if models is None:
+        return {
+            "provider": target,
+            "supported": False,
+            "models": [],
+        }
+    configured = runtime_config.stt_model(target)
+    return {
+        "provider": target,
+        "supported": True,
+        "configured": configured,
+        "configured_available": (not configured) or configured in models,
         "models": models,
     }
 
@@ -3002,6 +3036,12 @@ async def api_generate(
     # Rubrique « Corrections et éléments à valider », retirée du corps : elle
     # suit la note et meurt avec le brouillon, comme ``verification_json``.
     consultation.corrections_markdown = result["corrections"]
+    # Un audit « Validation » encore présent viendrait de la PRÉCÉDENTE note
+    # (même précaution que ``corrections_markdown``) : toute régénération le
+    # réinitialise ici — la base ne porte jamais un audit périmé pendant la
+    # fenêtre où une relecture client (poll de complétion, réouverture) ou un
+    # rechargement de page pourrait l'afficher à mauvais escient.
+    consultation.verification_json = None
     # Toujours écrasée, y compris sur une régénération : l'interface ne montre
     # plus jamais cette valeur qu'à l'ouverture (voir loadDraft côté JS) et
     # prévient déjà l'usager AVANT l'appel si des modifications seraient

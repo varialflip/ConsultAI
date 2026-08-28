@@ -84,6 +84,13 @@ def _parse_networks(entries: List[str]) -> List[ipaddress._BaseNetwork]:
 #: « command-a » est la famille que Cohere positionne comme la plus performante.
 COHERE_DEFAULT_LLM_MODEL = "command-a-03-2025"
 MISTRAL_DEFAULT_LLM_MODEL = "mistral-large-latest"
+#: OpenRouter — modèle multimodal par défaut (audio → texte), open-weight.
+#: Inkling Small accepte l'audio en entrée (note directe, STT) et raisonne.
+OPENROUTER_DEFAULT_LLM_MODEL = "thinkingmachines/inkling-small"
+#: Modèle STT par défaut du fournisseur OpenRouter — un seul et même modèle
+#: multimodal, interrogé en « chat » avec une part audio (OpenRouter ne
+#: l'expose pas derrière /audio/transcriptions).
+OPENROUTER_DEFAULT_STT_MODEL = "thinkingmachines/inkling-small"
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +279,11 @@ class Settings:
     openai_api_key: str = ""
     qwen_omni_api_key: str = ""
     qwen_omni_base_url: str = ""
+
+    # --- OpenRouter (modèles multimodaux open-weight, ex. Inkling) ---
+    # Une seule clé pour les deux usages : la note (audio ou texte) et la
+    # transcription STT passent par le même compte et le même modèle.
+    openrouter_api_key: str = ""
 
     # --- Enregistrements conservés avec les brouillons ---
     audio_dir: str = "/data/audio"
@@ -478,6 +490,7 @@ class Settings:
             openai_api_key=_env("OPENAI_API_KEY"),
             qwen_omni_api_key=_env("QWEN_OMNI_API_KEY"),
             qwen_omni_base_url=_env("QWEN_OMNI_BASE_URL"),
+            openrouter_api_key=_env("OPENROUTER_API_KEY"),
         )
 
     # -- Diagnostic de démarrage --------------------------------------------
@@ -577,13 +590,13 @@ class Settings:
 
         if not (self.gemini_api_key or self.google_cloud_project
                 or self.anthropic_api_key or self.openai_api_key
-                or self.mistral_api_key):
+                or self.mistral_api_key or self.openrouter_api_key):
             problems.append(
                 "Aucune clé de modèle de langage dans l'environnement "
                 "(GEMINI_API_KEY, GOOGLE_CLOUD_PROJECT, ANTHROPIC_API_KEY, "
-                "OPENAI_API_KEY, MISTRAL_API_KEY) — renseignez-en une ici ou "
-                "dans le panneau d'administration, sinon la mise en forme "
-                "échouera."
+                "OPENAI_API_KEY, MISTRAL_API_KEY, OPENROUTER_API_KEY) — "
+                "renseignez-en une ici ou dans le panneau d'administration, "
+                "sinon la mise en forme échouera."
             )
 
         return problems

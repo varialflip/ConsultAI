@@ -5,11 +5,11 @@ médecin dicte, l'application transcrit, un modèle de langage met en forme selo
 un gabarit, le médecin relit et exporte.
 
 * Interface **française ou anglaise**, au choix de chaque usager.
-* **Neuf** services de reconnaissance vocale et **sept** fournisseurs de
+* **Dix** services de reconnaissance vocale et **huit** fournisseurs de
   modèle de langage, commutables depuis le panneau d'administration sans
   reconstruire l'image. Plusieurs modèles (Gemini, Qwen Omni, point de
-  terminaison personnalisé) peuvent aussi recevoir **l'audio directement**,
-  sans transcription séparée.
+  terminaison personnalisé, OpenRouter) peuvent aussi recevoir **l'audio
+  directement**, sans transcription séparée.
 * Authentification **OpenID Connect**, assurée par l'application elle-même.
 * Aucune spécialité imposée : ce qui est propre à une pratique vit dans les
   gabarits et dans la consigne générale.
@@ -53,8 +53,8 @@ un point signalé comme tel.
 | Docker + Compose v2 | Fournis par DSM sur Synology ; sinon [docs.docker.com](https://docs.docker.com/engine/install/) |
 | Un fournisseur OIDC | Pocket ID, Authentik, Keycloak, Entra ID… |
 | Un proxy inverse en HTTPS | Obligatoire : le micro et l'installation PWA l'exigent |
-| Une clé de modèle de langage | Gemini, Anthropic, OpenAI, Cohere, Mistral ou Qwen Omni — au moins une (peut attendre le premier démarrage, voir §2) |
-| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox, Cohere, Mistral ou OpenAI (Whisper) — au moins une (idem) |
+| Une clé de modèle de langage | Gemini, Anthropic, OpenAI, Cohere, Mistral, Qwen Omni ou OpenRouter — au moins une (peut attendre le premier démarrage, voir §2) |
+| Une clé de service vocal | Google, Deepgram, AssemblyAI, Soniox, Cohere, Mistral, OpenAI (Whisper) ou OpenRouter — au moins une (idem) |
 | ~1 Go de RAM | Limite fixée dans `docker-compose.yml` |
 
 L'image contient `ffmpeg` : rien à installer sur l'hôte.
@@ -195,6 +195,7 @@ SONIOX_API_KEY=
 COHERE_API_KEY=
 MISTRAL_API_KEY=
 MODULATE_API_KEY=
+# OpenRouter : une seule clé pour la note ET la transcription STT (voir plus bas)
 
 # Modèle de langage — au moins un
 GEMINI_API_KEY=                # ou GOOGLE_CLOUD_PROJECT pour Vertex AI
@@ -202,6 +203,7 @@ ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 QWEN_OMNI_API_KEY=
 QWEN_OMNI_BASE_URL=            # documentation DashScope
+OPENROUTER_API_KEY=            # openrouter.ai → Keys ; note + STT
 # Cohere et Mistral : pas de variable propre, COHERE_API_KEY / MISTRAL_API_KEY
 # ci-dessus servent aux deux usages
 # Budget de raisonnement Cohere (thinking.token_budget) à la mise en forme —
@@ -215,6 +217,16 @@ COHERE_LLM_THINKING_BUDGET=1024
 > modèles gpt-4o de l'autre). Le réglage n'existe qu'une fois en base : le
 > champ est répété sous les deux onglets concernés (Dictée et Note), et une
 > saisie sous l'un se reflète aussitôt sous l'autre.
+>
+> **OpenRouter suit le même principe** (`OPENROUTER_API_KEY` — une seule clé) :
+> le fournisseur « OpenRouter » propose à la fois un **modèle de langage**
+> (ex. `thinkingmachines/inkling-small`, multimodal et open-weight) et une
+> **reconnaissance vocale** fondée sur ce même modèle. Contrairement au point
+> de terminaison personnalisé, OpenRouter ne sert pas inkling-small derrière
+> `/audio/transcriptions` : la transcription passe par un appel « chat » avec
+> une part audio. L'audio de la consultation part donc **vers le cloud
+> OpenRouter** (voir § 11.2 pour la résidence des données) — c'est un choix de
+> fournisseur, pas le trajet local.
 >
 > Un **point de terminaison personnalisé** (ex. Whisper auto-hébergé,
 > compatible API OpenAI) se configure uniquement depuis le panneau, sans
@@ -275,7 +287,11 @@ COHERE_LLM_THINKING_BUDGET=1024
 > roue sur le titre à partir de la FIN de la génération (jamais avant),
 > bascule automatique sur grand écran à ce même moment (sur mobile, on reste
 > sur la note générée) ; il est conservé avec le brouillon
-> (`consultations.verification_json`) et réaffiché au chargement. À l'ouverture
+> (`consultations.verification_json`) et réaffiché au chargement. Par sécurité
+> face à une chute du flux SSE, l'onglet qui a lancé la génération relit en
+> parallèle la consultation persistée (~toutes les 5 s) : l'audit s'affiche
+> dès qu'il y est écrit, sans dépendre du seul événement `verification_result`
+> (une relecture coupée revient sur les ~5 s suivantes). À l'ouverture
 > d'un brouillon, l'onglet du panneau est choisi selon l'état de la note :
 > **« Transcription brute »** tant qu'aucune note n'existe (on suit la dictée
 > en direct), **« Validation »** dès que la note est générée et que la
@@ -289,6 +305,9 @@ COHERE_LLM_THINKING_BUDGET=1024
 > **« Validation - 2e passe »** — se présentent en simple markdown, comme le
 > reste de l'application. Les brouillons antérieurs qui portent encore la
 > rubrique dans leur note la font réextraire à l'ouverture.
+> Une régénération réinitialise `verification_json` au moment où la nouvelle
+> note est persistée : la base ne porte jamais un audit de l'ancienne note
+> pendant le contrôle en cours.
 > Sans audio joint (note produite à partir de la seule transcription), la
 > bascule active produit immédiatement un « rien à signaler » : l'audit
 > audio↔note est impossible, pas de roue qui tourne dans le vide.
@@ -490,6 +509,15 @@ Mistral : transcription + note ; OpenAI : Whisper + note) n'existe qu'une fois
 en base : le champ est répété sous chacun des deux onglets, et toute saisie
 s'y reflète aussitôt.
 
+Le bouton **Modèles disponibles**, en pied de panneau, interroge le fournisseur
+**du sous-onglet consulté** avec sa clé et propose dans le champ « Modèle » ce
+à quoi ce compte a réellement droit. Il couvre le modèle de langage (Note) **et**
+la reconnaissance vocale (Dictée : Deepgram, Cohere, Mistral, OpenAI, point de
+terminaison personnalisé, OpenRouter). Les fournisseurs sans liste de modèles
+(Google, Soniox, AssemblyAI, Modulate) le signalent : le nom se saisit alors à
+la main. Si le modèle configuré n'apparaît pas dans la liste, un avertissement
+prévient que la transcription (ou la mise en forme) échouera.
+
 > Le **point de terminaison personnalisé** expose un **Budget de sortie**
 > (`custom_llm_max_tokens`, 32768 jetons par défaut) propre à ce fournisseur,
 > distinct du plafond de Gemini, et un réglage **Raisonnement**
@@ -503,6 +531,14 @@ s'y reflète aussitôt.
 > reçoit jamais, un modèle reflexif y renvoyant du texte hors JSON. Pour
 > l'extraction, un **modèle rapide non raisonneur** (field « Modèle rapide »)
 > est recommandé.
+>
+> **OpenRouter** expose les **mêmes capacités** que le point de terminaison
+> personnalisé (Budget de sortie `openrouter_llm_max_tokens`, Raisonnement
+> `openrouter_llm_reasoning_effort`, format audio, audio direct), avec une clé
+> dédiée (`OPENROUTER_API_KEY`). Le modèle par défaut,
+> `thinkingmachines/inkling-small`, est multimodal et open-weight : il accepte
+> l'audio joint et le **contournement de la reconnaissance vocale** (note
+> directe), comme Gemini.
 
 > **Afficher le raisonnement (thinking) pendant la génération.** Deux
 > réglages sous Note — **Montrer le raisonnement — administrateurs**
@@ -536,6 +572,7 @@ enregistrer.
 | **OpenAI (Whisper)** | **aucune** | Clé partagée avec le modèle de langage OpenAI |
 | **Modulate** | 100 termes (`custom_terms`) | Velma STT multilingue, détection de langue par énoncé |
 | **Personnalisé** | **aucune** | Endpoint compatible API OpenAI (ex. Whisper auto-hébergé) ; l'audio reste sur votre machine |
+| **OpenRouter** | liste passée en consigne (prompt) | Modèle multimodal (ex. `thinkingmachines/inkling-small`) interrogé en « chat » avec part audio — l'audio part au cloud (§ 11.2) |
 
 > Un point de terminaison personnalisé est tout indiqué pour un **Whisper
 > local** (ce déploiement s'appuie sur `speaches`/faster-whisper, interne au
@@ -566,12 +603,14 @@ pauses pour placer la ponctuation.
 
 > **Audio joint au modèle de langage** : quand « Joindre aussi l'audio » est
 > actif (`send_audio`), l'extrait envoyé est **OGG/Opus** par défaut — petit et
-> accepté par Gemini et Qwen Omni. Le **point de terminaison personnalisé**
-> expose en plus un réglage **Format audio envoyé** (`custom_send_audio_format` :
-> OGG/MP3/WAV) : un modèle comme **Mistral Voxtral** derrière OpenRouter **exige
-> MP3 ou WAV** et rejette l'OGG (`400 Failed to load audio file — valid mp3 or
-> wav`). Choisissez alors `mp3` ; le fichier est transcodé en mono 48 kHz avant
-> l'envoi. Gemini et Qwen ignorent ce réglage.
+> accepté par Gemini, Qwen Omni et OpenRouter (vérifié sur inkling-small). Le
+> **point de terminaison personnalisé** comme **OpenRouter** exposent en plus un
+> réglage **Format audio envoyé** (`custom_send_audio_format` /
+> `openrouter_send_audio_format` : OGG/MP3/WAV) : un modèle comme **Mistral
+> Voxtral** derrière un endpoint **exige MP3 ou WAV** et rejette l'OGG
+> (`400 Failed to load audio file — valid mp3 or wav`). Choisissez alors `mp3` ;
+> le fichier est transcodé en mono 48 kHz avant l'envoi. Gemini et Qwen
+> ignorent ce réglage.
 
 ### 7.4 Gabarits
 
@@ -620,6 +659,14 @@ d'en-tête sans valeur dictée (médecin de famille, lieu) ; le marqueur
 `[inaudible]` ne sert qu'à un passage inintelligible situé À L'INTÉRIEUR d'une
 rubrique qui produit par ailleurs du contenu — il ne remplace jamais une rubrique
 ou une ligne vide.
+
+**Correction de la transcription.** La consigne générale (§ 2.0, ajouté le
+2026-08-28) rappelle que la transcription vient d'une reconnaissance vocale,
+pas d'un texte tapé : ses erreurs sont **phonétiques** (homophones — souvent
+des mots courants parfaitement orthographiés, ex. « un casseur de saint
+droit »), pas des fautes de frappe, et une correction rétablit le mot dicté
+sans ajouter d'information — elle n'introduit jamais un fait non dicté (doute →
+règle des deux lectures, § 1).
 
 **Fidélité au contenu dicté.** La consigne générale interdit autant l'omission
 que l'invention (§ 1) : toute donnée clinique dictée figure dans la note —
@@ -965,11 +1012,21 @@ présentes dans la pièce, les propos incidents qui n'atteignent jamais la
 transcription.
 
 Un trajet supplémentaire évite la transcription séparée : les modèles
-**multimodaux** (Gemini, Qwen Omni, point de terminaison personnalisé) peuvent
-recevoir **l'audio directement** (option propre à chaque fournisseur dans le
-panneau). Dans ce cas le service vocal n'est pas appelé (`stt_provider` inactif)
-et toute la résidence se décide du côté du fournisseur de modèle — ce qui peut
-ramener le trajet audio au même endroit que le texte.
+**multimodaux** (Gemini, Qwen Omni, point de terminaison personnalisé,
+OpenRouter) peuvent recevoir **l'audio directement** (option propre à chaque
+fournisseur dans le panneau). Dans ce cas le service vocal n'est pas appelé
+(`stt_provider` inactif) et toute la résidence se décide du côté du fournisseur
+de modèle — ce qui peut ramener le trajet audio au même endroit que le texte.
+⚠️ **OpenRouter est un service cloud** (traite hors du Québec) : toute bascule
+vers lui — note directe comme STT — est une décision de conformité à part,
+comme n'importe quel fournisseur hébergé.
+
+> **« Conserver une transcription pendant l'enregistrement »** (activable avec
+> l'audio direct) : la reconnaissance vocale continue de tourner à l'écran **et**
+> la transcription accompagnée la note en **guide** — l'audio reste la source
+> autoritaire, le texte sert de filet anti-omission (éléments dictés oubliés
+> d'un audio seul). Désactivé (défaut) : aucun appel vocal pendant
+> l'enregistrement, la note vient de l'audio seul.
 
 Vérification en une commande — ce qui est **réellement** en service, et non ce que
 dit le `.env` (le panneau le surcharge) :

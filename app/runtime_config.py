@@ -62,7 +62,13 @@ from typing import Callable, Dict, List, Optional, Tuple
 from sqlalchemy import select
 
 from app import default_prompts, i18n, preferences
-from app.config import COHERE_DEFAULT_LLM_MODEL, MISTRAL_DEFAULT_LLM_MODEL, settings
+from app.config import (
+    COHERE_DEFAULT_LLM_MODEL,
+    MISTRAL_DEFAULT_LLM_MODEL,
+    OPENROUTER_DEFAULT_LLM_MODEL,
+    OPENROUTER_DEFAULT_STT_MODEL,
+    settings,
+)
 from app.database import AppSetting, SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -128,6 +134,7 @@ STT_PROVIDERS = (
     ("openai", "OpenAI Whisper"),
     ("modulate", "Modulate"),
     ("custom", "provider.custom_endpoint"),
+    ("openrouter", "OpenRouter"),
 )
 
 #: Un booléen présenté comme un choix : le panneau sait déjà afficher un
@@ -146,6 +153,7 @@ LLM_PROVIDERS = (
     ("mistral", "Mistral AI"),
     ("qwen_omni", "Qwen Omni"),
     ("custom", "provider.custom_endpoint"),
+    ("openrouter", "OpenRouter"),
 )
 
 # NOTE — la langue n'est PAS ici.
@@ -273,6 +281,7 @@ SETTINGS: Tuple[Setting, ...] = (
         "deepgram_model", "text", "group.dictation",
         default=lambda: settings.deepgram_model, placeholder="nova-2",
         only_for=("stt_provider", "deepgram"),
+        datalist=True,
     ),
     # Les trois réglages de langue ci-dessous sont vides par défaut : ils
     # suivent alors la langue de l'application. Y inscrire une valeur est un
@@ -339,6 +348,7 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: settings.cohere_model,
         placeholder="cohere-transcribe-03-2026",
         only_for=("stt_provider", "cohere"),
+        datalist=True,
     ),
     Setting(
         "cohere_language", "text", "group.dictation",
@@ -359,6 +369,7 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: settings.mistral_model,
         placeholder="voxtral-mini-latest",
         only_for=("stt_provider", "mistral"),
+        datalist=True,
     ),
     Setting(
         "mistral_language", "text", "group.dictation",
@@ -386,6 +397,7 @@ SETTINGS: Tuple[Setting, ...] = (
         "openai_stt_model", "text", "group.dictation",
         default=lambda: "", placeholder="whisper-1",
         only_for=("stt_provider", "openai"),
+        datalist=True,
     ),
     Setting(
         "openai_stt_language", "text", "group.dictation",
@@ -422,6 +434,7 @@ SETTINGS: Tuple[Setting, ...] = (
         "custom_stt_model", "text", "group.dictation",
         default=lambda: "", placeholder="whisper-1",
         only_for=("stt_provider", "custom"),
+        datalist=True,
     ),
     Setting(
         "custom_stt_language", "text", "group.dictation",
@@ -447,6 +460,24 @@ SETTINGS: Tuple[Setting, ...] = (
         "custom_stt_chunk_seconds", "text", "group.dictation",
         default=lambda: "60", placeholder="ex. 60 (vide = pas de découpage)",
         only_for=("stt_provider", "custom"), advanced=True,
+    ),
+
+    # --- OpenRouter (STT) ---
+    # Pas de clé propre ici : « openrouter_api_key » se règle sous Note et le
+    # champ y est répété via ``also_in`` (un seul compte OpenRouter pour les
+    # deux usages). La transcription passe par /chat/completions + part audio,
+    # pas par /audio/transcriptions qu'OpenRouter refuse pour inkling-small.
+    Setting(
+        "openrouter_stt_model", "text", "group.dictation",
+        default=lambda: OPENROUTER_DEFAULT_STT_MODEL,
+        placeholder="thinkingmachines/inkling-small",
+        only_for=("stt_provider", "openrouter"),
+        datalist=True,
+    ),
+    Setting(
+        "openrouter_stt_language", "text", "group.dictation",
+        default=lambda: "", placeholder="fr / en / auto",
+        only_for=("stt_provider", "openrouter"),
     ),
 
     # --- Retrait des pauses : global, tous services -------------------------
@@ -657,6 +688,46 @@ SETTINGS: Tuple[Setting, ...] = (
         visible_if=(("custom_send_audio", "true"),),
     ),
     *_cap_bypass("custom", "custom", help_key=None),
+
+    # --- OpenRouter (modèles multimodaux open-weight, ex. Inkling) ---
+    # Clé unique pour les deux usages (note et STT) : le champ natif vit ici,
+    # il est répété sous Dictée → OpenRouter.
+    Setting(
+        "openrouter_api_key", "secret", "group.note",
+        default=lambda: settings.openrouter_api_key,
+        only_for=("llm_provider", "openrouter"),
+        also_in=(("group.dictation", "openrouter"),),
+    ),
+    _cap_model("openrouter", "openrouter", default=lambda: OPENROUTER_DEFAULT_LLM_MODEL),
+    _cap_fast("openrouter", "openrouter"),
+    _cap_temperature("openrouter", "openrouter", lambda: str(settings.gemini_temperature)),
+    Setting(
+        "openrouter_llm_max_tokens", "text", "group.note",
+        default=lambda: "32768", placeholder="ex. 32768 (jetons de sortie)",
+        only_for=("llm_provider", "openrouter"),
+    ),
+    Setting(
+        "openrouter_llm_reasoning_effort", "choice", "group.note",
+        default=lambda: "auto",
+        choices=(
+            ("auto", "choice.reasoning_auto"),
+            ("none", "choice.reasoning_none"),
+            ("minimal", "choice.reasoning_minimal"),
+            ("low", "choice.reasoning_low"),
+            ("medium", "choice.reasoning_medium"),
+            ("high", "choice.reasoning_high"),
+        ),
+        only_for=("llm_provider", "openrouter"),
+    ),
+    *_cap_audio("openrouter", "openrouter"),
+    Setting(
+        "openrouter_send_audio_format", "choice", "group.note",
+        default=lambda: "ogg",
+        choices=(("ogg", "ogg"), ("mp3", "mp3"), ("wav", "wav")),
+        only_for=("llm_provider", "openrouter"),
+        visible_if=(("openrouter_send_audio", "true"),),
+    ),
+    *_cap_bypass("openrouter", "openrouter"),
 
     # Affichage du raisonnement du modèle (thinking) pendant la génération :
     # deux bascules indépendantes — administrateurs d'abord, autres usagers
@@ -883,6 +954,7 @@ def stt_language(provider: str) -> str:
         "openai": "openai_stt_language",
         "custom": "custom_stt_language",
         "modulate": "modulate_language",
+        "openrouter": "openrouter_stt_language",
     }.get(provider)
 
     if cle is not None:
@@ -916,6 +988,7 @@ def stt_model(provider: Optional[str] = None) -> str:
         "openai": "openai_stt_model",
         "custom": "custom_stt_model",
         "modulate": "modulate_model",
+        "openrouter": "openrouter_stt_model",
     }.get(provider)
     if cle is not None:
         return value(cle) or ""

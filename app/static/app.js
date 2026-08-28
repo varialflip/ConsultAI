@@ -2219,6 +2219,10 @@
    * la note générée. L'arrivée de l'audit ne force plus aucune bascule.
    * ====================================================================== */
   let secondPassTimeout = null;
+  // Relecture périodique de l'audit pour l'émetteur (voir armerPollVerification) :
+  // filet du filet — la secousse du flux SSE ne doit jamais priver l'onglet de
+  // son résultat « Validation - 2e passe » sans un rechargement manuel.
+  let pollVerificationTimeout = null;
   // Vrai seulement quand la vérification tourne VRAIMENT (après la fin de la
   // génération) : c'est la garde du toast de progression, qui doit survivre
   // au ``finally`` de generateNote tant que « Validation en cours… » s'affiche.
@@ -2239,6 +2243,8 @@
   function armerFiletSecondPass() {
     clearTimeout(secondPassTimeout);
     secondPassTimeout = setTimeout(() => {
+      clearTimeout(pollVerificationTimeout);
+      pollVerificationTimeout = null;
       verificationPendingToken = null;
       verificationSkipped = false;
       secondPassRunning = false;
@@ -2250,6 +2256,33 @@
         progressToast = null;
       }
     }, 180000);
+  }
+
+  /**
+   * Relecture périodique de l'audit pour l'émetteur. Le résultat « Validation »
+   * part normalement en SSE ``verification_result`` ; si le flux s'est cassé
+   * (proxy, file saturée — un onglet qui vient de lancer une génération n'a
+   * pas toujours de connexion SSE fiable), l'onglet relit ici la consultation
+   * persistée toutes les ~5 s et affiche l'audit dès qu'il y est écrit — sans
+   * saut d'onglet (``basculer=false``). Le SSE gagnant reste prioritaire :
+   * ``renderSecondPass`` passe par ``stopSecondPassPending``, qui coupe le
+   * sondage. Ne s'arme que pour l'émetteur (couplé à ``showSecondPassPending``) ;
+   * un « suiveur » garde le flux SSE et ``recoverMissedVerification``.
+   */
+  function armerPollVerification() {
+    clearTimeout(pollVerificationTimeout);
+    if (!state.consultationId || !verificationPendingToken) return;
+    pollVerificationTimeout = setTimeout(async () => {
+      if (!verificationPendingToken || !secondPassRunning) return;
+      try {
+        const draft = await api(`/api/consultations/${state.consultationId}`);
+        if (draft && draft.verification_json) {
+          renderSecondPass(JSON.parse(draft.verification_json), false);
+          return;
+        }
+      } catch (_) { /* relecture au mieux : jamais bloquante */ }
+      armerPollVerification();
+    }, 5000);
   }
 
   function updateSecondPassToggle() {
@@ -2394,6 +2427,8 @@
   function clearSecondPassView() {
     clearTimeout(secondPassTimeout);
     secondPassTimeout = null;
+    clearTimeout(pollVerificationTimeout);
+    pollVerificationTimeout = null;
     verificationPendingToken = null;
     verificationSkipped = false;
     secondPassRunning = false;
@@ -2417,11 +2452,14 @@
       audit.innerHTML = '';
     }
     armerFiletSecondPass();
+    armerPollVerification();
   }
 
   function stopSecondPassPending() {
     clearTimeout(secondPassTimeout);
     secondPassTimeout = null;
+    clearTimeout(pollVerificationTimeout);
+    pollVerificationTimeout = null;
     verificationPendingToken = null;
     secondPassRunning = false;
     setSecondPassSpinner(false);
@@ -3033,8 +3071,9 @@
    * STT contourné (audio envoyé seul au modèle, Gemini ou Qwen Omni) : dans
    * ce mode l'audio conservé suffit à lui seul à activer « Générer », qu'une
    * transcription soit affichée ou non — la conserver (voir
-   * llmBypassSttKeepTranscript) ne sert qu'à l'affichage pendant la dictée,
-   * jamais de source pour la génération (voir llm.generate_note, audio_only)
+   * llmBypassSttKeepTranscript) sert à l'affichage pendant la dictée et
+   * devient un GUIDE pour la génération (l'audio reste la source autoritaire,
+   * le texte aide à ne rien omettre — voir llm.generate_note, transcript_guide)
    * — voir refreshClientConfig(), qui alimente les deux réglages, et les
    * trois appelants ci-dessous (bouton, garde-fou de generateNote(), fin de
    * dictée automatique).
@@ -4509,7 +4548,8 @@
         ? ' step="0.05" min="0" max="2"' : '';
       // « Modèles disponibles » : le serveur marque lui-même les champs de
       // modèle concernés (``datalist``), principal et rapide de chaque
-      // fournisseur de modèle de langage.
+      // fournisseur de modèle de langage, et le modèle de transcription de
+      // chaque fournisseur de reconnaissance vocale.
       const list = field.datalist ? ' list="modelOptions"' : '';
       control = `<input id="${id}" data-key="${field.key}" type="${type}"${step}${list}
                    value="${esc(field.value || '')}" placeholder="${esc(field.placeholder)}"
@@ -4938,9 +4978,12 @@
 
     renderAdminIntro(tab);
 
-    // « Modèles disponibles » n'a de sens que sur l'onglet du modèle de langage ;
+    // « Modèles disponibles » n'a de sens que sur les onglets porteurs d'un
+    // champ de modèle — le modèle de langage et la reconnaissance vocale ;
     // « Enregistrer » que sur un onglet portant des réglages.
-    $('btnListModels').classList.toggle('hidden', tab !== 'group.note');
+    $('btnListModels').classList.toggle(
+      'hidden', tab !== 'group.note' && tab !== 'group.dictation',
+    );
     const aDesReglages = adminState.fields.some((f) => f.group === tab);
     $('btnSaveAdmin').classList.toggle('hidden', !aDesReglages);
 
@@ -6020,28 +6063,49 @@
 
   /** Interroge le fournisseur sélectionné et propose ses modèles dans le champ. */
   async function listAvailableModels() {
+    // Le bouton est partagé par deux onglets : c'est l'onglet visible qui
+    // décide de ce qu'on interroge — les modèles de reconnaissance vocale
+    // (Dictée) ou de langage (Note).
+    const tab = adminState.tab;
+    if (tab !== 'group.note' && tab !== 'group.dictation') return;
+    const stt = tab === 'group.dictation';
     // Le sélecteur de service n'est pas rendu (le sous-menu le remplace) :
     // c'est le service CONSULTÉ qu'il faut interroger, pas nécessairement
     // l'actif — sans quoi ce bouton renseignait toujours les modèles du
     // fournisseur en service, même en visitant l'onglet d'un autre.
-    const provider = currentProvider('group.note');
+    const provider = currentProvider(tab);
+    const endpoint = stt ? '/api/stt/models' : '/api/models';
     $('adminStatus').textContent = T('admin.querying');
     try {
-      const data = await api(`/api/models?provider=${encodeURIComponent(provider)}`);
-      // Une seule liste, mais rattachée aux DEUX champs de modèle du
-      // fournisseur interrogé — le principal et le rapide portent tous deux
-      // ``list="modelOptions"`` depuis leur rendu (marque ``datalist`` du
-      // schéma serveur), il suffit donc de remplir le datalist partagé.
+      const data = await api(`${endpoint}?provider=${encodeURIComponent(provider)}`);
+      // Fournisseur sans API de liste (Soniox, AssemblyAI, Modulate, Google) :
+      // rien à proposer, le champ se saisit à la main.
+      if (data.supported === false) {
+        $('adminStatus').textContent = '';
+        toast(T('admin.stt_models_unsupported'), 'info', 10000);
+        return;
+      }
+      // Une seule liste, mais rattachée aux champs de modèle du fournisseur
+      // interrogé — principal et rapide côté langage, modèle de transcription
+      // côté vocale : ils portent tous ``list="modelOptions"`` depuis leur
+      // rendu (marque ``datalist`` du schéma serveur), il suffit donc de
+      // remplir le datalist partagé.
       const datalist = $('modelOptions');
       datalist.innerHTML = (data.models || [])
         .map((name) => `<option value="${esc(name)}"></option>`).join('');
 
       $('adminStatus').textContent = T('admin.models_listed', { count: data.models.length });
-      if (!data.configured_available) {
-        toast(T('admin.model_missing', { model: data.configured }), 'warning', 10000);
-      }
-      if (data.fast_model && !data.fast_model_available) {
-        toast(T('admin.fast_model_missing', { model: data.fast_model }), 'warning', 10000);
+      if (stt) {
+        if (data.configured && !data.configured_available) {
+          toast(T('admin.stt_model_missing', { model: data.configured }), 'warning', 10000);
+        }
+      } else {
+        if (!data.configured_available) {
+          toast(T('admin.model_missing', { model: data.configured }), 'warning', 10000);
+        }
+        if (data.fast_model && !data.fast_model_available) {
+          toast(T('admin.fast_model_missing', { model: data.fast_model }), 'warning', 10000);
+        }
       }
     } catch (err) {
       $('adminStatus').textContent = '';

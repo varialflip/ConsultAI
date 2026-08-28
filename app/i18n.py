@@ -92,6 +92,7 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         "openai": "fr",
         "custom": "fr",
         "modulate": "fr",
+        "openrouter": "fr",
     },
     "en": {
         "google": "en-CA",
@@ -103,6 +104,7 @@ STT_LANGUAGE_CODES: Dict[str, Dict[str, str]] = {
         "openai": "en",
         "custom": "en",
         "modulate": "en",
+        "openrouter": "en",
     },
 }
 
@@ -514,14 +516,16 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "note.engine_llm_title": ("Mise en forme : {engine}", "Formatting: {engine}"),
     "note.engine_audio": ("+ audio", "+ audio"),
     "transcript.bypass_notice": (
-        "Affichage seulement — la note se génère à partir de l'audio",
-        "Display only — the note is generated from the audio",
+        "Guide — la note se génère à partir de l'audio, texte en soutien",
+        "Guide — the note is generated from the audio, text as support",
     ),
     "transcript.bypass_notice_title": (
-        "Le STT continue de tourner pour l'affichage, mais la note se génère "
-        "directement à partir de l'audio : ce texte n'y entre pour rien.",
-        "Speech recognition keeps running for display, but the note is "
-        "generated directly from the audio: this text plays no part in it.",
+        "Le STT continue de tourner pour l'affichage ; la note se génère à "
+        "partir de l'audio, avec ce texte en guide pour ne rien omettre "
+        "(l'audio reste la source autoritaire).",
+        "Speech recognition keeps running for display; the note is generated "
+        "from the audio, with this text as a guide so nothing is missed (the "
+        "audio remains the authoritative source).",
     ),
     "note.engine_audio_title": (
         "Un extrait audio de la dictée a été joint à la transcription pour "
@@ -1214,6 +1218,18 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Warning: “{model}” is not among the models available to this key. "
         "Formatting will fail.",
     ),
+    "admin.stt_model_missing": (
+        "Attention : « {model} » ne figure pas dans les modèles accessibles à "
+        "cette clé. La transcription échouera.",
+        "Warning: “{model}” is not among the models available to this key. "
+        "Transcription will fail.",
+    ),
+    "admin.stt_models_unsupported": (
+        "Ce fournisseur n'expose pas de liste de modèles : saisissez le nom "
+        "du modèle à la main.",
+        "This provider does not expose a model list: type the model name "
+        "manually.",
+    ),
 
     # --- Panneau d'administration : onglet Sauvegarde -----------------------
     "admin.backup.loading": ("Chargement…", "Loading…"),
@@ -1428,13 +1444,19 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.cap.keep_transcript.help": (
         "Sans effet si l'option ci-dessus est désactivée. Activée : la "
         "reconnaissance vocale continue de tourner pendant la dictée (texte "
-        "visible et modifiable), mais la note se génère quand même à partir "
-        "de l'audio. Désactivée (par défaut) : aucun appel au service vocal "
+        "visible et modifiable) ET cette transcription accompagne la note comme "
+        "guide : l'audio reste la source autoritaire, mais le texte en soutien "
+        "réduit les omissions (éléments dictés absents de la transcription, "
+        "mal transcrits ou oubliés d'un audio seul). Désactivée (par défaut) : "
+        "aucun appel au service vocal "
         "pendant l'enregistrement, économie maximale.",
         "No effect if the option above is off. On: speech recognition keeps "
-        "running during dictation (visible, editable text), but the note is "
-        "still generated from the audio. Off (default): no call to the "
-        "speech service during recording, maximum savings.",
+        "running during dictation (visible, editable text) AND that transcript "
+        "accompanies the note as a guide: the audio stays the authoritative "
+        "source, but the supporting text reduces omissions (dictated items "
+        "absent from the transcript, mis-transcribed, or missed from audio "
+        "alone). Off (default): no call to the speech service during "
+        "recording, maximum savings.",
     ),
 
     # --- Panneau d'administration : réglages -------------------------------
@@ -2093,6 +2115,59 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "If the note comes back empty (reasoning saturating the budget), raise "
         "the Output budget rather than increasing effort.",
     ),
+    "set.openrouter_api_key.label": ("Clé API OpenRouter", "OpenRouter API key"),
+    "set.openrouter_api_key.help": (
+        "openrouter.ai → Keys. Une seule clé pour les deux usages : la note et "
+        "la transcription STT passent par le même compte.",
+        "openrouter.ai → Keys. One key for both uses: note and STT "
+        "transcription go through the same account.",
+    ),
+    "set.openrouter_llm_max_tokens.label": ("Budget de sortie (jetons)", "Output budget (tokens)"),
+    "set.openrouter_llm_max_tokens.help": (
+        "Plafond de jetons de sortie pour OpenRouter (raisonnement + texte). "
+        "Inkling raisonne : un budget trop bas produit une note vide (« motif "
+        ": length »). 32768 par défaut.",
+        "Output token cap for OpenRouter (reasoning + text). Inkling reasons: "
+        "a too-small budget yields an empty note ('finish_reason: length'). "
+        "Default 32768.",
+    ),
+    "set.openrouter_llm_reasoning_effort.label": ("Raisonnement", "Reasoning"),
+    "set.openrouter_llm_reasoning_effort.help": (
+        "Effort de raisonnement demandé aux modèles à raisonnement (Inkling, "
+        "etc.) : « Automatique » = paramètre non envoyé ; « Aucun » = "
+        "raisonnement désactivé (plus rapide, moins cher). Tous les modèles "
+        "n'honorent pas `reasoning.effort`.",
+        "Reasoning effort requested from reasoning models (Inkling, etc.): "
+        "'Automatic' = parameter not sent; 'None' = reasoning disabled "
+        "(faster, cheaper). Not every model honors `reasoning.effort`.",
+    ),
+    "set.openrouter_send_audio_format.label": (
+        "Format audio envoyé",
+        "Sent audio format",
+    ),
+    "set.openrouter_send_audio_format.help": (
+        "Format de l'extrait joint au modèle. OGG/Opus (défaut) est le format "
+        "natif de l'application et le plus léger ; WAV convient aux modèles "
+        "qui le refusent.",
+        "Format of the clip attached to the model. OGG/Opus (default) is the "
+        "app's native format and the lightest; WAV suits models that reject it.",
+    ),
+    "set.openrouter_stt_model.label": ("Modèle OpenRouter", "OpenRouter model"),
+    "set.openrouter_stt_model.help": (
+        "Modèle multimodal (audio → texte) interrogé en « chat » pour la "
+        "transcription : OpenRouter ne sert pas inkling-small derrière "
+        "« /audio/transcriptions ». Le modèle doit comprendre le français.",
+        "Multimodal model (audio → text) queried via 'chat' for transcription: "
+        "OpenRouter does not serve inkling-small behind '/audio/transcriptions'. "
+        "The model must understand French.",
+    ),
+    "set.openrouter_stt_language.label": ("Langue OpenRouter", "OpenRouter language"),
+    "set.openrouter_stt_language.help": (
+        "Laisser vide pour suivre la langue de l'application. Inscrire « auto » "
+        "pour la détection automatique ; « fr » / « en » pour forcer.",
+        "Leave empty to follow the application language. Enter “auto” for "
+        "automatic detection; “fr”/“en” to force.",
+    ),
     "set.custom_send_audio.label": (
         "Joindre aussi l'audio (silences plafonnés)",
         "Also attach audio (pauses capped)",
@@ -2171,6 +2246,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "provider.custom_endpoint": (
         "Point de terminaison personnalisé",
         "Custom endpoint",
+    ),
+    "provider.openrouter": (
+        "OpenRouter",
+        "OpenRouter",
     ),
 
     "set.general_prompt.label": ("Consigne générale", "General instruction"),

@@ -2485,36 +2485,75 @@ import time as _time
 
 _STT_PROBE_CACHE: dict = {}
 _STT_PROBE_TTL = 15.0
-_STT_PROBE_TIMEOUT = 2.0
+_STT_PROBE_TIMEOUT = 4.0
+
+#: Un court OGG/Opus silencieux (~0,12 s) envoyé à l'endpoint custom pour
+#: vérifier le chemin RÉEL de la transcription. Un ``GET /health`` n'est pas un
+#: proxy fiable (route souvent absente → 404, ou timeout sur le réseau) : seul
+#: un POST d'un fragment (même muet) reflète ce que la dictée fera vraiment.
+_PROBE_SILENCE_OGG = (
+    "T2dnUwACAAAAAAAAAADS5PviAAAAAJRM6OgBE09wdXNIZWFkAQE4AYC7AAAAAABPZ2dTAAAAAAAAAAAAANLk"
+    "++IBAAAAH/AMIQE9T3B1c1RhZ3MMAAAATGF2ZjYxLjcuMTAzAQAAAB0AAABlbmNvZGVyPUxhdmM2MS4xOS4x"
+    "MDEgbGlib3B1c09nZ1MABLgXAAAAAAAA0uT74gIAAAAuUw5EBwMDAwMDAwP4//74//74//74//74//74"
+    "//74//74//4="
+)
+
+
+def _probe_custom(base_url: str, api_key: str, model: str, langue: str) -> bool:
+    """POST d'un fragment silencieux à l'endpoint — True si le service répond.
+
+    Toute réponse HTTP < 500 (y compris un 404/422 sur cette route) prouve que
+    le serveur est vivant ; un échec de connexion/timeout ou un >= 500 marque
+    l'indisponibilité.
+    """
+    import base64 as _b64
+    import urllib.error as _utlerr
+    import urllib.request as _urlreq
+
+    champs = {"model": model or _OPENAI_STT_MODEL_DEFAUT}
+    if langue:
+        champs["language"] = langue
+    corps, ctype = _multipart_body_fields(
+        champs, "file", "probe.ogg", _b64.b64decode(_PROBE_SILENCE_OGG),
+    )
+    headers = {"Content-Type": ctype}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    requete = _urlreq.Request(
+        base_url.rstrip("/") + "/audio/transcriptions",
+        data=corps, headers=headers, method="POST",
+    )
+    try:
+        with _urlreq.urlopen(requete, timeout=_STT_PROBE_TIMEOUT) as rep:
+            return int(rep.status) < 500
+    except _utlerr.HTTPError as exc:
+        return exc.code < 500          # 4xx = service vivant
+    except Exception:
+        return False                   # réseau/timeout → indisponible
 
 
 def stt_unavailable(endpoint: str) -> bool:
     """True si le STT est vraisemblablement injoignable, avec cache court.
 
-    Critère : l'endpoint ne répond PAS sur le réseau (connexion refusée,
-    timeout) ou répond en erreur serveur (>= 500). Un 404/401/403 signifie au
-    contraire qu'un service vit derrière l'URL (route de santé inconnue, clé
-    manquante) — c'est disponible.
+    Teste le chemin RÉEL de la transcription (POST d'un fragment muet) sur
+    l'endpoint personnalisé configuré : seule une absence de réponse réseau ou
+    une erreur serveur (>= 500) compte comme indisponible. Un 4xx (route ou clé)
+    prouve au contraire que le service répond.
     """
     cle = endpoint or "?"
     now = _time.monotonic()
     info = _STT_PROBE_CACHE.get(cle)
     if info and now - info[0] < _STT_PROBE_TTL:
         return info[1]
-    base = endpoint.rstrip("/")
-    # Une seule tentative à budget court : si l'hôte ne répond PAS en réseau,
-    # aucune des routes ne répondra — inutile d'y passer des secondes par
-    # chemin. La première route (/health) est la plus probable ; un 404 =
-    # service vivant (route inconnue) = dispo.
+    ok = False
     try:
-        import urllib.request as _urlreq
-        requete = _urlreq.Request(base + "/health", method="GET")
-        with _urlreq.urlopen(requete, timeout=_STT_PROBE_TIMEOUT) as rep:
-            ok = int(rep.status) < 500
-    except urllib.error.HTTPError as exc:
-        ok = exc.code < 500          # 4xx = hôte joignable → dispo
+        if endpoint:
+            api_key = runtime_config.value("custom_stt_api_key")
+            model = runtime_config.value("custom_stt_model")
+            langue = runtime_config.stt_language("custom")
+            ok = _probe_custom(endpoint, api_key, model, langue)
     except Exception:
-        ok = False                   # réseau/timeout → indisponible
+        ok = False
     _STT_PROBE_CACHE[cle] = (now, ok)
     return not ok
 

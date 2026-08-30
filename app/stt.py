@@ -2505,6 +2505,11 @@ def stt_unavailable(endpoint: str) -> bool:
     return not ok
 
 
+def stt_available(endpoint: str) -> bool:
+    """True si le service STT répond (inverse de ``stt_unavailable``)."""
+    return not stt_unavailable(endpoint)
+
+
 def active_stt_endpoint() -> str:
     """L'URL du service vocal actif (custom), ou vide si non configuré."""
     try:

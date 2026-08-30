@@ -1,0 +1,6 @@
+"81047","Biosimilar","Biosimilaire","6"
+"90411","Biosimilar","Biosimilaire","6"
+"93006","Biosimilar","Biosimilaire","6"
+"99215","Biosimilar","Biosimilaire","6"
+"100265","Biosimilar","Biosimilaire","6"
+"102920","Biosimilar","Biosimilaire","6"

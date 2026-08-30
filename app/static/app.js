@@ -6647,6 +6647,10 @@
   function onSttUnavailable(evt) {
     const payload = JSON.parse(evt.data || '{}');
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    // Seul l'onglet qui mène la dictée porte l'avis : un onglet suiveur qui
+    // suit une dictée d'un autre client ne doit pas afficher une alarme sur
+    // une session qu'il ne contrôle pas (il n'a pas de dictation.sessionId).
+    if (!dictation.sessionId || dictation.sessionId !== payload.session_id) return;
     updateSttAvailabilityNotice(
       payload.message || T('dictation.stt_unavailable'),
     );

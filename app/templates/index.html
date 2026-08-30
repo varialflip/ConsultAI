@@ -777,6 +777,18 @@
                          leading-relaxed text-slate-700 thin-scroll"
                   placeholder="{{ t('transcript.placeholder') }}"></textarea>
 
+        <!-- LISTE POINTÉE DES MÉDICAMENTS (grounding) — la liste pointée
+             (puces, pas de pointillés) des médicaments normalisés s'aligne ici
+             pendant la dictée (~ quelques secondes de latence, « par
+             l'arrière »). Jamais imprimée : le document clinique reste la note
+             seule. -->
+        <div id="medList" class="hidden shrink-0 px-4 sm:px-6 py-2 text-[12px] border-t border-slate-100">
+          <p class="font-medium text-slate-500 uppercase tracking-wide text-[10px] mb-1">
+            {{ t('medgrounding.title') }} <span id="medListCount" class="normal-case font-normal"></span>
+          </p>
+          <ul id="medListItems" class="space-y-0.5 text-slate-700"></ul>
+        </div>
+
         <!-- LIGNES PROVISOIRES (mode « streaming ») — le texte en cours de
              reconnaissance, publié en deltas, affiché en italique au-dessus du
              pied. Volontairement HORS de la zone committée : seul le commit
@@ -799,6 +811,7 @@
                STT tourne pour l'affichage sans jamais nourrir la génération
                (contournement actif ET transcription conservée). -->
            <span id="transcriptBypassNotice" class="hidden truncate"></span>
+          <span id="medGroundingStatus" class="hidden truncate"></span>
           <span id="saveStatusDictee" class="ml-auto shrink-0"></span>
         </footer>
       </div>
@@ -811,8 +824,17 @@
            ``verification_json``). Le tout en simple markdown, comme le reste
            de l'application. Jamais imprimée : le document clinique reste la
            note seule. -->
-      <div id="secondPassView" class="hidden flex flex-col flex-1 min-h-0 overflow-y-auto thin-scroll
-                                      p-4 sm:p-6 text-[13px] leading-relaxed text-slate-700 space-y-4">
+<div id="secondPassView" class="hidden flex flex-col flex-1 min-h-0 overflow-y-auto thin-scroll
+                                        p-4 sm:p-6 text-[13px] leading-relaxed text-slate-700 space-y-4">
+        <!-- LISTE POINTÉE DES MÉDICAMENTS (grounding) — présentée EN HAUT de
+             l'onglet Validation : noms normalisés + posologies, puces listes
+             plutôt que pointillés. Remplie en direct (``med_grounding``) puis
+             finalisée/persistée (``med_grounding_result``), restaurée au
+             rechargement depuis ``med_grounding_json``. Jamais imprimée. -->
+        <div id="secondPassMeds"
+             class="hidden prose prose-slate prose-sm max-w-none prose-headings:font-semibold
+                    prose-h2:text-sm prose-h2:uppercase prose-h2:tracking-wide
+                    prose-h2:border-b prose-h2:border-slate-200 prose-h2:pb-1"></div>
         <!-- Corrections et éléments à valider — la rubrique défile ici pendant
              la génération (markdown complet, intitulé compris). -->
         <div id="secondPassCorrections"

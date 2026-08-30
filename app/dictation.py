@@ -54,7 +54,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from app import audio_cache, live, llm, recordings, runtime_config, stt, usage
+from app import audio_cache, live, llm, med_grounding, recordings, runtime_config, stt, usage
 from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
 from sqlalchemy.orm import Session
@@ -1077,6 +1077,252 @@ def _store_part(
                 "text": text,
                 "audio_seconds": consultation.audio_seconds,
             })
+        if text:
+            maybe_schedule_grounding(session.id, session.username)
+
+
+# ---------------------------------------------------------------------------
+# Grounding — stabilisation des frontières + liste de médicaments
+# ---------------------------------------------------------------------------
+# La transcription par tranches ~10 s coupe parfois un mot à la jointure de
+# deux segments (aucun silence à portée de la fenêtre). Quand la correction
+# des médicaments est active, chaque frontière est ré-écoutée en continu
+# (petit délai « par l'arrière », compatible Cohere custom auto-hébergé) puis
+# le texte des deux parts concernées est remplacé. Le nom de médicaments
+# déformé est ensuite normalisé (moteur déterministe, base BDP) et la liste
+# pointée mise à jour (SSE ``med_grounding`` / ``med_grounding_result``).
+
+#: Intervalle minimal entre deux passages de stabilisation d'une même dictée.
+_GROUNDING_GAP = 4.0
+_GROUNDING_MEDS_CAP = 3
+_grounding_lock = threading.Lock()
+_grounding_course: set = set()
+_grounding_cooldown: Dict[str, float] = {}
+_grounding_upto: Dict[str, int] = {}
+_grounding_meds: Dict[str, list] = {}
+
+
+def _grounding_enabled() -> bool:
+    try:
+        if not med_grounding.is_available():
+            return False
+        return runtime_config.value("dictation_grounding") != "false"
+    except Exception:
+        return False
+
+
+def _norm_spaces(s: str) -> str:
+    """Comparateur de contenu insensible à la casse/aux blancs multiples."""
+    return " ".join((s or "").lower().split())
+
+
+def maybe_schedule_grounding(session_id: str, username: str) -> None:
+    """Arme (si besoin) la stabilisation d'une frontière de la dictée.
+
+    Nécessite le réglage, une session en cours, et le respect d'un faible
+    intervalle entre deux passages (endpoint custom auto-hébergé : aucune
+    limite de taux cloud, on garde juste une marge anti-boucle).
+    """
+    if not _grounding_enabled():
+        return
+    try:
+        session = load_session(session_id, username)
+    except DictationError:
+        return
+    if session.status != "recording":
+        return
+    if len(session.parts) < 2:
+        return
+    now = time.time()
+    with _grounding_lock:
+        if session_id in _grounding_course:
+            return
+        if now - _grounding_cooldown.get(session_id, 0.0) < _GROUNDING_GAP:
+            return
+        _grounding_course.add(session_id)
+        _grounding_cooldown[session_id] = now
+    threading.Thread(
+        target=_run_grounding,
+        args=(session_id, username),
+        daemon=True,
+        name=f"grounding-{session_id}",
+    ).start()
+
+
+def _run_grounding(session_id: str, username: str) -> None:
+    """Réécoute la frontière non encore stabilisée et remplace en place."""
+    try:
+        with _lock_for(session_id):
+            session = load_session(session_id, username)
+            if session.status != "recording":
+                return
+            n = len(session.parts)
+            if n < 2:
+                return
+            a = _grounding_upto.get(session_id, -1) + 1   # 1re frontière instable
+            if a < 0:
+                a = 0
+            if a >= n - 1:
+                return
+            b = a + 1
+            session = _rewrite_boundary(session, a, b)
+            if session is None:
+                return
+            _grounding_upto[session_id] = b
+            _merge_and_publish_meds(session)
+    except Exception:
+        logger.exception("Grounding impossible (dictée %s)", session_id)
+    finally:
+        with _grounding_lock:
+            _grounding_course.discard(session_id)
+
+
+def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSession | None:
+    """Ré-transcrit [start_a, end_b[ d'un bloc et remplace les parts a..b.
+
+    Retourne la session à jour (None si rien à changer). Ne touche JAMAIS aux
+    parts déjà stabilisées ; si le contenu réécouté est identique, on marque
+    simplement la frontière stable (aucun SSE, aucune mutation).
+    """
+    if len(session.covered_ranges) < b + 1:
+        return None
+    start = session.covered_ranges[a][0]
+    end = session.covered_ranges[b][1]
+    if end - start <= 0.05:
+        return None
+    hints = _phrase_hints(session.template_id)
+    low, target, high = _window()
+    nouveaux: List[str] = []
+    curseur = start
+    while end - curseur > 0.05:
+        restant = end - curseur
+        longueur = restant if restant <= high else find_cut_point(
+            session.audio_path, curseur, target, low, high)
+        try:
+            payload = extract_segment(session.audio_path, curseur, longueur)
+        except TranscriptionError:
+            break
+        if payload.duration_seconds < _MIN_SEGMENT_SECONDS:
+            break
+        curseur += payload.duration_seconds
+        try:
+            result = transcribe_payload(payload, hints)
+        except TranscriptionError:
+            continue
+        texte = (result.get("transcript") or "").strip()
+        if texte:
+            nouveaux.append(texte)
+        if texte:
+            logger.info(
+                "Dictée %s : stabilisation [%.1f-%.1f s] (%d caractères)",
+                session.id, curseur - payload.duration_seconds, curseur, len(texte),
+            )
+    if not nouveaux:
+        return None
+
+    ancien = _norm_spaces(" ".join(session.parts[a:b + 1]))
+    nouveau = _norm_spaces(" ".join(nouveaux))
+    if ancien and ancien == nouveau:
+        return session                     # déjà stable, rien à faire
+
+    session.parts[a:b + 1] = nouveaux
+    session.covered_ranges[a:b + 1] = [(start, end if curseur > start else end)]
+    session.save()
+
+    # Persistance durable du transcript remplacé.
+    owner = _session_owner(session)
+    with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
+        consultation = db.get(Consultation, session.consultation_id)
+        if consultation is not None:
+            consultation.raw_transcript = " ".join(session.parts).strip()
+            consultation.updated_at = utcnow()
+            db.commit()
+
+    live.publish(owner, "transcript_correct", {
+        "consultation_id": session.consultation_id,
+        "session_id": session.id,
+        "parts": list(session.parts),
+    })
+    return session
+
+
+def _merge_and_publish_meds(session: DictationSession) -> None:
+    """Met à jour la liste pointée (moteur déterministe) et la diffuse.
+
+    Calcule sur la QUEUE du transcript (derniers ~600 mots) puis fusionne dans
+    l'accumulateur de la session (clé = nom normalisé, première posologie
+    non vide conservée) : pas de re-normalisation complète à chaque frontière,
+    ce qui garde la passe compatible même avec une dictée de 30 min.
+    """
+    owner = _session_owner(session)
+    texte = " ".join(session.parts)
+    tail = texte[-3000:].lstrip()              # ≈ derniers ~600 mots
+    nouveaux = med_grounding.extract_med_items(tail)
+    accum = _grounding_meds.get(session.id, [])
+    par_cle = {med_grounding.norm_phon(i["name"]): i for i in accum}
+    for item in nouveaux:
+        cle = med_grounding.norm_phon(item["name"])
+        if cle in par_cle:
+            if not par_cle[cle].get("posology") and item.get("posology"):
+                par_cle[cle]["posology"] = item["posology"]
+        else:
+            par_cle[cle] = dict(item)
+    merged = list(par_cle.values())
+    _grounding_meds[session.id] = merged
+    live.publish(owner, "med_grounding", {
+        "consultation_id": session.consultation_id,
+        "session_id": session.id,
+        "index": len(session.parts),
+        "items": merged,
+    })
+
+
+def schedule_final_grounding(session_id: str, username: str) -> None:
+    """Lance (tâche de fond) la liste de médicaments DÉFINITIVE d'une dictée.
+
+    Exécutée au « Terminer », une seule fois, sur le transcript complet : le
+    résultat est persisté dans ``consultation.med_grounding_json`` et diffusé
+    via ``med_grounding_result``. Ne bloque pas la clôture de la dictée.
+    """
+    if not _grounding_enabled():
+        return
+    threading.Thread(
+        target=_finalize_grounding,
+        args=(session_id, username),
+        daemon=True,
+        name=f"grounding-final-{session_id}",
+    ).start()
+
+
+def _finalize_grounding(session_id: str, username: str) -> None:
+    try:
+        with _lock_for(session_id):
+            session = load_session(session_id, username)
+            owner = _session_owner(session)
+            if session.status not in ("recording", "finished"):
+                return
+            text = " ".join(session.parts).strip()
+            if not text:
+                return
+            items = med_grounding.extract_med_items(text)
+            _grounding_meds[session_id] = items
+            with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
+                consultation = db.get(Consultation, session.consultation_id)
+                if consultation is not None:
+                    consultation.med_grounding_json = json.dumps(items, ensure_ascii=False)
+                    db.commit()
+            live.publish(owner, "med_grounding_result", {
+                "consultation_id": session.consultation_id,
+                "session_id": session.id,
+                "items": items,
+            })
+    except Exception:
+        logger.exception("Grounding final impossible (dictée %s)", session_id)
+    finally:
+        with _grounding_lock:
+            _grounding_course.discard(session_id)
+            _grounding_upto.pop(session_id, None)
+            _grounding_meds.pop(session_id, None)
 
 
 def _transcribe_one(session: DictationSession, hints: str, final: bool,
@@ -1366,6 +1612,7 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
             if runtime_config.value("stt_vad_finish_sweep") != "false":
                 _sweep_uncovered(session, hints)
             _finalise(session)
+            schedule_final_grounding(session.id, session.username)
         return session
 
 

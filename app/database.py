@@ -273,6 +273,11 @@ class Consultation(Base):
     # note à la génération et montrée dans l'onglet « Validation ». Même
     # rétention que la note : vit et meurt avec le brouillon.
     corrections_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Liste des médicaments détectés/normalisés (moteur de grounding), sérialisée
+    # JSON. Nullable : absent = grounding jamais exécuté ; invalide = ignoré.
+    # Alimente la liste pointée de l'onglet « Validation » au rechargement et
+    # sert de trace d'audit (corrections déterministes, non-PHI).
+    med_grounding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -325,6 +330,7 @@ class Consultation(Base):
                     "edited_markdown": self.edited_markdown,
                     "verification_json": self.verification_json,
                     "corrections_markdown": self.corrections_markdown,
+                    "med_grounding_json": self.med_grounding_json,
                 }
             )
         return data
@@ -2346,6 +2352,7 @@ _ADDED_COLUMNS = {
         ("transcript_used", "BOOLEAN NOT NULL DEFAULT 1"),
         ("verification_json", "TEXT"),
         ("corrections_markdown", "TEXT"),
+        ("med_grounding_json", "TEXT"),
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),

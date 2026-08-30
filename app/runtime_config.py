@@ -540,6 +540,17 @@ SETTINGS: Tuple[Setting, ...] = (
         section="sect.realtime", visible_if=(("stt_realtime_mode", "vad"),),
     ),
 
+    # --- Correction medicaments (liste pointée sous la dictée) ---------------
+    # Active la stabilisation audio par l'arrière + le grounding des noms de
+    # médicaments (moteur déterministe, base BDP livrée dans l'image). Global
+    # : c'est l'installation tout entière qui active/désactive la
+    # re-transcription en arrière-plan pendant la dictée.
+    Setting(
+        "dictation_grounding", "choice", "group.dictation",
+        default=lambda: "true" if settings.dictation_grounding else "false",
+        choices=ON_OFF, section="sect.med_grounding",
+    ),
+
     # =========================================================================
     # --- Note ----------------------------------------------------------------
     # =========================================================================

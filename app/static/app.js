@@ -526,6 +526,11 @@
   // perdrait la queue non dévoilée. Le serveur écrit de toute façon la
   // version durable (scheduleSave ignore raw_transcript pendant la dictée).
   let committedText = '';
+  //: Miroir de la transcription par tranches (session.parts), maintenu côté
+  //: client pour pouvoir CORRIGER PAR L'ARRIÈRE au fil des événements
+  //: ``transcript_correct`` (remplacement d'un bloc d'index donné) sans
+  //: dépendre du texte accumulé final plus long à reconstruire.
+  let committedParts = [];
   const transcriptReveal = createTextReveal((shown) => {
     const box = $('transcript');
     if (!box) return;
@@ -546,6 +551,109 @@
   function resetTranscriptReveal() {
     transcriptReveal.reset();
     committedText = $('transcript').value;
+    // Le texte est remplacé en bloc (retranscription, ouverture, reprise) :
+    // on re-synchronise le tableau des parts sur ce nouveau contenu.
+    committedParts = committedText ? [committedText] : [];
+  }
+
+  /**
+   * Reconstruit ``committedText`` depuis ``committedParts`` et réaffiche. Le
+   * petit flash signale le « le texte se corrige par l'arrière ».
+   */
+  function rebuildCommittedText({ pulse = false } = {}) {
+    committedText = formatSentences(committedParts.join(' ').replace(/\s+/g, ' '));
+    transcriptReveal.set(committedText);
+    if (pulse) flashElement('transcript');
+  }
+
+  /**
+   * Applique une correction par l'arrière du transcript (SSE ``transcript_correct``).
+   * Le serveur envoie la liste complète et AUTORITATIVE des parts (les blocs
+   * remplacés ont déjà été réécrits de son côté) : on la reprend telle quelle,
+   * ce qui évite toute gestion d'index fragile quand le nombre de parts change.
+   */
+  function applyTranscriptCorrection(payload) {
+    if (!payload || !Array.isArray(payload.parts)) return;
+    committedParts = payload.parts.slice();
+    if (payload.session_id && payload.session_id === dictation.sessionId) {
+      // Notre onglet : resynchronise la borne des parts déjà consommées pour
+      // que applyDictationParts ne reprenne pas une version déjà remplacée.
+      dictation.appliedParts = committedParts.length;
+    }
+    rebuildCommittedText({ pulse: true });
+    updateActionButtons();
+  }
+
+  /**
+   * Liste pointée des médicaments normalisés : rend à la fois la liste live
+   * sous le transcrit (``#medList``), l'onglet « Validation » (``#secondPassMeds``)
+   * et le compteur du pied de dictée. Puce de liste (« - »), jamais de
+   * pointillés. ``items`` = [{name, posology, ...}].
+   */
+  function renderMedItems(items) {
+    const liste = items && Array.isArray(items) ? items : [];
+    state.medItems = liste;
+
+    const compteur = $('medListCount');
+    if (compteur) compteur.textContent = liste.length ? `(${liste.length})` : '';
+
+    // --- Liste live sous le transcrit ---
+    const blocLive = $('medList');
+    const ul = $('medListItems');
+    if (blocLive && ul) {
+      ul.replaceChildren();
+      if (liste.length) {
+        for (const item of liste) {
+          const li = document.createElement('li');
+          li.className = 'flex items-baseline gap-2';
+          const nom = document.createElement('span');
+          nom.className = 'font-medium';
+          nom.textContent = item.name;
+          li.appendChild(nom);
+          if (item.posology) {
+            const poso = document.createElement('span');
+            poso.className = 'text-slate-500';
+            poso.textContent = `— ${item.posology}`;
+            li.appendChild(poso);
+          }
+          ul.appendChild(li);
+        }
+        blocLive.classList.remove('hidden');
+      } else if (state.medGroundingOn) {
+        const li = document.createElement('li');
+        li.textContent = T('medgrounding.none');
+        ul.appendChild(li);
+        blocLive.classList.remove('hidden');
+      } else {
+        blocLive.classList.add('hidden');
+      }
+    }
+
+    // --- Onglet Validation (liste pointée, en markdown, PUCE DE LISTE) ---
+    const vueValidation = $('secondPassMeds');
+    if (vueValidation) {
+      if (liste.length) {
+        const lignes = [`## ${T('medgrounding.title')}`];
+        for (const item of liste) {
+          lignes.push(`- **${item.name}**${item.posology ? ` — ${item.posology}` : ''}`);
+        }
+        vueValidation.innerHTML = markdownToHtml(lignes.join('\n'));
+        vueValidation.classList.remove('hidden');
+      } else {
+        vueValidation.classList.add('hidden');
+      }
+    }
+
+    // --- Compteur du pied de dictée ---
+    const statut = $('medGroundingStatus');
+    if (statut) {
+      if (state.medGroundingOn) {
+        statut.textContent = T('medgrounding.status', { count: liste.length });
+        statut.classList.remove('hidden');
+      } else {
+        statut.classList.add('hidden');
+      }
+    }
   }
 
   const state = {
@@ -594,6 +702,9 @@
     // « Validation » : préférence usager (serveur), capacité du fournisseur.
     secondPass: false,
     verificationCapable: true,
+    // « Correction des médicaments » : réglage admin global + liste pointée.
+    medGroundingOn: false,
+    medItems: [],
     // Toast « brouillon abandonné » montré pendant CETTE page : remontré à
     // chaque chargement tant qu'un brouillon « abandonnée » existe (voir
     // refreshAbandonedState). Les annonces en direct (SSE) se dédupliquent
@@ -891,6 +1002,10 @@
       if (data.superseded) return;
       $('transcript').value = formatSentences(data.transcript);
       resetTranscriptReveal();
+      if (data.med_items) {
+        state.medGroundingOn = true;
+        renderMedItems(data.med_items);
+      }
       state.transcriptLanguage = data.stt_language || (tpl ? tpl.language : '');
       // Le serveur a déjà écrit ce texte en base. On force malgré tout une
       // sauvegarde : elle emporte aussi le gabarit qui vient de changer, et
@@ -1122,10 +1237,8 @@
     // La base est ``committedText``, jamais la valeur live de la boîte (un
     // préfixe pendant une révélation en cours). La révélation dévoile le
     // texte progressivement, comme la note structurée.
-    committedText = formatSentences(
-      committedText ? `${committedText} ${fresh.join(' ')}` : fresh.join(' '),
-    );
-    transcriptReveal.set(committedText);
+    for (const part of fresh) committedParts.push(part);
+    rebuildCommittedText();
     updateTranscriptMeta({ duration_seconds: session.transcribed_seconds });
     updateActionButtons();
   }
@@ -2164,6 +2277,11 @@
       );
       resetTranscriptReveal();
 
+      if (result.med_items) {
+        state.medGroundingOn = true;
+        renderMedItems(result.med_items);
+      }
+
       if (result.stt_language) state.transcriptLanguage = result.stt_language;
       updateTranscriptMeta(result);
       loadRecordings();
@@ -2834,9 +2952,12 @@
 
       // Sur grand écran, on bascule le panneau de dictée sur « Validation »
       // dès la note générée : la rubrique « Corrections » y est déjà visible,
-      // la roue continue de tourner si l'audit est en cours. Sur mobile on
-      // reste sur la note générée (l'usager bascule lui-même).
-      const correctionsOuAudit = Boolean(result.corrections || state.secondPass);
+      // la roue continue de tourner si l'audit est en cours, et la liste
+      // pointée des médicaments (grounding) y est présentée en haut. Sur
+      // mobile on reste sur la note générée (l'usager bascule lui-même).
+      const correctionsOuAudit = Boolean(
+        result.corrections || state.secondPass || state.medItems.length,
+      );
       if (!isMobileLayout() && correctionsOuAudit) {
         selectDicteeTab('secondpass');
       }
@@ -4130,6 +4251,20 @@
         renderSecondPass(null, false);
       }
 
+      // « Correction des médicaments » : restaurer la liste pointée persistée.
+      let medItemsPersistés = [];
+      if (draft.med_grounding_json) {
+        try {
+          medItemsPersistés = JSON.parse(draft.med_grounding_json);
+        } catch (_) { medItemsPersistés = []; }
+      }
+      if (Array.isArray(medItemsPersistés) && medItemsPersistés.length) {
+        state.medGroundingOn = true;
+        renderMedItems(medItemsPersistés);
+      } else {
+        renderMedItems([]);
+      }
+
       if (draft.template_id) {
         $('templateSelect').value = String(draft.template_id);
         updateTemplateDescription();
@@ -4148,7 +4283,8 @@
       // d'afficher un onglet vide — même règle que le post-génération).
       const notePresente = $('markdownEditor').value.trim();
       const contenuValidation = Boolean(
-        (draft.corrections_markdown || decoupe.corrections || '').trim() || draft.verification_json,
+        (draft.corrections_markdown || decoupe.corrections || '').trim() || draft.verification_json
+        || medItemsPersistés.length,
       );
       selectDicteeTab(notePresente && contenuValidation ? 'secondpass' : 'transcript');
       state.lastSavedSnapshot = workspaceSnapshot();
@@ -6333,6 +6469,8 @@
     // « Validation » : capable = fournisseur audio ; préférence = valeur usager.
     state.verificationCapable = Boolean(config.verification_capable);
     state.secondPass = Boolean(config.second_pass) && state.verificationCapable;
+    // « Correction des médicaments » : réglage admin global.
+    state.medGroundingOn = Boolean(config.dictation_grounding);
     updateSecondPassToggle();
     updateSecondPassAvailability();
     updateActionButtons();
@@ -6424,15 +6562,48 @@
     // Base = ``committedText`` (jamais la valeur live de la boîte, préfixe
     // pendant une révélation). La révélation synchrone le snapshot au fil du
     // dévoilement (voir transcriptReveal) : pas de faux conflit en direct.
-    committedText = formatSentences(
-      committedText ? `${committedText} ${payload.text}` : payload.text,
-    );
-    transcriptReveal.set(committedText);
+    committedParts.push(payload.text);
+    rebuildCommittedText();
     updateTranscriptMeta({ duration_seconds: payload.audio_seconds });
     updateActionButtons();
     // Le texte poussé est déjà durable côté serveur : ne pas le marquer
     // « à sauvegarder » — la révélation (transcriptReveal) synchronise le
     // snapshot au fil du dévoilement, donc il ne reste jamais « en attente ».
+  }
+
+  /* --- Correction par l'arrière (grounding) -------------------------------
+   * ``transcript_correct`` : le texte se stabilise quelques secondes après la
+   * dictée (mots de frontière ré-écoutés) — on remplace les parts localement.
+   * ``med_grounding`` / ``med_grounding_result`` : liste pointée des
+   * médicaments normalisés (live puis définitive), alimentant la liste sous
+   * le transcrit et l'onglet « Validation ».
+   * ---------------------------------------------------------------------- */
+
+  function onTranscriptCorrect(evt) {
+    const payload = JSON.parse(evt.data || '{}');
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    applyTranscriptCorrection(payload);
+  }
+
+  function onMedGrounding(evt) {
+    const payload = JSON.parse(evt.data || '{}');
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    if (payload.items) {
+      state.medGroundingOn = true;
+      renderMedItems(payload.items);
+    }
+  }
+
+  function onMedGroundingResult(evt) {
+    const payload = JSON.parse(evt.data || '{}');
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    // L'onglet qui a émis ignore son propre résultat (il le pose par la
+    // réponse HTTP) ; les suiveurs l'appliquent.
+    if (payload.origin_tab && payload.origin_tab === state.tabId) return;
+    if (payload.items) {
+      state.medGroundingOn = true;
+      renderMedItems(payload.items);
+    }
   }
 
   /* -------------------------------------------------------------------------
@@ -7049,6 +7220,9 @@
     liveSource.addEventListener('generation_started', onGenerationStarted);
     liveSource.addEventListener('verification_chunk', onVerificationChunk);
     liveSource.addEventListener('verification_result', onVerificationResult);
+    liveSource.addEventListener('transcript_correct', onTranscriptCorrect);
+    liveSource.addEventListener('med_grounding', onMedGrounding);
+    liveSource.addEventListener('med_grounding_result', onMedGroundingResult);
     liveSource.addEventListener('transcription_progress', onTranscriptionProgress);
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);
     liveSource.addEventListener('consultation_created', onSyncConsultationCreated);

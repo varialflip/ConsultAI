@@ -828,6 +828,37 @@ exposés qu'avant, noyés qu'ils étaient dans une tranche de 10 s : le seuil
 retente au « Terminer » sans garantie — comportement assumé, à reconsidérer si
 le gain de latence ne compense pas ces interjections.
 
+### 7.8 Correction des médicaments (grounding, liste pointée)
+
+Réglage admin `DICTATION_GROUNDING` (groupe **Dictée**, section « Correction
+des médicaments », défaut `false`). Une fois activé :
+
+- **Stabilisation audio par l'arrière.** La transcription par tranches coupe
+  parfois un mot à la jointure de deux segments (aucun silence à portée de la
+  fenêtre). Chaque frontière non encore stabilisée est **ré-écoutée en
+  continu** (découpage aux silences réels) et le texte des segments concernés
+  est remplacé en direct : le texte « se corrige par l'arrière » quelques
+  secondes après la dictée (SSE `transcript_correct`). Conçu pour un **point
+  de terminaison STT custom auto-hébergé** (aucune limite de taux) ; coûte des
+  appels STT en arrière-plan.
+- **Liste pointée des médicaments.** Les noms déformés par la reconnaissance
+  vocale sont normalisés contre la **base canadienne de produits
+  pharmaceutiques (BDP)** livrée dans l'image (`app/meds.sqlite`, moteur
+  déterministe `app/med_grounding.py`, dépendance `rapidfuzz` — aucun appel
+  réseau). La liste (nom normalisé + posologie, en **puces**, jamais de
+  pointillés) s'affiche sous le transcrit et **en haut de l'onglet
+  « Validation »**, mise à jour en direct (`med_grounding`) puis définitive
+  (`med_grounding_result`, persistée dans `med_grounding_json`).
+- **S'étend à l'audio importé et à la retranscription** : la liste est
+  recalculée sur le texte complet, renvoyée dans la réponse (`med_items`) et
+  diffusée par SSE.
+- Après génération de la note, l'onglet **Validation** s'ouvre sur grand
+  écran (en plus de la rubrique « Corrections » et de l'audit existants).
+
+La base BDP peut être régénérée depuis les extraits bruts (dossier
+`med_grounding/` du dépôt, scripts `build_db.py` / `seed_aliases.py` /
+`prune_db.py`) ; ce dossier ne fait pas partie du conteneur.
+
 ---
 
 ## 8. Mise à jour

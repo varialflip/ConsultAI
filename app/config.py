@@ -263,6 +263,12 @@ class Settings:
     #: les zones de parole non couvertes (VAD raté, tranche échouée).
     stt_vad_finish_sweep: bool = True
 
+    #: Correction médicaments : stabilisation audio par l'arrière pendant la
+    #: dictée + liste pointée des médicaments (moteur déterministe, base BDP
+    #: livrée). Désactivé par défaut : la re-transcription des frontières
+    #: consomme des appels STT (pertinent avec un endpoint custom auto-hébergé).
+    dictation_grounding: bool = False
+
     # --- Gemini ---
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
@@ -476,6 +482,7 @@ class Settings:
             stt_vad_speech_ms=_env_int("STT_VAD_SPEECH_MS", 150),
             stt_vad_silence_ms=_env_int("STT_VAD_SILENCE_MS", 450),
             stt_vad_finish_sweep=_env_bool("STT_VAD_FINISH_SWEEP", True),
+            dictation_grounding=_env_bool("DICTATION_GROUNDING", False),
 
             gemini_api_key=_env("GEMINI_API_KEY"),
             gemini_model=_env("GEMINI_MODEL", "gemini-2.5-flash"),

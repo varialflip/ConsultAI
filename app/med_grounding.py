@@ -1,19 +1,46 @@
 #!/usr/bin/env python3
-"""Deterministic, auditable medication-normalization engine.
+"""Medicine grounding engine — ConsultAI (module applicatif).
 
-Primary signal : orthographic fuzzy match (accent-folded Levenshtein) over the
-                 DPD brand/generic names -- matches the letter-substitution
-                 pattern of real ASR drug-name garble (Trendate->TRANDATE,
-                 Aricepte->ARICEPT, Pantolot->PANTOLOC).
-Secondary      : rule-based French G2P -> phoneme BK-tree, optional (--phonetic).
-                 Kept behind a flag because naive G2P is noisy; ortho is primary.
-Scoring        : ortho/exact 100; else PHONETIC(ortho floor) + ANCHOR + POSOLOGY,
-                 requires a context signal in narrative prose, gate S>=65.
+Port déterministe et auditable de ``med_grounding/match_meds.py`` (le dépôt
+garde les scripts de régénération de la base). Normalise les noms de
+médicaments déformés par la reconnaissance vocale contre la base canadienne
+BDP (`meds.sqlite`, livrée dans l'image).
+
+Signal primaire  : correspondance orthographique floue (Levenshtein à repli
+                   d'accents) sur les noms de marques/génériques DPD.
+Signal secondaire: G2P français → arbre BK de phonèmes (optionnel, bruité).
+Scoring          : exact 100 ; sinon PHONETIC + ANCHOR + POSOLOGY, demande un
+                   signal de contexte dans la prose narrative, seuil S ≥ 65.
+
+Ce module n'a AUCUNE dépendance ORM/réseau : il est importable partout
+(dictée, génération, tâches de fond) et thread-safe (un seul ``Matcher``
+singleton, en lecture seule après construction).
 """
-import re, sqlite3, unicodedata
-from rapidfuzz.distance import Levenshtein
+from __future__ import annotations
 
-DB = "./meds.sqlite"
+import os
+import re
+import sqlite3
+import threading
+import unicodedata
+
+#: Levenshtein accéléré en C (rapidfuzz). Optionnel au démarrage : l'image doit
+#: être reconstruite avec `rapidfuzz` (voir requirements.txt) pour que la
+#: correction des médicaments fonctionne, mais une instance non reconstruite
+#: doit continuer de DÉMARRER (fonctionnalité simplement désactivée, voir
+#: ``matcher()``).
+try:
+    from rapidfuzz.distance import Levenshtein
+    _RAPIDFUZZ_OK = True
+except Exception:  # pragma: no cover — dépendance manquante (image à reconstruire)
+    Levenshtein = None
+    _RAPIDFUZZ_OK = False
+
+#: Base BDP livrée avec l'application. ``meds.sqlite`` est au côté du module
+#: (Dockerfile: ``COPY app/ /app/app/``) ; le faire pointer vers le répertoire
+#: courant du module (et non le CWD) le rend invariable quel que soit l'endroit
+#: d'où le serveur est lancé.
+DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meds.sqlite")
 PHONETIC_WEIGHT = 40
 ANCHOR_WEIGHT   = 25
 POSOLOGY_WEIGHT = 25
@@ -947,20 +974,227 @@ class Matcher:
         return " ".join(result), changes
 
 
-def main():
-    import sys
-    args = [a for a in sys.argv[1:]]
-    use_phon = "--phonetic" in args
-    path = next((a for a in args if not a.startswith("--")), "dictee-1-cohere.txt")
-    text = open(path).read()
-    m = Matcher(use_phonetic=use_phon)
-    fixed, changes = m.normalize(text)
-    print(f"== output ({path}) [phonetic={use_phon}] ==")
-    print(fixed)
-    print("\n== audited changes ==")
-    for span, repl, score, ortho in changes:
-        print(f"  {span!r:26} -> {repl!r:22}  S={score} ortho={ortho}")
+# ---------------------------------------------------------------------------
+# API applicative — singleton thread-safe + extraction de la liste de méds
+# ---------------------------------------------------------------------------
+#: Verrou de construction : le ``Matcher`` est retardé au premier usage (l'init
+#: charge la base en mémoire, ~0,5 s) et partagé ensuite. Après construction
+#: l'objet est en lecture seule : ``normalize`` est thread-safe (vérifié).
+_moteur: Matcher | None = None
+_verrou_moteur = threading.Lock()
 
 
-if __name__ == "__main__":
-    main()
+def is_available() -> bool:
+    """La correction des médicaments peut-elle tourner (rapidfuzz + base) ?"""
+    return _RAPIDFUZZ_OK and os.path.exists(DB)
+
+
+def matcher() -> Matcher:
+    """Le ``Matcher`` singleton du processus (construit une seule fois).
+
+    Lève ``RuntimeError`` si ``rapidfuzz`` est absent du conteneur (image non
+    reconstruite) : les appelants traitent l'absence en désactivant la
+    fonctionnalité, jamais en faisant échouer un appel applicatif.
+    """
+    global _moteur
+    if _moteur is None:
+        if not _RAPIDFUZZ_OK:
+            raise RuntimeError(
+                "rapidfuzz est absent — correction des médicaments indisponible "
+                "(reconstruire l'image)."
+            )
+        with _verrou_moteur:
+            if _moteur is None:
+                _moteur = Matcher(db=DB)
+    return _moteur
+
+
+def normalize(text: str) -> tuple:
+    """Normalise les médicaments du texte → ``(texte_corrigé, changements)``.
+
+    ``changements`` = liste de ``(span, remplacement, score, ortho_sim)``,
+    filtrée des auto-correspondances (``span == remplacement``) pour la
+    lisibilité — consultez ``matcher().normalize`` pour la liste brute.
+    """
+    fixed, changes = matcher().normalize(text)
+    changes = [
+        (span, repl, score, ortho)
+        for span, repl, score, ortho in changes
+        if span and repl and norm_phon(span) != norm_phon(repl)
+    ]
+    return fixed, changes
+
+
+#: Mots qui ne sont JAMAIS un nom de médicament même s'ils figurent dans la
+#: base (protocoles, posologie, prose) — exclues de l'extraction de la liste.
+_ITEM_STOP = {
+    "die", "bid", "tid", "qid", "prn", "hs", "po", "peros", "q", "am", "pm",
+    "mg", "mcg", "ug", "g", "ml", "ui", "sc", "dieam", "per",
+
+}
+
+#: Principes/filtres UV et bases cosmétiques : des noms de marques RAMASSÉS
+#: (« MINUTES », « BASE », « SAGE »…) résolvent à ces substances en tant que
+#: feuilles de marques cosmétiques (crème solaire, maquillage). Jamais un
+#: médicament de la liste clinique — on les exclut.
+_UV_COSMETICS = {
+    "octisalate", "avobenzone", "octocrylene", "oxybenzone", "homosalate",
+    "sulisobenzone", "ecamsule", "ensulizole", "mexoryl", "zinc oxide",
+    "oxyde de zinc", "titanium dioxide", "dioxyde de titane", "enxasulfate",
+    "padimate", "meradimate", "dioxybenzone", "octyl methoxycinnamate",
+    "benzophenone", "phenylbenzimidazole", "avobenzone",
+}
+
+
+def _dose_posology(text: str, name: str) -> str:
+    """Candidate posologie après ``name`` dans ``text`` (<= 8 jetons).
+
+    S'autorise à sauter quelques mots de prose entre le nom et sa dose
+    (« … prescrite à une dose de 12,5 mg BID PRN ») mais s'arrête au premier
+    autre nom de médicament.
+    """
+    idx = text.find(name)
+    if idx < 0:
+        return ""
+    tail = text[idx + len(name):]
+    pieces: list = []
+    sauts = 0
+    for tok in re.split(r"\s+", tail.strip()):
+        if not tok:
+            break
+        aplat = tok.strip(" \t,;:().")
+        if not aplat:
+            continue
+        if aplat in (".", "!", "?"):
+            break
+        # Les chiffres comptent (dose !) mais norm_phon les élimine.
+        if re.fullmatch(r"\d+(?:[.,]\d+)?", aplat):
+            pieces.append(aplat)
+            if len(pieces) >= 8:
+                break
+            continue
+        p = norm_phon(aplat)
+        if p in _ITEM_STOP or (p and p in _DOSE_WORDS):
+            pieces.append(aplat)
+            if len(pieces) >= 8:
+                break
+            continue
+        # Un autre nom de médicament = fin de l'entrée courante.
+        if _lookup_exact(aplat):
+            break
+        if not pieces:
+            # Prose entre le nom et sa dose : passer outre, borné.
+            sauts += 1
+            if sauts > 6:
+                break
+            continue
+        break
+    return " ".join(pieces)
+
+
+#: Génériques français OTC courants, non portés en alias dans la base BDP.
+_FRENCH_OTC = {
+    "aspirine": "aspirine",
+    "acetaminophene": "acétaminophène",
+    "acetaminophen": "acétaminophène",
+    "paracetamol": "acétaminophène",
+    "ibuprofene": "ibuprofène",
+    "naproxene": "naproxène",
+    "omeprazole": "oméprazole",
+}
+
+#: Mots de posologie francs (fréquence, route, unité) — à comparer en ÉGALITÉ,
+#: jamais en sous-chaîne (« tachycardie » contient « die » et ne doit pas être
+#: capturé comme posologie).
+_DOSE_WORDS = {
+    "mg", "mcg", "µg", "ug", "g", "ml", "unite", "unites", "unités", "units", "ui",
+    "die", "bid", "tid", "qid", "prn", "po", "peros", "am", "pm", "hs",
+    "matin", "soir", "coucher", "jour", "jours", "semaine", "fois",
+    "quotidien", "quotidienne", "microgramme", "microgrammes", "q1sem", "q2j",
+    "souscut", "souscutane", "souscutanee", "sc",
+}
+
+
+def _lookup_exact(token: str) -> dict | None:
+    """Résout un jeton en nom de médicament canonique (exact seulement).
+
+    Exclut les feuilles de marques simples (un mot d'une marque composite,
+    ex. « LONG » de « LONG LASTING DRISTAN ») : en dehors de la correction
+    elle-même, un item de liste doit être un vrai nom de médicament.
+    """
+    t = norm_phon(token.strip(" \t,;:.()\"'"))
+    if not t or len(t) < 3 or t in _ITEM_STOP:
+        return None
+    # Mots de la langue courante / protocoles : jamais des noms de médicaments,
+    # même s'ils figurent comme feuilles de marques dans la base.
+    if t in FRENCH_STOP or t in ANCHOR_WORDS or t in PROTOCOL_WORDS:
+        return None
+    # OTC francophones courants, absents de la base BDP en tant que génériques
+    # (l'EN est « acetylsalicylic acid », …) mais fréquents en dictée.
+    if t in _FRENCH_OTC:
+        return {"level": "BASE_GENERIC", "base": _FRENCH_OTC[t], "brand": None}
+    m = matcher()
+    if t in m.exact_garble:
+        level, base, brand, _leaf, _otc = m.exact_garble[t]
+        if _is_cosmetic(base):
+            return None
+        return {"level": level, "base": base, "brand": brand}
+    if t in m.exact:
+        level, base, brand, is_leaf, _otc = m.exact[t]
+        if level == "FULL_GENERIC" or is_leaf:
+            return None
+        if _is_cosmetic(base or brand):
+            return None
+        return {"level": level, "base": base, "brand": brand}
+    # Génériques français non portés en alias exact (aspirine, …) : la liste
+    # des noms de substances actives construite à l'init.
+    if t in m._generic_names:
+        return {"level": "BASE_GENERIC", "base": t, "brand": None}
+    return None
+
+
+def _is_cosmetic(base_or_brand) -> bool:
+    if not base_or_brand:
+        return False
+    cle = norm_orth(base_or_brand).replace(" ", "")
+    return cle in {norm_orth(e).replace(" ", "") for e in _UV_COSMETICS}
+
+
+def extract_med_items(text: str) -> list:
+    """Liste pointée des médicaments détectés dans ``text`` (texte corrigé).
+
+    Chaque item : ``{"name", "posology", "score", "level"}``. Déterministe et
+    dédupliqué par nom canonique (première occurrence). Sert de source à la
+    fois à la liste live de dictée, à l'onglet « Validation » et à l'import.
+    """
+    fixed, _ = matcher().normalize((text or "").strip())
+    items = []
+    vus = set()
+    for jeton in re.findall(r"[\wÀ-ÿ'-]+", fixed):
+        res = _lookup_exact(jeton)
+        if not res:
+            continue
+        base = (res["base"] or res["brand"] or jeton)
+        cle = norm_phon(base)
+        if cle in vus:
+            continue
+        # Une posologie qui suit ce nom.
+        poso = _dose_posology(fixed, jeton)
+        # Électrolytes / valeurs de laboratoire : ne sont retenus comme
+        # médicaments que munis d'une vraie posologie (unité + fréquence) ;
+        # « Calcium 1,26 » du bilan est lab, « Calcium 500 mg PO DIE » est un
+        # supplément.
+        base_cle = norm_orth(base).replace(" ", "")
+        if base_cle in LAB_ION and not re.search(
+                r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm)\b",
+                poso, re.I):
+            continue
+        vus.add(cle)
+        items.append({
+            "name": jeton,
+            "base": base,
+            "posology": poso,
+            "score": 100 if res["level"] in ("BRAND", "BASE_GENERIC") else 65,
+            "level": res["level"],
+        })
+    return items

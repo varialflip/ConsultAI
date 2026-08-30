@@ -120,6 +120,32 @@ def strip_salts(name, fr=False):
     return " ".join(words)
 
 
+# Presentation / strength remnants to strip from brand names so an injectable
+# inactive like "HALDOL INJECTION 5MG/ML" lands as the plain name "HALDOL".
+# Without this the alias becomes "HALDOL /ML", whose unit token makes
+# prune_db.py delete it as presentation junk and orphan the med.
+SLASH_STRENGTH = re.compile(r"\s*/\s*\d*(?:[.,]\d*)?\s*(?:mg|mcg|g|ml|%)\b", re.I)
+INLINE_STRENGTH = re.compile(
+    r"\s+\d+(?:[.,]\d+)?\s*(?:mg|mcg|g|ml|%)\b(?:\s*/\s*\d+(?:[.,]\d+)?\s*(?:mg|mcg|g|ml|%)\b)?", re.I)
+FORM_TAIL = re.compile(r"\s+(?:la|inj|injection)\s*$", re.I)
+
+
+def clean_presentation(name):
+    """Reduce a raw brand name to its name-only core: drop dosage-form words
+    (BRAND_STOP), slash strengths ("5MG/ML", "/ML", "50 MG/ML", "0.1MG") and
+    trailing LA/INJ form tokens.
+    """
+    n = BRAND_STOP.sub(" ", name)
+    n = SLASH_STRENGTH.sub(" ", n)
+    n = INLINE_STRENGTH.sub(" ", n)
+    while True:
+        m = FORM_TAIL.sub(" ", n)
+        if m == n:
+            break
+        n = m
+    return re.sub(r"\s+", " ", n).strip().rstrip(".-")
+
+
 def ingest_inactive(conn, seen, dpd_ia_dir=DPD_IA_DIR):
     """Ingest Health Canada 'cancelled / inactive' products (dpd_ia extract) as
     BRAND rows mapped to their active-ingredient base generic. is_active=0 so a
@@ -171,13 +197,13 @@ def ingest_inactive(conn, seen, dpd_ia_dir=DPD_IA_DIR):
             continue
         code = r[0].strip()
         brand_en = r[4].strip()
-        brand_fr = r[11].strip() if len(r) > 11 else ""
+        # dpd_ia layout puts brand_fr at index 5 (the marketed layout uses 11).
+        brand_fr = r[5].strip() if len(r) > 5 else ""
         for bname in {brand_en, brand_fr}:
             bname = bname.strip()
             if not bname:
                 continue
-            clean = BRAND_STOP.sub(" ", bname)
-            clean = re.sub(r"\s+", " ", clean).strip().rstrip(".-")
+            clean = clean_presentation(bname)
             if not clean or clean.upper() in {"HUMAN", "N/A", ""}:
                 continue
             key = ("BRAND", norm(clean))

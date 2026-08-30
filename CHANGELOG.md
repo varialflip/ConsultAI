@@ -3,6 +3,41 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-30 — Correction des médicaments pendant la dictée (grounding, liste pointée)
+
+*Le STT par tranches coupe parfois un mot à la jointure de deux segments, et
+les noms de médicaments déformés arrivent telles quels. Avec le nouveau
+réglage admin « Correction des médicaments » (groupe Dictée,
+`DICTATION_GROUNDING`), l'application réécoute la frontière et normalise les
+noms contre la base canadienne BDP livrée dans l'image (moteur déterministe,
+sans appel réseau).*
+
+- **Stabilisation audio par l'arrière** : chaque frontière non encore stable
+  est ré-écoutée en continu (découpage aux silences), le texte des segments
+  concernés est remplacé (SSE `transcript_correct`, « le texte se corrige par
+  l'arrière » en ~3-6 s). Prévu pour un point de terminaison STT custom
+  auto-hébergé (aucune limite de taux).
+- **Liste pointée des médicaments** : noms normalisés + posologie (puces,
+  jamais de pointillés) sous le transcrit et **en haut de l'onglet
+  Validation** (SSE `med_grounding` puis `med_grounding_result`, restaurée au
+  rechargement via `med_grounding_json`).
+- **Fonctionne aussi sur l'audio importé et la retranscription** (liste
+  recalculée sur le texte complet, réponse `med_items` + SSE).
+- **Moteur** : `app/med_grounding.py` (port du matcher de `med_grounding/`),
+  base `app/meds.sqlite` livrée dans l'image, dépendance `rapidfuzz`.
+- **Base assainie** : bannissement de la base (`ban_terms.py`) du mot
+  « gériatrique » et de **tous les écrans solaires** (SPF/FPS, ÉCRAN, principes
+  UV : octisalate, avobenzone, octocrilene, dioxyde de titane, oxyde de zinc…) —
+  ces feuilles de marques (MINUTES, BASE, RAPIDE, SUPPORT…) provoquaient des
+  faux positifs en prose ; longs verbes corrects conservés (sunitinib,
+  salbutamol, furosemide…).
+- Bascule automatique vers l'onglet Validation sur grand écran après
+  génération de la note (étendue aux médicaments).
+- **Déploiement** : nouvelle dépendance (`rapidfuzz`) et nouvelle donnée de
+  référence → **reconstruire l'image** (pas un simple redéploiement) :
+  `docker compose build consultai-test` puis
+  `up -d --force-recreate consultai-test`.
+
 ## 2026-08-30 — STT custom : accepte un transcript en texte brut (endpoint OpenAI-compatible)
 
 *Certains serveurs STT auto-hébergés (ex. CohereLabs/cohere-transcribe-03-2026

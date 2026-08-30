@@ -59,6 +59,7 @@ Il est **reproductible** : `meds.sqlite` se reconstruit depuis `dpd/` +
 | `build_db.py` | Construit `meds.sqlite` à partir de `dpd/` + `dpd_ia/` (données BDP Canada). |
 | `seed_aliases.py` | Rajoute des alias « STT_GARBLE » (garbles phonétiques observés → médicament BDP). |
 | `prune_db.py` | Nettoie `meds.sqlite` (alias de présentation/dose parasites) pour un matching rapide. |
+| `ban_terms.py` | **Bannit** de la base le mot « gériatrique » et **tous les écrans solaires** (pratiques SPF/FPS, ÉCRAN, principes UV — octisalate, avobenzone, octocrilene, dioxyde de titane, oxyde de zinc…). Ces feuilles de marques (MINUTES, BASE, SAGE, RAPIDE, SUPPORT…) créaient des faux positifs en prose ; ils ne peuvent plus jamais matcher, ni en exact ni en flou. |
 | `audit_medical.py` | Affiche les différences ligne à ligne entre transcript brut et corrigé (contrôle qualité). |
 | `meds.sqlite` | Base de données médicaments (marques + génériques + alias) **préconstruite et prête à l'emploi**. |
 | `dpd/`, `dpd_ia/` | Extraits texte de la BDP (Drug, Ingredient, Schedule… ; `_ia` = produits annulés/inactifs). |
@@ -154,15 +155,19 @@ cd ~/ConsultAI-selfhosted/med_grounding
 ./venv/bin/python prune_db.py            # affiche ce qui serait retiré
 ./venv/bin/python prune_db.py --apply    # applique réellement
 
-# 4) Vérifier la base
+# 4) Bannir « gériatrique » + tous les écrans solaires. D'abord en dry-run :
+./venv/bin/python ban_terms.py           # affiche ce qui serait banni
+./venv/bin/python ban_terms.py --apply   # applique réellement
+
+# 5) Vérifier la base
 ./venv/bin/python -c "import sqlite3; c=sqlite3.connect('meds.sqlite'); \
 print('meds', c.execute('select count(*) from medications').fetchone()[0], \
 'alias', c.execute('select count(*) from medication_aliases').fetchone()[0])"
 ```
 
-Ordre logique : `build_db` → `seed_aliases` → `prune_db` (apply). Aucun de ces
-trois n'accepte d'argument (ils travaillent sur `./dpd`, `./dpd_ia`,
-`./meds.sqlite`).
+Ordre logique : `build_db` → `seed_aliases` → `prune_db` (apply) →
+`ban_terms` (apply). Aucun d'entre eux n'accepte d'argument (ils travaillent
+sur `./dpd`, `./dpd_ia`, `./meds.sqlite`).
 
 > ⚠ Toute reprise manuelle d'un transcript doit se faire **sur une copie** de
 > la sortie, et toute reprise de données cliniques respecte la politique de

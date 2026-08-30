@@ -77,9 +77,9 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
-
 from app import __version__
-from app import audio_cache, backup, changelog, dictation, i18n, live, llm, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
+
+from app import audio_cache, backup, changelog, dictation, i18n, live, llm, med_grounding, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
 from app import users as users_service
 from app.auth import (
     AuthMiddleware,
@@ -327,6 +327,41 @@ def _template_translator(language: str):
         return i18n.t(key, language, **fields)
 
     return traduire
+
+
+def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
+    """
+    Liste pointée des médicaments d'une transcription (texte complet), persistée
+    dans ``consultation.med_grounding_json`` et diffusée aux onglets suiveurs.
+    Retourne les items pour la réponse HTTP locale. Déterministe et local.
+    """
+    if consultation is None:
+        return []
+    text = (consultation.raw_transcript or "").strip()
+    if not text:
+        return []
+    try:
+        items = med_grounding.extract_med_items(text)
+    except Exception:
+        logger.exception("Grounding méds impossible (consultation %s)", consultation.id)
+        return []
+    consultation.med_grounding_json = json.dumps(items, ensure_ascii=False)
+    db.commit()
+    live.publish(consultation.owner, "med_grounding_result", {
+        "consultation_id": consultation.id,
+        "origin_tab": origin_tab,
+        "items": items,
+    })
+    return items
+
+
+def _med_grounding_on() -> bool:
+    try:
+        if not med_grounding.is_available():
+            return False
+        return runtime_config.value("dictation_grounding") != "false"
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -1419,6 +1454,8 @@ async def api_config(request: Request):
         # « Validation » : capable (fournisseur audio) et préférence de l'usager.
         "verification_capable": llm.verification_capable(),
         "second_pass": preferences.second_pass_for(user.owner_key),
+        # « Correction des médicaments » : réglage admin global.
+        "dictation_grounding": _med_grounding_on(),
         "max_audio_mb": settings.max_audio_mb,
         "is_template_admin": user.is_template_admin,
         #: L'utilisateur courant : le client en a besoin pour reconnaître ses
@@ -2269,6 +2306,11 @@ async def api_transcribe(
             result["stt_used"] = " / ".join(
                 p for p in (consultation.stt_provider, consultation.stt_model) if p
             )
+            if _med_grounding_on():
+                result["med_items"] = _apply_grounding(
+                    db, consultation,
+                    origin_tab=request.headers.get("x-consultai-tab", ""),
+                )
 
         # Le fichier importé est conservé au même titre qu'une dictée, qu'il
         # ait ou non gagné la course ci-dessus : il sert à trancher un doute
@@ -3539,7 +3581,7 @@ async def retranscribe_consultation(
         consultation_id, user.username, len(morceaux),
         consultation.stt_language, len(consultation.raw_transcript),
     )
-    return {
+    reponse = {
         "transcript": consultation.raw_transcript,
         "stt_language": consultation.stt_language,
         "stt_used": " / ".join(p for p in moteur if p),
@@ -3547,6 +3589,12 @@ async def retranscribe_consultation(
         "recordings": len(morceaux),
         "recordings_total": len(pistes),
     }
+    if _med_grounding_on():
+        reponse["med_items"] = _apply_grounding(
+            db, consultation,
+            origin_tab=request.headers.get("x-consultai-tab", ""),
+        )
+    return reponse
 
 
 @app.get("/api/recordings/{recording_id}/audio")

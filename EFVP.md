@@ -430,6 +430,30 @@ défaut** :
   la bascule étant désactivée par défaut, son activation est une décision
   explicite de l'administration.
 
+### 7.10 Correction des médicaments (grounding, 2026-08-30)
+
+La « correction des médicaments » (réglage admin `DICTATION_GROUNDING`,
+groupe Dictée) ajoute deux briques au traitement, **sans rien changer à la
+résidence ni à la dénominalisation** :
+
+- **Base de référence BDP** : `app/meds.sqlite` reproduit la base canadienne
+  des produits pharmaceutiques (BDP) — noms de marques/génériques, posologies
+  types. **Aucun renseignement de santé, aucune identité** : donnée publique
+  de référence (Open Government Licence), traitée localement dans le conteneur.
+  La base bannit le mot « gériatrique » et tous les écrans solaires (feuilles
+  de marques cosmétiques à risque de faux positifs en prose). Elle n'est
+  jamais incluse dans les sauvegardes sanitisées ni diffusée.
+- **Stabilisation audio par l'arrière** : pendant la dictée, la frontière de
+  segments est ré-écoutée via le service vocal **déjà configuré** (custom
+  auto-hébergé recommandé). L'audio tronqué n'est pas conservé en plus ; la
+  re-transcription recycle l'enregistrement déjà soumis à la rétention
+  (§ 3.1) — aucun nouvel envoi hors machine au-delà de ce que fait la dictée
+  elle-même avec le fournisseur choisi.
+- **Audit** : les corrections de noms sont **déterministes et tracées**
+  (`med_grounding_json` par consultation, même rétention que le brouillon),
+  affichées dans l'onglet Validation **à titre indicatif** — le clinicien reste
+  la seule autorité sur le document final, et rien n'est imprimé hors la note.
+
 ---
 
 ## 8. Registre des incidents

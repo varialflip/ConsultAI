@@ -345,6 +345,22 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Préférence « Validation » non enregistrée.",
         "Could not save the \u201cValidation\u201d preference.",
     ),
+    "medgrounding.title": (
+        "Médicaments normalisés",
+        "Normalized medications",
+    ),
+    "medgrounding.empty": (
+        "En attente des médicaments …",
+        "Waiting for medications …",
+    ),
+    "medgrounding.none": (
+        "Aucun médicament détecté.",
+        "No medication detected.",
+    ),
+    "medgrounding.status": (
+        "médicaments : {count}",
+        "medications: {count}",
+    ),
     "pane.clear": ("Supprimer", "Delete"),
     "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),
     "pane.generate": ("Mettre en forme", "Format"),
@@ -1365,6 +1381,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "sect.silence": ("Retrait des pauses", "Pause trimming"),
     "sect.realtime": ("Temps réel", "Realtime"),
     "sect.prompts": ("Consigne générale", "General instruction"),
+    "sect.med_grounding": ("Correction des médicaments", "Medication correction"),
 
     # --- Textes partagés entre fournisseurs de modèle de langage -------------
     # Les fabriques _cap_* de runtime_config.py instancient ces capacités pour
@@ -1627,6 +1644,27 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.stt_silence_keep_seconds.label": (
         "Pause conservée (secondes)",
         "Pause kept (seconds)",
+    ),
+    "set.dictation_grounding.label": (
+        "Correction des médicaments",
+        "Medication correction",
+    ),
+    "set.dictation_grounding.help": (
+        "Pendant la dictée, l'application réécoute les mots coupés en fin de "
+        "segment (stabilisation par l'arrière, quelques secondes de latence) "
+        "et corrige les noms de médicaments déformés par la reconnaissance "
+        "vocale contre la base canadienne BDP livrée dans l'image. Une liste "
+        "pointée des médicaments (nom + posologie) s'affiche sous le transcrit "
+        "et dans l'onglet Validation. Coûte des appels STT en arrière-plan — "
+        "prévu pour un point de terminaison custom auto-hébergé (sans limite "
+        "de taux).",
+        "During dictation, the app re-listens to words cut off at segment "
+        "boundaries (rear stabilization, a few seconds of latency) and "
+        "corrects drug names garbled by speech recognition against the "
+        "Canadian DPD database shipped in the image. A bullet list of "
+        "medications (name + dosage) appears below the transcript and in the "
+        "Validation tab. Costs background STT calls — intended for a "
+        "self-hosted custom endpoint (no rate limit).",
     ),
     "set.stt_silence_keep_seconds.help": (
         "Toute pause plus courte est gardée telle quelle ; les plus longues "

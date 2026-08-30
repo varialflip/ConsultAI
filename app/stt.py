@@ -2521,7 +2521,7 @@ def _post_openai_compatible(
     )
     try:
         with urllib.request.urlopen(requete, timeout=timeout) as reponse:
-            return _json.loads(reponse.read().decode("utf-8"))
+            brut = reponse.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:400]
         logger.error(
@@ -2532,6 +2532,19 @@ def _post_openai_compatible(
     except Exception as exc:
         logger.exception("Échec de l'appel à l'endpoint OpenAI-compatible (%s)", base_url)
         raise TranscriptionError(f"Erreur {libelle} : {exc}") from exc
+
+    # Certains serveurs OpenAI-compatibles rendent le transcript en texte brut
+    # (Content-Type text/plain) plutôt qu'en JSON ``{"text": …}``. On tolère
+    # les deux : JSON si décodable, sinon le corps brut est le transcript.
+    try:
+        return _json.loads(brut)
+    except ValueError:
+        texte = brut.strip()
+        if not texte:
+            raise TranscriptionError(
+                f"Réponse vide {libelle} — le serveur n'a retourné aucun texte."
+            )
+        return {"text": texte}
 
 
 def _fallback_custom_target(base_url: str) -> Tuple[str, str]:

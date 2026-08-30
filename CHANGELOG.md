@@ -3,6 +3,20 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-30 — STT custom : accepte un transcript en texte brut (endpoint OpenAI-compatible)
+
+*Certains serveurs STT auto-hébergés (ex. CohereLabs/cohere-transcribe-03-2026
+sur le serveur de l'instance de test) répondent à
+``POST /audio/transcriptions`` en ``text/plain`` avec le transcript nu, et non
+en JSON ``{"text": …}`` comme Whisper. La lecture stricte du JSON faisait
+échouer toute transcription (« Expecting value: line 1 column 1 »).*
+
+- `_post_openai_compatible` tolère les deux formats : JSON si décodable, sinon
+  le corps brut est pris comme transcript. Une réponse vide produit une erreur
+  explicite (« Réponse vide ») plutôt qu'un échec de décodage opaque.
+- Redéploiement : commit simple sur `selfhosted` + `--force-recreate
+  consultai-test` (aucun tag, aucune image — source servie par le bind mount).
+
 ## 2026-08-30 — Instance de test `test.dictai.ca` (branche `selfhosted`)
 
 *Branche `selfhosted` recréée sur `main` (l'ancienne est archivée sous

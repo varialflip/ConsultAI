@@ -7,6 +7,22 @@ Qwen Omni, point de terminaison personnalisé, OpenRouter). Branché sur
 `ghcr.io/varialflip/consultai`, déployé par la pile `/opt/dictai` (voir
 `/opt/dictai/AGENTS.md` pour le déploiement).
 
+## Branche `selfhosted` et instance de test (`test.dictai.ca`)
+
+Cette branche est le **code de l'instance de test `test.dictai.ca`**, miroir
+de `app.dictai.ca`. On la développe **dans le worktree dédié**
+**`/home/opc/ConsultAI-selfhosted`**, dont `app/` et `CHANGELOG.md` sont
+montés en lecture seule dans le conteneur `consultai-test` (stack
+`/opt/dictai`). Détails, déploiement et configuration : `/opt/dictai/AGENTS.md`
+(§ « Instance de test »).
+
+- Développer et commiter **dans le worktree**, puis pousser la branche ;
+- après chaque push : régénérer la feuille Tailwind **dans le worktree**, puis
+  `sudo docker compose up -d --force-recreate consultai-test` ;
+- la branche est partie de `main` le 2026-08-30 ; l'ancienne branche
+  `selfhosted` (pipeline JSON de structuration, vérification BDPP) a été
+  archivée sous `selfhosted-archive-2026-08-30` (locale + origin).
+
 ## Cycle de déploiement
 
 Deux chemins bien distincts. Une release (tag) n'est faite que lorsqu'elle est

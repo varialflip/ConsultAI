@@ -1092,6 +1092,13 @@ Le code source complet (pour l'audit, la contribution, ou reconstruire
 soi-même l'image) est sur
 [github.com/varialflip/ConsultAI](https://github.com/varialflip/ConsultAI).
 
+> **Branche `selfhosted` (instance de test)** : le dépôt porte aussi une
+> branche `selfhosted` qui alimente l'instance de test `test.dictai.ca`
+> (miroir de `app.dictai.ca`). Elle vit dans un git worktree dédié
+> (`/home/opc/ConsultAI-selfhosted`) monté dans le conteneur `consultai-test`
+> de la pile de production. Configuration, compte OIDC et redéploiement :
+> `/opt/dictai/AGENTS.md`.
+
 ### Structure du dépôt
 
 ```

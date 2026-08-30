@@ -3,6 +3,25 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-30 — Instance de test `test.dictai.ca` (branche `selfhosted`)
+
+*Branche `selfhosted` recréée sur `main` (l'ancienne est archivée sous
+`selfhosted-archive-2026-08-30`), puis miroir de l'instance de production
+déployé sur `test.dictai.ca` via un git worktree dédié
+(`/home/opc/ConsultAI-selfhosted`). Configuration et déploiement :
+`/opt/dictai/AGENTS.md`.*
+
+- **Instance de test** : service `consultai-test` (même image épinglée, code
+  du worktree `selfhosted` monté en lecture seule), données séparées
+  `data/consultai-test` (copie de `consultai.db`, `audio/`, `dictations/`).
+- **Accès** : `test.dictai.ca` → Caddy (mêmes garde-fous que l'app) →
+  `turnstile-gate` → `consultai-test:8000`.
+- **Connexion** : même fournisseur Pocket ID de production (`login.dictai.ca`),
+  client OIDC « Dictai.ca test » dédié, redirect `test.dictai.ca/auth/callback`
+  — mêmes comptes que l'app (mêmes usernames Pocket ID).
+- Redéploiement : commit simple sur la branche + `--force-recreate
+  consultai-test` (voir `/opt/dictai/AGENTS.md`).
+
 ## 2026-08-28 — Audit « Validation » : affichage garanti côté émetteur (relecture périodique)
 
 *Sur une régénération réelle (consultation 1), la section « Validation - 2e

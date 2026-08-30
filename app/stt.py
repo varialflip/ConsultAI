@@ -45,6 +45,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.error
 import uuid
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence, Tuple
@@ -2485,22 +2486,46 @@ import time as _time
 _STT_PROBE_CACHE: dict = {}
 _STT_PROBE_TTL = 15.0
 _STT_PROBE_TIMEOUT = 6.0
+#: Route de santé tentée en premier ; si inconnue (404), le service RÉPOND tout
+#: de même — ce qui compte est qu'il n'est pas injoignable. Seul un échec de
+#: connexion/timeout ou un statut >= 500 (surcharge, crash) marque indisponible.
+_PROBE_PATH = "/health"
+_PROBE_PATH_FALLBACKS = ("", "/v1")  # endpoint sans /health (ex. base racine)
 
 
 def stt_unavailable(endpoint: str) -> bool:
-    """True si le STT est vraisemblablement injoignable, avec cache court."""
+    """True si le STT est vraisemblablement injoignable, avec cache court.
+
+    Critère : l'endpoint ne répond PAS sur le réseau (connexion refusée,
+    timeout) ou répond en erreur serveur (>= 500). Un 404/401/403 signifie au
+    contraire qu'un service vit derrière l'URL (route de santé inconnue, clé
+    manquante) — c'est disponible.
+    """
     cle = endpoint or "?"
     now = _time.monotonic()
     info = _STT_PROBE_CACHE.get(cle)
     if info and now - info[0] < _STT_PROBE_TTL:
         return info[1]
-    try:
-        import urllib.request as _urlreq
-        requete = _urlreq.Request(endpoint.rstrip("/") + "/health", method="GET")
-        with _urlreq.urlopen(requete, timeout=_STT_PROBE_TIMEOUT) as rep:
-            ok = int(rep.status) < 500
-    except Exception:
-        ok = False
+    base = endpoint.rstrip("/")
+    paths = [base + _PROBE_PATH] + [base + f for f in _PROBE_PATH_FALLBACKS]
+    ok = False
+    for chemin in paths:
+        try:
+            import urllib.request as _urlreq
+            requete = _urlreq.Request(chemin, method="GET")
+            with _urlreq.urlopen(requete, timeout=_STT_PROBE_TIMEOUT) as rep:
+                # Toute réponse HTTP (même 404) = le service répond.
+                ok = int(rep.status) < 500
+                break
+        except urllib.error.HTTPError as exc:
+            # 4xx = hôte joignable, route inconnue : dispo.
+            if exc.code < 500:
+                ok = True
+                break
+            ok = False
+            break
+        except Exception:
+            continue   # échec réseau : on essaie le chemin suivant
     _STT_PROBE_CACHE[cle] = (now, ok)
     return not ok
 

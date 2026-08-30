@@ -2485,12 +2485,7 @@ import time as _time
 
 _STT_PROBE_CACHE: dict = {}
 _STT_PROBE_TTL = 15.0
-_STT_PROBE_TIMEOUT = 6.0
-#: Route de santé tentée en premier ; si inconnue (404), le service RÉPOND tout
-#: de même — ce qui compte est qu'il n'est pas injoignable. Seul un échec de
-#: connexion/timeout ou un statut >= 500 (surcharge, crash) marque indisponible.
-_PROBE_PATH = "/health"
-_PROBE_PATH_FALLBACKS = ("", "/v1")  # endpoint sans /health (ex. base racine)
+_STT_PROBE_TIMEOUT = 2.0
 
 
 def stt_unavailable(endpoint: str) -> bool:
@@ -2507,25 +2502,19 @@ def stt_unavailable(endpoint: str) -> bool:
     if info and now - info[0] < _STT_PROBE_TTL:
         return info[1]
     base = endpoint.rstrip("/")
-    paths = [base + _PROBE_PATH] + [base + f for f in _PROBE_PATH_FALLBACKS]
-    ok = False
-    for chemin in paths:
-        try:
-            import urllib.request as _urlreq
-            requete = _urlreq.Request(chemin, method="GET")
-            with _urlreq.urlopen(requete, timeout=_STT_PROBE_TIMEOUT) as rep:
-                # Toute réponse HTTP (même 404) = le service répond.
-                ok = int(rep.status) < 500
-                break
-        except urllib.error.HTTPError as exc:
-            # 4xx = hôte joignable, route inconnue : dispo.
-            if exc.code < 500:
-                ok = True
-                break
-            ok = False
-            break
-        except Exception:
-            continue   # échec réseau : on essaie le chemin suivant
+    # Une seule tentative à budget court : si l'hôte ne répond PAS en réseau,
+    # aucune des routes ne répondra — inutile d'y passer des secondes par
+    # chemin. La première route (/health) est la plus probable ; un 404 =
+    # service vivant (route inconnue) = dispo.
+    try:
+        import urllib.request as _urlreq
+        requete = _urlreq.Request(base + "/health", method="GET")
+        with _urlreq.urlopen(requete, timeout=_STT_PROBE_TIMEOUT) as rep:
+            ok = int(rep.status) < 500
+    except urllib.error.HTTPError as exc:
+        ok = exc.code < 500          # 4xx = hôte joignable → dispo
+    except Exception:
+        ok = False                   # réseau/timeout → indisponible
     _STT_PROBE_CACHE[cle] = (now, ok)
     return not ok
 

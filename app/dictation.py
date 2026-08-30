@@ -1049,6 +1049,8 @@ def _store_part(
     reste juste : elle sert de repère au médecin dans la liste des brouillons.
     """
     if text:
+        text = _normalize_part_text(text)
+    if text:
         session.parts.append(text)
     with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
         consultation = db.get(Consultation, session.consultation_id)
@@ -1124,6 +1126,25 @@ def _grounding_enabled() -> bool:
 def _norm_spaces(s: str) -> str:
     """Comparateur de contenu insensible à la casse/aux blancs multiples."""
     return " ".join((s or "").lower().split())
+
+
+def _normalize_part_text(text: str) -> str:
+    """Applique la correction des médicaments à un bout de transcription.
+
+    Quand le grounding est actif, les noms déformés par la reconnaissance
+    vocale sont remplacés INLINE dès le stockage de la part : le texte affiché
+    (dictée) et le brouillon montrent les noms corrigés à leur place, sans
+    liste séparée. Déterministe, sans effet si la correction est désactivée.
+    """
+    if not text:
+        return text
+    if not _grounding_enabled():
+        return text
+    try:
+        corrige, _ = med_grounding.normalize(text)
+        return corrige.strip() or text
+    except Exception:
+        return text
 
 
 def maybe_schedule_grounding(session_id: str, username: str) -> None:
@@ -1221,7 +1242,7 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
             continue
         texte = (result.get("transcript") or "").strip()
         if texte:
-            nouveaux.append(texte)
+            nouveaux.append(_normalize_part_text(texte))
         if texte:
             logger.info(
                 "Dictée %s : stabilisation [%.1f-%.1f s] (%d caractères)",

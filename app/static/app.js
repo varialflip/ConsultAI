@@ -585,49 +585,15 @@
   }
 
   /**
-   * Liste pointée des médicaments normalisés : rend à la fois la liste live
-   * sous le transcrit (``#medList``), l'onglet « Validation » (``#secondPassMeds``)
-   * et le compteur du pied de dictée. Puce de liste (« - »), jamais de
-   * pointillés. ``items`` = [{name, posology, ...}].
+   * Liste pointée des médicaments normalisés : alimente l'onglet
+   * « Validation » (``#secondPassMeds``). La correction elle-même est
+   * appliquée INLINE dans le texte de la dictée (le serveur normalise les
+   * parts) — aucune liste séparée n'est affichée sous le transcrit.
+   * ``items`` = [{name, posology, ...}].
    */
   function renderMedItems(items) {
     const liste = items && Array.isArray(items) ? items : [];
     state.medItems = liste;
-
-    const compteur = $('medListCount');
-    if (compteur) compteur.textContent = liste.length ? `(${liste.length})` : '';
-
-    // --- Liste live sous le transcrit ---
-    const blocLive = $('medList');
-    const ul = $('medListItems');
-    if (blocLive && ul) {
-      ul.replaceChildren();
-      if (liste.length) {
-        for (const item of liste) {
-          const li = document.createElement('li');
-          li.className = 'flex items-baseline gap-2';
-          const nom = document.createElement('span');
-          nom.className = 'font-medium';
-          nom.textContent = item.name;
-          li.appendChild(nom);
-          if (item.posology) {
-            const poso = document.createElement('span');
-            poso.className = 'text-slate-500';
-            poso.textContent = `— ${item.posology}`;
-            li.appendChild(poso);
-          }
-          ul.appendChild(li);
-        }
-        blocLive.classList.remove('hidden');
-      } else if (state.medGroundingOn) {
-        const li = document.createElement('li');
-        li.textContent = T('medgrounding.none');
-        ul.appendChild(li);
-        blocLive.classList.remove('hidden');
-      } else {
-        blocLive.classList.add('hidden');
-      }
-    }
 
     // --- Onglet Validation (liste pointée, en markdown, PUCE DE LISTE) ---
     const vueValidation = $('secondPassMeds');
@@ -641,17 +607,6 @@
         vueValidation.classList.remove('hidden');
       } else {
         vueValidation.classList.add('hidden');
-      }
-    }
-
-    // --- Compteur du pied de dictée ---
-    const statut = $('medGroundingStatus');
-    if (statut) {
-      if (state.medGroundingOn) {
-        statut.textContent = T('medgrounding.status', { count: liste.length });
-        statut.classList.remove('hidden');
-      } else {
-        statut.classList.add('hidden');
       }
     }
   }

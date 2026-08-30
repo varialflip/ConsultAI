@@ -400,6 +400,7 @@ class Matcher:
         self.ortho = []          # (norm_phon, level, base, brand, is_leaf, is_otc) deduped
         self.ortho_by_len = {}   # len(norm_phon) -> [(n, ...)] for fast phrase lookup
         self._generic_names = set()   # genuine generic orthography names
+        self._generic_compound = set()   # composés multi-mots (espaces préservés)
         seen = set()
         for alias, atype, level, base, brand, is_otc in rows:
             n = norm_phon(alias)
@@ -410,6 +411,8 @@ class Matcher:
                 self.exact_garble.setdefault(n, (level, base, brand, False, bool(is_otc)))
             if level in ("BASE_GENERIC", "FULL_GENERIC") and base:
                 self._generic_names.add(norm_orth(base))
+                if " " in norm_orth(base):
+                    self._generic_compound.add(norm_orth(base))
             # Generic-level aliases win over brand leaves on exact collisions
             prev = self.exact.get(n)
             if n not in self.exact or (prev is not None and prev[3] and not is_leaf):
@@ -1116,13 +1119,14 @@ _DOSE_WORDS = {
 
 
 def _lookup_exact(token: str) -> dict | None:
-    """Résout un jeton en nom de médicament canonique (exact seulement).
+    """Résout un jeton (ou bigramme composé) en nom canonique (exact).
 
     Exclut les feuilles de marques simples (un mot d'une marque composite,
     ex. « LONG » de « LONG LASTING DRISTAN ») : en dehors de la correction
     elle-même, un item de liste doit être un vrai nom de médicament.
     """
-    t = norm_phon(token.strip(" \t,;:.()\"'"))
+    tok = token.strip(" \t,;:.()\"'")
+    t = norm_phon(tok)
     if not t or len(t) < 3 or t in _ITEM_STOP:
         return None
     # Mots de la langue courante / protocoles : jamais des noms de médicaments,
@@ -1134,6 +1138,17 @@ def _lookup_exact(token: str) -> dict | None:
     if t in _FRENCH_OTC:
         return {"level": "BASE_GENERIC", "base": _FRENCH_OTC[t], "brand": None}
     m = matcher()
+    # Composé multi-mots réel (espaces préservés) : « Vitamine D »,
+    # « acide folique »… La clé normalisée garde l'espace ; un nom + dose
+    # (« Trandate 10 ») n'est PAS un composé générique et reste exclu.
+    if " " in tok:
+        nspace = norm_orth(tok)
+        if nspace in m._generic_compound:
+            return {"level": "BASE_GENERIC", "base": nspace, "brand": None}
+        if nspace in m.exact and m.exact[nspace][0] == "BASE_GENERIC":
+            level, base, brand, _leaf, _otc = m.exact[nspace]
+            return {"level": level, "base": base, "brand": brand}
+        return None   # bigramme non composé : ni nom+dose, ni feuille
     if t in m.exact_garble:
         level, base, brand, _leaf, _otc = m.exact_garble[t]
         if _is_cosmetic(base):
@@ -1160,41 +1175,68 @@ def _is_cosmetic(base_or_brand) -> bool:
     return cle in {norm_orth(e).replace(" ", "") for e in _UV_COSMETICS}
 
 
+def _append_item(items, vus, fixed, jeton, res, force_name=None) -> None:
+    """Ajoute un item à la liste, dédupliqué par nom canonique."""
+    base = res.get("base") or res.get("brand") or jeton
+    cle = norm_phon(base)
+    if cle in vus:
+        return False
+    poso = _dose_posology(fixed, force_name or jeton)
+    # Électrolytes / valeurs de laboratoire : ne sont retenus comme
+    # médicaments que munis d'une vraie posologie (unité + fréquence) ;
+    # « Calcium 1,26 » du bilan est lab, « Calcium 500 mg PO DIE » est un
+    # supplément.
+    base_cle = norm_orth(base).replace(" ", "")
+    if base_cle in LAB_ION and not re.search(
+            r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm)\b",
+            poso, re.I):
+        return False
+    vus.add(cle)
+    items.append({
+        "name": force_name or jeton,
+        "base": base,
+        "posology": poso,
+        "score": 100 if res["level"] in ("BRAND", "BASE_GENERIC") else 65,
+        "level": res["level"],
+    })
+    return True
+
+
 def extract_med_items(text: str) -> list:
     """Liste pointée des médicaments détectés dans ``text`` (texte corrigé).
 
     Chaque item : ``{"name", "posology", "score", "level"}``. Déterministe et
-    dédupliqué par nom canonique (première occurrence). Sert de source à la
-    fois à la liste live de dictée, à l'onglet « Validation » et à l'import.
+    dédupliqué par nom canonique. Sert de source à la fois à la liste live de
+    dictée, à l'onglet « Validation » et à l'import.
+
+    Reconnaît d'abord les NOMS COMPOSÉS en bigrammes (« Vitamine D », « acide
+    folique »…) dont la concaténation normalisée existe en base, puis repasse
+    token-à-token pour les simples.
     """
     fixed, _ = matcher().normalize((text or "").strip())
+    jetons = re.findall(r"[\wÀ-ÿ'-]+", fixed)
     items = []
     vus = set()
-    for jeton in re.findall(r"[\wÀ-ÿ'-]+", fixed):
+    consommes = set()
+
+    # --- Bigrammes : noms composés ----------------------------------------
+    for i in range(len(jetons) - 1):
+        if i in consommes:
+            continue
+        paire = f"{jetons[i]} {jetons[i + 1]}"
+        res = _lookup_exact(paire)
+        if res is None:
+            continue
+        if _append_item(items, vus, fixed, paire, res, force_name=" ".join((jetons[i], jetons[i + 1]))):
+            consommes.add(i)
+            consommes.add(i + 1)
+
+    # --- Unigrammes : noms simples -----------------------------------------
+    for i, jeton in enumerate(jetons):
+        if i in consommes:
+            continue
         res = _lookup_exact(jeton)
         if not res:
             continue
-        base = (res["base"] or res["brand"] or jeton)
-        cle = norm_phon(base)
-        if cle in vus:
-            continue
-        # Une posologie qui suit ce nom.
-        poso = _dose_posology(fixed, jeton)
-        # Électrolytes / valeurs de laboratoire : ne sont retenus comme
-        # médicaments que munis d'une vraie posologie (unité + fréquence) ;
-        # « Calcium 1,26 » du bilan est lab, « Calcium 500 mg PO DIE » est un
-        # supplément.
-        base_cle = norm_orth(base).replace(" ", "")
-        if base_cle in LAB_ION and not re.search(
-                r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm)\b",
-                poso, re.I):
-            continue
-        vus.add(cle)
-        items.append({
-            "name": jeton,
-            "base": base,
-            "posology": poso,
-            "score": 100 if res["level"] in ("BRAND", "BASE_GENERIC") else 65,
-            "level": res["level"],
-        })
+        _append_item(items, vus, fixed, jeton, res)
     return items

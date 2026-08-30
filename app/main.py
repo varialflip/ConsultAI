@@ -3029,6 +3029,20 @@ async def api_generate(
             "skipped": True,
         })
 
+    # Correction des médicaments : normaliser le transcript AVANT de l'envoyer
+    # au modèle, pour que la note n'emporte jamais les noms déformés par la
+    # reconnaissance vocale (sélexa → Celexa, trendate → Trandate…). Le
+    # grounding est déterministe et auditable (med_grounding_json) ; le
+    # brouillon conserve la version corrigée (raw_transcript est réécrit
+    # plus loin avec payload.transcript).
+    if _med_grounding_on() and payload.transcript:
+        try:
+            corrige, _ = med_grounding.normalize(payload.transcript)
+            if corrige and corrige.strip():
+                payload.transcript = corrige
+        except Exception:
+            logger.exception("Grounding du transcript impossible — génération sur texte brut")
+
     try:
         result = await run_in_threadpool(
             _generate_and_publish,
@@ -3098,6 +3112,18 @@ async def api_generate(
     # perdues — la garder ici en plus ferait diverger les deux copies
     # silencieusement, exactement le bogue que ce choix corrige.
     consultation.edited_markdown = result["markdown"]
+
+    # Liste pointée des médicaments, recalculée sur le transcript CORRIGÉ (le
+    # grounding réécrit payload.transcript avant la génération) : la liste et
+    # la note concordent, et le JSON d'audit suit la régénération.
+    if _med_grounding_on():
+        try:
+            _apply_grounding(
+                db, consultation,
+                origin_tab=request.headers.get("x-consultai-tab", ""),
+            )
+        except Exception:
+            logger.exception("Grounding liste incomplète (génération %s)", consultation.id)
 
     # Ce que le médecin a saisi lui-même est repris tel quel et fait autorité.
     for field, column in (

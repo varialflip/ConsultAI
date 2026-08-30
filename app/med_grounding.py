@@ -538,12 +538,17 @@ class Matcher:
         }
 
     def _resolve_phrase(self, words, start, n, dose_unit, num_token, anchor_hit,
-                        fragile):
+                        fragile, garble_seed_only=False):
         """Proactive multi-token med-phrase resolution (medication-list regions
         only). Joins up to 3 content tokens bridged by French stop-words (e.g.
         "Perrin de prille" -> perindopril) and accepts a match only when a
         dose follows immediately and the hit is high-confidence and unique, so
-        ordinary prose / anchored narrative is never absorbed."""
+        ordinary prose / anchored narrative is never absorbed.
+
+        ``garble_seed_only=True`` restreint le flou orthographique et ne garde
+        que les garbles multi-mots SEEDÉS (exacts, déterministes) — usage hors
+        zone proactive, où un score flou pourrait absorber de la prose.
+        """
         BRIDGE = {"de", "du", "des", "d", "à", "au", "aux", "le", "la",
                   "les", "l", "un", "une", "et"}
         def clean(w):
@@ -589,6 +594,8 @@ class Matcher:
                 can = self._canonicalize(level, base, brand, bool(_otc))
                 if can:
                     return (idxs[ln - 1] + 1, can, 100)
+            if garble_seed_only:
+                continue              # hors proactive : pas de score flou
             best, second = None, 0.0
             L = len(t)
             for bln in range(max(1, L - MAX_LEN_DIFF - 2), L + MAX_LEN_DIFF + 3):
@@ -932,6 +939,20 @@ class Matcher:
             if proactive[i]:
                 ph = self._resolve_phrase(words, i, n, dose_unit, num_token,
                                           anchor_hit, fragile)
+                if ph is not None:
+                    end, can, ph_score = ph
+                    result.append(can)
+                    changes.append((" ".join(words[i:end]), can, ph_score, 0.0))
+                    i = end
+                    continue
+            # Hors zone proactive, on tente UNAÉ pas le garble multi-mots
+            # seedé (exact, déterministe — « Hamelot d'épine » -> amlodipine
+            # même hors d'une liste dense). Le gabarit phrase exige une dose
+            # juste après, donc aucune prose ne peut être absorbée.
+            else:
+                ph = self._resolve_phrase(words, i, n, dose_unit, num_token,
+                                          anchor_hit, fragile,
+                                          garble_seed_only=True)
                 if ph is not None:
                     end, can, ph_score = ph
                     result.append(can)

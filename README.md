@@ -857,7 +857,23 @@ des médicaments », défaut `false`). Une fois activé :
 
 La base BDP peut être régénérée depuis les extraits bruts (dossier
 `med_grounding/` du dépôt, scripts `build_db.py` / `seed_aliases.py` /
-`prune_db.py`) ; ce dossier ne fait pas partie du conteneur.
+`prune_db.py` / `ban_terms.py` / `fix_inactive_otc.py` / `prune_scope.py`) ;
+ce dossier ne fait pas partie du conteneur. La base est **assainie pour le
+périmètre gériatrique** : hors catalogue — vaccins (sauf Shingrix, Pneumovax
+23, Prevnar, Capvaxive, Vaxneuvance, Fluzone, Fluad, Arexvy, Abrysvo),
+produits de contraste et diagnostics, gaz médicaux, solutés IV/dialyse,
+hygiène/cosmétique (désinfectants mains, émollients, anti-acné,
+antisudorifiques, shampoings, soins dentaires, antiprurigineux OTC,
+rubéfiants), anesthésiques, sirops toux/rhume OTC, décongestionnants nasaux,
+suppléments/multivitamines, contraception/obstétrique/fertilité,
+helminthiases, **homéopathie** et produits de santé naturels. Une liste de
+sauvegarde conserve les exceptions réellement dictées en gériatrie
+(diclofénac topique, Xylocaïne/lidocaïne/EMLA, Zincofax/cremes barrière,
+Peridex/chlorhexidine/benzydamine, codéine/acétylcystéine, Nix-Stromectol,
+Dostinex…). Les anciennes marques disparues continuent de matcher (MAXERAN,
+ARICEPT, LOPRESSOR…) tant qu'elles ne sont pas dans une classe retirée. Les
+marques retirées ne font que cesser d'être normalisées : le générique
+correspondant reste toujours catalogué.
 
 ---
 

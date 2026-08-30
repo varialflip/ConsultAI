@@ -46,7 +46,8 @@ Le cœur est **`match_meds.py`**, un moteur déterministe et auditable :
 
 Il est **reproductible** : `meds.sqlite` se reconstruit depuis `dpd/` +
 `dpd_ia/` (extraits BDP Canada) via `build_db.py` + `seed_aliases.py` +
-`prune_db.py`.
+`prune_db.py` + `ban_terms.py` + `fix_inactive_otc.py` + `prune_scope.py`
+(voir § 5 pour l'ordre et le rôle de chaque étape).
 
 ---
 
@@ -60,6 +61,8 @@ Il est **reproductible** : `meds.sqlite` se reconstruit depuis `dpd/` +
 | `seed_aliases.py` | Rajoute des alias « STT_GARBLE » (garbles phonétiques observés → médicament BDP). |
 | `prune_db.py` | Nettoie `meds.sqlite` (alias de présentation/dose parasites) pour un matching rapide. |
 | `ban_terms.py` | **Bannit** de la base le mot « gériatrique » et **tous les écrans solaires** (pratiques SPF/FPS, ÉCRAN, principes UV — octisalate, avobenzone, octocrilene, dioxyde de titane, oxyde de zinc…). Ces feuilles de marques (MINUTES, BASE, SAGE, RAPIDE, SUPPORT…) créaient des faux positifs en prose ; ils ne peuvent plus jamais matcher, ni en exact ni en flou. |
+| `prune_scope.py` | **Retire du périmètre clinique gériatrique** (~7 200 marques) : vaccins, extraits allergéniques, immunoglobulines (sauf liste de sauvegarde : Shingrix, Pneumovax 23, Prevnar, Capvaxive, Vaxneuvance, Fluzone, Fluad, Arexvy, Abrysvo), contraste/diagnostic, gaz médicaux, solutés IV/dialyse, hygiène/cosmétique (désinfectants mains, émollients/huiles, anti-acné, antisudorifiques, shampoings, verrues, soins dentaires, pastilles, antiprurigineux OTC, rubéfiants), anesthésiques, sirops toux/rhume OTC, décongestionnants nasaux, suppléments/multivitamines, contraception/obstétrique/fertilité, anthelminthiques hors listes, **homéopathie**, marques cosmétiques/pédiatriques et annulées sans classe ATC (PSN/herboristerie). Une liste de sauvegarde explicite conserve les exceptions dictées en gériatrie (diclofénac topique, Xylocaïne/lidocaïne/EMLA, Zincofax, Peridex/chlorhexidine, codéine/acétylcystéine, Nix/Stromectol, Dostinex…). Retirer une marque ne retire jamais le générique (lignes distinctes). |
+| `fix_inactive_otc.py` | **Corrige le drapeau `is_otc` des marques annulées** : l'extrait BDP des produits inactifs étiquette « NON-PRESCRIPTION DRUGS » là où l'extrait courant écrit « OTC » ; sans la traduction, les OTC annulés sortaient leur nom de marque au lieu du principe actif. La correction définitive est dans `build_db.py` ; ce script répare une base déjà construite (idempotent). |
 | `audit_medical.py` | Affiche les différences ligne à ligne entre transcript brut et corrigé (contrôle qualité). |
 | `meds.sqlite` | Base de données médicaments (marques + génériques + alias) **préconstruite et prête à l'emploi**. |
 | `dpd/`, `dpd_ia/` | Extraits texte de la BDP (Drug, Ingredient, Schedule… ; `_ia` = produits annulés/inactifs). |
@@ -159,14 +162,24 @@ cd ~/ConsultAI-selfhosted/med_grounding
 ./venv/bin/python ban_terms.py           # affiche ce qui serait banni
 ./venv/bin/python ban_terms.py --apply   # applique réellement
 
-# 5) Vérifier la base
+# 5) Corriger le flag is_otc des marques annulées (BDP_ia « NON-PRESCRIPTION
+#    DRUGS » vs « OTC »). D'abord en dry-run :
+./venv/bin/python fix_inactive_otc.py            # affiche ce qui serait corrigé
+./venv/bin/python fix_inactive_otc.py --apply    # applique réellement
+
+# 6) Retirer les classes hors périmètre gériatrique. D'abord en dry-run :
+./venv/bin/python prune_scope.py            # affiche ce qui serait retiré
+./venv/bin/python prune_scope.py --apply    # applique réellement
+
+# 7) Vérifier la base
 ./venv/bin/python -c "import sqlite3; c=sqlite3.connect('meds.sqlite'); \
 print('meds', c.execute('select count(*) from medications').fetchone()[0], \
 'alias', c.execute('select count(*) from medication_aliases').fetchone()[0])"
 ```
 
 Ordre logique : `build_db` → `seed_aliases` → `prune_db` (apply) →
-`ban_terms` (apply). Aucun d'entre eux n'accepte d'argument (ils travaillent
+`ban_terms` (apply) → `fix_inactive_otc` (apply) → `prune_scope` (apply).
+Aucun d'entre eux n'accepte d'argument autre que `--apply` (ils travaillent
 sur `./dpd`, `./dpd_ia`, `./meds.sqlite`).
 
 > ⚠ Toute reprise manuelle d'un transcript doit se faire **sur une copie** de

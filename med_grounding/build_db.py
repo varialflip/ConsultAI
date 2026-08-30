@@ -54,11 +54,23 @@ BRAND_STOP = re.compile(
 BRAND_TRAILING = re.compile(r"[\s\-]+(\d+\s*(mg|mcg|g|ml|%)\b|xl\b|hs\b|np\b)", re.IGNORECASE)
 
 # Generic presentation words that must NOT become brand-leaf aliases.
+# (Le jeu de mots « floratiles » observés sur les marques OTC/disparues :
+# SET, AND, WHITE, MIN... — voir prune_scope.py, et les mots de prose qui
+# survivent au retrait ci-dessous.)
 BRAND_LEAF_STOP = set("""
 strength regular extra children enfants junior adult adults complete cold cough flu
 plus mucus relief liquid gels rapid release arthritis pain ultra ultimate kids
 maximum max forte forte extra nouvelle new original advance advanced non dosed
 surround etc co cr er xr sr odt tab caplet capsule tablet cap easy swallow spray
+""".split())
+
+# Mots de prose qui survivent au retrait de périmètre (marques légitimes à
+# tous les mots comme DEPO-MEDROL WITH LIDOCAINE, VOLTAREN RAPIDE...). Leur
+# feuille de marque est un mot français/anglais courant : risque de faux
+# positif en prose, ne deviennent jamais des alias BRAND_LEAF.
+BRAND_LEAF_STOP.update("""
+and with one without joint application action all restore first low preparation
+total time depot back day internal treatment immediate
 """.split())
 
 # Very common French words that must never be treated as a brand leaf (prevents
@@ -164,10 +176,14 @@ def ingest_inactive(conn, seen, dpd_ia_dir=DPD_IA_DIR):
                 inner = line[1:-1] if line.startswith('"') and line.endswith('"') else line
                 yield inner.split('","')
 
-    # schedule_ia: DRUG_CODE -> otc flag (same layout as schedule.txt)
+    # schedule_ia: DRUG_CODE -> otc flag. Contrairement à schedule.txt
+    # (valeur "OTC"), l'extrait des produits inactifs étiquette les produits
+    # sans ordonnance "NON-PRESCRIPTION DRUGS" (libellé historique). Sans cette
+    # traduction, tous les OTC annulés étaient chargés avec is_otc=0 et le
+    # moteur sortait leur nom de marque au lieu du principe actif.
     otc_codes = set()
     for r in read("schedule_ia.txt"):
-        if len(r) >= 2 and r[1].strip() == "OTC":
+        if len(r) >= 2 and r[1].strip() in {"OTC", "NON-PRESCRIPTION DRUGS"}:
             otc_codes.add(r[0].strip())
 
     # ingred_ia: DRUG_CODE -> active ingredient tokens (EN, FR)

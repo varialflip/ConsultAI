@@ -38,6 +38,34 @@ sans appel réseau).*
   `docker compose build consultai-test` puis
   `up -d --force-recreate consultai-test`.
 
+**Complément — base de médicaments resserrée sur le périmètre gériatrique (-31 %).**
+La base BDP était pleine de catalogue non pertinent (cosmétiques, vaccins,
+solutions IV, homéopathie…). Nouveau script `med_grounding/prune_scope.py` :
+à partir des classes ATC et des annexes BDP, il retire ~7 243 marques
+(23 034 → 15 791 lignes) — désinfectants mains, émollients/huiles, anti-acné,
+antisudorifiques, shampoings, verrues, soins dentaires/fluor, pastilles et
+rince-bouche, antiprurigineux et rubéfiants OTC, sirops toux/rhume OTC,
+décongestionnants nasaux, multivitamines/suppléments, contraception,
+obstétrique, fertilité, anthelminthiques, anesthésiques, gaz médicaux,
+solutés IV/dialyse, diagnostics et produits de contraste, extraits
+allergéniques, immunoglobulines, homéopathie, et marques cosmétiques/
+pédiatriques ou annulées sans classe ATC. Une liste de sauvegarde préserve ce
+qui se dicte réellement en gériatrie (vaccins gériatriques, diclofénac
+topique, Xylocaïne/EMLA, Zincofax, Peridex/chlorhexidine, codéine,
+Nix-Stromectol…), et **toutes les anciennes marques** (MAXERAN, ARICEPT,
+LASIX, PANTOLOC, LOSEC, COUMADIN, ELTROXIN, SYNTHROID…) restent matchées. Les
+marques retirées cessent seulement d'être normalisées — le générique reste
+toujours catalogué (lignes distinctes). Effets : initialisation du moteur et
+normalisation ~3× plus rapides (base chargée en mémoire à chaque démarrage),
+735 alias de marques parasites en moins (SET, PEOPLE, MIN, MINUTES…), zéro
+changement sur les 4 transcripts de référence. Corrections associées :
+**`fix_inactive_otc.py`** répare le drapeau `is_otc` des marques annulées
+(l'extrait BDP inactif écrit « NON-PRESCRIPTION DRUGS », `build_db.py` ne
+testait que « OTC » → les OTC annulés sortaient leur nom de marque au lieu du
+principe actif ; correction définitive dans `build_db.py`) ; base
+`ZINCOFAX` réglée sur « oxyde de zinc » ; gardes de prose ajoutées au moteur
+(`jasmin`, `lhopital`).
+
 ## 2026-08-30 — STT custom : accepte un transcript en texte brut (endpoint OpenAI-compatible)
 
 *Certains serveurs STT auto-hébergés (ex. CohereLabs/cohere-transcribe-03-2026

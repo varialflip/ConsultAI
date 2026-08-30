@@ -376,6 +376,12 @@ FRENCH_STOP |= {
     "celle", "celles", "celui", "ceux", "conge", "conges",
     "reste", "restants", "prises", "famille", "date", "dates",
     "echelle", "échelle", "echelles", "selon", "depression", "essais",
+    # la marque contraceptive JASMIN a été retirée du périmètre (prune_scope) :
+    # sans lui, « jasmin » retomberait sur FASTIN par le flou orthographique
+    "jasmin",
+    # le tokenizer garde l'article soudé : « l'hopital » -> norm "lhopital",
+    # qui floue sur ADRENALIN TOPICAL (faux positif historique, base git-id)
+    "lhopital",
     # note 6 (délirium ICU) prose collisions
     "heure", "heures", "laisse", "laissee", "laisser", "laissait",
     "médicaments", "medicaments", "médication", "medication", "polypharmacie",

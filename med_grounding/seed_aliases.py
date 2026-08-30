@@ -53,6 +53,24 @@ GARBLES = {
     # --- consultation 9 (démence Alzheimer, comportement) ---
     "ketiapine":   ("quetiapine", "quetiapine"),
     "dexilan":     ("dexilant", "dexilant"),
+    # --- consultations 4/5/10/11 (troubles mnésiques / neurocognitifs) ---
+    # « Hamelot d'épine » = amlodipine (bêta-bloquant), pas « adenine ».
+    "hamelot d'épine": (None, "amlodipine"),
+    "hamelot d epine": (None, "amlodipine"),
+    "d'épine":     (None, "amlodipine"),
+    "depine":      (None, "amlodipine"),
+    "hydrochloroxia": (None, "hydrochlorothiazide"),
+    "hydrochloroxyl": (None, "hydrochlorothiazide"),
+    "val sartan":  (None, "valsartan"),
+    "val sartans": (None, "valsartan"),
+    "sartan":      (None, "valsartan"),
+    "cipravex":    ("cipralex", "escitalopram"),
+    "ciprabex":    ("cipralex", "escitalopram"),
+    # « sous Eliquissé » = Eliquis (F.A.), pas « Latisse ».
+    "liquissé":    ("eliquis", "apixaban"),
+    "liquisse":    ("eliquis", "apixaban"),
+    "eliquissé":   ("eliquis", "apixaban"),
+    "eliquisse":   ("eliquis", "apixaban"),
     # generic French confusions
     "rosuvastatine http": (None, "rosuvastatin"),
     "rozu va statine":    (None, "rosuvastatin"),

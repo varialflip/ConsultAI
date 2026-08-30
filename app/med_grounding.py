@@ -385,6 +385,15 @@ FRENCH_STOP |= {
     # note 6 (délirium ICU) prose collisions
     "heure", "heures", "laisse", "laissee", "laisser", "laissait",
     "médicaments", "medicaments", "médication", "medication", "polypharmacie",
+    # prose des consultations 3/4/10/11 qui floue sur des marques medically
+    "sinusal", "sinusale", "semaine", "semaines", "alcool", "savant",
+    "cestadire", "eviere", "évière", "pothyroide", "pothyroïdie",
+    "hypothyroide", "hypothyroïdie", "sartanicals",
+    # formes avec article soudé (tokenizer garde « l' ») ou accent replié :
+    # « l'alcool » -> lalcool, « l'évière » -> leviere, « pothyroïdie » ->
+    # pothyroidie
+    "lalcool", "leviere", "lhypothyroide", "pothyroidie", "lasynthe",
+    "lalcohol", "lesinusal",
     # polyethylene glycol is written with a space: "glycol" alone must never
     # fuzzy-match a brand (Baycol); the full phrase only resolves via the
     # multi-token garble / brand path, never per-token.
@@ -573,6 +582,13 @@ class Matcher:
             t = norm_phon(joined)
             if not t or len(t) < 6:
                 continue
+            # Un garble STT multi-mots connu (seed) prime sur le flou :
+            # « Hamelot d'épine » -> amlodipine, « Périn de prille » -> …
+            if t in self.exact_garble:
+                level, base, brand, _leaf, _otc = self.exact_garble[t]
+                can = self._canonicalize(level, base, brand, bool(_otc))
+                if can:
+                    return (idxs[ln - 1] + 1, can, 100)
             best, second = None, 0.0
             L = len(t)
             for bln in range(max(1, L - MAX_LEN_DIFF - 2), L + MAX_LEN_DIFF + 3):

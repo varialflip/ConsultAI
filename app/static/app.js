@@ -1317,12 +1317,12 @@
       try {
         const session = await api(`/api/dictation/${dictation.sessionId}`);
         applyDictationParts(session);
-        // Le serveur peut découvrir l'indisponibilité du STT en cours de
-        // dictée (sonde de processus) : on le relaie dès qu'il la signale.
-        if (session && session.stt_available === false) {
-          updateSttAvailabilityNotice(T('dictation.stt_unavailable'));
-        } else if (session && session.stt_available === true && state.sttClosed) {
-          // Le service vocal est de nouveau joignable : on retire l'avis.
+        // Le service vocal est redevenu joignable : on retire l'avis. On ne
+        // RECRÉE jamais l'avis ici — seule l'alarme initiale (ou le SSE
+        // stt_unavailable d'un échec réel) le déclenche ; une scrutation qui
+        // constaterait un faux négatif transitoire ne doit pas faire flapper
+        // l'écran.
+        if (session && session.stt_available !== false && state.sttClosed) {
           updateSttAvailabilityNotice(null);
         }
       } catch (_) {

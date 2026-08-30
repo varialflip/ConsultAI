@@ -1338,28 +1338,47 @@ def _finalize_grounding(session_id: str, username: str) -> None:
 def _should_transcribe(session: DictationSession) -> bool:
     """Vrai si le service STT est (vraisemblablement) joignable.
 
-    Sonde l'endpoint actif (requête légère à timeout court, résultat mis en
-    cache ~15 s) et pose ``session.stt_available`` pour la transmettre au
-    navigateur. Ne lève jamais : une sonde qui échoue ne bloque pas la dictée,
-    elle déclenche le signal d'avis.
+    Pose ``session.stt_available`` pour le signaler au navigateur
+    (informations). Ne publie PAS de SSE et ne bloque jamais : la vraie alarme
+    « service indisponible » ne part qu'à l'échec réel d'une transcription (où
+    l'on sait que le STT n'a pas répondu), pas sur une sonde qui peut avoir un
+    faux négatif transitoire.
     """
     try:
         endpoint = stt.active_stt_endpoint()
         if not endpoint:
-            session.stt_available = True if session.stt_available is None else session.stt_available
             return True
         joignable = stt.stt_available(endpoint)
     except Exception:
         joignable = True
     session.stt_available = joignable
-    if not joignable and session.id:
+    return joignable
+
+
+def _is_transport_error(message: str) -> bool:
+    """Vrai si l'erreur de transcription signale un stt injoignable (réseau/
+    timeout/endpoint) et non un refus métier (aucune parole, clé, 4xx)."""
+    m = (message or "").lower()
+    return ("point de terminaison" in m or "urllib" in m
+            or "timed out" in m or "timeout" in m
+            or "connection refused" in m or "unreachable" in m)
+
+
+def _signal_stt_unavailable(session: DictationSession, message: str) -> None:
+    """Diffuse l'avis d'indisponibilité du STT (échec RÉEL de transcription)."""
+    try:
         owner = _session_owner(session)
         live.publish(owner, "stt_unavailable", {
             "consultation_id": session.consultation_id,
             "session_id": session.id,
             "message": "Le service de reconnaissance vocale ne répond pas.",
         })
-    return joignable
+        logger.warning(
+            "Dictée %s : service STT injoignable à la transcription — %s",
+            session.id, message,
+        )
+    except Exception:
+        pass
 
 
 def _transcribe_one(session: DictationSession, hints: str, final: bool,
@@ -1638,6 +1657,11 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
                 session.last_error = str(exc)
                 session.save()
                 logger.warning("Dictée %s : transcription refusée — %s", session.id, exc)
+                # Échec RÉEL de transport = le STT ne répond pas : c'est ICI
+                # qu'on prévient (pas sur une sonde). Un refus métier (aucune
+                # parole, clé, 4xx) ne déclenche pas l'avis.
+                if _is_transport_error(str(exc)):
+                    _signal_stt_unavailable(session, str(exc))
                 raise
             if duration is None:
                 break

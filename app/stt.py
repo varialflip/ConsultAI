@@ -2500,11 +2500,13 @@ _PROBE_SILENCE_OGG = (
 
 
 def _probe_custom(base_url: str, api_key: str, model: str, langue: str) -> bool:
-    """POST d'un fragment silencieux à l'endpoint — True si le service répond.
+    """POST d'un fragment silencieux à l'endpoint — True si le SERVEUR répond.
 
-    Toute réponse HTTP < 500 (y compris un 404/422 sur cette route) prouve que
-    le serveur est vivant ; un échec de connexion/timeout ou un >= 500 marque
-    l'indisponibilité.
+    « Disponible » = l'hôte répond sur le réseau. Une erreur HTTP quelconque
+    (y compris 4xx/5xx sur ce fragment muet — Parakeet rejette parfois un
+    fichier quasi vide) prouve que le service est VIVANT et que la dictée
+    réelle fonctionnera. Seul un échec de transport (connexion refusée,
+    timeout) ou une absence de route DNS compte comme « indisponible ».
     """
     import base64 as _b64
     import urllib.error as _utlerr
@@ -2525,20 +2527,21 @@ def _probe_custom(base_url: str, api_key: str, model: str, langue: str) -> bool:
     )
     try:
         with _urlreq.urlopen(requete, timeout=_STT_PROBE_TIMEOUT) as rep:
-            return int(rep.status) < 500
-    except _utlerr.HTTPError as exc:
-        return exc.code < 500          # 4xx = service vivant
+            return True                    # réponse HTTP = service vivant
+    except _utlerr.HTTPError:
+        return True                        # 4xx/5xx = l'hôte a répondu
     except Exception:
-        return False                   # réseau/timeout → indisponible
+        return False                       # réseau/timeout → indisponible
 
 
 def stt_unavailable(endpoint: str) -> bool:
     """True si le STT est vraisemblablement injoignable, avec cache court.
 
-    Teste le chemin RÉEL de la transcription (POST d'un fragment muet) sur
-    l'endpoint personnalisé configuré : seule une absence de réponse réseau ou
-    une erreur serveur (>= 500) compte comme indisponible. Un 4xx (route ou clé)
-    prouve au contraire que le service répond.
+    Teste le chemin RÉEL de la transcription (POST d'un fragment muet sur
+    l'endpoint personnalisé configuré) : seuls un échec de transport
+    (connexion refusée, timeout, DNS) marque l'indisponibilité. Une réponse
+    HTTP quelconque — même 4xx/5xx sur le fragment muet — prouve que le
+    service répond : la dictée réelle fonctionnera.
     """
     cle = endpoint or "?"
     now = _time.monotonic()

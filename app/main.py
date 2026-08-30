@@ -2412,6 +2412,14 @@ def start_dictation(payload: DictationStartIn, request: Request, db: Session = D
         template_id=payload.template_id,
         mime_type=payload.mime_type,
     )
+    # Sonde précoce du service STT : le navigateur sait IMMÉDIATEMENT si
+    # l'endpoint de reconnaissance est injoignable (au lieu d'attendre un
+    # échec de transcription, des dizaines de secondes plus tard). La sonde
+    # est légère (timeout court, cache ~15 s) et ne bloque jamais la dictée.
+    endpoint = stt.active_stt_endpoint()
+    if endpoint:
+        session.stt_available = stt.stt_available(endpoint)
+        session.save()
     live.publish(user.owner_key, "dictation_started", {
         "consultation_id": consultation.id,
         "session_id": session.id,

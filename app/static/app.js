@@ -705,6 +705,9 @@
     // « Correction des médicaments » : réglage admin global + liste pointée.
     medGroundingOn: false,
     medItems: [],
+    // Indisponibilité du service STT (service vocal non joignable) : la dictée
+    // enregistre toujours, mais on prévient l'utilisateur immédiatement.
+    sttClosed: false,
     // Toast « brouillon abandonné » montré pendant CETTE page : remontré à
     // chaque chargement tant qu'un brouillon « abandonnée » existe (voir
     // refreshAbandonedState). Les annonces en direct (SSE) se dédupliquent
@@ -1312,7 +1315,16 @@
     dictation.pollHandle = setInterval(async () => {
       if (!dictation.sessionId || dictation.sending) return;
       try {
-        applyDictationParts(await api(`/api/dictation/${dictation.sessionId}`));
+        const session = await api(`/api/dictation/${dictation.sessionId}`);
+        applyDictationParts(session);
+        // Le serveur peut découvrir l'indisponibilité du STT en cours de
+        // dictée (sonde de processus) : on le relaie dès qu'il la signale.
+        if (session && session.stt_available === false) {
+          updateSttAvailabilityNotice(T('dictation.stt_unavailable'));
+        } else if (session && session.stt_available === true && state.sttClosed) {
+          // Le service vocal est de nouveau joignable : on retire l'avis.
+          updateSttAvailabilityNotice(null);
+        }
       } catch (_) {
         /* le prochain tour réessaiera */
       }
@@ -1891,6 +1903,12 @@
         },
       });
       dictation.sessionId = session.session_id;
+      // Disponibilité immédiate du service STT (sonde au démarrage) : on
+      // prévient l'utilisateur d'emblée si la reconnaissance n'est pas
+      // joignable, sans attendre le premier échec de transcription.
+      if (session && session.stt_available === false) {
+        updateSttAvailabilityNotice(T('dictation.stt_unavailable'));
+      }
     } catch (err) {
       // Serveur injoignable : on enregistre quand même. Les fragments
       // s'accumulent localement et partiront à « Terminer », ou plus tard
@@ -3303,9 +3321,11 @@
     const moteur = $('transcriptEngine');
     const etat = $('saveStatusDictee');
     const avis = $('transcriptBypassNotice');
+    const sttAvis = $('sttUnavailableNotice');
     const visible = (moteur && !moteur.classList.contains('hidden') && moteur.textContent.trim())
                  || (etat && etat.textContent.trim())
-                 || (avis && !avis.classList.contains('hidden'));
+                 || (avis && !avis.classList.contains('hidden'))
+                 || (sttAvis && !sttAvis.classList.contains('hidden'));
     pied.classList.toggle('hidden', !visible);
   }
 
@@ -3325,6 +3345,23 @@
     el.title = show ? T('transcript.bypass_notice_title') : '';
     el.classList.toggle('hidden', !show);
     refreshTranscriptFooter();
+  }
+
+  /** Avis persistant « service vocal indisponible » (STT injoignable). */
+  function updateSttAvailabilityNotice(message) {
+    const el = $('sttUnavailableNotice');
+    if (!el) return;
+    const nouveau = Boolean(message);
+    const etait = state.sttClosed;
+    state.sttClosed = nouveau;
+    el.textContent = message || '';
+    el.title = message || '';
+    el.classList.toggle('hidden', !nouveau);
+    refreshTranscriptFooter();
+    // Toast seulement à la TRANSITION (fermé) : pas de spam à chaque scrutation.
+    if (nouveau && !etait) {
+      toast(message, 'error', 0);   // persistant tant que le STT reste fermé
+    }
   }
 
   /**
@@ -6606,6 +6643,15 @@
     }
   }
 
+  /** Le service STT est redevenu injoignable (SSE) — avis immédiat. */
+  function onSttUnavailable(evt) {
+    const payload = JSON.parse(evt.data || '{}');
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    updateSttAvailabilityNotice(
+      payload.message || T('dictation.stt_unavailable'),
+    );
+  }
+
   /* -------------------------------------------------------------------------
    * Lignes provisoires (mode « streaming »)
    * ----------------------------------------------------------------------
@@ -7223,6 +7269,7 @@
     liveSource.addEventListener('transcript_correct', onTranscriptCorrect);
     liveSource.addEventListener('med_grounding', onMedGrounding);
     liveSource.addEventListener('med_grounding_result', onMedGroundingResult);
+    liveSource.addEventListener('stt_unavailable', onSttUnavailable);
     liveSource.addEventListener('transcription_progress', onTranscriptionProgress);
     liveSource.addEventListener('consultation_patched', onSyncGeneratedOrPatched);
     liveSource.addEventListener('consultation_created', onSyncConsultationCreated);

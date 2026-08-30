@@ -183,6 +183,9 @@ class DictationSession:
     #: identifiant, pour que la ligne provisoire des onglets puisse être
     #: retirée au commit.
     utterance_seq: int = 0
+    #: Disponibilité du service STT sondée au démarrage (None = pas encore
+    #: sondée ; booléen ensuite). Transmise au navigateur via ``to_public``.
+    stt_available: Optional[bool] = None
 
     # -- Chemins ------------------------------------------------------------
     @property
@@ -217,6 +220,7 @@ class DictationSession:
             "covered_ranges": list(self.covered_ranges),
             "flush_requested": self.flush_requested,
             "utterance_seq": self.utterance_seq,
+            "stt_available": self.stt_available,
         }
 
     def to_public(self) -> dict:
@@ -228,6 +232,7 @@ class DictationSession:
             "next_seq": self.next_seq,
             "parts": self.parts,
             "part_count": len(self.parts),
+            "stt_available": self.stt_available,
             "transcribed_seconds": int(round(self.offset_seconds)),
             "received_seconds": int(round(self.received_seconds)),
             "bytes_received": self.bytes_received,
@@ -238,6 +243,10 @@ class DictationSession:
             # refreshRecoveryBanner côté JS, et list_sessions ci-dessous).
             "updated_at": self.updated_at,
             "last_error": self.last_error,
+            # Disponibilité immédiate du service STT (sonde légère au démarrage
+            # de dictée) : renseigne le navigateur AVANT le premier segment pour
+            # qu'il puisse prévenir tout de suite si l'endpoint est injoignable.
+            "stt_available": self.stt_available,
         }
 
     def save(self) -> None:
@@ -363,6 +372,7 @@ def load_session(session_id: str, username: str) -> DictationSession:
         offset_seconds=data.get("offset_seconds", 0.0),
         parts=data.get("parts", []),
         status=data.get("status", "recording"),
+        stt_available=data.get("stt_available"),
         last_error=data.get("last_error", ""),
         covered_ranges=[
             (float(a), float(b)) for a, b in data.get("covered_ranges", [])
@@ -1325,6 +1335,33 @@ def _finalize_grounding(session_id: str, username: str) -> None:
             _grounding_meds.pop(session_id, None)
 
 
+def _should_transcribe(session: DictationSession) -> bool:
+    """Vrai si le service STT est (vraisemblablement) joignable.
+
+    Sonde l'endpoint actif (requête légère à timeout court, résultat mis en
+    cache ~15 s) et pose ``session.stt_available`` pour la transmettre au
+    navigateur. Ne lève jamais : une sonde qui échoue ne bloque pas la dictée,
+    elle déclenche le signal d'avis.
+    """
+    try:
+        endpoint = stt.active_stt_endpoint()
+        if not endpoint:
+            session.stt_available = True if session.stt_available is None else session.stt_available
+            return True
+        joignable = stt.stt_available(endpoint)
+    except Exception:
+        joignable = True
+    session.stt_available = joignable
+    if not joignable and session.id:
+        owner = _session_owner(session)
+        live.publish(owner, "stt_unavailable", {
+            "consultation_id": session.consultation_id,
+            "session_id": session.id,
+            "message": "Le service de reconnaissance vocale ne répond pas.",
+        })
+    return joignable
+
+
 def _transcribe_one(session: DictationSession, hints: str, final: bool,
                     flush: bool = False) -> Optional[float]:
     """
@@ -1555,6 +1592,14 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
     """
     with _lock_for(session_id):
         session = load_session(session_id, username)
+
+        # Vérifier tôt la disponibilité du STT (sonde légère, cache court) :
+        # le navigateur est prévenu dès l'initiation de la dictée si l'endpoint
+        # est injoignable, plutôt qu'après un backlog de segments.
+        _should_transcribe(session)
+        # Un échec ci-dessus doit marquer la session (persisté) pour que le
+        # premier get renvoie stt_available=False.
+        session.save()
 
         # STT contourné pour ce fournisseur (audio envoyé seul à la
         # génération) : ni transcription ni repli ``_finalise``, on se

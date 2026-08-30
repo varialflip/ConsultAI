@@ -2471,6 +2471,50 @@ def _transcribe_modulate(payload: AudioPayload, extra_phrase_hints: Optional[str
 
 
 # ===========================================================================
+# ===========================================================================
+# Disponibilité rapide du point de terminaison STT
+# ===========================================================================
+# On ne peut pas attendre qu'un backlog de segments se soit accumulé avant de
+# prévenir le médecin. À l'initiation d'une dictée (et au premier échec de
+# transcription), on sonde l'endpoint configuré avec une requête LÉGÈRE à
+# timeout COURT et résultat en cache : si le service STT est injoignable, le
+# signal est immédiat (toast/bannière), pas plusieurs dizaines de secondes plus
+# tard.
+import time as _time
+
+_STT_PROBE_CACHE: dict = {}
+_STT_PROBE_TTL = 15.0
+_STT_PROBE_TIMEOUT = 6.0
+
+
+def stt_unavailable(endpoint: str) -> bool:
+    """True si le STT est vraisemblablement injoignable, avec cache court."""
+    cle = endpoint or "?"
+    now = _time.monotonic()
+    info = _STT_PROBE_CACHE.get(cle)
+    if info and now - info[0] < _STT_PROBE_TTL:
+        return info[1]
+    try:
+        import urllib.request as _urlreq
+        requete = _urlreq.Request(endpoint.rstrip("/") + "/health", method="GET")
+        with _urlreq.urlopen(requete, timeout=_STT_PROBE_TIMEOUT) as rep:
+            ok = int(rep.status) < 500
+    except Exception:
+        ok = False
+    _STT_PROBE_CACHE[cle] = (now, ok)
+    return not ok
+
+
+def active_stt_endpoint() -> str:
+    """L'URL du service vocal actif (custom), ou vide si non configuré."""
+    try:
+        if runtime_config.value("stt_provider") == "custom":
+            return (runtime_config.value("custom_stt_base_url") or "").strip()
+    except Exception:
+        pass
+    return ""
+
+
 # Point de terminaison personnalisé, compatible OpenAI
 # ===========================================================================
 #

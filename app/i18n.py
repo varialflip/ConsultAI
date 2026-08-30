@@ -726,6 +726,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Server unreachable: the dictation is stored in the browser and will "
         "be sent at the end. ({error})",
     ),
+    "dictation.stt_unavailable": (
+        "Service de reconnaissance vocale indisponible : le texte n'arrive "
+        "plus. La dictée est enregistrée dans le navigateur.",
+        "Speech recognition service unavailable: no more text is arriving. The "
+        "dictation is stored in the browser.",
+    ),
 
     # --- Dictée : micro et erreurs matérielles -----------------------------
     "mic.insecure": (

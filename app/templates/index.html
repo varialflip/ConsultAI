@@ -811,6 +811,11 @@
                STT tourne pour l'affichage sans jamais nourrir la génération
                (contournement actif ET transcription conservée). -->
            <span id="transcriptBypassNotice" class="hidden truncate"></span>
+          <!-- Avis d'indisponibilité du service vocal : le STT ne répond pas
+               (endpoint injoignable), le texte n'arrive plus — persistant
+               pendant la dictée, renseigné dès l'initiation. -->
+          <span id="sttUnavailableNotice"
+                class="hidden truncate text-red-600 font-semibold"></span>
           <span id="medGroundingStatus" class="hidden truncate"></span>
           <span id="saveStatusDictee" class="ml-auto shrink-0"></span>
         </footer>

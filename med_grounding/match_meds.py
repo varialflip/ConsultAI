@@ -431,7 +431,9 @@ class Matcher:
         self.ortho = []          # (norm_phon, level, base, brand, is_leaf, is_otc) deduped
         self.ortho_by_len = {}   # len(norm_phon) -> [(n, ...)] for fast phrase lookup
         self._generic_names = set()   # genuine generic orthography names
-        seen = set()
+        # Miroir de app/med_grounding : un niveau générique écrase une feuille de
+        # marque de même ``norm_phon`` (sinon « trasodone » → marque parasite).
+        seen = {}
         for alias, atype, level, base, brand, is_otc in rows:
             n = norm_phon(alias)
             is_leaf = (atype == "BRAND_LEAF")
@@ -448,11 +450,12 @@ class Matcher:
             if re.search(r"\d|%|mg|mcg|µg|ml|tablet|tab|caplet|capsule|cream|gel|"
                          r"patch|syringe|injection|solution|suppository", alias, re.I):
                 continue                       # junk aliases: exact only
-            if n not in seen:
-                seen.add(n)
-                self.ortho.append((n, level, base, brand, is_leaf, bool(is_otc)))
-                self.ortho_by_len.setdefault(len(n), []).append(
-                    (n, level, base, brand, is_leaf, bool(is_otc)))
+            if n not in seen or (seen[n][3] and not is_leaf):
+                seen[n] = (n, level, base, brand, is_leaf, bool(is_otc))
+        for n, level, base, brand, is_leaf, is_otc in seen.values():
+            self.ortho.append((n, level, base, brand, is_leaf, bool(is_otc)))
+            self.ortho_by_len.setdefault(len(n), []).append(
+                (n, level, base, brand, is_leaf, bool(is_otc)))
         self.bk_ortho = BKTree(lev)
         self.ortho_node = {}
         for n, level, base, brand, is_leaf, is_otc in self.ortho:

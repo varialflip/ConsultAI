@@ -311,6 +311,28 @@ sur 7).
   Limite connue, préexistante : `cholesterol` → `colestipol` (faux positif hors
   portée ; la phonétique + le LLM doivent le résoudre).
 
+### Le générique écrase la marque-leaf homonyme (2026-08-31)
+
+La dictée « Trasodone » affichait la marque parasite **NU-TRAZODONE** au lieu
+du générique attendu. Cause : un alias `BRAND_LEAF` « trazodone »
+(manufacturier) précède dans la base le `BASE_GENERIC` du même nom, et la
+déduplication orthographique retenait la **première** occurrence (la feuille).
+Or les candidats phonétiques, qui excluent les feuilles, retombaient alors sur
+une marque morte (`is_active=0`, faible similarité) au lieu du générique exact.
+
+La déduplication orthographique (`seen`) applique donc la même précédence déjà
+en vigueur pour la table exacte : **un niveau `BASE_GENERIC`/`FULL_GENERIC`
+écrase une `BRAND_LEAF` de même `norm_phon`**. `ortho`, `ortho_by_len`,
+`bk_ortho`/`ortho_node` et `bk_node` héritent automatiquement de cette
+précédence. « trazodone » → **trazodone** (hint exact) ; ~230 génériques
+autrefois shadowés par une feuille (furosemide, morphine, diazépam,
+prednisone…) en bénéficient.
+
+- **Régression** : seules différences mesurées sur les 4 transcripts de
+  référence, bénignes et correctes — `métoprolol` → `metoprolol` (accent
+  retiré, le générique exact gagne) et perindopril (le nom générique complet
+  de la base s'affiche à la place du leaf manufacturier).
+
 ---
 
 ## 7. Référence rapide des entrées de test

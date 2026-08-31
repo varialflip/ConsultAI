@@ -3,6 +3,28 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-31 — Grounding : le générique écrase la marque-leaf homonyme (Trasodone → trazodone)
+
+*La dictée « Trasodone » affichait la marque parasite **NU-TRAZODONE** au lieu du
+générique attendu. Cause : un alias `BRAND_LEAF` « trazodone » (manufacturier)
+précédait dans la base le `BASE_GENERIC` du même nom, et la déduplication
+orthographique retenait la **première** occurrence (la feuille). Or les
+candidats phonétiques excluent les feuilles — la validation retombait donc sur
+une marque morte (`is_active=0`) au lieu du générique exact.*
+
+- **Précédence générique > feuille appliquée à toute la déduplication
+  orthographique** : désormais, pour un même `norm_phon`, un niveau
+  `BASE_GENERIC`/`FULL_GENERIC` écrase une `BRAND_LEAF` (même règle déjà
+  appliquée à la table exacte). « trasodone » → **trazodone** (hint exact,
+  plus de marque parasite). ~230 génériques autrefois shadowés par une feuille
+  (furosemide, morphine, diazépam, prednisone…) en bénéficient.
+- Impact réel mesuré sur les 4 transcripts de référence : les seules
+  différences sont bénignes et correctes — `dictee-6` « métoprolol » (accent
+  retiré, devient le générique exact) et `consult7` « perindopril » (le nom
+  générique complet de la base s'affiche à la place du leaf manufacturier).
+- Port appliqué aux deux modules (`app/med_grounding.py` et
+  `med_grounding/match_meds.py`).
+
 ## 2026-08-31 — Grounding : métrique pondérée qui départage les substitutions de lettres proches
 
 *Les erreurs du STT sont surtout **auditives** : la substitution entre lettres

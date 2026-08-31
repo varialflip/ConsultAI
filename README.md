@@ -900,6 +900,13 @@ des médicaments », défaut `false`). Une fois activé :
   la pondération départage de même les candidats déjà retenus par le filtre
   `sim` (elle ne fait jamais franchir les seuils à de la **prose** :
   `droite`→thyroide etc. restent hors des suggestions).
+- **Le générique écrase la marque homonyme** : quand une `BRAND_LEAF`
+  manufacturelière partage le même `norm_phon` qu'un `BASE_GENERIC`
+  (« trazodone » → PMS TRAZODONE HCL avant le générique), la déduplication
+  retient le générique — la correction phonétique de « Trasodone » rend
+  **trazodone** et non plus la marque morte NU-TRAZODONE. ~230 génériques
+  autrefois shadowés (furosemide, morphine, diazépam, prednisone…) en
+  bénéficient.
 - **Fréquence dictée en chiffre** : « N fois par jour » (1–4) est normalisé
   comme la variante en lettres — « 2 fois par jour » → BID, « 3 fois par
   jour » → TID, « 4 fois par jour » → QID, « 1 fois par jour » → DIE. Le

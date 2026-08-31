@@ -222,6 +222,21 @@ GARBLES = {
     "coumadin":           ("coumadin", "warfarin"),
     "warfarin":           (None, "warfarin"),
     "pradaxa":            ("pradaxa", "dabigatran"),
+    # --- note 15 (post-op hanche, polypharmacie) — garbles observés Cohere ---
+    # « monocore »/« monocor » = Monocor (bisoprolol, β-bloquant). Sans seed, le
+    # mot propre frappait la marque OTC « MONICURE COMBO » (miconazole) au flou.
+    # C'est un VRAI médicament dicté, pas une exception à bannir : on le seed.
+    "monocore":           ("monocor", "bisoprolol"),
+    "monocor":            ("monocor", "bisoprolol"),
+    # « dilodide » = Dilaudid (hydromorphone) : antalgique post-opératoire
+    # critique — un modèle sans seed peut l'omettre de la note.
+    "dilodide":           ("dilaudid", "hydromorphone"),
+    "dilaudid 0,25":      ("dilaudid", "hydromorphone"),
+    "dilote vide":        ("dilaudid", "hydromorphone"),
+    "dilote":             ("dilaudid", "hydromorphone"),
+    # « indur » = Imdur (isosorbide mononitrate) — sans seed le LLM écrit un
+    # faux nom voisin (« Indural »).
+    "indur":              ("imdur", "isosorbide mononitrate"),
 }
 
 # Brand keys that have no clean DPD brand row (only presentation variants like

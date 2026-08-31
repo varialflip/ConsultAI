@@ -40,6 +40,11 @@ verbe d'administration ou une liste de médicaments le porte.*
   corrigé en **« fer »** uniquement quand une dose est voisine — en prose
   (« va faire des courses ») le verbe reste ignoré. Même garde que les noms
   courts (`is_leaf`).
+- **Liste de Validation : noms sans chiffre de dose** — fini « bisoprolol 2 —
+  5 mg DIE » / « calcium 500 — mg PO » : `_lookup_exact` ne reconnaît plus un
+  bigramme « nom + chiffre » comme un composé (le chiffre est la posologie,
+  jamais le nom). La posologie conserve la décimale entière (« bisoprolol 2,5
+  mg DIE »), les items sont propres dans Validation et à l'import.
 
 ## 2026-08-30 — Correction des médicaments pendant la dictée (grounding, liste pointée)
 

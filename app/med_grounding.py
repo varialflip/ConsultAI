@@ -1277,8 +1277,13 @@ def _lookup_exact(token: str) -> dict | None:
     m = matcher()
     # Composé multi-mots réel (espaces préservés) : « Vitamine D »,
     # « acide folique »… La clé normalisée garde l'espace ; un nom + dose
-    # (« Trandate 10 ») n'est PAS un composé générique et reste exclu.
+    # (« Trandate 10 », « bisoprolol 2,5 », « calcium 500 ») n'est PAS un
+    # composé générique : le chiffre doit rester dans la posologie, jamais
+    # dans le nom. On l'exclut d'emblée — sans quoi « norm_orth » éliminerait
+    # le chiffre et le bigramme retomberait sur le nom seul.
     if " " in tok:
+        if re.search(r"(?:\A|\s)\d", tok):
+            return None   # nom + dose : chiffre = posologie, pas le nom
         nspace = norm_orth(tok)
         if nspace in m._generic_compound:
             return {"level": "BASE_GENERIC", "base": nspace, "brand": None}

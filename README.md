@@ -870,6 +870,10 @@ des médicaments », défaut `false`). Une fois activé :
 - **Garble seedé à condition de dose** : un déformation comme « faire » (=
   « fer », sulfate ferreux) n'est corrigée que si une **dose est voisine**
   (« faire 300 mg » → « fer 300 ») ; en prose le verbe reste intact.
+- **Liste des médicaments : noms sans dose collée**. Un bigramme « nom +
+  chiffre » (ex. « bisoprolol 2,5 », « calcium 500 ») n'est jamais traité
+  comme un nom composé : le chiffre reste dans la **posologie** (« bisoprolol
+  2,5 mg DIE »), jamais dans le nom de l'item.
 - Après génération de la note, l'onglet **Validation** s'ouvre sur grand
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 

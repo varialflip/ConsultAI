@@ -103,7 +103,7 @@ from app.database import (
     init_db,
     utcnow,
 )
-from app.dictation import DictationError, SequenceMismatch, SessionNotFound
+from app.dictation import DictationError, SequenceMismatch, SessionNotFound, _merge_conf_into
 from app.llm import GenerationError, extract_metadata, list_available_models
 from app.stt import TranscriptionError, list_available_stt_models, transcribe
 
@@ -2703,6 +2703,7 @@ def _generate_and_publish(
     generation_seq: int,
     origin_tab: str,
     system_prompt: str,
+    confiance_mots: Optional[List[dict]] = None,
 ) -> dict:
     """
     Génère la note en continu et diffuse les morceaux en direct (SSE).
@@ -2776,6 +2777,7 @@ def _generate_and_publish(
         on_stream_started=_publish_started,
         on_thought=_on_thought if show_thinking else None,
         system_override=system_prompt,
+        confiance=confiance_mots,
     )
 
     raw = ""
@@ -3044,13 +3046,41 @@ async def api_generate(
     # grounding est déterministe et auditable (med_grounding_json) ; le
     # brouillon conserve la version corrigée (raw_transcript est réécrit
     # plus loin avec payload.transcript).
+    confiance_mots: Optional[List[dict]] = None
+    changements: list = []
     if _med_grounding_on() and payload.transcript:
         try:
-            corrige, _ = med_grounding.normalize(payload.transcript)
+            corrige, changements = med_grounding.normalize(payload.transcript)
             if corrige and corrige.strip():
                 payload.transcript = corrige
         except Exception:
+            changements = []
             logger.exception("Grounding du transcript impossible — génération sur texte brut")
+
+    # Confiance mot-à-mot : sans audio (fournisseur de note qui n'écoute pas),
+    # on signale au LLM les mots que le STT a entendus avec incertitude, pour
+    # concentrer son effort de correction là où il est utile et prévenir toute
+    # sur-correction du reste. Les noms déjà corrigés par le grounding (spans
+    # de ``changements``) sont exclus : leur correction est déterministe et
+    # auditable, le modèle n'a pas à la re-discuter.
+    if (
+        audio_payload is None
+        and payload.consultation_id
+        and payload.transcript
+    ):
+        try:
+            consultation = _get_owned_consultation(db, payload.consultation_id, user)
+            conf_map = json.loads(consultation.transcript_conf) if consultation.transcript_conf else {}
+            ignores = {
+                med_grounding.norm_phon(span)
+                for span, _, _, _ in changements if span
+            }
+            if conf_map:
+                confiance_mots = med_grounding.doutes_pour_texte(
+                    payload.transcript, conf_map, ignores=ignores
+                )
+        except Exception:
+            logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
 
     try:
         result = await run_in_threadpool(
@@ -3063,6 +3093,7 @@ async def api_generate(
             generation_seq,
             request.headers.get("x-consultai-tab", ""),
             system_prompt,
+            confiance_mots,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -3382,6 +3413,13 @@ def patch_consultation(
             consultation.template_name = template_row.name if template_row else ""
         setattr(consultation, key, value)
 
+    # L'alignement confiance↔texte est rompu par une édition manuelle du
+    # transcript : on efface le mapping pour que la génération n'applique
+    # jamais la confiance d'un ancien STT à un texte que le médecin a luimême
+    # réécrit.
+    if "raw_transcript" in updates:
+        consultation.transcript_conf = None
+
     consultation.updated_at = utcnow()
     db.commit()
     db.refresh(consultation)
@@ -3518,6 +3556,7 @@ async def retranscribe_consultation(
     total_secondes = sum(float(p.duration_seconds or 0) for p in pistes) or 0.0
     done_secondes = 0.0
     morceaux: List[str] = []
+    conf_maps: List[dict] = []
     secondes = 0.0
     moteur = ("", "")
     dernier_refus = ""
@@ -3572,15 +3611,21 @@ async def retranscribe_consultation(
 
         texte = (resultat.get("transcript") or "").strip()
         if texte:
+            conf_map = {}
+            if resultat.get("words"):
+                try:
+                    conf_map = med_grounding.conf_par_token(
+                        texte, resultat.get("words") or [],
+                    )
+                except Exception:
+                    conf_map = {}
             if _med_grounding_on():
                 try:
-                    conf = med_grounding.conf_par_token(
-                        texte, resultat.get("words") or [],
-                    ) if resultat.get("words") else None
-                    texte = med_grounding.normalize(texte, conf=conf)[0] or texte
+                    texte = med_grounding.normalize(texte, conf=conf_map or None)[0] or texte
                 except Exception:
                     logger.exception("Grounding retranscription impossible (consultation %s)", consultation_id)
             morceaux.append(texte)
+            conf_maps.append(conf_map)
         secondes += float(resultat.get("duration_seconds") or 0)
         done_secondes += float(resultat.get("duration_seconds") or 0)
         if resultat.get("provider"):
@@ -3610,6 +3655,9 @@ async def retranscribe_consultation(
         return {"transcript": "\n\n".join(morceaux), "superseded": True}
 
     consultation.raw_transcript = "\n\n".join(morceaux)
+    consultation.transcript_conf = None
+    for cmap in conf_maps:
+        _merge_conf_into(consultation, cmap)
     consultation.audio_seconds = int(round(secondes))
     consultation.status = "transcrit"
     if moteur[0]:

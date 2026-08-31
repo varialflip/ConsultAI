@@ -247,6 +247,15 @@ COHERE_LLM_THINKING_BUDGET=1024
 > fournisseurs, y compris cet endpoint** et l'audio joint au modèle de langage ;
 > coupez la bascule s'il dégrade un modèle local multilingue.
 
+Quand le fournisseur de **génération de note** ne reçoit pas l'audio, la
+confiance mot-à-mot du STT (`words[].confidence`, si le service la fournit) est
+transmise au modèle : seuls les mots entendus avec incertitude sont signalés,
+et le modèle y concentre son effort de correction — en marquant « à confirmer »
+les doutes persistants dans « Corrections et éléments à valider » — tout en
+préservant fidèlement les mots sûrs (anti sur-correction). Les noms de
+médicaments déjà corrigés par le grounding déterministe sont exclus du
+signalement.
+
 > **⚡ Préparation de l'audio pendant la dictée.** L'audio joint au modèle de
 > langage (plafonnement des silences + encodage) coûte ~0,9× le temps réel —
 > plusieurs secondes autrefois payées AU clic « Mettre en forme ». Désormais,

@@ -1490,3 +1490,69 @@ def conf_par_token(text: str, words: list) -> dict:
                     result[t] = w.get("confidence") or 1.0
                     break
     return result
+
+
+#: Seuil de signalement au LLM (sans audio). Plus permissif que le gate
+#: déterministe ``CONF_HARD_FLOOR`` (0.92, anti-faux-positifs de prose) :
+#: ici, on préfère donner au modèle un peu plus de mots douteux — il garde le
+#: jugement final, et un surplus de doutes signale une correction à tenter, pas
+#: une certitude d'erreur.
+CONF_LLM_SEUIL = 0.90
+
+
+def doutes_pour_texte(
+    texte: str,
+    conf_map,
+    seuil: float = CONF_LLM_SEUIL,
+    ignores=None,
+) -> list:
+    """
+    Motss du texte GROUNDÉ sous le seuil de confiance, pour le LLM.
+
+
+
+    ``conf_map`` : mapping ``norm_phon → confiance`` accumulé tranche par tranche
+    (``consultation.transcript_conf``). Aligne le texte au mapping par clé
+    ``norm_phon``, exactement comme ``conf_par_token`` le fait; les tokens
+    orphelins (pas dans le mapping) ne sont pas signalés.
+
+
+
+    ``ignores`` : clés ``norm_phon`` à ne jamais signaler — les noms que le
+    grounding déterministe sur les médicaments vient de corriger (on ne demande
+    pas au LLM de seconde-guess une correction déjà faite et auditable).
+
+    Retourne la liste ``(mot, confiance, position)`` par position croissante ;
+    ``position`` est l'index du mot dans ``texte.split()`` (pour la lisibilité et
+    les tests), non utilisé par le prompt. La confiance y figure en [0,1[,
+    arrondie à 3 décimales.
+
+    Seuil compris : une valeur invalide (None, NaN…) est ignorée. Un
+    mapping vide → aucune liste (on ne signale rien, le comportement
+    historique s'applique).
+    """
+    result = []
+    if not texte or not conf_map:
+        return result
+    ignores = ignores or set()
+    try:
+        seuil = float(seuil)
+    except (TypeError, ValueError):
+        return result
+    toks = texte.split()
+    for i, tok in enumerate(toks):
+        cle = norm_phon(tok)
+        if not cle or cle in ignores:
+            continue
+        valeur = conf_map.get(cle, None)
+        if valeur is None:
+            continue
+        try:
+            valeur = float(valeur)
+        except (TypeError, ValueError):
+            continue
+        if valeur < seuil:
+            result.append(
+                {"mot": tok, "conf": round(valeur, 3), "position": i}
+            )
+    return result

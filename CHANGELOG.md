@@ -10,6 +10,20 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   le découpage n'était utile que pour les endpoints plafonnant la durée par
   passe (Parakeet/ONNX) et se règle toujours explicitement dans le panneau.
 
+## 2026-08-31 — Confiance STT mot-à-mot envoyée au LLM (génération sans audio)
+
+- **Mieux corriger sans inventer** : quand le fournisseur de note ne reçoit pas
+  l'audio, la confiance `words[].confidence` du STT (persistée tranche par
+  tranche) est transmise au modèle — seuls les mots entendus avec incertitude
+  (< seuil) sont signalés, et le modèle y concentre son effort de correction,
+  en marquant « à confirmer » les doutes persistants. Le reste de la
+  transcription (mots sûrs) est préservé fidèlement, prévenant la sur-correction.
+- Les noms de médicaments déjà corrigés par le grounding déterministe sont
+  exclus du signalement : le modèle ne re-discusse pas une correction auditable.
+- Sans `words[]` (fournisseur STT qui n'en fournit pas) ou sans confiance
+  persistée, le comportement historique s'applique (aucun signal, sans
+  ralentissement).
+
 ## 2026-08-31 — « Validation » : 2e passe de validation pour tous les fournisseurs LLM
 
 *La 2e passe de validation n'était utilisable qu'avec Gemini (seul chemin qui

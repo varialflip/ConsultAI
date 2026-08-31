@@ -221,6 +221,12 @@ class Consultation(Base):
     template_name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
 
     raw_transcript: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    #: Confiance mot-à-mot du STT (``{norm_phon(mot) → confiance}``), en miroir
+    #: de la transcription. Série côté serveur uniquement : elle permet à la
+    #: génération de signaler au LLM les mots mal reconnus (sans audio), et
+    #: meurt avec le brouillon comme les autres champs internes. Jamais
+    #: transmise au navigateur.
+    transcript_conf: Mapped[str | None] = mapped_column(Text, nullable=True)
     generated_markdown: Mapped[str] = mapped_column(Text, default="", nullable=False)
     edited_markdown: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
@@ -2353,6 +2359,7 @@ _ADDED_COLUMNS = {
         ("verification_json", "TEXT"),
         ("corrections_markdown", "TEXT"),
         ("med_grounding_json", "TEXT"),
+        ("transcript_conf", "TEXT"),
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),

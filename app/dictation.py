@@ -1043,6 +1043,33 @@ def _bind_template_language(template_id: Optional[int]) -> None:
         preferences.bind_document_language(row.language if row else None)
 
 
+def _merge_conf_into(consultation, conf_map: Optional[dict]) -> None:
+    """Fusionne ``conf_map`` (``norm_phon → confiance``) dans le brouillon.
+
+    La confiance mot-à-mot est accumulée tranche par tranche dans
+    ``transcript_conf`` (JSON) pour servir à la génération : sans audio, le
+    LLM a besoin de savoir quels mots le STT a mal reconnus. Clé duplicatée
+    dans deux tranches → on garde la confiance la PLUS BASSE (le mot fut
+    ambigu au moins une fois, la prudence commande de le signaler).
+    """
+    if not conf_map:
+        return
+    try:
+        stocke = json.loads(consultation.transcript_conf) if consultation.transcript_conf else {}
+    except (ValueError, TypeError):
+        stocke = {}
+    if not isinstance(stocke, dict):
+        stocke = {}
+    for cle, valeur in conf_map.items():
+        try:
+            valeur = float(valeur)
+        except (TypeError, ValueError):
+            continue
+        if cle not in stocke or valeur < float(stocke[cle]):
+            stocke[cle] = valeur
+    consultation.transcript_conf = json.dumps(stocke, ensure_ascii=False)
+
+
 def _store_part(
     session: DictationSession, text: str, moteur: tuple = ("", ""),
     duration_seconds: float = 0.0, words: Optional[list] = None,
@@ -1076,6 +1103,7 @@ def _store_part(
             existing = (consultation.raw_transcript or "").strip()
             consultation.raw_transcript = f"{existing} {text}".strip() if existing else text
             consultation.status = "transcrit"
+        _merge_conf_into(consultation, conf_part)
         consultation.audio_seconds = int(round(session.offset_seconds))
         # Dernière tranche gagnante : changer de service en pleine dictée est
         # possible, et c'est alors celui qui a fait le plus de travail qu'on
@@ -1294,6 +1322,9 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
         consultation = db.get(Consultation, session.consultation_id)
         if consultation is not None:
             consultation.raw_transcript = " ".join(session.parts).strip()
+            consultation.transcript_conf = None
+            for cmap in session.parts_conf:
+                _merge_conf_into(consultation, cmap)
             consultation.updated_at = utcnow()
             db.commit()
 

@@ -3086,15 +3086,19 @@ async def api_generate(
         except Exception:
             logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
 
-    # Hints structurés pour le LLM : les candidats médicamenteux détectés par
-    # le moteur (extraction sûre, inline_safe) accompagnent la dictée MÊME
-    # quand le grounding a laissé un nom déformé tel quel (approche
-    # « donner des outils au LLM »). Le modèle recoupe ces pistes avec le
-    # contexte clinique au lieu d'un orthographe aveugle.
+    # Hints structurés pour le LLM : (1) les candidats SAINS du moteur
+    # (extraction inline_safe) et (2) les candidats PHONÉTIQUES — le même
+    # moteur, en G2P français, rapproche un token non résolu (« dilote ») de son
+    # véritable voisin (Dilaudid). Les phonétiques sont des PISTES à confirmer,
+    # jamais des réécritures : le modèle les recoupe avec le contexte clinique.
     med_hints: list = []
     if _med_grounding_on() and payload.transcript:
         try:
             med_hints = med_grounding.extract_med_items(payload.transcript)
+            phon = med_grounding.matcher().phonetiques_texte(payload.transcript)
+            deja = {med_grounding.norm_phon(h.get("base") or h.get("name")) for h in med_hints}
+            med_hints += [h for h in phon
+                          if med_grounding.norm_phon(h.get("base") or h.get("name")) not in deja]
         except Exception:
             med_hints = []
             logger.exception("Hints méds indisponibles — génération sans candidats")

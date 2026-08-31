@@ -67,6 +67,15 @@ HIGH_SIM = 0.80       # near-certain fuzzy matches; exempt from context signals
 #: ferait tomber. 0.92 est le point de bascule mesuré.
 CONF_HARD_FLOOR = 0.92
 
+#: Prose structurante à ne JAMAIS proposer comme candidat phonétique (léxique
+#: réduit, réservé à la DÉTECTION de hints — ne modifie pas ``FRENCH_STOP``,
+#: qui reste le garde de la réécriture inline).
+_HINTS_PROSE = {
+    "droite", "gauche", "piles", "vide", "doigt", "mamelle", "epaule",
+    "hanche", "genou", "cheville", "poignet", "coude", "colonne", "poitrine",
+    "ventre", "abdomen", "groupe", "taches",
+}
+
 # ---------------------------------------------------------------- normalization
 def norm_orth(s):
     s = unicodedata.normalize("NFD", s)
@@ -503,8 +512,12 @@ class Matcher:
             self.ortho_node[n] = (level, base, brand, is_leaf, is_otc)
         if self.use_phonetic:
             self.bk = BKTree(lev)
-            for n, level, base, brand, _, _ in self.ortho:
-                self.bk.add(phonetic_fr(" ".join(n)))
+            self.bk_node = {}            # node phonétique -> (level, base, brand, is_leaf, is_otc)
+            for n, level, base, brand, is_leaf, is_otc in self.ortho:
+                node = phonetic_fr(n)
+                self.bk.add(node)
+                if node not in self.bk_node:
+                    self.bk_node[node] = (level, base, brand, is_leaf, is_otc)
 
         # Canonicalization data
         self.generics = self._generic_names
@@ -868,10 +881,136 @@ class Matcher:
         for dist, node in hits[:8]:
             s = sim(q, node)
             if s >= 0.6 and (best is None or s > best[3]):
-                for n, level, base, brand, is_leaf, is_otc in self.ortho:
-                    if phonetic_fr(" ".join(n)) == node:
-                        best = (level, base, brand, s, is_leaf, is_otc); break
+                row = self.bk_node.get(node)
+                if row is not None:
+                    best = (row[0], row[1], row[2], s, row[3], row[4])
         return best
+
+    def phonetiques_texte(self, texte, maxi=10):
+        """Candidats PHONÉTIQUES pour le modèle de langage (bloc hints).
+
+        Pour chaque jeton « ressemblant à un médicament » (ni français courant,
+        ni ancre/protocole, pas un chiffre, longueur >= 5) NON déjà résolu
+        exactement/par garble seedé, on interroge l'arbre BK phonétique (G2P
+        français, dist <= 3) et on remonte le meilleur voisin (>= 0,60),
+        non-feuille, non cosmétique. Le candidat est remis au LLM avec la
+        posologie voisine et l'étiquette ``source: "phonetic"`` : c'est une
+        PISTE à confirmer par le modèle, jamais une réécriture.
+
+        ``maxi`` borne le nombre de candidats total (la phonétique brute est
+        bruitée ; on ne donne que les pistes les mieux notées, les autres
+        retombent sur le modèle seul).
+
+        Retourne une liste de dicts compatibles ``extract_med_items`` (+ la clé
+        ``source``) pour le rendu unique des hints.
+        """
+        if not self.use_phonetic:
+            return []
+        words = texte.split()
+        n = len(words)
+        dose_unit = [False] * n
+        num_token = [False] * n
+        for i, w in enumerate(words):
+            if (POSOLOGY_RE.search(w) or DOSE_RE.search(w)
+                    or w.strip(",;:.()").lower() in
+                    {"mg", "mcg", "µg", "g", "ml", "unités", "unites", "ui",
+                     "bid", "tid", "hs", "prn", "qid", "die", "po", "peros"}):
+                dose_unit[i] = True
+            if re.fullmatch(r"\d+(?:[,.]\d+)?", w.strip(",;:.()")):
+                num_token[i] = True
+        result: list = []
+        vus = set()
+        for i, w in enumerate(words):
+            jet = w.strip(" \t,;:.()\"'’")
+            p = norm_phon(jet)
+            if not p or len(p) < 5:
+                continue
+            if p in FRENCH_STOP or p in ANCHOR_WORDS or p in PROTOCOL_WORDS:
+                continue
+            if p in _HINTS_PROSE:
+                continue                  # prose structurante (« droite »,
+                                          # « piles ») — jamais un med
+            if p in self.exact_garble or p in self.exact:
+                continue                  # déjà résolu déterministiquement
+            # Contexte : une dose/ancre à portée ou un voisin chiffre petit —
+            # sinon ça spatit de la prose sur la phonétique même bruitée. Un gros
+            # nombre (>999) est une date/n° de dosier, jamais une doze.
+            j = min(i + 3, n)
+            num_apres = (i + 1 < n and num_token[i + 1]
+                         and float(words[i + 1].replace(',', '.')) <= 999) or \
+                        (i + 2 < n and num_token[i + 2]
+                         and float(words[i + 2].replace(',', '.')) <= 999)
+            contexte = (
+                any(dose_unit[k] for k in range(i, j))
+                or num_apres
+                or (i > 0 and num_token[i - 1]
+                    and float(words[i - 1].replace(',', '.')) <= 999)
+            )
+            if not contexte:
+                continue
+            cand = self._phonetic_candidats(jet)
+            if not cand:
+                continue
+            can, base, brand, s = cand
+            poso = _dose_posology(texte, jet) or ""
+            # Un candidat SANS TROUVE posologie crédible (vide, ou uniquement des
+            # chiffres sans unité — n° de dossier/date) n'est admis que s'il est
+            # très proche phonétiquement (>= 0,72, sépare les vrais garbles
+            # kitsapine→quetiapine 0,78 du bruit de prose droite/piles 0,67).
+            if poso and not re.search(
+                    r"\b(mg|mcg|µg|g|ml|ui|unité|unites|comprimé|tid|bid|hs|prn|po|die)\b",
+                    poso, re.I) and s < 0.72:
+                continue
+            if not poso and s < 0.72:
+                continue
+            # (canonical, base, brand, sim)
+            if can is None or norm_phon(can) in vus:
+                continue
+            vus.add(norm_phon(can))
+            result.append({
+                "name": jet,              # le token déformé tel quel
+                "base": base or brand or can,
+                "brand": brand,
+                "posology": poso,
+                "score": int(round(s * 100)),
+                "level": "BASE_GENERIC",
+                "source": "phonetic",
+            })
+            if len(result) >= maxi:
+                break
+        return result
+
+    def _phonetic_candidats(self, token):
+        """Meilleur candidat phonétique d'un token, ou ``None``.
+
+        Retourne ``(canonical_display, base_generic, brand_name, sim)``. On
+        exclut les feuilles de marques et les cosmétiques/UV, dont la
+        phonétique rapproche souvent la prose.
+        """
+        q = phonetic_fr(token)
+        if not q:
+            return None
+        voie = self.bk.search(q, max_dist=3)
+        best = None
+        for dist, node in voie[:12]:
+            s = sim(q, node)
+            if s < 0.72 or (best is not None and s <= best[0]):
+                continue
+            row = self.bk_node.get(node)
+            if row is None:
+                continue
+            level, base, brand, is_leaf, is_otc = row
+            if is_leaf:
+                continue
+            if _is_cosmetic(base or brand):
+                continue
+            can = self._canonicalize(level, base, brand, bool(is_otc))
+            if can is None:
+                continue
+            best = (s, can, base or brand, brand)
+        if best is None:
+            return None
+        return (best[1], best[2], best[3], best[0])
 
     def normalize(self, text, conf=None, inline_safe=False):
         # ``inline_safe`` — mode « texte envoyé au LLM » : on ne réécrit que les
@@ -1247,7 +1386,11 @@ def matcher() -> Matcher:
             )
         with _verrou_moteur:
             if _moteur is None:
-                _moteur = Matcher(db=DB)
+                # L'arbre phonétique (G2P français) sert désormais à produire
+                # les HINTS remis au modèle de langage (« candidats phonétiques
+                # à confirmer ») : on le construit côté application. La
+                # réécriture inline, elle, reste sur l'orthographe + seeds.
+                _moteur = Matcher(db=DB, use_phonetic=True)
     return _moteur
 
 

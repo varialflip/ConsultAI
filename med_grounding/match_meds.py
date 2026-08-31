@@ -414,7 +414,7 @@ class Matcher:
         if self.use_phonetic:
             self.bk = BKTree(lev)
             for n, level, base, brand, _, _ in self.ortho:
-                self.bk.add(phonetic_fr(" ".join(n)))
+                self.bk.add(phonetic_fr(n))
 
         # Canonicalization data
         self.generics = self._generic_names
@@ -765,7 +765,7 @@ class Matcher:
             s = sim(q, node)
             if s >= 0.6 and (best is None or s > best[3]):
                 for n, level, base, brand, is_leaf, is_otc in self.ortho:
-                    if phonetic_fr(" ".join(n)) == node:
+                    if phonetic_fr(n) == node:
                         best = (level, base, brand, s, is_leaf, is_otc); break
         return best
 

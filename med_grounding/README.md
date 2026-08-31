@@ -38,7 +38,10 @@ Le cœur est **`match_meds.py`**, un moteur déterministe et auditable :
   `Aricepte→ARICEPT`, `Pantolot→PANTOLOC`).
 - **Signal secondaire (optionnel `--phonetic`)** : G2P français règle → arbre
   BK de phonèmes. Gardé derrière un drapeau car le G2P naïf est bruité ;
-  l'orthographe est le signal principal.
+  l'orthographe est le signal principal. *(Correctif 2026-08-31 : l'arbre BK
+  était indexé par caractères éclatés — `phonetic_fr(" ".join(n))` — ce qui le
+  rendait inutilisable ; indexé désormais par `phonetic_fr(n)`, il est
+  opérationnel.)*
 - **Scoring** : ortho/exact = 100 ; sinon PHONETIC (seuil ortho) + ANCHOR +
   POSOLOGY, exige un signal de contexte dans la prose narrative, seuil S ≥ 65.
 - **Posologie** : phrases « per os »→`PO`, « dy »→`DIE`, « Q2 jours »→`Q2J`,
@@ -249,10 +252,22 @@ garbles STT **seedés** sont réécrits. Les résolutions orthographiques floues
 (« Monocore » → nitrate de miconazole, sim 0,75) ne s'appliquent **jamais**
 inline : le modèle de langage les tranche avec la posologie et le contexte
 clinique, secondé par les candidats sûrs fournis en hints (bloc
-`MEDICAMENTS_SOUPCONNES`). Ce mode remplace progressivement l'accumulation
-d'exceptions `FRENCH_STOP` : on cesse de bannir chaque marque confuse, on
-confie la résolution au modèle. `extract_med_items` applique aussi le mode
-sûr pour que la liste Validation ne porte jamais une invention du moteur.
+`MEDICAMENTS_SOUPCONNES`). `extract_med_items` applique aussi le mode sûr pour
+que la liste Validation ne porte jamais une invention du moteur.
+
+### Hints phonétiques (G2P français → BK-tree)
+
+Depuis 2026-08-31, le moteur applicatif construit son arbre phonétique
+(`Matcher(use_phonetic=True)`) et expose `phonetiques_texte(texte)` : pour
+chaque jeton non résolu, ressemblant à un médicament et porté par une dose,
+il remonte le meilleur voisin phonétique (BK, dist ≤ 3, sim ≥ 0,72, non
+feuille, non cosmétique). Ces candidats sont injectés dans un bloc dédié
+du prompt (`MEDICAMENTS_PHONETIQUES`), étiquetés **« à confirmer »** : le
+modèle les accepte ou les écarte selon la posologie et le contexte clinique
+(« dilote » → Dilaudid, « kitsapine » → quetiapine, « Antoloque » →
+Pantoloc). C'est le « tool » généralisable qui rend les garbles manuels
+(seeds) de plus en plus redondants — on n'ajoute plus d'exception par cas
+observé, on laisse la phonétique + le LLM résoudre.
 
 ---
 

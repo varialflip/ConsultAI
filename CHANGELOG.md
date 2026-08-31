@@ -10,7 +10,7 @@ orthographiques lointains de la base BDP (« Monocore » → « nitrate de
 miconazole »). Ajouter une exception par faux positif devenait intenable. Le
 moteur ne réécrit plus inline que ce qu'il sait déterministiquement ; les
 noms déformés restants sont résolus par le modèle de langage, qui reçoit les
-candidats sûrs comme hints.*
+candidats sûrs *et phonétiques* comme hints.*
 
 - **Fini la correction inline inventive** : `normalize(..., inline_safe=True)`
   ne réécrit plus que les correspondances **exactes** (nom réel, non-feuille)
@@ -23,9 +23,19 @@ candidats sûrs comme hints.*
   d'écrire le nom correct, en signalant en « Corrections et éléments à
   valider » ce qu'il ne peut pas trancher. Application : « Monocore 1,25 mg »
   → Monocor (bisoprolol) 1,25 mg ; « pantoloque 40 » → Pantoloc 40.
-- **Hints structurés au modèle** : la liste sûre du moteur (extraction
-  `inline_safe`) accompagne la dictée dans un bloc `MEDICAMENTS_SOUPCONNES`
-  — des pistes à recouper avec la dictée, jamais des vérités à recopier.
+- **Hints structurés au modèle** :
+  - la liste **sûre** du moteur (extraction `inline_safe`) accompagne la
+    dictée dans un bloc `MEDICAMENTS_SOUPCONNES` ;
+  - **candidats phonétiques** : le G2P français du moteur (arbre BK,
+    `phonetiques_texte`) remonte pour chaque jeton non résolu et « dosé » le
+    meilleur voisin phonétique (dist ≤ 3, sim ≥ 0,72, non feuille, non
+    cosmétique), injecté dans un bloc `MEDICAMENTS_PHONETIQUES` étiqueté
+    « à confirmer ». « dilote » → Dilaudid, « kitsapine » → quetiapine,
+    « Antoloque » → Pantoloc, « phézothérodine » → fesoterodine.
+- **Correctif arbre BK** : `phonetic_fr(" ".join(n))` (éclaté en caractères)
+  rendait la phonétique inopérante — remplacé par `phonetic_fr(n)` + index
+  inverse `bk_node`. L'index ortho est balayé une fois à la construction
+  (~3 s au démarrage, une seule fois).
 - **Liste Validation alignée** : `extract_med_items` passe aussi en mode sûr
   pour qu'aucune inventon du moteur n'apparaisse dans l'onglet Validation ni
   dans les hints — fini les fantômes du STT canonisés (diclofenac

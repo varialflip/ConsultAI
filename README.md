@@ -876,7 +876,13 @@ des médicaments », défaut `false`). Une fois activé :
   invention du moteur.
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`) — des pistes pour le
-  modèle, jamais des vérités à recopier aveuglément.
+  modèle, jamais des vérités à recopier aveuglément. S'y ajoutent les
+  **candidats phonétiques** (bloc `MEDICAMENTS_PHONETIQUES`, étiquetés
+  « à confirmer ») : le G2P français du moteur (`phonetiques_texte`) remonte
+  pour chaque jeton non résolu et « dosé » le meilleur voisin phonétique
+  (dist ≤ 3, sim ≥ 0,72, non feuille, non cosmétique). « dilote » → Dilaudid,
+  « kitsapine » → quetiapine, « Antoloque » → Pantoloc — le modèle les
+  accepte ou les écarte selon la posologie et le contexte clinique.
 - **S'étend à l'audio importé et à la retranscription** : la liste est
   recalculée sur le texte complet, renvoyée dans la réponse (`med_items`) et
   diffusée par SSE.

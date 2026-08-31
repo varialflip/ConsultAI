@@ -990,11 +990,40 @@ def verification_capable(provider: Optional[str] = None) -> bool:
     """
     « Validation » disponible pour ce fournisseur ?
 
-    L'audit compare la note à l'AUDIO (source de vérité — la transcription
-    Parakeet est trop imprécise pour servir de référence) : seul le chemin
-    Gemini reçoit l'audio ici.
+    La 2e passe audite la note contre l'AUDIO quand le fournisseur le reçoit
+    (Gemini, Qwen Omni, point de terminaison personnalisé, OpenRouter), sinon
+    contre la transcription — dans les deux cas, elle est utilisable quel que
+    soit le fournisseur LLM actif.
     """
-    return (provider or active_provider()) == "gemini"
+    return True
+
+
+#: Réglage « modèle de 2e passe », par fournisseur. Suffixe « _verify_model »,
+#: comme les autres réglages propres de la note (``cohere_llm_temperature``,
+#: ``custom_llm_base_url``…).
+_VERIFY_MODEL_KEYS = {
+    "gemini": "gemini_verify_model",
+    "anthropic": "anthropic_verify_model",
+    "openai": "openai_verify_model",
+    "cohere": "cohere_llm_verify_model",
+    "mistral": "mistral_llm_verify_model",
+    "qwen_omni": "qwen_omni_verify_model",
+    "custom": "custom_llm_verify_model",
+    "openrouter": "openrouter_verify_model",
+}
+
+
+def verify_model(provider: Optional[str] = None) -> str:
+    """
+    Modèle de la 2e passe de validation pour le fournisseur donné (ou actif).
+
+    Réglage ``<fournisseur>_verify_model`` du panneau ; vide → le même modèle
+    que la mise en forme (``active_model``). Peut être vide (comme le modèle
+    principal) : ``verify_note`` se charge de refuser une passe sans modèle.
+    """
+    provider = provider or active_provider()
+    key = _VERIFY_MODEL_KEYS.get(provider, "gemini_verify_model")
+    return runtime_config.value(key) or active_model(provider)
 
 
 #: Consignes de l'auditeur factuel (« Validation »). Volontairement PERMISSIF :
@@ -1111,90 +1140,170 @@ _AUDITOR_PROMPTS = {
 }
 
 
-def _verification_requete(
+#: Consignes de l'audit « Validation » SANS AUDIO — fournisseurs que l'app ne
+#: fait pas écouter (Anthropic, OpenAI, Cohere, Mistral) : la transcription est
+#: alors la seule référence. Elle est APPROXIMATIVE (le moteur vocal se
+#: trompe), donc on renforce encore la permissivité : ne signaler QUE des
+#: écarts dont on peut désigner le faux EXPRES dans la transcription, jamais
+#: sur une simple absence de mot (le mot a pu être mal reconnu). L'audio reste
+#: la vérité absolue quand il existe ; ici on s'en passe faute de mieux.
+_AUDITOR_TRANSCRIPT_PROMPTS = {
+    "fr": (
+        "Tu es auditeur factuel d'une note clinique rédigée à partir d'une "
+        "dictée. Seule référence disponible : la TRANSCRIPTION du moteur "
+        "vocal. Elle est APPROXIMATIVE et peut se tromper sur les noms, les "
+        "posologies et les chiffres — c'est pourquoi tu es TRÈS permissif, "
+        "car aucune omission ni invention ne peut être prouvée par un simple "
+        "mot manquant.\n"
+        "\n"
+        "MÉTHODE OBLIGATOIRE, dans cet ordre : 1) lis la transcription en "
+        "entier ; 2) relis la note en entier ; 3) compare alors seulement "
+        "élément par élément.\n"
+        "\n"
+        "La note est une reformulation FIDÈLE de la dictée : presque chaque "
+        "affirmation a une origine dans la transcription. Ton rôle n'est PAS "
+        "de chercher des écarts, mais de ne signaler QUE les écarts dont tu "
+        "peux prouver l'existence. Par défaut, tu ne signales rien.\n"
+        "\n"
+        "- « omissions » : information CLAIREMENT et EXPLICITEMENT écrite dans "
+        "la transcription, avec les mots exacts, ET totalement absente du sens "
+        "de la note. Toute présence équivalente annule le signalement : "
+        "reformulation, synonyme médical, regroupement, généralisation, ou un "
+        "énoncé qui implique le fait. Si l'info est dite ailleurs dans la "
+        "note (mêmes idées), ce n'est PAS une omission.\n"
+        "- « inventions » : affirmation CONCRÈTE et DÉTAILLÉE de la note "
+        "(médicament spécifique, dose, chiffre, diagnostic, antécédent) dont tu "
+        "peux déterminer qu'elle est ABSENTE de la transcription dans son "
+        "intégralité, y compris sous une prononciation ou une orthographe "
+        "proche (ex. « Lipitar » ≈ « Lipitor », « pentoloc » ≈ « Pantoloc »). "
+        "Un mot que le moteur vocal a MÉCOMPRIS (homonyme, troncature) n'est "
+        "pas une invention : si un élément de la note ressemble à un énoncé "
+        "de la transcription, ce n'en est pas une. Une affirmation déjà "
+        "présente dans la note ne peut presque jamais être une invention — "
+        "vérifie que la transcription ne la laisse pas deviner.\n"
+        "\n"
+        "Sois EXTRÊMEMENT permissif : le style, l'ordre des rubriques, la mise "
+        "en forme, les généralisations bénignes et l'explicitation d'un détail "
+        "déjà pris en compte ne comptent JAMAIS comme écart. Dans le doute, NE "
+        "SIGNALE PAS : une liste vide est le résultat normal, jamais un échec. "
+        "Sans preuve EXPRESSE dans la transcription, ne signale rien ; au plus "
+        "5 éléments courts par liste. « confiance » : ta certitude globale "
+        "(haute/moyenne/basse).\n"
+        "\n"
+        "RÉPONSE OBLIGATOIRE : renvoie UNIQUEMENT un objet JSON strict, sans "
+        "aucun autre texte ni commentaire, de la forme : "
+        "{\"omissions\": [\"...\"], \"inventions\": [\"...\"], \"confiance\": "
+        "\"haute\"} — « confiance » parmi haute/moyenne/basse."
+    ),
+    "en": (
+        "You are a factual auditor of a clinical note written from a "
+        "dictation. The only reference available is the speech engine's "
+        "TRANSCRIPT. It is APPROXIMATE and can be wrong on names, doses and "
+        "numbers — so you are VERY permissive, because no omission or "
+        "invention can be proven by a mere missing word.\n"
+        "\n"
+        "MANDATORY METHOD, in this order: 1) read the entire transcript; "
+        "2) reread the entire note; 3) then compare element by element.\n"
+        "\n"
+        "The note is a FAITHFUL reformulation of the dictation: nearly every "
+        "claim has an origin in the transcript. Your role is NOT to hunt for "
+        "discrepancies but to flag ONLY those you can prove. By default you "
+        "flag nothing.\n"
+        "\n"
+        "- \"omissions\": information CLEARLY and EXPLICITLY written in the "
+        "transcript, with the exact words, AND entirely absent from the note's "
+        "meaning. Any equivalent presence cancels the flag: reformulation, "
+        "exact medical synonym, grouping, generalization, or a statement "
+        "implying the fact. If the information is stated elsewhere in the note "
+        "(same ideas), it is NOT an omission.\n"
+        "- \"inventions\": a concrete, DETAILED claim in the note (specific "
+        "medication, dose, number, diagnosis, history) that you can determine "
+        "is ABSENT from the transcript in its entirety, including under a "
+        "close pronunciation or spelling (e.g. \"Lipitar\" ≈ \"Lipitor\", "
+        "\"pentoloc\" ≈ \"Pantoloc\"). A word the engine MISHEARD (homophone, "
+        "truncation) is not an invention: if a note element resembles an "
+        "utterance in the transcript, it is not one. A statement already "
+        "present in the note can almost never be an invention — check that "
+        "the transcript does not hint at it.\n"
+        "\n"
+        "Be EXTREMELY permissive: style, section order, formatting, benign "
+        "generalizations, and spelling out a detail already accounted for "
+        "NEVER count as a discrepancy. When in doubt, DO NOT flag: an empty "
+        "list is the normal outcome, never a failure. Without EXPRESS proof "
+        "in the transcript, flag nothing; at most 5 short items per list. "
+        "\"confiance\": your overall certainty (haute/moyenne/basse).\n"
+        "\n"
+        "MANDATORY RESPONSE: return ONLY a strict JSON object, no other text "
+        "or commentary, of the form: {\"omissions\": [\"...\"], "
+        "\"inventions\": [\"...\"], \"confiance\": \"haute\"} — \"confiance\" "
+        "is one of haute/moyenne/basse."
+    ),
+}
+
+
+def _verification_messages(
     note_markdown: str,
     langue: str,
-    audio: Tuple[bytes, str],
+    audio: Optional[Tuple[bytes, str]],
     transcript: Optional[str],
     system_instruction: str,
-    model: Optional[str],
-) -> Tuple[object, str, List[object], Dict[str, object]]:
+) -> Tuple[str, str, Optional[Tuple[bytes, str]]]:
     """
-    Construit la requête d'audit « Validation » : client, modèle, contenus et
-    configuration — la même pour l'appel simple (``verify_note``) et le flux
-    (``verify_note_stream``).
+    Construit la requête d'audit « Validation » : consigne système, message
+    utilisateur et audio — la même pour l'appel simple (``verify_note``) et le
+    flux (``verify_note_stream``), quel que soit le fournisseur.
 
-    La consigne système est celle de la MISE EN FORME (``system_instruction``,
-    injectée par ``api_generate``) : les deux passes partagent alors le même
-    préfixe [consigne système + audio], réutilisé par le cache implicite de
-    Gemini — l'audio n'est re-facturé que sur la fin du message. Les consignes
-    d'audit elles-mêmes ouvrent le message utilisateur (juste après l'audio).
+    Deux modes :
+    * avec audio (fournisseurs audio-capables) — la consigne système est celle
+      de la MISE EN FORME (``system_instruction``, injectée par
+      ``api_generate``) : les deux passes partagent alors le même préfixe
+      [consigne système + audio], réutilisé par le cache implicite de Gemini.
+      La transcription éventuelle n'est qu'indicative (consigne d'audit audio).
+    * sans audio (Anthropic, OpenAI, Cohere, Mistral) — la transcription sert
+      de référence, avec des consignes d'audit adaptées (plus permissives).
+
+    Le JSON est toujours demandé par instruction (jamais de ``json_mode`` :
+    pour Gemini, ``response_mime_type`` rompttait la resservie du cache de
+    préfixe — voir ``_complete_gemini``), et l'extraction reste tolérante
+    (``_extraire_json``).
     """
-    from google.genai import types
-
-    client = get_client("gemini")
-    nom_modele = model or active_model()
     langue_norm = i18n.normalize(langue)
+    # Mode audio : la consigne système est celle de la MISE EN FORME
+    # (``system_instruction``), partagée pour le cache de préfixe ; l'auditeur
+    # audio ouvre le message utilisateur, comme avant. Mode transcription :
+    # l'auditeur adapté sert lui-même de consigne système, et le message
+    # utilisateur ne porte que la note et la transcription (pas de doublon).
+    if audio is not None:
+        auditeur = _AUDITOR_PROMPTS.get(langue_norm, _AUDITOR_PROMPTS["fr"])
+        system = system_instruction or auditeur
+        blocs = [auditeur]
+    else:
+        auditeur = _AUDITOR_TRANSCRIPT_PROMPTS.get(
+            langue_norm, _AUDITOR_TRANSCRIPT_PROMPTS["fr"]
+        )
+        system = auditeur
+        blocs = []
 
-    blocs = [
-        # Consignes d'audit EN TÊTE du message utilisateur : avec l'audio, elles
-        # suivent le préfixe partagé [consigne système + audio]. Le texte est le
-        # même qu'avant (``_AUDITOR_PROMPTS``) — seule sa position change.
-        _AUDITOR_PROMPTS.get(langue_norm, _AUDITOR_PROMPTS["fr"]),
-        f"<NOTE_AUDITER>\n{(note_markdown or '').strip()}\n</NOTE_AUDITER>",
-    ]
+    blocs.append(
+        f"<NOTE_AUDITER>\n{(note_markdown or '').strip()}\n</NOTE_AUDITER>"
+    )
     transcript_propre = (transcript or "").strip()
     if transcript_propre:
-        # Indicatif seulement : le texte brut peut contenir les erreurs du
-        # service vocal, jamais élevé au rang de référence.
-        blocs.append(
-            "<TRANSCRIPTION_INDICATIVE_approximative_ne_pas_servir_de_reference>\n"
-            f"{transcript_propre}\n"
-            "</TRANSCRIPTION_INDICATIVE_approximative_ne_pas_servir_de_reference>"
-        )
-    # L'AUDIO en TÊTE du message utilisateur : avec la consigne système (celle
-    # de la mise en forme), il forme le préfixe [consigne système + audio]
-    # partagé entre les deux passes — servi depuis le cache implicite de Gemini.
-    # Le texte suit IMMÉDIATEMENT l'audio, en CHAÎNE brute comme la mise en
-    # forme (``[Part(audio), user]``) : un ``Content`` explicite produirait deux
-    # messages [audio] / [texte] et romprait la resservie du préfixe.
-    contenu: List[object] = [
-        types.Part.from_bytes(data=audio[0], mime_type=audio[1]),
-        "\n\n".join(blocs),
-    ]
+        if audio is not None:
+            # Indicatif seulement : le texte brut peut contenir les erreurs du
+            # service vocal, jamais élevé au rang de référence.
+            balise = (
+                "<TRANSCRIPTION_INDICATIVE_approximative_ne_pas_servir_de_reference>"
+            )
+        else:
+            balise = "<TRANSCRIPTION_REFERENCE>"
+        fermeture = "</" + balise[1:]
+        blocs.append(f"{balise}\n{transcript_propre}\n{fermeture}")
+    user = "\n\n".join(blocs)
+    return system, user, audio
 
-    # L'audit est une tâche de CROISEMENT (note ↔ audio) : il a besoin de
-    # raisonnement pour ne pas inventer d'écarts. Le budget du panneau
-    # (``gemini_thinking_budget``) s'applique ici comme pour la génération,
-    # pas le plancher 128 qui laisse le modèle halluciner des faux positifs
-    # (observé : des médicaments réellement dictés déclarés « inventions »).
-    # Bascule coupée → budget 0, refusé par gemini-2.5-pro : le repli
-    # ``_est_think_refusee_gemini`` relance alors sans champ, ce qui laisse le
-    # modèle raisonner sur sa valeur par défaut — toujours mieux pour l'audit
-    # qu'un budget au plancher.
-    # PAS de ``response_mime_type="application/json"`` ni de ``response_schema`` :
-    # vérifié en réel sur gemini-2.5-pro (Vertex), une requête en mode JSON ne
-    # réutilise PAS le cache de préfixe implicite d'une requête hors mode JSON
-    # (la mise en forme). Le JSON est donc demandé par instruction (voir
-    # ``_AUDITOR_PROMPTS``) et l'extraction est tolérante (voir ``_extraire_json``).
-    # Même exigence pour la température : elle doit coïncider avec celle de la
-    # mise en forme (``active_temperature``), sinon le préfixe [consigne + audio]
-    # n'est pas resservi du cache — un audit à 0,2 fixe raté chaque cache.
-    config_kwargs: Dict[str, object] = dict(
-        # Sans ``system_instruction`` (appelant hors pipeline de mise en forme),
-        # on retombe sur l'auditeur comme consigne système — comportement d'avant
-        # le partage de préfixe.
-        system_instruction=system_instruction or _AUDITOR_PROMPTS.get(
-            langue_norm, _AUDITOR_PROMPTS["fr"]
-        ),
-        temperature=active_temperature(),
-        max_output_tokens=settings.gemini_max_output_tokens,
-        safety_settings=_safety_settings(),
-        thinking_config=types.ThinkingConfig(
-            thinking_budget=_gemini_thinking_budget()
-        ),
-    )
-    return client, nom_modele, contenu, config_kwargs
+
+
 
 
 def _extraire_json(brut: str) -> Optional[dict]:
@@ -1275,62 +1384,54 @@ def verify_note(
     transcript: Optional[str] = None,
     system_instruction: Optional[str] = None,
     model: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
     """
-    « Validation » : audite la note contre l'AUDIO de la dictée.
+    « Validation » : audite la note contre la vérité disponible.
 
-    Retourne ``(résultat, usage)`` — ``résultat`` vaut ``None`` au moindre
-    doute (pas d'audio, appel impossible, JSON invalide) : l'appelant traite
-    cela comme « rien à afficher », jamais comme une erreur bloquante.
+    Avec audio (fournisseurs audio-capables), l'audit compare la note à l'AUDIO
+    (source de vérité) ; sans audio, il la compare à la TRANSCRIPTION, avec des
+    consignes adaptées. Retourne ``(résultat, usage)`` — ``résultat`` vaut
+    ``None`` au moindre doute (rien à croiser, appel impossible, JSON invalide)
+    : l'appelant traite cela comme « rien à afficher », jamais comme une erreur
+    bloquante.
 
     ``system_instruction`` — la consigne système de la MISE EN FORME, injectée
     par ``api_generate`` : partagée avec la génération, elle fait de l'audio un
-    préfixe candidat au cache implicite de Gemini (cf. ``_verification_requete``).
+    préfixe candidat au cache implicite de Gemini (cf. ``_verification_messages``).
     """
-    from google.genai import types
-
-    if audio is None:
-        logger.info("« Validation » ignoré : aucun audio joint à la consultation")
+    if audio is None and not (transcript or "").strip():
+        logger.info("« Validation » ignoré : ni audio ni transcription à croiser")
         return None, {}
 
-    client, nom_modele, contenu, config_kwargs = _verification_requete(
-        note_markdown, langue, audio, transcript, system_instruction, model
+    provider = provider or active_provider()
+    nom_modele = model or verify_model(provider)
+    if not nom_modele:
+        logger.warning("« Validation » ignoré : aucun modèle de 2e passe pour %s", provider)
+        return None, {}
+    system, user, audio_reel = _verification_messages(
+        note_markdown, langue, audio, transcript, system_instruction
     )
 
     t0 = time.monotonic()
     try:
-        response = _gemini_appel(
-            client,
-            nom_modele,
-            contenu,
-            types.GenerateContentConfig(**config_kwargs),
+        completion = complete(
+            system, user,
+            model=nom_modele, temperature=active_temperature(),
+            max_tokens=settings.gemini_max_output_tokens,
+            json_mode=False, provider=provider, audio=audio_reel,
         )
     except Exception as exc:
-        if _est_think_refusee_gemini(exc):
-            config_kwargs.pop("thinking_config", None)
-            try:
-                response = _gemini_appel(
-                    client,
-                    nom_modele,
-                    contenu,
-                    types.GenerateContentConfig(**config_kwargs),
-                )
-            except Exception as exc2:
-                logger.warning("« Validation » refusé (%s) : %s", nom_modele, exc2)
-                return None, {}
-        else:
-            logger.warning("« Validation » impossible (%s) : %s", nom_modele, exc)
-            return None, {}
+        logger.warning("« Validation » impossible (%s / %s) : %s", provider, nom_modele, exc)
+        return None, {}
 
-    usage = _gemini_usage(getattr(response, "usage_metadata", None))
+    usage = completion.usage
     logger.info(
-        "Gemini %s (contrôle) : %s jetons de prompt (%s audio, %s en cache), %s en réponse, %.1f s",
-        nom_modele, usage.get("prompt_tokens"), usage.get("audio_prompt_tokens"),
-        usage.get("cached_tokens"), usage.get("output_tokens"), time.monotonic() - t0,
+        "« Validation » %s (%s) : %d jetons de prompt, %d en réponse, %.1f s",
+        provider, nom_modele, usage.get("prompt_tokens"),
+        usage.get("output_tokens"), time.monotonic() - t0,
     )
-
-    brut = getattr(response, "text", "") or ""
-    resultat = _assainir_verification(brut, note_markdown, transcript)
+    resultat = _assainir_verification(completion.text, note_markdown, transcript)
     if resultat is None:
         return None, usage
     return resultat, usage
@@ -1343,12 +1444,14 @@ def verify_note_stream(
     transcript: Optional[str] = None,
     system_instruction: Optional[str] = None,
     model: Optional[str] = None,
+    provider: Optional[str] = None,
     on_chunk: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
     """
-    « Validation » en flux : audite la note contre l'AUDIO en diffusant le
-    JSON brut au fil de l'eau, puis renvoie ``(résultat, usage)`` exactement
-    comme ``verify_note`` (même requête, même parse, même garde-fou).
+    « Validation » en flux : audite la note (audio ou transcription) en
+    diffusant le JSON brut au fil de l'eau, puis renvoie ``(résultat, usage)``
+    exactement comme ``verify_note`` (même requête, même parse, même garde-fou).
+    Le fournisseur est celui actif (ou ``provider``), tous modèles confondus.
 
     ``on_chunk(texte)`` reçoit le texte JSON ACCUMULÉ (jamais des deltas) : le
     client re-parse et réaffiche sans état — un morceau perdu se répare seul.
@@ -1356,97 +1459,58 @@ def verify_note_stream(
     ``system_instruction`` — idem ``verify_note`` : la consigne système de la
     mise en forme, partagée pour faire de l'audio un préfixe du cache implicite.
     """
-    from google.genai import types
-
-    if audio is None:
-        logger.info("« Validation » ignoré : aucun audio joint à la consultation")
+    if audio is None and not (transcript or "").strip():
+        logger.info("« Validation » ignoré : ni audio ni transcription à croiser")
         return None, {}
 
-    client, nom_modele, contenu, config_kwargs = _verification_requete(
-        note_markdown, langue, audio, transcript, system_instruction, model
+    provider = provider or active_provider()
+    nom_modele = model or verify_model(provider)
+    if not nom_modele:
+        logger.warning("« Validation » ignoré : aucun modèle de 2e passe pour %s", provider)
+        return None, {}
+    system, user, audio_reel = _verification_messages(
+        note_markdown, langue, audio, transcript, system_instruction
     )
-    config = types.GenerateContentConfig(**config_kwargs)
-    sans_thinking = False
 
     t0 = time.monotonic()
-    # Même mécanique de reprise que la génération (voir generate_note_stream) :
-    # un refus de quota (429) survient souvent au premier morceau plutôt qu'à
-    # la création du flux ; un refus du ``thinking_config`` se rattrape une
-    # fois, sans le champ — jamais après qu'un texte a été diffusé.
-    for tentative in range(1, _GEMINI_TENTATIVES + 1):
-        try:
-            stream = client.models.generate_content_stream(
-                model=nom_modele, contents=contenu, config=config
-            )
-        except Exception as exc:
-            if _est_think_refusee_gemini(exc):
-                if not sans_thinking:
-                    logger.warning(
-                        "Gemini (%s) refuse thinking_config (audit en flux) : "
-                        "nouvel essai sans raisonnement configuré.", nom_modele,
-                    )
-                    config_kwargs.pop("thinking_config", None)
-                    config = types.GenerateContentConfig(**config_kwargs)
-                    sans_thinking = True
-                    continue
-            if not _est_quota_gemini(exc) or tentative == _GEMINI_TENTATIVES:
-                logger.warning("« Validation » impossible (%s) : %s", nom_modele, exc)
-                return None, {}
-            _gemini_pause_retry(tentative, exc, "audit en flux")
-            continue
-
-        parties: List[str] = []
-        usage_metadata = None
-        deja_diffuse = False
-        try:
-            for chunk in stream:
-                for piece in (getattr(chunk, "parts", None) or []):
-                    part = getattr(piece, "text", None) or ""
-                    if not part:
-                        continue
-                    parties.append(part)
-                    deja_diffuse = True
-                    if on_chunk is not None:
-                        on_chunk("".join(parties))
-                if getattr(chunk, "usage_metadata", None) is not None:
-                    usage_metadata = chunk.usage_metadata
-        except Exception as exc:
-            if _est_think_refusee_gemini(exc):
-                if not sans_thinking and not deja_diffuse:
-                    logger.warning(
-                        "Gemini (%s) refuse thinking_config (audit en flux) : "
-                        "nouvel essai sans raisonnement configuré.", nom_modele,
-                    )
-                    config_kwargs.pop("thinking_config", None)
-                    config = types.GenerateContentConfig(**config_kwargs)
-                    sans_thinking = True
-                    continue
-            if (
-                _est_quota_gemini(exc)
-                and not deja_diffuse
-                and tentative < _GEMINI_TENTATIVES
-            ):
-                _gemini_pause_retry(tentative, exc, "audit en flux")
-                continue
-            logger.warning("« Validation » impossible (%s) : %s", nom_modele, exc)
-            return None, {}
-        finally:
+    parties: List[str] = []
+    stream = None
+    try:
+        stream = complete_stream(
+            system, user,
+            model=nom_modele, temperature=active_temperature(),
+            max_tokens=settings.gemini_max_output_tokens,
+            json_mode=False, provider=provider, audio=audio_reel,
+        )
+        while True:
+            try:
+                fragment = next(stream)
+            except StopIteration as stop:
+                completion = stop.value
+                break
+            if fragment:
+                parties.append(fragment)
+                if on_chunk is not None:
+                    on_chunk("".join(parties))
+    except Exception as exc:
+        logger.warning("« Validation » impossible (%s / %s) : %s", provider, nom_modele, exc)
+        return None, {}
+    finally:
+        if stream is not None:
             fermeture = getattr(stream, "close", None)
             if callable(fermeture):
                 try:
                     fermeture()
                 except Exception:
                     pass
-        break
 
-    usage = _gemini_usage(usage_metadata)
+    usage = completion.usage
     brut = "".join(parties)
     logger.info(
-        "Gemini %s (contrôle, flux) : %s jetons de prompt (%s audio, %s en cache), "
-        "%s en réponse, %.1f s, %d caractères",
-        nom_modele, usage.get("prompt_tokens"), usage.get("audio_prompt_tokens"),
-        usage.get("cached_tokens"), usage.get("output_tokens"), time.monotonic() - t0,
-        len(brut),
+        "« Validation » %s (%s, flux) : %d jetons de prompt, %d en réponse, "
+        "%.1f s, %d caractères",
+        provider, nom_modele, usage.get("prompt_tokens"),
+        usage.get("output_tokens"), time.monotonic() - t0, len(brut),
     )
     resultat = _assainir_verification(brut, note_markdown, transcript)
     if resultat is None:

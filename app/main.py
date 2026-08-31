@@ -2868,11 +2868,13 @@ async def _run_second_pass(
     transcript: str,
     langue: str,
     audio_payload,
+    provider: str,
     model_name: Optional[str],
     system_instruction: str,
 ) -> None:
     """
-    « Validation » : audit factuel audio↔note, en tâche de fond.
+    « Validation » : audit factuel (audio↔note, ou transcription seule si le
+    fournisseur ne reçoit pas l'audio), en tâche de fond.
 
     Lancé APRÈS la persistance de la note ; ne bloque jamais l'usager. Le
     JSON brut de l'audit est diffusé en direct (évènements SSE
@@ -2915,6 +2917,7 @@ async def _run_second_pass(
             transcript=transcript or None,
             system_instruction=system_instruction,
             model=model_name,
+            provider=provider,
             on_chunk=_publier_chunk,
         )
         if resultat is None:
@@ -2929,7 +2932,7 @@ async def _run_second_pass(
             try:
                 usage.log_llm_usage(
                     db, owner=owner_key, consultation_id=consultation_id,
-                    provider="gemini", model=model_name or "",
+                    provider=provider, model=model_name or "",
                     prompt_tokens=usage_passe.get("prompt_tokens"),
                     output_tokens=usage_passe.get("output_tokens"),
                     audio_prompt_tokens=usage_passe.get("audio_prompt_tokens"),
@@ -3018,10 +3021,16 @@ async def api_generate(
             payload.consultation_id, active_provider,
         )
 
-    # « Validation » demandée mais aucun audio à croiser : prévenir aussitôt
-    # les onglets (évènement « skipped ») plutôt que de laisser la roue
-    # tourner jusqu'au filet de 180 s — sans audio, l'audit ne partira jamais.
-    if payload.second_pass and payload.consultation_id and audio_payload is None:
+    # « Validation » demandée mais rien à croiser (ni audio ni transcription) :
+    # prévenir aussitôt les onglets (évènement « skipped ») plutôt que de
+    # laisser la roue tourner jusqu'au filet de 180 s — sans référence, l'audit
+    # ne partira jamais.
+    if (
+        payload.second_pass
+        and payload.consultation_id
+        and audio_payload is None
+        and not (payload.transcript or "").strip()
+    ):
         live.publish(user.owner_key, "verification_result", {
             "consultation_id": payload.consultation_id,
             "generation_token": payload.generation_token,
@@ -3182,13 +3191,14 @@ async def api_generate(
         len(result["markdown"]),
     )
 
-    # « Validation » : audit factuel audio↔note en tâche de fond — jamais sur le
+    # « Validation » : audit factuel (audio↔note, ou transcription seule si le
+    # fournisseur ne reçoit pas l'audio) en tâche de fond — jamais sur le
     # chemin de la réponse ; le résultat partira en SSE quand il sera prêt.
     if (
         payload.second_pass
         and payload.consultation_id
-        and audio_payload is not None
         and llm.verification_capable()
+        and (audio_payload is not None or (payload.transcript or "").strip())
     ):
         tache_verif = asyncio.create_task(_run_second_pass(
             owner_key=user.owner_key,
@@ -3200,7 +3210,8 @@ async def api_generate(
             transcript=payload.transcript,
             langue=template_row.language,
             audio_payload=audio_payload,
-            model_name=result["model"],
+            provider=llm.active_provider(),
+            model_name=llm.verify_model(),
             system_instruction=system_prompt,
         ))
         _taches_fond.add(tache_verif)

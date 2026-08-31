@@ -176,6 +176,7 @@ Autres flux :
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
 | Mise en forme de la note (depuis 2026-08-16) | **Audio de la dictée** (trajet principal) ; texte recoupé par le gabarit | Google Vertex AI — Gemini `gemini-2.5-pro` | Québec (région `northamerica-northeast1`, Montréal) — voir § 7.4 |
+| Validation — 2e passe (audit, tous fournisseurs depuis 2026-08-31) | Note générée + **audio** de la dictée (fournisseurs audio) **ou** note + **transcription** (Anthropic/OpenAI/Cohere/Mistral) | Le **même fournisseur** que la mise en forme de la note (modèle de 2e passe réglable dans le panneau, par défaut le même) | Identique à la mise en forme de la note (ligne ci-dessus ; décision de conformité § 5) |
 | Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (Parakeet local, mode par défaut) |
 | Reconnaissance vocale — fournisseur cloud (Modulate, si sélectionné) | Tranches de dictée (~10 s) | API Modulate (Velma STT) | Traitement hébergé par Modulate — **aucun mode par défaut ne l'envoie** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |
 | OpenRouter — modèle de langage **et/ou** STT (si sélectionné) | Audio de la dictée (note directe **ou** transcription), texte | API OpenRouter (modèle multimodal, ex. `thinkingmachines/inkling-small`) | Traitement hébergé par OpenRouter (cloud) — **aucun mode par défaut ne l'utilise** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |

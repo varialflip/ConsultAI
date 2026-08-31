@@ -197,6 +197,22 @@ def _cap_fast(fournisseur: str, prefixe: str) -> Setting:
     )
 
 
+def _cap_verify(fournisseur: str, prefixe: str) -> Setting:
+    """Modèle de la DEUXIÈME passe de validation (« Validation »).
+
+    Vide par défaut : la passe emploie alors le même modèle que la mise en
+    forme. La valeur est résolue par ``llm.verify_model()`` — pas ici, pour
+    ne pas créer de dépendance circulaire entre ``runtime_config`` et
+    ``llm``.
+    """
+    return Setting(
+        f"{prefixe}_verify_model", "text", "group.note",
+        default=lambda: "", label_key="set.cap.verify_model.label",
+        help_key="set.cap.verify_model.help",
+        datalist=True, only_for=("llm_provider", fournisseur),
+    )
+
+
 def _cap_temperature(fournisseur: str, prefixe: str,
                      default: Callable[[], str]) -> Setting:
     """Température de mise en forme. Le suffixe ``_temperature`` est requis :
@@ -576,6 +592,7 @@ SETTINGS: Tuple[Setting, ...] = (
                default=lambda: settings.active_gemini_model,
                help_key="set.cap.model.help"),
     _cap_fast("gemini", "gemini"),
+    _cap_verify("gemini", "gemini"),
     _cap_temperature("gemini", "gemini", lambda: str(settings.gemini_temperature)),
     Setting(
         "gemini_thinking", "choice", "group.note",
@@ -599,6 +616,7 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     _cap_model("anthropic", "anthropic"),
     _cap_fast("anthropic", "anthropic"),
+    _cap_verify("anthropic", "anthropic"),
     _cap_temperature("anthropic", "anthropic", lambda: str(settings.gemini_temperature)),
 
     # --- OpenAI ---
@@ -612,6 +630,7 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     _cap_model("openai", "openai"),
     _cap_fast("openai", "openai"),
+    _cap_verify("openai", "openai"),
     _cap_temperature("openai", "openai", lambda: str(settings.gemini_temperature)),
 
     # --- Cohere ---
@@ -620,6 +639,7 @@ SETTINGS: Tuple[Setting, ...] = (
     # en collision avec cohere_model, qui désigne le modèle de TRANSCRIPTION.
     _cap_model("cohere", "cohere_llm", default=lambda: COHERE_DEFAULT_LLM_MODEL),
     _cap_fast("cohere", "cohere_llm"),
+    _cap_verify("cohere", "cohere_llm"),
     _cap_temperature("cohere", "cohere_llm", lambda: str(settings.gemini_temperature)),
     Setting(
         "cohere_llm_thinking_budget", "number", "group.note",
@@ -629,6 +649,7 @@ SETTINGS: Tuple[Setting, ...] = (
     # --- Mistral ---
     _cap_model("mistral", "mistral_llm", default=lambda: MISTRAL_DEFAULT_LLM_MODEL),
     _cap_fast("mistral", "mistral_llm"),
+    _cap_verify("mistral", "mistral_llm"),
     _cap_temperature("mistral", "mistral_llm", lambda: str(settings.gemini_temperature)),
 
     # --- Qwen Omni (Alibaba Cloud DashScope, mode compatible OpenAI) ---
@@ -648,6 +669,7 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     _cap_model("qwen_omni", "qwen_omni"),
     _cap_fast("qwen_omni", "qwen_omni"),
+    _cap_verify("qwen_omni", "qwen_omni"),
     _cap_temperature("qwen_omni", "qwen_omni", lambda: str(settings.gemini_temperature)),
     *_cap_audio("qwen_omni", "qwen_omni"),
     *_cap_bypass("qwen_omni", "qwen_omni"),
@@ -668,6 +690,7 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     _cap_model("custom", "custom_llm", help_key=None),
     _cap_fast("custom", "custom_llm"),
+    _cap_verify("custom", "custom_llm"),
     dataclasses.replace(
         _cap_temperature("custom", "custom_llm", lambda: str(settings.gemini_temperature)),
         help_key=None,
@@ -711,6 +734,7 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     _cap_model("openrouter", "openrouter", default=lambda: OPENROUTER_DEFAULT_LLM_MODEL),
     _cap_fast("openrouter", "openrouter"),
+    _cap_verify("openrouter", "openrouter"),
     _cap_temperature("openrouter", "openrouter", lambda: str(settings.gemini_temperature)),
     Setting(
         "openrouter_llm_max_tokens", "text", "group.note",

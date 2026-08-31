@@ -3,6 +3,30 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-31 — « Validation » : 2e passe de validation pour tous les fournisseurs LLM
+
+*La 2e passe de validation n'était utilisable qu'avec Gemini (seul chemin qui
+recevait l'audio). Elle s'applique désormais à n'importe quel fournisseur de
+modèle de langage, avec un modèle de 2e passe choisi par fournisseur dans le
+panneau d'administration.*
+
+- **Disponible pour tous les modèles** : fin de la restriction Gemini. Pour les
+  fournisseurs qui reçoivent l'audio (Gemini, Qwen Omni, point de terminaison
+  personnalisé, OpenRouter), l'audit croise toujours la note avec l'AUDIO
+  (source de vérité) ; pour les autres (Anthropic, OpenAI, Cohere, Mistral), il
+  croise la note avec la **transcription**, sous des consignes volontairement
+  plus permissives (la transcription du moteur vocal peut se tromper : seuls
+  les écarts certainement prouvés sont signalés).
+- **Modèle de 2e passe par fournisseur** : nouveau champ « Modèle de 2e passe
+  (Validation) » sous chaque fournisseur de Note (Note → *fournisseur*). Laissé
+  vide, c'est le **même modèle que la mise en forme** qui audite ; il alimente
+  le sous-menu « Modèles disponibles ».
+- **Journalisation de l'usage corrigée** : la consommation de la 2e passe est
+  dorénavant imputée au fournisseur et au modèle réellement utilisés (et non
+  plus systématiquement « gemini »).
+- Sans audio **ni** transcription à croiser, la bascule affiche toujours un
+  « rien à signaler » immédiat (pas de roue qui tourne dans le vide).
+
 ## 2026-08-31 — Correction des médicaments : gate de confiance mot-à-mot (STT custom)
 
 *L'endpoint STT personnalisé (`response_format=json`) renvoie désormais la

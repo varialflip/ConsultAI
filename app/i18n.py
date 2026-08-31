@@ -310,18 +310,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Corrections and items to verify",
     ),
     "secondpass.title": (
-        "Validation : après chaque note, comparer la note à l'audio et "
+        "Validation : après chaque note, comparer la note à la référence "
+        "(l'audio si le fournisseur le reçoit, sinon la transcription) et "
         "signaler les écarts certains (omissions / éléments non dictés).",
-        "Validation: after each note, compare it against the audio "
+        "Validation: after each note, compare it against the reference "
+        "(the audio when the provider receives it, otherwise the transcript) "
         "and flag certain discrepancies (omissions / non-dictated items).",
     ),
     "secondpass.pending": (
-        "Vérification en cours — comparaison de la note à l'audio…",
-        "Verification in progress — comparing the note against the audio…",
+        "Vérification en cours — comparaison de la note à la référence…",
+        "Verification in progress — comparing the note against the reference…",
     ),
     "secondpass.empty": (
-        "Rien à signaler : aucun écart certain entre la note et l'audio.",
-        "Nothing to report: no certain discrepancy between note and audio.",
+        "Rien à signaler : aucun écart certain entre la note et la référence.",
+        "Nothing to report: no certain discrepancy between note and reference.",
     ),
     "secondpass.summary": ("Audit factuel de la note", "Factual audit of the note"),
     "secondpass.audit_title": (
@@ -329,12 +331,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Validation - 2nd pass",
     ),
     "secondpass.omissions": (
-        "Dictés mais absents de la note",
-        "Dictated but missing from the note",
+        "Dans la source, mais absents de la note",
+        "In the source, but missing from the note",
     ),
     "secondpass.inventions": (
-        "Dans la note, mais non dictés",
-        "In the note, but not dictated",
+        "Dans la note, mais absents de la source",
+        "In the note, but absent from the source",
     ),
     "secondpass.confidence": ("Confiance de l'audit", "Audit confidence"),
     "secondpass.unavailable": (
@@ -1410,6 +1412,18 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "payée au jeton. Laisser vide pour employer le modèle principal.",
         "Used only to re-read metadata, a trivial task paid by the token. "
         "Leave empty to use the main model.",
+    ),
+    "set.cap.verify_model.label": (
+        "Modèle de 2e passe (Validation)",
+        "2nd pass model (Validation)",
+    ),
+    "set.cap.verify_model.help": (
+        "Modèle qui audite la note contre l'audio (ou la transcription) dans "
+        "le panneau « Validation » après génération. Laisser vide pour "
+        "employer le même modèle que la mise en forme.",
+        "Model that audits the note against the audio (or the transcript) in "
+        "the “Validation” panel after generation. Leave empty to use the same "
+        "model as the formatting.",
     ),
     "set.cap.temperature.label": ("Température", "Temperature"),
     "set.cap.temperature.help": (

@@ -276,12 +276,12 @@ COHERE_LLM_THINKING_BUDGET=1024
 
 > **🔎 « Validation » — audit factuel de la note.** Bascule à côté du bouton
 > « Mettre en forme » (préférence par usager, désactivée par défaut). Quand
-> elle est active, chaque génération est suivie d'un second appel qui
-> compare la note à l'AUDIO de la dictée (source de vérité — jamais la
-> transcription Parakeet, trop imprécise) et renvoie deux listes : ce qui
-> fut dicté mais manque à la note, ce que la note affirme sans avoir été
-> dicté. Volontairement permissif : seuls les écarts certains sont signalés,
-> les reformulations médicales sont acceptées. Le résultat est diffusé en
+> elle est active, chaque génération est suivie d'un second appel — **quel que
+> soit le fournisseur LLM** — qui compare la note à la référence disponible et
+> renvoie deux listes : ce qui fut dicté mais manque à la note, ce que la note
+> affirme sans avoir été dicté. Volontairement permissif : seuls les écarts
+> certains sont signalés, les reformulations médicales sont acceptées. Le
+> résultat est diffusé en
 > direct (SSE `verification_chunk`, JSON brut re-rendu au fil de l'eau, puis
 > `verification_result`) dans un second onglet du panneau de transcription —
 > roue sur le titre à partir de la FIN de la génération (jamais avant),
@@ -308,13 +308,21 @@ COHERE_LLM_THINKING_BUDGET=1024
 > Une régénération réinitialise `verification_json` au moment où la nouvelle
 > note est persistée : la base ne porte jamais un audit de l'ancienne note
 > pendant le contrôle en cours.
-> Sans audio joint (note produite à partir de la seule transcription), la
-> bascule active produit immédiatement un « rien à signaler » : l'audit
-> audio↔note est impossible, pas de roue qui tourne dans le vide.
-> Coût observé : ~60 % d'un appel de génération en plus (l'audio domine),
-> atténué par le cache de préfixe implicite — l'audio et la consigne système
-> étant relus depuis le cache au second passage (cf. ci-dessus).
-> Fiabilité : le « Validation » utilise le budget de raisonnement configuré
+> La référence de l'audit dépend du fournisseur actif : pour ceux qui
+> reçoivent l'audio (Gemini, Qwen Omni, point de terminaison personnalisé,
+> OpenRouter), l'audit croise la note avec l'AUDIO de la dictée (source de
+> vérité, jamais la transcription approximative) ; pour ceux qui ne le
+> reçoivent pas (Anthropic, OpenAI, Cohere, Mistral), il croise la note avec
+> la TRANSCRIPTION, avec des consignes volontairement plus permissives (la
+> transcription du moteur vocal peut se tromper). Sans audio ni transcription
+> à croiser, la bascule active produit immédiatement un « rien à signaler » :
+> pas de roue qui tourne dans le vide. Le **modèle de 2e passe** se choisit
+> par fournisseur dans le panneau (champ « Modèle de 2e passe (Validation) ») ;
+> laissé vide, c'est le même modèle que la mise en forme qui audite.
+> Coût observé (audio) : ~60 % d'un appel de génération en plus (l'audio
+> domine), atténué par le cache de préfixe implicite — l'audio et la consigne
+> système étant relus depuis le cache au second passage (cf. ci-dessus).
+> Fiabilité : l'audit audio réutilise le budget de raisonnement configuré
 > dans le panneau (`gemini_thinking_budget`) — au plancher 128 il hallucine
 > des écarts inexistants — et un garde-fou déterministe écarte après coup
 > toute « omission » déjà présente dans la note et toute « invention » déjà

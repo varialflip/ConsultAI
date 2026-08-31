@@ -49,8 +49,8 @@ Le cœur est **`match_meds.py`**, un moteur déterministe et auditable :
 
 Il est **reproductible** : `meds.sqlite` se reconstruit depuis `dpd/` +
 `dpd_ia/` (extraits BDP Canada) via `build_db.py` + `seed_aliases.py` +
-`prune_db.py` + `ban_terms.py` + `fix_inactive_otc.py` + `prune_scope.py`
-(voir § 5 pour l'ordre et le rôle de chaque étape).
+`prune_db.py` + `ban_terms.py` + `fix_inactive_otc.py` + `prune_scope.py` +
+`prune_otc.py` (voir § 5 pour l'ordre et le rôle de chaque étape).
 
 ---
 
@@ -66,6 +66,7 @@ Il est **reproductible** : `meds.sqlite` se reconstruit depuis `dpd/` +
 | `ban_terms.py` | **Bannit** de la base le mot « gériatrique » et **tous les écrans solaires** (pratiques SPF/FPS, ÉCRAN, principes UV — octisalate, avobenzone, octocrilene, dioxyde de titane, oxyde de zinc…). Ces feuilles de marques (MINUTES, BASE, SAGE, RAPIDE, SUPPORT…) créaient des faux positifs en prose ; ils ne peuvent plus jamais matcher, ni en exact ni en flou. |
 | `prune_scope.py` | **Retire du périmètre clinique gériatrique** (~7 200 marques) : vaccins, extraits allergéniques, immunoglobulines (sauf liste de sauvegarde : Shingrix, Pneumovax 23, Prevnar, Capvaxive, Vaxneuvance, Fluzone, Fluad, Arexvy, Abrysvo), contraste/diagnostic, gaz médicaux, solutés IV/dialyse, hygiène/cosmétique (désinfectants mains, émollients/huiles, anti-acné, antisudorifiques, shampoings, verrues, soins dentaires, pastilles, antiprurigineux OTC, rubéfiants), anesthésiques, sirops toux/rhume OTC, décongestionnants nasaux, suppléments/multivitamines, contraception/obstétrique/fertilité, anthelminthiques hors listes, **homéopathie**, marques cosmétiques/pédiatriques et annulées sans classe ATC (PSN/herboristerie). Une liste de sauvegarde explicite conserve les exceptions dictées en gériatrie (diclofénac topique, Xylocaïne/lidocaïne/EMLA, Zincofax, Peridex/chlorhexidine, codéine/acétylcystéine, Nix/Stromectol, Dostinex…). Retirer une marque ne retire jamais le générique (lignes distinctes). |
 | `fix_inactive_otc.py` | **Corrige le drapeau `is_otc` des marques annulées** : l'extrait BDP des produits inactifs étiquette « NON-PRESCRIPTION DRUGS » là où l'extrait courant écrit « OTC » ; sans la traduction, les OTC annulés sortaient leur nom de marque au lieu du principe actif. La correction définitive est dans `build_db.py` ; ce script répare une base déjà construite (idempotent). |
+| `prune_otc.py` | **Purgé les marques OTC de comptoir** (`level='BRAND' AND is_otc=1`) hors contexte clinique : il conserve les substances dictables (R1 : acétaminophène, ibuprofène, docusate, diphénhydramine, siméticone, calcium…) et les cibles de garbles seedés (R0), retire les noms à mots de parfum/force/format/allégation marketing (R2 : CHERRY, MAXIMUM STRENGTH, GAS RELIEF, NIGHTTIME, 24 HOUR, DUAL ACTION…) puis **déduplique par famille** — une ligne représentative par nom de tête (TYLENOL, ADVIL, GRAVOL…) au lieu des ~25 variantes. Retire TUMS et BILEX ; garde GAVISCON (acide alginique dicté en gériatrie), Tylenol, Advil, Gravol, Benadryl, Restoralax, Colace, Dulcolax, Senokot S. Un **benchmark de garde** (Tylenol/Advil/Gravol/Benadryl/Voltaren) refuse d'appliquer si un nom court ne résout plus. Jamais les marques Rx ni les génériques. |
 | `audit_medical.py` | Affiche les différences ligne à ligne entre transcript brut et corrigé (contrôle qualité). |
 | `meds.sqlite` | Base de données médicaments (marques + génériques + alias) **préconstruite et prête à l'emploi**. |
 | `dpd/`, `dpd_ia/` | Extraits texte de la BDP (Drug, Ingredient, Schedule… ; `_ia` = produits annulés/inactifs). |
@@ -174,14 +175,19 @@ cd ~/ConsultAI-selfhosted/med_grounding
 ./venv/bin/python prune_scope.py            # affiche ce qui serait retiré
 ./venv/bin/python prune_scope.py --apply    # applique réellement
 
-# 7) Vérifier la base
+# 7) Purger les marques OTC de comptoir (substances + dédup + benchmark) :
+./venv/bin/python prune_otc.py            # affiche ce qui serait retiré
+./venv/bin/python prune_otc.py --apply    # applique réellement
+
+# 8) Vérifier la base
 ./venv/bin/python -c "import sqlite3; c=sqlite3.connect('meds.sqlite'); \
 print('meds', c.execute('select count(*) from medications').fetchone()[0], \
 'alias', c.execute('select count(*) from medication_aliases').fetchone()[0])"
 ```
 
 Ordre logique : `build_db` → `seed_aliases` → `prune_db` (apply) →
-`ban_terms` (apply) → `fix_inactive_otc` (apply) → `prune_scope` (apply).
+`ban_terms` (apply) → `fix_inactive_otc` (apply) → `prune_scope` (apply) →
+`prune_otc` (apply).
 Aucun d'entre eux n'accepte d'argument autre que `--apply` (ils travaillent
 sur `./dpd`, `./dpd_ia`, `./meds.sqlite`).
 

@@ -945,7 +945,8 @@ des médicaments », défaut `false`). Une fois activé :
 
 La base BDP peut être régénérée depuis les extraits bruts (dossier
 `med_grounding/` du dépôt, scripts `build_db.py` / `seed_aliases.py` /
-`prune_db.py` / `ban_terms.py` / `fix_inactive_otc.py` / `prune_scope.py`) ;
+`prune_db.py` / `ban_terms.py` / `fix_inactive_otc.py` / `prune_scope.py` /
+`prune_otc.py`) ;
 ce dossier ne fait pas partie du conteneur. La base est **assainie pour le
 périmètre gériatrique** : hors catalogue — vaccins (sauf Shingrix, Pneumovax
 23, Prevnar, Capvaxive, Vaxneuvance, Fluzone, Fluad, Arexvy, Abrysvo),
@@ -961,7 +962,12 @@ Peridex/chlorhexidine/benzydamine, codéine/acétylcystéine, Nix-Stromectol,
 Dostinex…). Les anciennes marques disparues continuent de matcher (MAXERAN,
 ARICEPT, LOPRESSOR…) tant qu'elles ne sont pas dans une classe retirée. Les
 marques retirées ne font que cesser d'être normalisées : le générique
-correspondant reste toujours catalogué.
+correspondant reste toujours catalogué. Les **marques OTC de comptoir**
+(TUMS, BILEX, DIMETAPP NIGHTTIME, « 24 HOUR ALLERGY »…) sont purgées : seules
+les substances cliniquement dictables (acétaminophène, docusate,
+diphénhydramine, calcium…) et une **ligne représentative par famille** (une
+seule variante TYLENOL, ADVIL, GRAVOL au lieu de leurs multiples forces/parfums)
+sont conservées pour l'ancrage.
 
 ---
 

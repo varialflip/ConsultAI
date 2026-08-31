@@ -68,6 +68,18 @@ candidats sûrs *et phonétiques* comme hints.*
   conserve que les corrections déterministes. Le transcript corrompu de la
   note 15 (« nitrate de miconazole » déjà écrit) se nettoie par
   **retranscription** (le code de retranscription passe aussi en mode sûr).
+- **Base d'ancrage épurée — purge des marques OTC de comptoir** (`prune_otc.py`) :
+  les marques OTC grand public non dictées (TUMS, BILEX, « TUMS CHERRY »,
+  « DIMETAPP NIGHTTIME », « 24 HOUR ALLERGY »…) sont retirées de `meds.sqlite`.
+  Seules les substances cliniquement dictables et une **ligne représentative
+  par famille** sont conservées — une seule variante TYLENOL / ADVIL / GRAVOL
+  au lieu de leurs multiples forces/parfums (dedup). Un **benchmark de garde**
+  (Tylenol, Advil, Gravol, Benadryl, Voltaren — tels quels, aucune exception
+  codée en dur) refuse d'appliquer si un nom court ne résout plus ; les
+  garbles seedés ne sont jamais retirés. Toujours intacts : marques Rx,
+  génériques (BASE/FULL_GENERIC). Base : 15 792 → 13 852 médications, les
+  alias suivent (18 291 → 16 166). Sortie `match_meds.py` inchangée sur les
+  4 transcripts de référence.
 
 ## 2026-08-31 — Grounding : fin des faux médicaments de prose et des équivoques de dose
 

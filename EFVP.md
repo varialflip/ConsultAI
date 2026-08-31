@@ -442,7 +442,9 @@ résidence ni à la dénominalisation** :
   types. **Aucun renseignement de santé, aucune identité** : donnée publique
   de référence (Open Government Licence), traitée localement dans le conteneur.
   La base bannit le mot « gériatrique » et tous les écrans solaires (feuilles
-  de marques cosmétiques à risque de faux positifs en prose). Elle n'est
+  de marques cosmétiques à risque de faux positifs en prose) et purge les
+  marques OTC de comptoir (une seule variante par famille de marque, ex. une
+  seule TYLENOL/ADVIL/GRAVOL). Elle n'est
   jamais incluse dans les sauvegardes sanitisées ni diffusée.
 - **Stabilisation audio par l'arrière** : pendant la dictée, la frontière de
   segments est ré-écoutée via le service vocal **déjà configuré** (custom

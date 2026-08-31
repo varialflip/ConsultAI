@@ -3,6 +3,13 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-31 — Endpoint personnalisé : envoi en un seul bloc par défaut
+
+- **Plus de découpage en tranches par défaut** : `custom_stt_chunk_seconds`
+  est désormais vide (auparavant 60 s), l'audio part en une seule requête —
+  le découpage n'était utile que pour les endpoints plafonnant la durée par
+  passe (Parakeet/ONNX) et se règle toujours explicitement dans le panneau.
+
 ## 2026-08-31 — « Validation » : 2e passe de validation pour tous les fournisseurs LLM
 
 *La 2e passe de validation n'était utilisable qu'avec Gemini (seul chemin qui

@@ -474,7 +474,7 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     Setting(
         "custom_stt_chunk_seconds", "text", "group.dictation",
-        default=lambda: "60", placeholder="ex. 60 (vide = pas de découpage)",
+        default=lambda: "", placeholder="ex. 60 (vide = envoi en un seul bloc)",
         only_for=("stt_provider", "custom"), advanced=True,
     ),
 

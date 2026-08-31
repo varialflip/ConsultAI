@@ -235,14 +235,14 @@ COHERE_LLM_THINKING_BUDGET=1024
 > aussi un **modèle de repli** (`custom_stt_fallback_model` et, au besoin,
 > `custom_stt_fallback_base_url`) : en cas d'erreur HTTP 5xx de l'endpoint
 > principal, la transcription est retentée une fois avec le modèle de repli.
-> Un **découpage en tranches** (`custom_stt_chunk_seconds`, 60 s par défaut)
-> découpe l'audio au-delà de cette durée et envoie chaque tranche au modèle
-> principal, en coupant de préférence dans un silence : même un endpoint qui
-> plafonne en longueur d'audio par passe (ex. un Parakeet/ONNX plafonnant
-> autour de 6-7 min) garde le modèle principal sur toute la dictée. Le
-> découpage prime sur le **seuil de durée** (`custom_stt_max_seconds`), qui
-> reste disponible sans découpage pour envoyer directement au modèle de repli
-> les dictées trop longues. Le **retrait des silences** (plafonnement des
+> Un **découpage en tranches** (`custom_stt_chunk_seconds`, vide par défaut) —
+> uniquement si une durée y est renseignée — découpe l'audio au-delà de cette
+> durée et envoie chaque tranche au modèle principal, en coupant de préférence
+> dans un silence : même un endpoint qui plafonne en longueur d'audio par
+> passe (ex. un Parakeet/ONNX plafonnant autour de 6-7 min) garde le modèle
+> principal sur toute la dictée. Sans découpage (défaut), le **seuil de
+> durée** (`custom_stt_max_seconds`) reste disponible pour envoyer directement
+> au modèle de repli les dictées trop longues. Le **retrait des silences** (plafonnement des
 > pauses, bascule globale `stt_trim_silence`) s'applique désormais **à tous les
 > fournisseurs, y compris cet endpoint** et l'audio joint au modèle de langage ;
 > coupez la bascule s'il dégrade un modèle local multilingue.

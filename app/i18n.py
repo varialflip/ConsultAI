@@ -1967,13 +1967,13 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Découpe l'audio en tranches de cette durée (ex. 60) avant l'envoi, "
         "en coupant de préférence dans un silence : chaque tranche part au "
         "modèle principal, même au-delà de sa limite d'audio en une passe "
-        "(ex. Parakeet/ONNX plafonnant vers 6-7 min). Vide = envoi en un bloc, "
-        "le seuil de durée ci-dessus s'applique alors.",
+        "(ex. Parakeet/ONNX plafonnant vers 6-7 min). Vide (défaut) = envoi en "
+        "un bloc, le seuil de durée ci-dessus s'applique alors.",
         "Splits the audio into chunks of this length (e.g. 60) before sending, "
         "cutting preferably in a silence: each chunk goes to the main model, "
         "even beyond its one-pass audio limit (e.g. Parakeet/ONNX capping "
-        "around 6-7 min). Empty = single send, and the duration threshold "
-        "above applies.",
+        "around 6-7 min). Empty (default) = send in one block, then the "
+        "duration threshold above applies.",
     ),
 
     # Avertissement affiché dans le panneau quand Cohere est sélectionné.

@@ -76,6 +76,17 @@ def norm_orth(s):
 def norm_phon(s):
     return re.sub(r"[^a-z]", "", norm_orth(s))
 
+def _norm_lead(s):
+    """Normalisation qui CONSERVE les chiffres (lettres + chiffres concaténés).
+
+    Sert aux garbles STT dont le nom commence par un nombre (« 13 iba ») :
+    ``norm_phon`` perdrait le « 13 », or ce chiffre est l'amorce phonétique du
+    nom et non une dose — il doit rester dans la clé de correspondance.
+    """
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
 # ------------------------------- ISMP Canada TALLman lettering (LASA names)
 # Mixed-case capitalization recommended for look-alike/sound-alike drug names.
 # Key  = accent-folded lowercase name (as produced by norm_orth within a token).
@@ -284,6 +295,10 @@ DOSE_FREQ_SINGLE = {
     "sc": "S/C", "souscut": "S/C", "souscutane": "S/C", "souscutanee": "S/C",
     "souscu": "S/C", "subcut": "S/C",
     "die": "DIE", "dye": "DIE", "dieam": "DIE AM", "dieam": "DIE AM",
+    # « d'yeux » = déformation STT de « DIE » (10 mg d'yeux → 10 mg DIE) ;
+    # « déjeunés » = « AM » (5 mg d'yeux déjeunés → 5 mg DIE AM). Observés sur
+    # la consultation 11 (STT custom, confirmés à l'audience).
+    "dyeux": "DIE", "dejeunes": "AM",
     "quotidien": "DIE", "quotidienne": "DIE",
     "bd": "BID", "bid": "BID", "tid": "TID", "qid": "QID",
     "prn": "PRN", "besoin": "PRN",
@@ -325,7 +340,8 @@ DOSE_ROUTE_START = {"po", "peros", "per", "os",
 DOSE_QUANT_START = {"q", "q2"}
 DOSE_LATIN_START = {"die", "dye", "dieam", "quotidien", "quotidienne",
                     "bd", "bid", "tid", "qid", "prn", "besoin", "hs", "am",
-                    "pm", "unites", "unite", "ui", "sc"}
+                    "pm", "unites", "unite", "ui", "sc",
+                    "dyeux", "dejeunes"}
 DOSE_FRENCH_START = {"jour", "jours", "semaine", "matin", "soir", "coucher",
                      "par", "fois", "deux", "trois", "quatre", "une", "au",
                      "le", "de", "sous"}
@@ -425,6 +441,12 @@ class Matcher:
         self.exact = {}          # norm_phon -> (level, base, brand, is_leaf, is_otc)
         self.exact_garble = {}   # norm_phon -> same tuple, seeded STT_GARBLE rows
                                  # (seeded garbles WIN any exact collision)
+        # Garbles STT dont le NOM commence par un nombre (« 13 iba » = Tresiba,
+        # où « 13 » est l'amorce phonétique « trési » et NON une dose). Leur
+        # ``norm_phon`` (« 13iba » → « iba ») perdrait le chiffre : ils sont
+        # rangés à part, clé = ``_norm_lead`` (lettres + chiffres concaténés),
+        # et ``normalize`` les consomme comme un bigramme nombre+mot unique.
+        self.exact_garble_num = {}   # _norm_lead(num+word) -> tuple
         self.ortho = []          # (norm_phon, level, base, brand, is_leaf, is_otc) deduped
         self.ortho_by_len = {}   # len(norm_phon) -> [(n, ...)] for fast phrase lookup
         self._generic_names = set()   # genuine generic orthography names
@@ -436,6 +458,16 @@ class Matcher:
             if not n:
                 continue
             if atype == "STT_GARBLE":
+                # Garbles STT dont le nom commence par un nombre (« 13 iba » =
+                # Tresiba) : rangés à part, JAMAIS populés dans exact_garble /
+                # exact (leur norm_phon « 13 iba » → « iba » ferait de « iba »
+                # seul un Tresiba S=100 en prose).
+                if re.match(r"^\d", alias.strip()):
+                    k = _norm_lead(alias)
+                    if k:
+                        self.exact_garble_num.setdefault(
+                            k, (level, base, brand, bool(is_otc)))
+                    continue
                 self.exact_garble.setdefault(n, (level, base, brand, False, bool(is_otc)))
             if level in ("BASE_GENERIC", "FULL_GENERIC") and base:
                 self._generic_names.add(norm_orth(base))
@@ -939,6 +971,22 @@ class Matcher:
         result, changes = [], []
         i = 0
         while i < n:
+            # Garble STT dont le nom commence par un nombre : « 13 IBA » =
+            # Tresiba (le « 13 » est l'amorce phonétique « trési », PAS une
+            # dose). Le couple nombre+mot est consommé comme un seul nom,
+            # exact, déterministe — jamais le mot isolé (« IBA » seul en prose
+            # reste IBA).
+            if self.exact_garble_num and i + 1 < n:
+                k = _norm_lead(f"{words[i]} {words[i + 1]}")
+                if k in self.exact_garble_num:
+                    level, base, brand, is_otc = self.exact_garble_num[k]
+                    can = self._canonicalize(level, base, brand, is_otc)
+                    if can:
+                        trail = "".join(re.findall(r"[^\w]+$", words[i + 1]))
+                        result.append(can + trail)
+                        changes.append((" ".join(words[i:i + 2]), can, 100, 0.0))
+                        i += 2
+                        continue
             # Latin/French route-frequency suffix in a med list: normalize the
             # dosing part (per os -> PO, d'ye -> DIE, Q2 jours -> Q2jours ...)
             # before any med resolution, since these are protocol tokens.

@@ -173,6 +173,11 @@ GARBLES = {
     "senokot":            (None, "sennosides"),
     "sénokot":            (None, "sennosides"),
     "docusate":           (None, "docusate"),
+    # « 13 IBA » = homonyme phonétique de « Tresiba » (« treize » ≈ « trési »)
+    # : le nombre n'est PAS la dose — c'est l'amorce du nom. Le garble est le
+    # BIGRAMME complet « 13 iba », consommé comme un seul nom (jamais « iba »
+    # seul qui deviendrait Tresiba en prose).
+    "13 iba":             ("tresiba", "insulin degludec"),
     # extended Canadian ASR confusions (brand-oriented)
     "cymbalta":           ("cymbalta", "duloxetine"),
     "duloxetine":         (None, "duloxetine"),

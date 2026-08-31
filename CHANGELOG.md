@@ -29,6 +29,12 @@ verbe d'administration ou une liste de médicaments le porte.*
 - **Seuil réglable** : constante unique `CONF_HARD_FLOOR` dans
   `app/med_grounding.py` (pas de champ admin : réglé au code, comme le reste
   du moteur).
+- **Garbles multi-mots commençant par un nombre** : « 13 IBA » (homonyme
+  phonétique de **Tresiba**, « treize » ≈ « trési ») est désormais consommé
+  comme un **nom unique** (`exact_garble_num`, clé conservant les chiffres) —
+  le « 13 » n'est pas une dose mais l'amorce du nom. Le mot isolé « IBA » en
+  prose reste inchangé. Posologie captée (« 13 IBA, 9 UI HS » → Tresiba, 9 UI
+  HS).
 
 ## 2026-08-30 — Correction des médicaments pendant la dictée (grounding, liste pointée)
 

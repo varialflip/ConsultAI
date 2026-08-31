@@ -863,6 +863,10 @@ des médicaments », défaut `false`). Une fois activé :
   mesuré sur corpus réel : **0.92** (`CONF_HARD_FLOOR` dans
   `app/med_grounding.py`). Sans confiance disponible, le comportement
   historique est conservé.
+- **Garbles à nom commençant par un nombre** : « 13 IBA » (homonyme
+  phonétique de « Tresiba ») est consommé en **nom unique** — le « 13 » est
+  l'amorce phonétique du nom, pas une dose. Le mot isolé (« IBA » en prose)
+  reste inchangé.
 - Après génération de la note, l'onglet **Validation** s'ouvre sur grand
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 

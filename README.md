@@ -887,6 +887,23 @@ des médicaments », défaut `false`). Une fois activé :
 - **Garble seedé à condition de dose** : un déformation comme « faire » (=
   « fer », sulfate ferreux) n'est corrigée que si une **dose est voisine**
   (« faire 300 mg » → « fer 300 ») ; en prose le verbe reste intact.
+- **Posologie directionnelle** : la preuve de posologie n'est créditée à un
+  nom qu'en bon escient — un marqueur de dose placé **après** le nom ne
+  suffit que si le nom est quasi-certain ou sert dans une région de liste
+  confirmée. La prose « de façon régulière HS » ne transforme donc plus
+  « régulière » en médicament (`régulière → REGULEX`) et le « HS » reste au
+  vrai médicament qui précède. La fenêtre de dose **avant** le nom s'arrête à
+  la ponctuation de phrase (« … au coucher régulièrement. Prochain point. » :
+  le « coucher » d'avant le point ne crédite pas « point. »). Le gate de
+  confiance mot-à-mot n'est levé que par une preuve arrière, une ancre ou une
+  région confirmée — jamais par une simple dose en avant.
+- **Liste anti-fantôme** : la liste pointée de l'onglet « Validation » et
+  l'import ne retiennent un nom de médicament que muni d'un signal de dosage —
+  posologie captée, chiffre de dose adjacent (« aspirine 80 », « calcium 500 »,
+  « rivastigmine timbre 10 »), région de liste confirmée ou nom composé
+  (« Vitamine D »). Un nom nu halluciné par le STT et canonisé (« diclofenac
+  diethylamine » entre deux actions) sort de la liste — le texte inline,
+  lui, n'est jamais touché.
 - **Liste des médicaments : noms sans dose collée**. Un bigramme « nom +
   chiffre » (ex. « bisoprolol 2,5 », « calcium 500 ») n'est jamais traité
   comme un nom composé : le chiffre reste dans la **posologie** (« bisoprolol

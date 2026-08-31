@@ -356,6 +356,17 @@ FRENCH_STOP |= {
     # fuzzy-match a brand (Baycol); the full phrase only resolves via the
     # multi-token garble / brand path, never per-token.
     "glycol", "glycole", "polyethylene", "polyethyleneglycol", "polyethylène",
+    # adjectifs/adverbes de fréquence et de sévérité : la prose « de façon
+    # régulière HS » ne doit jamais se faire coller la posologie suivante
+    # (régulière -> REGULEX/docusate en raflant le HS de la quétiapine,
+    # note 13). « aiguë »/« couchée » gardent la même ceinture.
+    "regulier", "reguliere", "regulierement", "reguliers", "regulieres",
+    "aigue", "aigues", "ague", "agues", "aigu",
+    "couchee", "recouchee",
+    # la conjonction anglaise « and » (le STT lâche parfois des tokens EN :
+    # « on and off ») frappe EXACTEMENT la marque BDP « AND » (naproxène,
+    # OTC inactif) : on la bannit, comme « jasmin »/« lhopital ».
+    "and",
 }
 
 # ---------------------------------------------------------------- matcher
@@ -781,26 +792,43 @@ class Matcher:
         # because their ortho similarity to any med is too low.
         def posology(i, sim, in_region):
             j = min(i + 3, n)                 # allow dose+unit a little fuzz away
+            # La preuve de posologie est DIRECTIONNELLE : elle peut venir APRÈS
+            # le nom (« régulière HS »), d'un chiffre collé après le nom
+            # (« aspirine 80 »), ou AVANT le nom (« administrer 25 mg HS de
+            # kétiapine »). Une preuve par un marqueur de dose APRÈS un nom
+            # FLOU n'est créditée que si le nom est quasi-certain (HIGH_SIM)
+            # ou sert dans une région de liste confirmée : sans cela, la prose
+            # « …de façon régulière HS… » ferait régulière -> REGULEX/docusate
+            # en raflant le HS qui revient au vrai médicament précédent
+            # (quétiapine, note 13). Retourne la direction ("avant"/"nombre"/
+            # "arriere") ou "" — la direction sert au gate de confiance mot-à-mot.
             if any(dose_unit[k] for k in range(i, j)):
-                return True
+                if in_region or sim >= HIGH_SIM:
+                    return "avant"
             if i + 1 < n and num_token[i + 1]:
                 if sim >= 0.85:
-                    return True
+                    return "nombre"
                 # Inside a confirmed med-list region a name followed by a bare
                 # dose number is a list entry (e.g. "pantoloque 40"), so a
                 # moderate fuzzy match suffices there; outside the region the
                 # near-certain 0.85 bar is kept to avoid prose / lab false hits.
                 if in_region and sim >= ORTHO_FLOOR:
-                    return True
+                    return "nombre"
             # Small backward window for dose-BEFORE-name phrasings
             # ("administrer 25 mg HS de kétiapine"): the dose marker sits up to
-            # three tokens earlier. A marker attached to sentence punctuation
-            # belongs to the previous sentence and never counts ("8,1%. Le
-            # reste ..."). Unit-only markers (mg/ml/g) must see their number;
-            # protocol markers (HS/BID/PO/DIE/PRN) carry the dose by themselves.
-            for k in range(max(0, i - 3), i):
+            # three tokens earlier. On n'utilise que les marqueurs de la MÊME
+            # phrase que le token courant : la limite repousse APRÈS la dernière
+            # ponctuation de phrase de la fenêtre (« …au coucher régulièrement.
+            # Prochain point. » — le « coucher » d'avant la ponctuation ne
+            # crédite pas « point. », note 13). Unit-only markers (mg/ml/g) must
+            # see their number; protocol markers (HS/BID/PO/DIE/PRN) carry the
+            # dose by themselves.
+            borne = max(0, i - 3)
+            for k in range(i - 1, borne - 1, -1):
                 if words[k].endswith((".", "!", "?")):
-                    continue
+                    borne = k + 1
+                    break
+            for k in range(borne, i):
                 base_unit = words[k].strip(",;:.()").lower()
                 # only real dose markers count; PROTOCOL_WORDS also holds
                 # everyday particles (par/per/os/de) that must never credit
@@ -808,10 +836,10 @@ class Matcher:
                     continue
                 if base_unit in {"mg", "mcg", "µg", "g", "ml", "unités", "unites"}:
                     if any(num_token[t] for t in range(k, i)):
-                        return True
+                        return "arriere"
                     continue
-                return True
-            return False
+                return "arriere"
+            return ""
         anchor_hit = [False] * n
         token_start, idx = [], 0
         for w in words:
@@ -897,7 +925,7 @@ class Matcher:
             base_score = cand[3] if cand else 0.0
             is_leaf = cand[4] if cand else False
             is_otc = cand[5] if cand else False
-            has_poso = posology(i, base_score, in_region)
+            has_poso = bool(posology(i, base_score, in_region))
 
             w_phon = norm_phon(words[i])
             if (not cand or w_phon in FRENCH_STOP or w_phon in ANCHOR_WORDS or

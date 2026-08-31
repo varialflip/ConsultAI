@@ -3,6 +3,48 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-31 — Grounding : fin des faux médicaments de prose et des équivoques de dose
+
+*Suite à l'analyse de la note 13 (dictée réelle) : des mots de prose étaient
+réécrits en noms de médicaments en raflant une posologie voisine, et des noms
+hallucinés par le STT étaient canonisés dans la liste de l'onglet
+« Validation » puis repris par le LLM.*
+
+- **Posologie directionnelle** : un marqueur de dose placé **après** un nom
+  ne suffit plus, seul ou presque, à valider sa substitution — un nom est
+  réécrit si la dose vient d'**avant** (la preuve la plus probante), d'un
+  chiffre collé, ou d'une région de liste confirmée. La prose « de façon
+  régulière HS » ne transforme plus « régulière » en REGULEX (docusate), le
+  « HS » restant au vrai médicament qui précède (quétiapine).
+- **La fenêtre de dose arrière s'arrête à la ponctuation de phrase** :
+  « … au coucher régulièrement. Prochain point. … » — le « coucher » d'avant
+  le point ne crédite plus « point. » (fini le faux « point. → diclofenac
+  diethylamine »).
+- **Gate de confiance mot-à-mot renforcé** : la haute confiance STT d'un mot
+  le protège d'une substitution floue quand elle n'est portée que par une
+  dose **en avant** ; seules une preuve arrière, une ancre verbale ou une
+  région confirmée la lèvent.
+- **Liste anti-fantôme (Validation / import)** : un nom de médicament n'entre
+  dans la liste que muni d'un signal de dosage (posologie captée, chiffre de
+  dose adjacent, région de liste confirmée, nom composé). Un nom nu
+  halluciné par le STT et canonisé (« diclofenac diethylamine »,
+  « naproxene ») n'apparaît plus dans la liste — le texte inline reste
+  intact.
+- **Consigne générale (§ Impression et Plan, fr/en)** : un nom de médicament
+  dicté sans verbe d'action, sans dose ni voie n'est jamais écrit comme une
+  ligne de Plan affirmée — il passe en « Corrections et éléments à valider ».
+  Migré en base (ancienne puce intacte exigée — une consigne personnalisée
+  n'est pas écrasée).
+- **Collisions exactes bannies** : la conjonction anglaise « and » (le STT
+  sort parfois des tokens EN, « on and off ») frappait exactement la marque
+  BDP « AND » (naproxène) ; ajoutée à `FRENCH_STOP`, comme les adjectifs de
+  fréquence (« régulière », « aiguë », « couchée »).
+- **Régression** : aucun changement sur les 4 transcripts de référence
+  (`dictee-1`, `dictee-6`, `consult7`, `consultai4-gemini`) à l'exception
+  voulue du retrait d'un nom nu de prose hors liste (« apixaban à vie » dans
+  les antécédents). Port appliqué aux deux modules (`app/med_grounding.py` et
+  `med_grounding/match_meds.py`).
+
 ## 2026-08-31 — Endpoint personnalisé : envoi en un seul bloc par défaut
 
 - **Plus de découpage en tranches par défaut** : `custom_stt_chunk_seconds`

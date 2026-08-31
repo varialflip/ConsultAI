@@ -1833,6 +1833,79 @@ def migrate_general_prompt_impression_plan_no_omission(db: Session) -> int:
     return touches
 
 
+#: Règle « jamais de nom de médicament flottant dans le Plan » (2026-08-31,
+#: note 13) : un nom de médicament dicté seul, sans verbe d'action, sans dose,
+#: sans voie ni aucun élément de posologie (« diclofenac diethylamine » entre
+#: deux actions) n'est pas écrit comme une prescription dans le Plan — il passe
+#: en « Corrections et éléments à valider ». Ancrage : la puce « Aucune
+#: omission dans l'Impression ni le Plan » livrée le 2026-08-27 ; la consigne
+#: est éditée par le médecin et vit en base, une puce retravaillée est laissée
+#: intacte et signalée au journal.
+_IMPRESSION_PLAN_MED_NU_OLD_FR = _IMPRESSION_PLAN_NO_OMISSION_NEW_FR
+_IMPRESSION_PLAN_MED_NU_OLD_EN = _IMPRESSION_PLAN_NO_OMISSION_NEW_EN
+_IMPRESSION_PLAN_MED_NU_NEW_FR = (
+    _IMPRESSION_PLAN_MED_NU_OLD_FR
+    + "\n"
+    + "  - **Jamais de nom de médicament « flottant » dans le Plan** : un nom "
+    "de médicament dicté seul, sans verbe d'action, sans dose, sans voie ni "
+    "aucun élément de posologie, n'est jamais écrit comme une ligne de Plan "
+    "affirmée — comme s'il s'agissait d'une prescription. Il figure en "
+    "« Corrections et éléments à valider » comme mention à confirmer. Une "
+    "vraie action dictée avec son médicament (« on commence Zyprexa 2,5 mg "
+    "HS ») reste une ligne de Plan."
+)
+_IMPRESSION_PLAN_MED_NU_NEW_EN = (
+    _IMPRESSION_PLAN_MED_NU_OLD_EN
+    + "\n"
+    + "  - **No floating drug name in the Plan** : a drug name dictated "
+    "alone, without an action verb, without a dose, route or any dosing "
+    "element, is never written as an asserted Plan line — as if it were a "
+    "prescription. It goes to \u201cCorrections and items to verify\u201d as "
+    "a mention to confirm. A real dictated action with its medication "
+    '("start Zyprexa 2.5 mg HS") stays a Plan line.'
+)
+
+
+def migrate_general_prompt_plan_medicament_nu(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la règle « jamais de nom de
+    médicament flottant dans le Plan » (2026-08-31, note 13). Même mécanique
+    que les migrations précédentes : la consigne générale est éditée par le
+    médecin et vit en base, la nouvelle puce n'est ajoutée que si la puce
+    « Aucune omission dans l'Impression ni le Plan » y figure encore
+    EXACTEMENT telle que livrée. Une puce retravaillée est laissée intacte.
+    """
+    touches = 0
+    for cle, ancienne, nouvelle in (
+        ("general_prompt_fr", _IMPRESSION_PLAN_MED_NU_OLD_FR, _IMPRESSION_PLAN_MED_NU_NEW_FR),
+        ("general_prompt_en", _IMPRESSION_PLAN_MED_NU_OLD_EN, _IMPRESSION_PLAN_MED_NU_NEW_EN),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if nouvelle in row.value:
+            continue  # déjà en place — idempotent
+        if ancienne not in row.value:
+            logger.info(
+                "Consigne « %s » : puce « Impression et Plan » modifiée, "
+                "règle « jamais de nom de médicament flottant dans le Plan » "
+                "laissée au panneau.",
+                cle,
+            )
+            continue
+        row.value = row.value.replace(ancienne, nouvelle)
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » : règle « jamais de nom de médicament flottant "
+            "dans le Plan » appliquée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Ancres de la consigne générale pour le placement des hospitalisations
 #: (2026-08-26). La phrase « Hospitalisations et séjours » du § 1 est le
 #: point d'ancrage : on y accole la clause de placement uniquement si elle y
@@ -2453,6 +2526,7 @@ def init_db() -> None:
         migrate_general_prompt_treatment_stays(db)
         migrate_general_prompt_plan_first_person(db)
         migrate_general_prompt_impression_plan_no_omission(db)
+        migrate_general_prompt_plan_medicament_nu(db)
         migrate_general_prompt_antecedents_hospitalisation_placement(db)
         migrate_general_prompt_phonetic_origin(db)
         migrate_template_med_grouping(db)

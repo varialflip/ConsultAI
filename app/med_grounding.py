@@ -427,6 +427,17 @@ FRENCH_STOP |= {
     # fuzzy-match a brand (Baycol); the full phrase only resolves via the
     # multi-token garble / brand path, never per-token.
     "glycol", "glycole", "polyethylene", "polyethyleneglycol", "polyethylène",
+    # adjectifs/adverbes de fréquence et de sévérité : la prose « de façon
+    # régulière HS » ne doit jamais se faire coller la posologie suivante
+    # (régulière -> REGULEX/docusate en raflant le HS de la quétiapine,
+    # note 13). « aiguë »/« couchée » gardent la même ceinture.
+    "regulier", "reguliere", "regulierement", "reguliers", "regulieres",
+    "aigue", "aigues", "ague", "agues", "aigu",
+    "couchee", "recouchee",
+    # la conjonction anglaise « and » (le STT lâche parfois des tokens EN :
+    # « on and off ») frappe EXACTEMENT la marque BDP « AND » (naproxène,
+    # OTC inactif) : on la bannit, comme « jasmin »/« lhopital ».
+    "and",
 }
 
 # ---------------------------------------------------------------- matcher
@@ -885,26 +896,43 @@ class Matcher:
         # because their ortho similarity to any med is too low.
         def posology(i, sim, in_region):
             j = min(i + 3, n)                 # allow dose+unit a little fuzz away
+            # La preuve de posologie est DIRECTIONNELLE : elle peut venir APRÈS
+            # le nom (« régulière HS »), d'un chiffre collé après le nom
+            # (« aspirine 80 »), ou AVANT le nom (« administrer 25 mg HS de
+            # kétiapine »). Une preuve par un marqueur de dose APRÈS un nom
+            # FLOU n'est créditée que si le nom est quasi-certain (HIGH_SIM)
+            # ou sert dans une région de liste confirmée : sans cela, la prose
+            # « …de façon régulière HS… » ferait régulière -> REGULEX/docusate
+            # en raflant le HS qui revient au vrai médicament précédent
+            # (quétiapine, note 13). Retourne la direction ("avant"/"nombre"/
+            # "arriere") ou "" — la direction sert au gate de confiance mot-à-mot.
             if any(dose_unit[k] for k in range(i, j)):
-                return True
+                if in_region or sim >= HIGH_SIM:
+                    return "avant"
             if i + 1 < n and num_token[i + 1]:
                 if sim >= 0.85:
-                    return True
+                    return "nombre"
                 # Inside a confirmed med-list region a name followed by a bare
                 # dose number is a list entry (e.g. "pantoloque 40"), so a
                 # moderate fuzzy match suffices there; outside the region the
                 # near-certain 0.85 bar is kept to avoid prose / lab false hits.
                 if in_region and sim >= ORTHO_FLOOR:
-                    return True
+                    return "nombre"
             # Small backward window for dose-BEFORE-name phrasings
             # ("administrer 25 mg HS de kétiapine"): the dose marker sits up to
-            # three tokens earlier. A marker attached to sentence punctuation
-            # belongs to the previous sentence and never counts ("8,1%. Le
-            # reste ..."). Unit-only markers (mg/ml/g) must see their number;
-            # protocol markers (HS/BID/PO/DIE/PRN) carry the dose by themselves.
-            for k in range(max(0, i - 3), i):
+            # three tokens earlier. On n'utilise que les marqueurs de la MÊME
+            # phrase que le token courant : la limite repousse APRÈS la dernière
+            # ponctuation de phrase de la fenêtre (« …au coucher régulièrement.
+            # Prochain point. » — le « coucher » d'avant la ponctuation ne
+            # crédite pas « point. », note 13). Unit-only markers (mg/ml/g) must
+            # see their number; protocol markers (HS/BID/PO/DIE/PRN) carry the
+            # dose by themselves.
+            borne = max(0, i - 3)
+            for k in range(i - 1, borne - 1, -1):
                 if words[k].endswith((".", "!", "?")):
-                    continue
+                    borne = k + 1
+                    break
+            for k in range(borne, i):
                 base_unit = words[k].strip(",;:.()").lower()
                 # only real dose markers count; PROTOCOL_WORDS also holds
                 # everyday particles (par/per/os/de) that must never credit
@@ -912,10 +940,10 @@ class Matcher:
                     continue
                 if base_unit in {"mg", "mcg", "µg", "g", "ml", "unités", "unites"}:
                     if any(num_token[t] for t in range(k, i)):
-                        return True
+                        return "arriere"
                     continue
-                return True
-            return False
+                return "arriere"
+            return ""
         anchor_hit = [False] * n
         token_start, idx = [], 0
         for w in words:
@@ -1078,7 +1106,8 @@ class Matcher:
             base_score = cand[3] if cand else 0.0
             is_leaf = cand[4] if cand else False
             is_otc = cand[5] if cand else False
-            has_poso = posology(i, base_score, in_region)
+            poso_dir = posology(i, base_score, in_region)
+            has_poso = bool(poso_dir)
 
             w_phon = norm_phon(words[i])
             if (not cand or w_phon in ANCHOR_WORDS or
@@ -1140,8 +1169,14 @@ class Matcher:
             # par le contexte physique. Les collisions EXACTES (vitamine→vitamin
             # e, ces→C.e.s, magnésium→magnesium) ont la même confiance que les
             # vrais noms : elles relèvent de ``FRENCH_STOP``, pas de ce seuil.
+            # Une preuve de posologie ne gratifie un token confiant du rejet que
+            # lorsqu'elle vient d'AVANT le nom (dose posée derrière, la plus
+            # probante : « administrer 25 mg HS de kétiapine ») — jamais d'une
+            # simple preuve APRÈS (« régulière HS », note 13) ni d'un chiffre
+            # collé : la haute confiance STT du mot suffit alors à le protéger.
             if (score >= THRESHOLD and base_score < 0.99 and conf is not None
-                    and not (has_poso or has_anchor or region_credit)):
+                    and not (has_anchor or region_credit)
+                    and not (has_poso and poso_dir == "arriere")):
                 c = (conf.get(w_phon, 0.0) if isinstance(conf, dict) else
                      (conf[i] if i < len(conf) else 0.0))
                 if isinstance(c, (int, float)) and c >= CONF_HARD_FLOOR:
@@ -1369,7 +1404,8 @@ def _is_cosmetic(base_or_brand) -> bool:
     return cle in {norm_orth(e).replace(" ", "") for e in _UV_COSMETICS}
 
 
-def _append_item(items, vus, fixed, jeton, res, force_name=None) -> None:
+def _append_item(items, vus, fixed, jeton, res, force_name=None,
+                 ancre_poso=False) -> None:
     """Ajoute un item à la liste, dédupliqué par nom canonique."""
     base = res.get("base") or res.get("brand") or jeton
     cle = norm_phon(base)
@@ -1385,6 +1421,15 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None) -> None:
             r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm)\b",
             poso, re.I):
         return False
+    # Anti-fantôme : un nom de médicament NU (sans dose captée après, sans
+    # ancre de dose adjacente, hors région de liste confirmée) est un
+    # « fantôme » du STT canonisé (« diclofenac diethylamine »,
+    # « naproxene », note 13) — il ne figure pas dans la liste Validation /
+    # import. ``ancre_poso`` vaut vrai pour un token en région de liste
+    # confirmée ou côte à côte d'un chiffre de dose (aspirine 80, calcium
+    # 500, rivastigmine timbre 10).
+    if not poso and not ancre_poso:
+        return False
     vus.add(cle)
     items.append({
         "name": force_name or jeton,
@@ -1394,6 +1439,36 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None) -> None:
         "level": res["level"],
     })
     return True
+
+
+def _region_medlist(fixed: str) -> set:
+    """Indices (dans ``fixed.split()``) des tokens de la région « liste de
+    médicaments » confirmée, telle que vue par ``Matcher.normalize``.
+
+    Réutilisée par l'extraction de la liste : un nom nu de prose n'est pas
+    dans une région confirmée, un nom d'une liste dictée avec doses l'est.
+    Le recalcul est léger (drapeaux de jeton + ``_medlist_regions``, aucun
+    re-matching)."""
+    words = fixed.split()
+    n = len(words)
+    dose_unit = [False] * n
+    num_token = [False] * n
+    for i, w in enumerate(words):
+        if (POSOLOGY_RE.search(w) or DOSE_RE.search(w)
+                or w.strip(",;:.()").lower() in
+                {"mg", "mcg", "µg", "g", "ml", "unités", "unites", "ui", "bid",
+                 "tid", "hs", "prn", "qid", "die", "po", "peros"}):
+            dose_unit[i] = True
+        if re.fullmatch(r"\d+(?:[,.]\d+)?", w.strip(",;:.()")):
+            num_token[i] = True
+    fragile = [False] * n
+    for i, w in enumerate(words):
+        p = norm_phon(w)
+        if (p in FRENCH_STOP or p in ANCHOR_WORDS or p in PROTOCOL_WORDS
+                or w.isdigit()):
+            fragile[i] = True
+    medlist = matcher()._medlist_regions(words, fragile, num_token, dose_unit)
+    return {i for i, v in enumerate(medlist) if v}
 
 
 def extract_med_items(text: str, conf=None) -> list:
@@ -1416,6 +1491,16 @@ def extract_med_items(text: str, conf=None) -> list:
     items = []
     vus = set()
     consommes = set()
+    region = _region_medlist(fixed)
+
+    def chiffre_voisin(i):
+        """Un chiffre de dose est collé au nom (avant/après, à <= 2 jetons) ?"""
+        for d in (-2, -1, 1, 2):
+            j = i + d
+            if 0 <= j < len(jetons) and re.fullmatch(
+                    r"\d+(?:[.,]\d+)?", jetons[j].strip(" \t,;:.()")):
+                return True
+        return False
 
     # --- Bigrammes : noms composés ----------------------------------------
     for i in range(len(jetons) - 1):
@@ -1425,7 +1510,9 @@ def extract_med_items(text: str, conf=None) -> list:
         res = _lookup_exact(paire)
         if res is None:
             continue
-        if _append_item(items, vus, fixed, paire, res, force_name=" ".join((jetons[i], jetons[i + 1]))):
+        if _append_item(items, vus, fixed, paire, res,
+                        force_name=" ".join((jetons[i], jetons[i + 1])),
+                        ancre_poso=(i in region) or chiffre_voisin(i)):
             consommes.add(i)
             consommes.add(i + 1)
 
@@ -1436,7 +1523,8 @@ def extract_med_items(text: str, conf=None) -> list:
         res = _lookup_exact(jeton)
         if not res:
             continue
-        _append_item(items, vus, fixed, jeton, res)
+        _append_item(items, vus, fixed, jeton, res,
+                     ancre_poso=(i in region) or chiffre_voisin(i))
     return items
 
 

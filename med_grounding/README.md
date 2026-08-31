@@ -227,6 +227,20 @@ jours », « une prise matinale », « sous AOD », « au plus deux jours » res
 inchangées. Un mot n'est remplacé que si un signal de contexte (posologie,
 ancre de liste, similarité élevée) l'étaye.
 
+Trois gardes supplémentaires (note 13, 2026-08-31) :
+
+- **Posologie directionnelle** : une preuve de posologie par un marqueur
+  placé **après** le nom n'est créditée à un nom *flou* que s'il est
+  quasi-certain ou sert dans une région de liste confirmée. « de façon
+  régulière HS » ne transforme plus « régulière » en REGULEX (docusate) — le
+  « HS » appartient au vrai médicament qui précède.
+- **La fenêtre de dose arrière s'arrête à la ponctuation de phrase** :
+  « … au coucher régulièrement. Prochain point. » — le « coucher » d'avant le
+  point ne crédite pas « point. ».
+- **« and » banni** : la conjonction anglaise (le STT sort parfois des tokens
+  EN : « on and off ») frappe exactement la marque BDP « AND » (naproxène) —
+  elle est dans `FRENCH_STOP`, comme « régulière », « aiguë », « couchée ».
+
 ---
 
 ## 7. Référence rapide des entrées de test

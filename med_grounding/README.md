@@ -275,6 +275,36 @@ Pantoloc). C'est le « tool » généralisable qui rend les garbles manuels
 (seeds) de plus en plus redondants — on n'ajoute plus d'exception par cas
 observé, on laisse la phonétique + le LLM résoudre.
 
+### Départage des substitutions de lettres proches (2026-08-31)
+
+Les erreurs du STT sont surtout **auditives** : la substitution entre lettres
+proches (`/s/↔/z/`, `/f/↔/v/`…) est plus plausible qu'une insertion. Or la
+métrique `sim = 1 - lev(a,b)/max(len)` départage mal : à distance de Levenshtein
+égale, elle favorise le plus long des deux candidats. « esétrol » (ézétimibe)
+tombait donc sur « estetrol » (l'hormone) — simple insertion d'un `t`
+(distance 1 sur 8) — plutôt que sur « ezetrol » (départage `s/z`, distance 1
+sur 7).
+
+- **Tie-break orthographique pondéré** (`sim_ortho_w`) : parmi les candidats à
+  **distance de Levenshtein minimale égale**, une distance pondérée pénalise
+  moins les paires `s/z, f/v, c/k, c/s, g/j, b/d, p/t, i/y` (coût 0,4).
+  « esétrol » → **Ezetrol** ; les autres noms (`norvasque`, `lirica`, `dilote`,
+  `kitsapine`, `Antoloque`) sont **inchangés**. `sim` (rapidfuzz en C) reste le
+  filtre et le score principal — la pondération (DP) ne s'applique qu'aux
+  candidats déjà retenus, la performance reste quasi neutre.
+- **Phonétique pondérée comme départage, jamais comme filtre**
+  (`sim_phon_w`, coûts s/z·f/v·ʃ/ʒ·plosives voisées·r/l) : appliquée brute au
+  seuil, elle ferait franchir les seuils à des mots de **prose** (`droite`→
+  thyroide, `corps`→Corax, `action`→Halcion, `l'ivire`→« l lysine »). Les
+  chemins phonétiques (`_phonetic_candidats`, seuil 0,72 ; `_resolve_phonetic`,
+  seuil 0,6) filtrent donc d'abord par `sim`, puis **départagent** les candidats
+  retenus par `sim_phon_w`. « esétrol » conserve ses deux candidats (estetrol
+  0,875 / ezetrol 0,857) et ezetrol gagne au départage — sans aucun faux
+  positif de prose.
+- **Régression** : aucune différence sur les 4 transcripts de référence.
+  Limite connue, préexistante : `cholesterol` → `colestipol` (faux positif hors
+  portée ; la phonétique + le LLM doivent le résoudre).
+
 ---
 
 ## 7. Référence rapide des entrées de test

@@ -166,6 +166,41 @@ def sim(a, b):
     m = max(len(a), len(b))
     return 0.0 if m == 0 else 1.0 - lev(a, b) / m
 
+# ---------------- similarité orthographique pondérée (miroir app/med_grounding)
+#
+# Le STT produit surtout des fautes auditives : la substitution entre lettres
+# proches (/s/↔/z/, /f/↔/v/…) est plus plausible qu'une insertion. Or sim
+# (1 - lev/max_len) départage mal deux candidats à distance de Levenshtein
+# égale (il favorise le plus long). On départage à distance égale par une
+# distance pondérée qui pénalise moins les lettres articulatoirement proches
+# (ex. « esétrol » → « ezetrol » = ézétimibe, au lieu de la seule insertion
+# réussie « estetrol »).
+_ORTHO_SUB_PAIRS = ("sz", "fv", "ck", "cs", "gj", "bd", "pt", "iy")
+_ORTHO_SUB = {frozenset(p): 0.4 for p in _ORTHO_SUB_PAIRS}
+
+def _ortho_sub_cost(a, b):
+    return _ORTHO_SUB.get(frozenset((a, b)), 1.0)
+
+def _dp_subst(a, b, sub_cost):
+    n, m = len(a), len(b)
+    d = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n + 1):
+        d[i][0] = i
+    for j in range(m + 1):
+        d[0][j] = j
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            cost = 0.0 if a[i - 1] == b[j - 1] else sub_cost(a[i - 1], b[j - 1])
+            d[i][j] = min(d[i - 1][j] + 1.0, d[i][j - 1] + 1.0,
+                          d[i - 1][j - 1] + cost)
+    return d[n][m]
+
+def sim_ortho_w(a, b):
+    m = max(len(a), len(b))
+    if m == 0:
+        return 0.0
+    return 1.0 - _dp_subst(a, b, _ortho_sub_cost) / m
+
 class BKTree:
     def __init__(self, distance):
         self._d = distance; self.tree = None
@@ -765,12 +800,39 @@ class Matcher:
         if len(t) < MIN_FUZZY_LEN:
             return None                     # short tokens: exact only, no fuzzy
         best = None
+        best_sim = 0.0
         L = len(t)
+        # Candidats au-dessus du seuil, avec leur distance de Levenshtein brute.
+        cands = []
+        lev_min = None
         for bln in range(max(1, L - MAX_LEN_DIFF), L + MAX_LEN_DIFF + 1):
             for n, level, base, brand, is_leaf, is_otc in self.ortho_by_len.get(bln, ()):
                 s = sim(t, n)
-                if s >= ORTHO_FLOOR and (best is None or s > best[3]):
-                    best = (level, base, brand, s, is_leaf, is_otc)
+                if s >= ORTHO_FLOOR:
+                    d = lev(t, n)
+                    if lev_min is None or d < lev_min:
+                        lev_min = d
+                    cands.append((n, level, base, brand, s, is_leaf, is_otc))
+                    if s > best_sim:
+                        best_sim = s
+                        best = (level, base, brand, s, is_leaf, is_otc)
+        if best is None:
+            return None
+        # Tie-break des substitutions proches, comme dans app/med_grounding.py :
+        # à distance de Levenshtein égale, la distance pondérée favorise les
+        # lettres proches (« esétrol » → « ezetrol » = ézétimibe).
+        if len(cands) > 1:
+            grp = [c for c in cands if lev(t, c[0]) == lev_min]
+            if len(grp) > 1:
+                g_best = None
+                g_sim = 0.0
+                for n, level, base, brand, _s, is_leaf, is_otc in grp:
+                    sw = sim_ortho_w(t, n)
+                    if g_best is None or sw > g_sim:
+                        g_sim = sw
+                        g_best = (level, base, brand, sw, is_leaf, is_otc)
+                if g_best is not None:
+                    best = g_best
         return best
 
     def _resolve_phonetic(self, token):

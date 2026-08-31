@@ -3,6 +3,39 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-31 — Grounding : métrique pondérée qui départage les substitutions de lettres proches
+
+*Les erreurs du STT sont surtout **auditives** : la substitution entre lettres
+proches (`/s/↔/z/`, `/f/↔/v/`) est plus plausible qu'une insertion. Or la
+métrique de similarité (Levenshtein, `1 - max(len)`) départage mal deux noms à
+distance égale — « Esétrol » (ézétimibe) était rendu « estetrol » (hormone),
+simple insertion d'un t, alors qu'il s'agissait du « s→z » attendu vers
+« ezetrol ».*
+
+- **Tie-break pondéré (orthographe)** : à distance de Levenshtein **minimale
+  égale**, les candidats sont départagés par une distance pondérée qui pénalise
+  moins les lettres articulatoirement proches (`s/z, f/v, c/k, c/s, g/j, b/d,
+  p/t, i/y` à coût réduit) — « esétrol » → **Ezetrol**, les autres noms
+  (`norvasque`→Norvasc, `lirica`→Lyrica, `dilote`→Dilaudid,
+  `kitsapine`→quetiapine, `Antoloque`→Pantoloc) **inchangés**. `sim` reste le
+  filtre principal (rapidfuzz en C, performance quasi neutre) ; la pondération
+  ne s'applique qu'au départage.
+- **Phonétique pondérée comme départage, pas comme filtre** : la pondération
+  abaisse les coûts `s/z, f/v, ʃ/ʒ, plosives voisées, r/l` — appliquée *brutale*
+  au seuil, elle faisait franchir les seuils à des mots de **prose**
+  (`droite`→thyroide, `corps`→Corax, `copie`→Tobi, `action`→Halcion,
+  `l'ivire`→« l lysine »). On conserve donc `sim` (non pondéré) comme filtre
+  au seuil (0.72 hints, 0.6 résolution), et la pondération ne **départage** que
+  les candidats déjà retenus. « esétrol » garde ainsi ses deux candidats
+  (estetrol 0.875 / ezetrol 0.857 ≥ seuil) puis ezetrol gagne par la pondération
+  — sans aucun faux positif de prose.
+- **Régression** : aucune différence sur les 4 transcripts de référence
+  (`dictee-1`, `dictee-6`, `consult7`, `consultai4-gemini`). Limite connue,
+  préexistante : `cholesterol` → `colestipol` (faux positif hors portée, la
+  phonétique + le LLM doivent le résoudre).
+- Port appliqué aux deux modules (`app/med_grounding.py` et
+  `med_grounding/match_meds.py`).
+
 ## 2026-08-31 — Validation : candidats phonétiques affichés + fréquences dictées en chiffre
 
 *Suite à la dictée de production importée en test (diverticulite avec abcès,

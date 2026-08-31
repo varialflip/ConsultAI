@@ -889,7 +889,17 @@ des médicaments », défaut `false`). Une fois activé :
   (puce `_Lirica_ → **LYRICA**`), dédupliquées par substance avec les items
   résolus. Même source partagée entre la liste live de dictée, le « Terminer »,
   la génération et la retranscription (`extract_validation_items`) ;
-  `med_grounding_json` porte l'étiquette `source: "phonetic"`.
+     `med_grounding_json` porte l'étiquette `source: "phonetic"`.
+- **Substitutions de lettres proches départagées** : les erreurs du STT sont
+  surtout **auditives** (`/s/↔/z/`, `/f/↔/v/`…), plus plausibles qu'une
+  insertion. À distance de Levenshtein **minimale égale**, les candidats sont
+  départagés par une distance pondérée qui pénalise moins les lettres
+  articulatoirement proches — « Esétrol » devient **Ezetrol** (ézétimibe) et
+  non « estetrol » (l'hormone). `sim` reste le filtre principal (performance
+  quasi neutre) ; la pondération ne s'applique qu'au départage. En phonétique,
+  la pondération départage de même les candidats déjà retenus par le filtre
+  `sim` (elle ne fait jamais franchir les seuils à de la **prose** :
+  `droite`→thyroide etc. restent hors des suggestions).
 - **Fréquence dictée en chiffre** : « N fois par jour » (1–4) est normalisé
   comme la variante en lettres — « 2 fois par jour » → BID, « 3 fois par
   jour » → TID, « 4 fois par jour » → QID, « 1 fois par jour » → DIE. Le

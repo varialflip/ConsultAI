@@ -226,6 +226,76 @@ def sim(a, b):
     m = max(len(a), len(b))
     return 0.0 if m == 0 else 1.0 - lev(a, b) / m
 
+# ------------------------------------------- métriques pondérées (lettres / phonèmes)
+#
+# Le STT produit des fautes surtout auditives : les substitutions entre
+# phonèmes (ou lettres) articulatoirement proches — /s/↔/z/, /f/↔/v/… —
+# sont plus plausibles qu'une insertion d'un phonème entier. Or la distance
+# de Levenshtein unitaire en fait des coûts identiques (1), et le normalise
+# `sim = 1 - lev/max(len)` favorise même le plus long des deux. C'est ce qui
+# faisait proposer l'hormone « estetrol » (insertion d'un /t/) au détriment de
+# « ezetrol » = ézétimibe (simple /s/→/z/, `esétrol` dicté).
+#
+# On ajoute une distance pondérée : la substitution n'est pénalisée qu'à
+# *fraction* du coût d'une insertion/suppression selon sa proximité. Deux
+# tables : l'une pour les chaînes de LETTRES (chemin orthographique, tie-break
+# de `_resolve_single`), l'autre pour les chaînes de PHONÈMES G2P (chemin
+# phonétique des hints).
+
+def _dp_subst(a, b, sub_cost):
+    """Distance de Levenshtein pondérée : le coût de substitution vaut
+    ``sub_cost(pa, pb)`` (0 si identiques), sinon 1.0 par insertion/suppr."""
+    n, m = len(a), len(b)
+    d = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n + 1):
+        d[i][0] = i
+    for j in range(m + 1):
+        d[0][j] = j
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            cost = 0.0 if a[i - 1] == b[j - 1] else sub_cost(a[i - 1], b[j - 1])
+            d[i][j] = min(d[i - 1][j] + 1.0, d[i][j - 1] + 1.0,
+                          d[i - 1][j - 1] + cost)
+    return d[n][m]
+
+# Substitutions de lettres proches (orthographique). Paires phonétiquement
+# équivalentes en français → coût réduit.
+_ORTHO_SUB_PAIRS = ("sz", "fv", "ck", "cs", "gj", "bd", "pt", "iy")
+_ORTHO_SUB = {frozenset(p): 0.4 for p in _ORTHO_SUB_PAIRS}
+
+def _ortho_sub_cost(a, b):
+    return _ORTHO_SUB.get(frozenset((a, b)), 1.0)
+
+def sim_ortho_w(a, b):
+    """Similarité orthographique pondérée (lettres), pour départager à
+    distance de Levenshtein égale des candidats aux lettres proches."""
+    m = max(len(a), len(b))
+    if m == 0:
+        return 0.0
+    return 1.0 - _dp_subst(a, b, _ortho_sub_cost) / m
+
+# Substitutions de phonèmes articulatoirement proches (G2P).
+_PLOSIVE = set("ptkbdg")
+_FRICATIVE = set("fsvzʃʒ")
+
+def _phon_sub_cost(a, b):
+    if {a, b} in ({'s', 'z'}, {'f', 'v'}, {'ʃ', 'ʒ'}):
+        return 0.3                  # fricatives sonore/sourde
+    if {a, b} in ({'p', 'b'}, {'t', 'd'}, {'k', 'g'}):
+        return 0.4                  # plosives sonore/sourde
+    if (a in _FRICATIVE and b in _FRICATIVE) or (a in _PLOSIVE and b in _PLOSIVE):
+        return 0.6                  # même classe d'articulation
+    if {a, b} in ({'r', 'l'}, {'l', 'ʁ'}):
+        return 0.7                  # approximantes proches
+    return 1.0
+
+def sim_phon_w(a, b):
+    """Similarité phonémique pondérée (G2P), pour les hints phonétiques."""
+    m = max(len(a), len(b))
+    if m == 0:
+        return 0.0
+    return 1.0 - _dp_subst(a, b, _phon_sub_cost) / m
+
 class BKTree:
     def __init__(self, distance):
         self._d = distance; self.tree = None
@@ -883,12 +953,44 @@ class Matcher:
         if len(t) < MIN_FUZZY_LEN:
             return None                     # short tokens: exact only, no fuzzy
         best = None
+        best_sim = 0.0
         L = len(t)
+        # Candidats au-dessus du seuil, avec leur distance de Levenshtein brute
+        # (rapidfuzz, rapide). On retient aussi la plus petite distance.
+        cands = []
+        lev_min = None
         for bln in range(max(1, L - MAX_LEN_DIFF), L + MAX_LEN_DIFF + 1):
             for n, level, base, brand, is_leaf, is_otc in self.ortho_by_len.get(bln, ()):
                 s = sim(t, n)
-                if s >= ORTHO_FLOOR and (best is None or s > best[3]):
-                    best = (level, base, brand, s, is_leaf, is_otc)
+                if s >= ORTHO_FLOOR:
+                    d = lev(t, n)
+                    if lev_min is None or d < lev_min:
+                        lev_min = d
+                    cands.append((n, level, base, brand, s, is_leaf, is_otc))
+                    if s > best_sim:
+                        best_sim = s
+                        best = (level, base, brand, s, is_leaf, is_otc)
+        if best is None:
+            return None
+        # Tie-break des substitutions proches : quand plusieurs candidats
+        # partagent la plus petite distance de Levenshtein (typiquement des
+        # paires /s/↔/z/, /f/↔/v/), on les départage par la distance pondérée
+        # qui favorise les lettres articulatoirement proches. Sans ce rééqui-
+        # librage, `sim` (1 - lev/max_len) fait gagner le candidat le plus
+        # long — « esétrol » devenait « estetrol » (insertion d'un t) au lieu
+        # d'« ezetrol » (ézétimibe, simple s→z).
+        if len(cands) > 1:
+            grp = [c for c in cands if lev(t, c[0]) == lev_min]
+            if len(grp) > 1:
+                g_best = None
+                g_sim = 0.0
+                for n, level, base, brand, _s, is_leaf, is_otc in grp:
+                    sw = sim_ortho_w(t, n)
+                    if g_best is None or sw > g_sim:
+                        g_sim = sw
+                        g_best = (level, base, brand, sw, is_leaf, is_otc)
+                if g_best is not None:
+                    best = g_best
         return best
 
     def _resolve_phonetic(self, token):
@@ -897,13 +999,21 @@ class Matcher:
             return None
         q = phonetic_fr(token)
         hits = self.bk.search(q, max_dist=3)
+        # Filtre par `sim` (non pondéré) au seuil 0.6 pour ne pas laisser la
+        # pondération faire franchir le seuil à des mots de prose (ex. « l'ivire »
+        # → « l lysine », sim 0.571 < 0.6 mais sim_phon_w 0.629) ; on départage
+        # ensuite les candidats retenus par `sim_phon_w` pour favoriser les
+        # substitutions de lettres proches.
         best = None
         for dist, node in hits[:8]:
-            s = sim(q, node)
-            if s >= 0.6 and (best is None or s > best[3]):
-                row = self.bk_node.get(node)
-                if row is not None:
-                    best = (row[0], row[1], row[2], s, row[3], row[4])
+            if sim(q, node) < 0.6:
+                continue
+            s = sim_phon_w(q, node)
+            if best is not None and s <= best[3]:
+                continue
+            row = self.bk_node.get(node)
+            if row is not None:
+                best = (row[0], row[1], row[2], s, row[3], row[4])
         return best
 
     def phonetiques_texte(self, texte, maxi=10):
@@ -1011,10 +1121,20 @@ class Matcher:
         if not q:
             return None
         voie = self.bk.search(q, max_dist=3)
+        # Filtre par `sim` (non pondéré) au seuil 0.72 : garantit qu'un mot de
+        # prose sans vraie parenté phonétique ne devient jamais un hint (la
+        # pondération abaissant les coûts s/z, f/v… ferait franchir le seuil à
+        # des mots courants : droite→thyroide, corps→Corax…). Parmi les
+        # candidats retenus, on départage par `sim_phon_w` pour que la substi-
+        # tution de lettres proches l'emporte (ex. « esétrol » → ezetrol, pas
+        # estetrol).
         best = None
         for dist, node in voie[:12]:
             s = sim(q, node)
-            if s < 0.72 or (best is not None and s <= best[0]):
+            if s < 0.72:
+                continue
+            sw = sim_phon_w(q, node)
+            if best is not None and sw <= best[0]:
                 continue
             row = self.bk_node.get(node)
             if row is None:
@@ -1027,7 +1147,7 @@ class Matcher:
             can = self._canonicalize(level, base, brand, bool(is_otc))
             if can is None:
                 continue
-            best = (s, can, base or brand, brand)
+            best = (sw, can, base or brand, brand)
         if best is None:
             return None
         return (best[1], best[2], best[3], best[0])

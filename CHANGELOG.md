@@ -45,6 +45,12 @@ verbe d'administration ou une liste de médicaments le porte.*
   bigramme « nom + chiffre » comme un composé (le chiffre est la posologie,
   jamais le nom). La posologie conserve la décimale entière (« bisoprolol 2,5
   mg DIE »), les items sont propres dans Validation et à l'import.
+- **Liste de médicaments isolée par des lignes vides dans le texte** : le
+  transcript corrigé met une ligne vide avant et après le bloc de la liste
+  (région `proactive` contenant un `medlist`, blocs denses séparés par ≤ 6
+  jetons fusionnés) — on voit d'un coup d'œil où la normalisation a agi.
+  Reste hors encadrement : la prose des antécédents (« anémie, FA sous AOD,
+  HTA… ») et les consultations sans liste.
 
 ## 2026-08-30 — Correction des médicaments pendant la dictée (grounding, liste pointée)
 

@@ -968,9 +968,56 @@ class Matcher:
             if words[i].endswith((".", "!", "?")):
                 noun_seen = False
 
+        # ---- borne visuelle de la liste de médicaments ----
+        # Dans le texte transcrit, on isole la zone normalisée par une ligne
+        # vide avant et après : chaque run maximal de tokens ``proactive``
+        # Qui contient au moins un token de liste confirmée (``medlist``) est
+        # le bloc « liste de médicaments ». La prose dense des antécédents
+        # (proactive mais AUCUN medlist, ex. « anémie, FA sous AOD, HTA… »)
+        # n'est pas encadrée.
+        encadrer = [False] * n
+        # Rassemble d'abord les run « proactive contenant un medlist », puis
+        # fusionne ceux séparés par peu de prose (<= 6 jetons) : une liste
+        # dicte en prose (« ... sous Risperdal 2 et Epival 500 mg BID, ainsi
+        # que trazodone 150 HS et Cipralex 20 ... ») ne doit pas produire une
+        # ligne vide à chaque groupe de deux noms.
+        blocs = []
+        run_debut = None
+        for i in range(n + 1):
+            dans = i < n and proactive[i]
+            if dans and run_debut is None:
+                run_debut = i
+            elif not dans and run_debut is not None:
+                if any(medlist[k] for k in range(run_debut, i)):
+                    blocs.append((run_debut, i - 1))
+                run_debut = None
+        if blocs:
+            fusionnes = [list(blocs[0])]
+            for s, e in blocs[1:]:
+                if s - fusionnes[-1][1] <= 6:
+                    fusionnes[-1][1] = e
+                else:
+                    fusionnes.append([s, e])
+            for s, e in fusionnes:
+                for k in range(s, e + 1):
+                    encadrer[k] = True
+
         result, changes = [], []
         i = 0
+        dans_liste = False
         while i < n:
+            # Ligne vide avant/après la zone de liste de médicaments : quand on
+            # entre dans la zone marquée, on isole sauf si c'est le tout début ;
+            # quand on en sort, on ferme. Garde-fou : on ne cumule jamais deux
+            # sauts de ligne consécutifs.
+            if encadrer[i] and not dans_liste:
+                if result and result[-1] != "\n\n":
+                    result.append("\n\n")
+                dans_liste = True
+            elif not encadrer[i] and dans_liste:
+                if result and result[-1] != "\n\n":
+                    result.append("\n\n")
+                dans_liste = False
             # Garble STT dont le nom commence par un nombre : « 13 IBA » =
             # Tresiba (le « 13 » est l'amorce phonétique « trési », PAS une
             # dose). Le couple nombre+mot est consommé comme un seul nom,
@@ -1106,7 +1153,12 @@ class Matcher:
             else:
                 result.append(words[i])
             i += 1
-        return " ".join(result), changes
+        texte = " ".join(result)
+        # Les sauts de ligne de la borne de liste portent les espaces du join :
+        # on les reformate propres (ligne vide = deux \n).
+        texte = re.sub(r"[ \t]+\n\n[ \t]+", "\n\n", texte)
+        texte = re.sub(r"\n{3,}", "\n\n", texte)
+        return texte.strip("\n") if texte else texte, changes
 
 
 # ---------------------------------------------------------------------------

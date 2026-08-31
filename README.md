@@ -874,6 +874,9 @@ des médicaments », défaut `false`). Une fois activé :
   chiffre » (ex. « bisoprolol 2,5 », « calcium 500 ») n'est jamais traité
   comme un nom composé : le chiffre reste dans la **posologie** (« bisoprolol
   2,5 mg DIE »), jamais dans le nom de l'item.
+- **La liste normalisée est isolée par des lignes vides** dans le texte
+  transcrit (avant et après le bloc), pour repérer d'un coup d'œil où le
+  script a corrigé les noms.
 - Après génération de la note, l'onglet **Validation** s'ouvre sur grand
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 

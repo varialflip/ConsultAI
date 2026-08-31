@@ -170,6 +170,12 @@ class DictationSession:
     parts: List[str] = field(default_factory=list)
     status: str = "recording"         # recording | finished | error
     last_error: str = ""
+    #: Confiance mot-à-mot (``norm_phon → conf``) de chaque part, en miroir de
+    #: ``parts``. Alimentée quand le STT fournit ``words[].confidence`` (endpoint
+    #: custom) : sert au gate anti-faux-positifs au moment du grounding des
+    #: VIEILLES parts (on ne retranscrit pas pour re-naître la confiance) et à
+    #: l'extraction de la liste de médicaments sans resurgir les faux positifs.
+    parts_conf: List[dict] = field(default_factory=list)
     #: Couverture de l'audio par les transcriptions réussies, dans l'horloge
     #: MESURÉE : intervalles [début, fin] du fichier brut déjà transcrits.
     #: Sert au filet de fin (``_sweep_uncovered``) à retrouver les trous
@@ -215,6 +221,7 @@ class DictationSession:
             "received_seconds": self.received_seconds,
             "offset_seconds": self.offset_seconds,
             "parts": self.parts,
+            "parts_conf": self.parts_conf,
             "status": self.status,
             "last_error": self.last_error,
             "covered_ranges": list(self.covered_ranges),
@@ -1038,7 +1045,7 @@ def _bind_template_language(template_id: Optional[int]) -> None:
 
 def _store_part(
     session: DictationSession, text: str, moteur: tuple = ("", ""),
-    duration_seconds: float = 0.0,
+    duration_seconds: float = 0.0, words: Optional[list] = None,
 ) -> None:
     """
     Reporte la tranche dans le brouillon — c'est lui, la copie durable. Le
@@ -1048,10 +1055,17 @@ def _store_part(
     Appelée même pour une tranche muette, afin que la durée d'audio traitée
     reste juste : elle sert de repère au médecin dans la liste des brouillons.
     """
+    conf_part = None
     if text:
-        text = _normalize_part_text(text)
+        if words:
+            try:
+                conf_part = med_grounding.conf_par_token(text, words)
+            except Exception:
+                conf_part = None
+        text = _normalize_part_text(text, words)
     if text:
         session.parts.append(text)
+        session.parts_conf.append(conf_part or {})
     with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
         consultation = db.get(Consultation, session.consultation_id)
         if consultation is None:
@@ -1128,20 +1142,26 @@ def _norm_spaces(s: str) -> str:
     return " ".join((s or "").lower().split())
 
 
-def _normalize_part_text(text: str) -> str:
+def _normalize_part_text(text: str, words: Optional[list] = None) -> str:
     """Applique la correction des médicaments à un bout de transcription.
 
     Quand le grounding est actif, les noms déformés par la reconnaissance
     vocale sont remplacés INLINE dès le stockage de la part : le texte affiché
     (dictée) et le brouillon montrent les noms corrigés à leur place, sans
     liste séparée. Déterministe, sans effet si la correction est désactivée.
+
+    ``words`` optionnel : ``words[]`` du STT (``{word, confidence}``) du même
+    segment — active le gate mot-à-mot : une substitution orthographique floue
+    très confiante, non portée par une dose/ancre, est refusée (anti-faux
+    positifs de prose, seuil ``CONF_HARD_FLOOR``).
     """
     if not text:
         return text
     if not _grounding_enabled():
         return text
     try:
-        corrige, _ = med_grounding.normalize(text)
+        conf = med_grounding.conf_par_token(text, words or []) if words else None
+        corrige, _ = med_grounding.normalize(text, conf=conf)
         return corrige.strip() or text
     except Exception:
         return text
@@ -1224,6 +1244,7 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
     hints = _phrase_hints(session.template_id)
     low, target, high = _window()
     nouveaux: List[str] = []
+    nouveaux_conf: List[dict] = []
     curseur = start
     while end - curseur > 0.05:
         restant = end - curseur
@@ -1242,7 +1263,13 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
             continue
         texte = (result.get("transcript") or "").strip()
         if texte:
-            nouveaux.append(_normalize_part_text(texte))
+            words = result.get("words") or None
+            try:
+                conf_map = med_grounding.conf_par_token(texte, words) if words else {}
+            except Exception:
+                conf_map = {}
+            nouveaux.append(_normalize_part_text(texte, words))
+            nouveaux_conf.append(conf_map)
         if texte:
             logger.info(
                 "Dictée %s : stabilisation [%.1f-%.1f s] (%d caractères)",
@@ -1257,6 +1284,7 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
         return session                     # déjà stable, rien à faire
 
     session.parts[a:b + 1] = nouveaux
+    session.parts_conf[a:b + 1] = nouveaux_conf
     session.covered_ranges[a:b + 1] = [(start, end if curseur > start else end)]
     session.save()
 
@@ -1277,6 +1305,28 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
     return session
 
 
+def _conf_tail(session: DictationSession, tail: str) -> Optional[dict]:
+    """Confiance mot-à-mot agrégée des parts couvrant ``tail`` (liste seule).
+
+    ``tail`` = ``" ".join(parts)[-3000:]``. On remonte les parts depuis la fin
+    jusqu'à couvrir la longueur du tail, on fusionne leurs ``parts_conf``
+    (la clé ``norm_phon`` suffit, le gate ne lit qu'à la clé). Retourne ``None``
+    si aucune part portait de confiance.
+    """
+    if not session.parts_conf:
+        return None
+    conf: dict = {}
+    restant = len(tail)
+    for part, cmap in reversed(list(zip(session.parts, session.parts_conf))):
+        if not cmap:
+            continue
+        conf.update(cmap)
+        restant -= len(part)
+        if restant <= 0:
+            break
+    return conf or None
+
+
 def _merge_and_publish_meds(session: DictationSession) -> None:
     """Met à jour la liste pointée (moteur déterministe) et la diffuse.
 
@@ -1288,7 +1338,8 @@ def _merge_and_publish_meds(session: DictationSession) -> None:
     owner = _session_owner(session)
     texte = " ".join(session.parts)
     tail = texte[-3000:].lstrip()              # ≈ derniers ~600 mots
-    nouveaux = med_grounding.extract_med_items(tail)
+    conf_tail = _conf_tail(session, tail)
+    nouveaux = med_grounding.extract_med_items(tail, conf=conf_tail)
     accum = _grounding_meds.get(session.id, [])
     par_cle = {med_grounding.norm_phon(i["name"]): i for i in accum}
     for item in nouveaux:
@@ -1335,7 +1386,8 @@ def _finalize_grounding(session_id: str, username: str) -> None:
             text = " ".join(session.parts).strip()
             if not text:
                 return
-            items = med_grounding.extract_med_items(text)
+            conf_all = _conf_tail(session, text) if session.parts_conf else None
+            items = med_grounding.extract_med_items(text, conf=conf_all)
             _grounding_meds[session_id] = items
             with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
                 consultation = db.get(Consultation, session.consultation_id)
@@ -1456,7 +1508,8 @@ def _transcribe_one(session: DictationSession, hints: str, final: bool,
                     session.id, payload.duration_seconds)
     _store_part(session, text,
                 (result.get("provider") or "", result.get("model") or ""),
-                duration_seconds=payload.duration_seconds)
+                duration_seconds=payload.duration_seconds,
+                words=result.get("words") or None)
 
     session.save()
     logger.info(
@@ -1619,7 +1672,8 @@ def _transcribe_region(session: DictationSession, start: float, end: float, hint
             )
         _store_part(session, text,
                     (result.get("provider") or "", result.get("model") or ""),
-                    duration_seconds=payload.duration_seconds)
+                    duration_seconds=payload.duration_seconds,
+                    words=result.get("words") or None)
     session.save()
 
 
@@ -1734,6 +1788,7 @@ def _finalise(session: DictationSession) -> None:
     if text:
         _store_part(session, text,
                     (result.get("provider") or "", result.get("model") or ""),
-                    duration_seconds=session.offset_seconds)
+                    duration_seconds=session.offset_seconds,
+                    words=result.get("words") or None)
     session.status = "finished"
     session.save()

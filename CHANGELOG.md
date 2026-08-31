@@ -3,6 +3,33 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-31 — Correction des médicaments : gate de confiance mot-à-mot (STT custom)
+
+*L'endpoint STT personnalisé (`response_format=json`) renvoie désormais la
+confiance de chaque mot (`words[].confidence`). Elle devient un levier pour
+distinguer les vrais noms de médicaments déformés des mots de prose à
+l'orthographe voisine : un mot dicté avec une confiance très élevée n'est
+jamais « corrigé » par simple proximité orthographique, sauf si une dose, un
+verbe d'administration ou une liste de médicaments le porte.*
+
+- **`CONF_HARD_FLOOR = 0.92`** (mesuré sur 8 dictées réelles, corpus Cohere
+  MLX) : substitution orthographique *floue* d'un token confiant refusée hors
+  contexte fort (dose/ancre/région de liste). Élimine les faux positifs de
+  prose `laisse → Latisse`, `diabète → Diabeta`, `d'autres → Dobutrex` (conf
+  ~1,00) sans perdre un seul vrai nom déformé du corpus (`pivale → Epival`,
+  `neurontain → Neurontin`, `l'aldol PRN → Haldol`, `aspirine 80`…). Sans
+  confiance disponible (fournisseurs sans `words[]`), comportement historique
+  inchangé.
+- **Propagation de la confiance** : endpoint custom demande
+  `response_format=json` et remonte `words[]` ; `dictation` stocke une carte
+  `norm_phon → conf` par part (persistée en session) et l'applique au
+  grounding des frontières, à la retranscription et à l'extraction de la
+  liste (`extract_med_items(text, conf=…)`) — un faux positif bloqué dans le
+  texte ne resurgit donc pas dans la liste de l'onglet Validation.
+- **Seuil réglable** : constante unique `CONF_HARD_FLOOR` dans
+  `app/med_grounding.py` (pas de champ admin : réglé au code, comme le reste
+  du moteur).
+
 ## 2026-08-30 — Correction des médicaments pendant la dictée (grounding, liste pointée)
 
 *Le STT par tranches coupe parfois un mot à la jointure de deux segments, et

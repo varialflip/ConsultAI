@@ -453,6 +453,11 @@ résidence ni à la dénominalisation** :
   (`med_grounding_json` par consultation, même rétention que le brouillon),
   affichées dans l'onglet Validation **à titre indicatif** — le clinicien reste
   la seule autorité sur le document final, et rien n'est imprimé hors la note.
+- **Confiance mot-à-mot (STT custom)** : le serveur renvoie la confiance de
+  chaque mot (`words[].confidence`) ; elle n'est utilisée que **en mémoire,
+  au moment du grounding** (seuil 0,92), jamais persistée en dehors du
+  diagnostic immédiat de la frontière — rien de nouveau à résidence, aucune
+  donnée de santé supplémentaire capturée ni sauvegardée.
 
 ---
 

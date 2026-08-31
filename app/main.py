@@ -3561,6 +3561,14 @@ async def retranscribe_consultation(
 
         texte = (resultat.get("transcript") or "").strip()
         if texte:
+            if _med_grounding_on():
+                try:
+                    conf = med_grounding.conf_par_token(
+                        texte, resultat.get("words") or [],
+                    ) if resultat.get("words") else None
+                    texte = med_grounding.normalize(texte, conf=conf)[0] or texte
+                except Exception:
+                    logger.exception("Grounding retranscription impossible (consultation %s)", consultation_id)
             morceaux.append(texte)
         secondes += float(resultat.get("duration_seconds") or 0)
         done_secondes += float(resultat.get("duration_seconds") or 0)

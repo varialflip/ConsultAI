@@ -852,6 +852,17 @@ des médicaments », défaut `false`). Une fois activé :
 - **S'étend à l'audio importé et à la retranscription** : la liste est
   recalculée sur le texte complet, renvoyée dans la réponse (`med_items`) et
   diffusée par SSE.
+- **Confiance mot-à-mot (endpoint STT custom)** : quand le serveur renvoie
+  `words[].confidence` (`response_format=json`), une substitution
+  orthographique *floue* d'un mot dicté **très confiant** est refusée sauf si
+  une dose, un verbe d'administration ou une région de liste médicament la
+  porte. C'est la garantie anti-faux-positifs : `laisse → Latisse`,
+  `diabète → Diabeta`, `d'autres → Dobutrex` (confiance ~1.00) ne sont plus
+  réécrits dans la prose, alors que les vrais noms déformés portés par une
+  dose (`l'aldol PRN → Haldol`, `aspirine 80`) restent corrigés. Seuil
+  mesuré sur corpus réel : **0.92** (`CONF_HARD_FLOOR` dans
+  `app/med_grounding.py`). Sans confiance disponible, le comportement
+  historique est conservé.
 - Après génération de la note, l'onglet **Validation** s'ouvre sur grand
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 

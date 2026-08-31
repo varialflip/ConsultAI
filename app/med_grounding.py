@@ -54,6 +54,19 @@ MIN_FUZZY_LEN = 5      # tokens shorter than this are exact-match only (no fuzzy
                        # their garble is unrecoverable by ortho anyway.
 HIGH_SIM = 0.80       # near-certain fuzzy matches; exempt from context signals
 
+#: Seuil de confiance mot-à-mot (STT ``words[].confidence``) : au-dessus, une
+#: substitution orthographique *floue* d'un token est refusée quand il n'est
+#: porté ni par une dose ni par un ancre ni par une région médicament
+#: confirmée. Mesuré sur 8 dictées réelles (Cohere MLX `words[]`) : 0.92
+#: bloque les faux positifs de prose flous (alcool 1.00, laisse 1.00, diabète
+#: 0.996, d'autres 1.00) tout en conservant les vrais garbles de la zone
+#: 0.55–0.92 (pivale, neurontain, tilénol, dexilan, l'épival 0.917) et ceux
+#: portés par une dose ou un ancre (l'aldol+PRN, aspirine+80, oxycontin+210).
+#: En dessous de 0.92 les vrais garbles hors contexte (l'épival à 0.917,
+#: ketapine 0.78, Dapaglyflosine 0.76) passeraient, mais rejeter dès 0.90 les
+#: ferait tomber. 0.92 est le point de bascule mesuré.
+CONF_HARD_FLOOR = 0.92
+
 # ---------------------------------------------------------------- normalization
 def norm_orth(s):
     s = unicodedata.normalize("NFD", s)
@@ -817,7 +830,7 @@ class Matcher:
                         best = (level, base, brand, s, is_leaf, is_otc); break
         return best
 
-    def normalize(self, text):
+    def normalize(self, text, conf=None):
         # accent-folded copy for signal detection so "médicament" matches "medicament"
         flat = unicodedata.normalize("NFD", text)
         flat = "".join(c for c in flat if unicodedata.category(c) != "Mn").lower()
@@ -1010,6 +1023,27 @@ class Matcher:
             # are plain values and must not be substituted.
             if norm_orth(replacement).replace(" ", "") in LAB_ION and not has_poso:
                 score = 0
+            # ---- confiance mot-à-mot (STT words[].confidence) ----
+            # Une substitution FLOUE (ortho pas exacte — jamais l'exact ni les
+            # garbles seedés) d'un token TRÈS CONFIDENT est refusée quand rien de
+            # fort ne la porte — dose, ancre verbale, région médicament confirmée.
+            # Le contexte NOMINAL (le simple fait d'être dans une phrase qui
+            # parle de « médicaments ») n'est PAS compté : c'est précisément lui
+            # qui fait passer les faux positifs de prose (alcool/laisse/diabète
+            # à conf ~1.00). Seules les preuves physiques (dose, ancre, région)
+            # épargnent un token à haute confiance du rejet. La confiance STT est
+            # le meilleur séparateur prose/méd : les FP de prose flous ont une
+            # conf ~1.00 et ne portent aucune dose ; les vrais garbles portés par
+            # une dose (l'aldol+PRN, aspirine+80, oxycontin+210 mg) sont épargnés
+            # par le contexte physique. Les collisions EXACTES (vitamine→vitamin
+            # e, ces→C.e.s, magnésium→magnesium) ont la même confiance que les
+            # vrais noms : elles relèvent de ``FRENCH_STOP``, pas de ce seuil.
+            if (score >= THRESHOLD and base_score < 0.99 and conf is not None
+                    and not (has_poso or has_anchor or region_credit)):
+                c = (conf.get(w_phon, 0.0) if isinstance(conf, dict) else
+                     (conf[i] if i < len(conf) else 0.0))
+                if isinstance(c, (int, float)) and c >= CONF_HARD_FLOOR:
+                    score = 0
             if replacement and score >= THRESHOLD and norm_orth(replacement).replace(" ", "") not in BAN_ORTH:
                 trail = "".join(re.findall(r"[^\w]+$", words[i]))
                 result.append(replacement + trail)
@@ -1055,14 +1089,19 @@ def matcher() -> Matcher:
     return _moteur
 
 
-def normalize(text: str) -> tuple:
+def normalize(text: str, conf=None) -> tuple:
     """Normalise les médicaments du texte → ``(texte_corrigé, changements)``.
+
+    ``conf`` optionnel : mapping ``token → confiance`` (clé ``norm_phon``) ou
+    liste parallèle aux mots du texte (``text.split()``) — active le refus de
+    substitution floue pour les tokens très confiants sans contexte (voir
+    ``CONF_HARD_FLOOR``).
 
     ``changements`` = liste de ``(span, remplacement, score, ortho_sim)``,
     filtrée des auto-correspondances (``span == remplacement``) pour la
     lisibilité — consultez ``matcher().normalize`` pour la liste brute.
     """
-    fixed, changes = matcher().normalize(text)
+    fixed, changes = matcher().normalize(text, conf=conf)
     changes = [
         (span, repl, score, ortho)
         for span, repl, score, ortho in changes
@@ -1245,18 +1284,22 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None) -> None:
     return True
 
 
-def extract_med_items(text: str) -> list:
+def extract_med_items(text: str, conf=None) -> list:
     """Liste pointée des médicaments détectés dans ``text`` (texte corrigé).
 
     Chaque item : ``{"name", "posology", "score", "level"}``. Déterministe et
     dédupliqué par nom canonique. Sert de source à la fois à la liste live de
     dictée, à l'onglet « Validation » et à l'import.
 
+    ``conf`` optionnel est relayé à ``normalize`` (gate mot-à-mot) : utile
+    quand ``text`` n'a pas déjà été corrigé par le gate — évite qu'un faux
+    positif de prose bloqué (diabète→Diabeta) resurgisse dans la liste.
+
     Reconnaît d'abord les NOMS COMPOSÉS en bigrammes (« Vitamine D », « acide
     folique »…) dont la concaténation normalisée existe en base, puis repasse
     token-à-token pour les simples.
     """
-    fixed, _ = matcher().normalize((text or "").strip())
+    fixed, _ = matcher().normalize((text or "").strip(), conf=conf)
     jetons = re.findall(r"[\wÀ-ÿ'-]+", fixed)
     items = []
     vus = set()
@@ -1283,3 +1326,55 @@ def extract_med_items(text: str) -> list:
             continue
         _append_item(items, vus, fixed, jeton, res)
     return items
+
+
+def conf_par_token(text: str, words: list) -> dict:
+    """Aligne ``words[]`` du STT (``{word, confidence}``) aux tokens du texte.
+
+    Renvoie un mapping ``norm_phon(token) → confiance``. Le STT découpe
+    souvent différemment du ``split()`` du texte (ponctuation, articles
+    soudés, variantes typographiques) : on avance dans les deux listes en
+    parallèle en se calant sur les amorces normalisées, et les tokens orphelins
+    portent la confiance du mot STT le plus proche. Le résultat sert au gate
+    ``CONF_HARD_FLOOR`` de ``normalize(text, conf=...)`` ; un mot jamais joint
+    (ou une liste vide) laisse la substitution inchangée — le gate n'est actif
+    que là où la confiance est exploitable.
+    """
+    toks = text.split()
+    result: dict = {}
+    wpos = 0
+    dernier = 1.0
+    ph = [norm_phon((w.get("word") or "").strip()) for w in words]
+    for tok in toks:
+        t = norm_phon(tok)
+        if not t:
+            continue
+        if wpos < len(words):
+            w = ph[wpos]
+            if w == t:
+                result[t] = words[wpos].get("confidence") or 1.0
+                dernier = result[t]
+                wpos += 1
+                continue
+            # Le token STT couvre le token texte (ou l'inverse) : on le joint.
+            if w.startswith(t) or t.startswith(w) or (len(t) >= 4 and (t in w or w in t)):
+                result[t] = words[wpos].get("confidence") or 1.0
+                dernier = result[t]
+                wpos += 1
+                continue
+            # Sinon le STT a peut-être inséré un mot (ponctuation) : on avance.
+            if wpos + 1 < len(words) and w and ph[wpos + 1] == t:
+                result[t] = words[wpos + 1].get("confidence") or 1.0
+                dernier = result[t]
+                wpos += 2
+                continue
+        result.setdefault(t, dernier)
+    # Compléter les tokens que le passage parallèle a pu manquer.
+    for tok in toks:
+        t = norm_phon(tok)
+        if t not in result:
+            for w, c in zip(words, ph):
+                if c == t:
+                    result[t] = w.get("confidence") or 1.0
+                    break
+    return result

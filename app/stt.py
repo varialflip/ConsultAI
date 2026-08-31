@@ -2601,9 +2601,16 @@ def _post_openai_compatible(
     payload: AudioPayload,
     timeout: int = 240,
     libelle: str = "du point de terminaison personnalisé",
+    confiance_mots: bool = False,
 ) -> dict:
     """
     POST multipart vers ``{base_url}/audio/transcriptions`` (compatible OpenAI).
+
+    Avec ``confiance_mots``, le champ ``response_format=json`` est demandé afin
+    que le serveur renvoie la confiance (``confidence`` + ``words[].confidence``)
+    — le gate mot-à-mot de la correction des médicaments en a besoin (rejet des
+    substitutions floues très confiantes hors contexte). L'absence de réponse
+    structurée est tolérée en silence.
 
     Lève ``_EndpointHttpError`` si le serveur répond en erreur HTTP, ou
     ``TranscriptionError`` (message affichable) en cas d'échec de transport.
@@ -2615,6 +2622,8 @@ def _post_openai_compatible(
     champs = {"model": model}
     if langue:
         champs["language"] = langue
+    if confiance_mots:
+        champs["response_format"] = "json"
     corps, ctype = _multipart_body_fields(champs, "file", "dictee.ogg", payload.content)
 
     headers = {"Content-Type": ctype}
@@ -2683,6 +2692,7 @@ def _post_custom_avec_repli(
     fb_url: str,
     langue: str,
     payload: AudioPayload,
+    confiance_mots: bool = False,
 ) -> Tuple[dict, str]:
     """
     POST une tranche à l'endpoint personnalisé, avec repli sur erreur 5xx.
@@ -2694,7 +2704,9 @@ def _post_custom_avec_repli(
     la tranche.
     """
     try:
-        data = _post_openai_compatible(base_url, api_key, model, langue, payload)
+        data = _post_openai_compatible(
+            base_url, api_key, model, langue, payload, confiance_mots=confiance_mots,
+        )
         return data, model
     except _EndpointHttpError as exc:
         if exc.code >= 500 and fb_model and fb_model != model:
@@ -2703,7 +2715,10 @@ def _post_custom_avec_repli(
                 model, fb_model, exc.code, base_url,
             )
             try:
-                data = _post_openai_compatible(fb_url, api_key, fb_model, langue, payload)
+                data = _post_openai_compatible(
+                    fb_url, api_key, fb_model, langue, payload,
+                    confiance_mots=confiance_mots,
+                )
                 return data, fb_model
             except _EndpointHttpError as exc2:
                 if exc2.code in (401, 403):
@@ -2769,6 +2784,7 @@ def _transcribe_custom_chunked(
         )
 
         morceaux: List[str] = []
+        mots_tranches: List[dict] = []
         modele_final = model
         dernier_refus = ""
         start = 0.0
@@ -2795,6 +2811,7 @@ def _transcribe_custom_chunked(
             try:
                 data, modele_utilise = _post_custom_avec_repli(
                     base_url, api_key, model, fb_model, fb_url, langue, seg,
+                    confiance_mots=True,
                 )
             except TranscriptionError as exc:
                 dernier_refus = str(exc)
@@ -2808,6 +2825,8 @@ def _transcribe_custom_chunked(
             if texte:
                 morceaux.append(texte)
                 modele_final = modele_utilise
+            if data.get("words"):
+                mots_tranches.extend(data["words"])
             logger.info(
                 "STT custom : tranche de %.0f s transcrite (%d caractères, "
                 "curseur %.0f s)",
@@ -2826,6 +2845,7 @@ def _transcribe_custom_chunked(
         return {
             "transcript": "\n".join(morceaux),
             "confidence": 0.0,
+            "words": mots_tranches,
             "duration_seconds": int(round(payload.duration_seconds)),
             "segments": len(morceaux),
             "provider": "custom",
@@ -2893,7 +2913,10 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
         round(payload.effective_seconds, 1) or "?", model, langue or "auto",
     )
 
-    data, model = _post_custom_avec_repli(base_url, api_key, model, fb_model, fb_url, langue, payload)
+    data, model = _post_custom_avec_repli(
+        base_url, api_key, model, fb_model, fb_url, langue, payload,
+        confiance_mots=True,
+    )
 
     transcript = str(data.get("text") or "").strip()
     if not transcript and not payload.allow_silence:
@@ -2907,7 +2930,8 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
 
     return {
         "transcript": transcript,
-        "confidence": 0.0,
+        "confidence": float(data.get("confidence") or 0.0),
+        "words": data.get("words") or [],
         "duration_seconds": int(round(payload.duration_seconds)),
         "segments": 1 if transcript else 0,
         "provider": "custom",

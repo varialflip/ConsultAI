@@ -113,6 +113,15 @@ candidats sûrs *et phonétiques* comme hints.*
   génériques (BASE/FULL_GENERIC). Base : 15 792 → 13 852 médications, les
   alias suivent (18 291 → 16 166). Sortie `match_meds.py` inchangée sur les
   4 transcripts de référence.
+- **Dedup des marques de fabricants génériques** (`prune_generic_mfg.py`) :
+  les marques préfixées (APO-, TEVA-, PMS-, SANDOZ-…) redondantes sont
+  ramenées à **une ligne par molécule** couverte par un générique («
+  furosemide », pas « TEVA-FUROSEMIDE »). Les produits uniques sans générique
+  de secours (combinaisons OXYCOCET, TECNAL) et les grables seedés restent
+  intacts ; les génériques ne sont jamais touchés. Base : 13 852 → 12 599
+  médications (16 166 → 14 801 alias). Sortie `match_meds.py` identique sur
+  les 4 transcripts de référence (seul le score ortho d'un candidat concurrent
+  varie, le texte normalisé est identique).
 
 ## 2026-08-31 — Grounding : fin des faux médicaments de prose et des équivoques de dose
 

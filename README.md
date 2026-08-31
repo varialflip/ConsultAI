@@ -956,7 +956,7 @@ des médicaments », défaut `false`). Une fois activé :
 La base BDP peut être régénérée depuis les extraits bruts (dossier
 `med_grounding/` du dépôt, scripts `build_db.py` / `seed_aliases.py` /
 `prune_db.py` / `ban_terms.py` / `fix_inactive_otc.py` / `prune_scope.py` /
-`prune_otc.py`) ;
+`prune_otc.py` / `prune_generic_mfg.py`) ;
 ce dossier ne fait pas partie du conteneur. La base est **assainie pour le
 périmètre gériatrique** : hors catalogue — vaccins (sauf Shingrix, Pneumovax
 23, Prevnar, Capvaxive, Vaxneuvance, Fluzone, Fluad, Arexvy, Abrysvo),
@@ -977,7 +977,11 @@ correspondant reste toujours catalogué. Les **marques OTC de comptoir**
 les substances cliniquement dictables (acétaminophène, docusate,
 diphénhydramine, calcium…) et une **ligne représentative par famille** (une
 seule variante TYLENOL, ADVIL, GRAVOL au lieu de leurs multiples forces/parfums)
-sont conservées pour l'ancrage.
+sont conservées pour l'ancrage. Les **marques de fabricants génériques**
+(APO-, TEVA-, PMS-, SANDOZ-…) sont dédupliquées à **une seule par molécule**
+couverte par un générique (« furosemide », pas « TEVA-FUROSEMIDE »), sans
+jamais toucher les génériques ni les produits uniques (combinaisons OXYCOCET,
+TECNAL).
 
 ---
 

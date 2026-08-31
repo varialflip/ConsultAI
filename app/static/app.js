@@ -601,7 +601,17 @@
       if (liste.length) {
         const lignes = [`## ${T('medgrounding.title')}`];
         for (const item of liste) {
-          lignes.push(`- **${item.name}**${item.posology ? ` — ${item.posology}` : ''}`);
+          if (item.source === 'phonetic') {
+            // Candidats phonétiques du moteur de grounding (« Lirica » →
+            // LYRICA) : des PISTES transmises au LLM pour confirmation, jamais
+            // des certitudes — rendues distinctes (italique, flèche, mention).
+            const cible = item.brand || item.base || item.name;
+            lignes.push(`- _${item.name}_ → **${cible}**`
+              + `${item.posology ? ` — ${item.posology}` : ''}`
+              + ` _(${T('medgrounding.confirm')})_`);
+          } else {
+            lignes.push(`- **${item.name}**${item.posology ? ` — ${item.posology}` : ''}`);
+          }
         }
         vueValidation.innerHTML = markdownToHtml(lignes.join('\n'));
         vueValidation.classList.remove('hidden');

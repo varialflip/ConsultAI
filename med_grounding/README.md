@@ -211,9 +211,9 @@ Wikimedica / formulation québécoise)
 | `per os`, `per`, `os` | `PO` |
 | `per os quotidien` (dicté `perotidien`) | `PO DIE` |
 | `par jour`, `quotidien(ne)`, `dy` | `DIE` |
-| `deux fois par jour` / `BD` | `BID` |
-| `trois fois par jour` | `TID` |
-| `quatre fois par jour` | `QID` |
+| `deux fois par jour` / `BD` / `2 fois par jour` | `BID` |
+| `trois fois par jour` / `3 fois par jour` | `TID` |
+| `quatre fois par jour` / `4 fois par jour` | `QID` |
 | `hs`, `au coucher` | `HS` |
 | `le matin` | `AM` |
 | `le soir` | `PM` |

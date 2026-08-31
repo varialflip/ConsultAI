@@ -1370,11 +1370,11 @@ def _merge_and_publish_meds(session: DictationSession) -> None:
     texte = " ".join(session.parts)
     tail = texte[-3000:].lstrip()              # ≈ derniers ~600 mots
     conf_tail = _conf_tail(session, tail)
-    nouveaux = med_grounding.extract_med_items(tail, conf=conf_tail)
+    nouveaux = med_grounding.extract_validation_items(tail, conf=conf_tail)
     accum = _grounding_meds.get(session.id, [])
-    par_cle = {med_grounding.norm_phon(i["name"]): i for i in accum}
+    par_cle = {med_grounding.norm_phon(i.get("base") or i["name"]): i for i in accum}
     for item in nouveaux:
-        cle = med_grounding.norm_phon(item["name"])
+        cle = med_grounding.norm_phon(item.get("base") or item["name"])
         if cle in par_cle:
             if not par_cle[cle].get("posology") and item.get("posology"):
                 par_cle[cle]["posology"] = item["posology"]
@@ -1418,7 +1418,7 @@ def _finalize_grounding(session_id: str, username: str) -> None:
             if not text:
                 return
             conf_all = _conf_tail(session, text) if session.parts_conf else None
-            items = med_grounding.extract_med_items(text, conf=conf_all)
+            items = med_grounding.extract_validation_items(text, conf=conf_all)
             _grounding_meds[session_id] = items
             with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
                 consultation = db.get(Consultation, session.consultation_id)

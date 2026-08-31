@@ -329,6 +329,14 @@ DOSE_FREQ_PHRASES = [
     (("trois", "fois", "par", "jour"), ["TID"]),
     (("quatre", "fois", "par", "jour"), ["QID"]),
     (("une", "fois", "par", "jour"), ["DIE"]),
+    # Le STT dit la fréquence en chiffre (« 3 fois par jour ») : même canon que
+    # l'orthographe en lettres — 1→DIE, 2→BID, 3→TID, 4→QID. Placés AVANT le
+    # motif générique (« fois par jour »→DIE) pour que le chiffre soit absorbé
+    # dans le run et non laissé seul devant un « 3 » nu.
+    (("1", "fois", "par", "jour"), ["DIE"]),
+    (("2", "fois", "par", "jour"), ["BID"]),
+    (("3", "fois", "par", "jour"), ["TID"]),
+    (("4", "fois", "par", "jour"), ["QID"]),
     (("fois", "par", "jour"), ["DIE"]),
     (("par", "jour"), ["DIE"]),
     (("par", "semaine"), ["Q1SEM"]),
@@ -354,6 +362,11 @@ DOSE_LATIN_START = {"die", "dye", "dieam", "quotidien", "quotidienne",
 DOSE_FRENCH_START = {"jour", "jours", "semaine", "matin", "soir", "coucher",
                      "par", "fois", "deux", "trois", "quatre", "une", "au",
                      "le", "de", "sous"}
+#: Fréquence dictée en CHIFFRE (« 3 fois par jour ») : amorce identique à la
+#: variante en lettres, exige le run complet (1–4 × « fois par jour »). Un
+#: chiffre nu (« …il prend 3 comprimés… ») ne s'absorbe jamais : la boucle de
+#: consommation ne remonte que les runs reconnus.
+DOSE_NUM_START = {"1", "2", "3", "4"}
 
 FRENCH_STOP = set("""
 un une des le la les du de d a à au aux et ou ni ne se ce sa son ses leur leurs
@@ -757,6 +770,13 @@ class Matcher:
         elif p0 in (DOSE_QUANT_START | DOSE_LATIN_START) and (prev_dose or region):
             pass
         elif p0 in DOSE_FRENCH_START and (prev_dose or region):
+            pass
+        elif p0 in DOSE_NUM_START:
+            # Un chiffre 1–4 devant « fois par jour » est à coup sûr une
+            # fréquence de prise, même hors d'une région de liste dense (un
+            # seul médicament dicté avec sa posologie) : la boucle ci-dessous
+            # n'absorbe que le run exact (« 3 fois par jour » → TID), un
+            # chiffre nu ou suivi d'autre chose reste intact.
             pass
         else:
             return None, i
@@ -1695,6 +1715,37 @@ def extract_med_items(text: str, conf=None) -> list:
             continue
         _append_item(items, vus, fixed, jeton, res,
                      ancre_poso=(i in region) or chiffre_voisin(i))
+    return items
+
+
+def extract_validation_items(text: str, conf=None, maxi_phon: int = 40) -> list:
+    """Items de la liste « Validation » : médicaments résolus + candidats phonétiques.
+
+    Rejoint les items déterministes de ``extract_med_items`` (noms normalisés,
+    ``source`` absent) aux candidats PHONÉTIQUES de ``phonetiques_texte``
+    (« Lirica » → LYRICA, « Norvasque » → NORVASC, étiquette ``source:
+    "phonetic"``) : la Validation montre ainsi au médecin les deux strates —
+    les corrections sûres et les pistes que le modèle de langage devra
+    confirmer. Déduplique par ``norm_phon(base)`` pour ne jamais afficher deux
+    fois le même médicament (déjà résolu → le candidat est écarté).
+
+    ``conf`` et ``maxi_phon`` sont relayés tels quels (gate mot-à-mot de
+    ``extract_med_items``, borne de ``phonetiques_texte``).
+    """
+    items = extract_med_items(text, conf=conf)
+    if not _RAPIDFUZZ_OK:
+        return items
+    try:
+        phon = matcher().phonetiques_texte(text or "", maxi=maxi_phon)
+    except Exception:
+        return items
+    vus = {norm_phon(i.get("base") or i.get("name")) for i in items}
+    for h in phon:
+        cle = norm_phon(h.get("base") or h.get("name"))
+        if cle in vus:
+            continue
+        vus.add(cle)
+        items.append(h)
     return items
 
 

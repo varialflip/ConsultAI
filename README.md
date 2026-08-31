@@ -883,6 +883,18 @@ des médicaments », défaut `false`). Une fois activé :
   (dist ≤ 3, sim ≥ 0,72, non feuille, non cosmétique). « dilote » → Dilaudid,
   « kitsapine » → quetiapine, « Antoloque » → Pantoloc — le modèle les
   accepte ou les écarte selon la posologie et le contexte clinique.
+- **Candidats phonétiques dans l'onglet « Validation »** : la liste pointée y
+  rejoint les noms normalisés aux pistes du G2P — « Lirica » → LYRICA,
+  « Norvasque » → NORVASC — rendues en italique avec la mention « à confirmer »
+  (puce `_Lirica_ → **LYRICA**`), dédupliquées par substance avec les items
+  résolus. Même source partagée entre la liste live de dictée, le « Terminer »,
+  la génération et la retranscription (`extract_validation_items`) ;
+  `med_grounding_json` porte l'étiquette `source: "phonetic"`.
+- **Fréquence dictée en chiffre** : « N fois par jour » (1–4) est normalisé
+  comme la variante en lettres — « 2 fois par jour » → BID, « 3 fois par
+  jour » → TID, « 4 fois par jour » → QID, « 1 fois par jour » → DIE. Le
+  chiffre est absorbé dans le run de posologie (jamais un « Tylenol 3 DIE ») ;
+  un chiffre nu ou ≥ 5 reste inchangé.
 - **S'étend à l'audio importé et à la retranscription** : la liste est
   recalculée sur le texte complet, renvoyée dans la réponse (`med_items`) et
   diffusée par SSE.

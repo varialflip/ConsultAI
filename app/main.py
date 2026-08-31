@@ -333,7 +333,9 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     """
     Liste pointée des médicaments d'une transcription (texte complet), persistée
     dans ``consultation.med_grounding_json`` et diffusée aux onglets suiveurs.
-    Retourne les items pour la réponse HTTP locale. Déterministe et local.
+    Comprend les noms normalisés et les candidats phonétiques à confirmer
+    (``source: "phonetic"``). Déterministe et local.
+    Retourne les items pour la réponse HTTP locale.
     """
     if consultation is None:
         return []
@@ -341,7 +343,7 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     if not text:
         return []
     try:
-        items = med_grounding.extract_med_items(text)
+        items = med_grounding.extract_validation_items(text)
     except Exception:
         logger.exception("Grounding méds impossible (consultation %s)", consultation.id)
         return []

@@ -265,6 +265,14 @@ DOSE_FREQ_PHRASES = [
     (("trois", "fois", "par", "jour"), ["TID"]),
     (("quatre", "fois", "par", "jour"), ["QID"]),
     (("une", "fois", "par", "jour"), ["DIE"]),
+    # Le STT dit la fréquence en chiffre (« 3 fois par jour ») : même canon que
+    # l'orthographe en lettres — 1→DIE, 2→BID, 3→TID, 4→QID. Placés AVANT le
+    # motif générique (« fois par jour »→DIE) pour que le chiffre soit absorbé
+    # dans le run et non laissé seul devant un « 3 » nu.
+    (("1", "fois", "par", "jour"), ["DIE"]),
+    (("2", "fois", "par", "jour"), ["BID"]),
+    (("3", "fois", "par", "jour"), ["TID"]),
+    (("4", "fois", "par", "jour"), ["QID"]),
     (("fois", "par", "jour"), ["DIE"]),
     (("par", "jour"), ["DIE"]),
     (("par", "semaine"), ["Q1SEM"]),
@@ -289,6 +297,10 @@ DOSE_LATIN_START = {"die", "dye", "dieam", "quotidien", "quotidienne",
 DOSE_FRENCH_START = {"jour", "jours", "semaine", "matin", "soir", "coucher",
                      "par", "fois", "deux", "trois", "quatre", "une", "au",
                      "le", "de", "sous"}
+#: Fréquence dictée en CHIFFRE (« 3 fois par jour ») : amorce identique à la
+#: variante en lettres, exige le run complet (1–4 × « fois par jour »). Un
+#: chiffre nu (« …il prend 3 comprimés… ») ne s'absorbe jamais.
+DOSE_NUM_START = {"1", "2", "3", "4"}
 
 FRENCH_STOP = set("""
 un une des le la les du de d a à au aux et ou ni ne se ce sa son ses leur leurs
@@ -640,6 +652,13 @@ class Matcher:
         elif p0 in (DOSE_QUANT_START | DOSE_LATIN_START) and (prev_dose or region):
             pass
         elif p0 in DOSE_FRENCH_START and (prev_dose or region):
+            pass
+        elif p0 in DOSE_NUM_START:
+            # Un chiffre 1–4 devant « fois par jour » est à coup sûr une
+            # fréquence de prise, même hors d'une région de liste dense (un
+            # seul médicament dicté avec sa posologie) : la boucle ci-dessous
+            # n'absorbe que le run exact (« 3 fois par jour » → TID), un
+            # chiffre nu ou suivi d'autre chose reste intact.
             pass
         else:
             return None, i

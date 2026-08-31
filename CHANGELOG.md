@@ -3,6 +3,27 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-31 — Validation : candidats phonétiques affichés + fréquences dictées en chiffre
+
+*Suite à la dictée de production importée en test (diverticulite avec abcès,
+consult. 16) : la liste Validation ne montrait que les médicaments résolus
+par le moteur, et « trois fois par jour » transcrit en chiffre (« 3 fois par
+jour ») devenait « 3 DIE » au lieu de « TID ».*
+
+- **Candidats phonétiques dans l'onglet Validation** : désormais la liste
+  (« Médicaments normalisés ») rejoint les noms normalisés aux pistes du G2P —
+  « Lirica » → LYRICA, « Norvasque » → NORVASC — affichées en italique avec la
+  mention « à confirmer » (puce `_Lirica_ → **LYRICA**`). Même source partagée
+  entre la liste live de dictée, le final « Terminer », la génération et la
+  retranscription (`extract_validation_items`, dédupliqué par substance) ; le
+  JSON d'audit `med_grounding_json` porte l'étiquette `source: "phonetic"`.
+- **Préfixe numérique de fréquence** : « N fois par jour » dicté en chiffre
+  (1–4) est normalisé comme la variante en lettres — « 2 fois par jour » → BID,
+  « 3 fois par jour » → TID, « 4 fois par jour » → QID, « 1 fois par jour » →
+  DIE. Le chiffre est absorbé dans le run, jamais isolé ; un chiffre nu ou ≥ 5
+  reste inchangé. Fini le « Tylenol 3 DIE » produit par un « 3 » laissé seul
+  devant le motif générique « fois par jour » → DIE.
+
 ## 2026-08-31 — Grounding : approche « donner des outils au LLM »
 
 *Le moteur orthographique réécrivait des noms bien transcrits en voisins

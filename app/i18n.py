@@ -363,6 +363,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "médicaments : {count}",
         "medications: {count}",
     ),
+    "medgrounding.confirm": (
+        "à confirmer",
+        "to confirm",
+    ),
     "pane.clear": ("Supprimer", "Delete"),
     "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),
     "pane.generate": ("Mettre en forme", "Format"),

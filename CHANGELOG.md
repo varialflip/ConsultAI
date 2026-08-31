@@ -35,6 +35,11 @@ verbe d'administration ou une liste de médicaments le porte.*
   le « 13 » n'est pas une dose mais l'amorce du nom. Le mot isolé « IBA » en
   prose reste inchangé. Posologie captée (« 13 IBA, 9 UI HS » → Tresiba, 9 UI
   HS).
+- **Garble seedé franchissant `FRENCH_STOP` à condition de dose** : « faire »
+  (consult 10, « Médication, faire 300 mg PO Q2J HS » = sulfate ferreux) est
+  corrigé en **« fer »** uniquement quand une dose est voisine — en prose
+  (« va faire des courses ») le verbe reste ignoré. Même garde que les noms
+  courts (`is_leaf`).
 
 ## 2026-08-30 — Correction des médicaments pendant la dictée (grounding, liste pointée)
 

@@ -173,6 +173,11 @@ GARBLES = {
     "senokot":            (None, "sennosides"),
     "sénokot":            (None, "sennosides"),
     "docusate":           (None, "docusate"),
+    # « faire » = « fer » (consult 10 : « Médication, faire 300 mg PO Q2J HS »
+    # = sulfate ferreux 300 mg). Le moteur ne laisse franchir ce garble à
+    # travers FRENCH_STOP QUE si une dose est voisine — en prose (« va faire
+    # des courses ») il reste ignoré.
+    "faire":              (None, "fer"),
     # « 13 IBA » = homonyme phonétique de « Tresiba » (« treize » ≈ « trési »)
     # : le nombre n'est PAS la dose — c'est l'amorce du nom. Le garble est le
     # BIGRAMME complet « 13 iba », consommé comme un seul nom (jamais « iba »

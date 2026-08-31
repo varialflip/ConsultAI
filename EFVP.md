@@ -458,6 +458,9 @@ résidence ni à la dénominalisation** :
   au moment du grounding** (seuil 0,92), jamais persistée en dehors du
   diagnostic immédiat de la frontière — rien de nouveau à résidence, aucune
   donnée de santé supplémentaire capturée ni sauvegardée.
+- **Garbles STT supplémentaires** (« faire » → fer, « 13 IBA » → Tresiba) :
+  alias de la base BDP de référence (§ 7.10, donnée publique traitée
+  localement) — aucun renseignement de santé, aucune identité ajoutée.
 
 ---
 

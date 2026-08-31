@@ -867,6 +867,9 @@ des médicaments », défaut `false`). Une fois activé :
   phonétique de « Tresiba ») est consommé en **nom unique** — le « 13 » est
   l'amorce phonétique du nom, pas une dose. Le mot isolé (« IBA » en prose)
   reste inchangé.
+- **Garble seedé à condition de dose** : un déformation comme « faire » (=
+  « fer », sulfate ferreux) n'est corrigée que si une **dose est voisine**
+  (« faire 300 mg » → « fer 300 ») ; en prose le verbe reste intact.
 - Après génération de la note, l'onglet **Validation** s'ouvre sur grand
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 

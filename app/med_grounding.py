@@ -1034,9 +1034,16 @@ class Matcher:
             has_poso = posology(i, base_score, in_region)
 
             w_phon = norm_phon(words[i])
-            if (not cand or w_phon in FRENCH_STOP or w_phon in ANCHOR_WORDS or
+            if (not cand or w_phon in ANCHOR_WORDS or
                     w_phon in PROTOCOL_WORDS or words[i].isdigit() or
                     len(w_phon) < 3):
+                result.append(words[i]); i += 1; continue
+            # Un garble STT seedé peut franchir ``FRENCH_STOP`` (« faire » ->
+            # « fer », consult 10) MAIS uniquement quand une dose est voisine :
+            # sans dose, le verbe « faire » de la prose reste ignoré — c'est le
+            # même garde que ``is_leaf`` (un nom à part entière exige une dose
+            # ou un ancre fort, jamais seule en prose).
+            if w_phon in FRENCH_STOP and not (w_phon in self.exact_garble and has_poso):
                 result.append(words[i]); i += 1; continue
 
             level, base, brand = cand[0], cand[1], cand[2]

@@ -3,6 +3,41 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-08-31 — Grounding : approche « donner des outils au LLM »
+
+*Le moteur orthographique réécrivait des noms bien transcrits en voisins
+orthographiques lointains de la base BDP (« Monocore » → « nitrate de
+miconazole »). Ajouter une exception par faux positif devenait intenable. Le
+moteur ne réécrit plus inline que ce qu'il sait déterministiquement ; les
+noms déformés restants sont résolus par le modèle de langage, qui reçoit les
+candidats sûrs comme hints.*
+
+- **Fini la correction inline inventive** : `normalize(..., inline_safe=True)`
+  ne réécrit plus que les correspondances **exactes** (nom réel, non-feuille)
+  et les garbles STT **seedés**. Toute résolution orthographique floue
+  (« Monocore » → nitrate de miconazole, « comprimé » → acétaminophène) est
+  laissée telle quelle dans le texte envoyé au modèle.
+- **Le modèle de langage devient le résolveur** : la consigne générale (§ 4
+  MÉDICAMENTS, fr/en) lui demande explicitement de reconnaître le
+  médicament réel derrière le nom déformé (posologie + contexte clinique) et
+  d'écrire le nom correct, en signalant en « Corrections et éléments à
+  valider » ce qu'il ne peut pas trancher. Application : « Monocore 1,25 mg »
+  → Monocor (bisoprolol) 1,25 mg ; « pantoloque 40 » → Pantoloc 40.
+- **Hints structurés au modèle** : la liste sûre du moteur (extraction
+  `inline_safe`) accompagne la dictée dans un bloc `MEDICAMENTS_SOUPCONNES`
+  — des pistes à recouper avec la dictée, jamais des vérités à recopier.
+- **Liste Validation alignée** : `extract_med_items` passe aussi en mode sûr
+  pour qu'aucune inventon du moteur n'apparaisse dans l'onglet Validation ni
+  dans les hints — fini les fantômes du STT canonisés (diclofenac
+  diethylamine, nitrate de miconazole).
+- **Migration consigne en base** (ancrage « Liste pointée, nom + dose »,
+  idempotente, consigne personnalisée intacte).
+- **Régression** : sortie `normalize()` **non** `inline_safe` (mode de
+  compat) inchangée sur les 4 transcripts de référence ; le mode sûr ne
+  conserve que les corrections déterministes. Le transcript corrompu de la
+  note 15 (« nitrate de miconazole » déjà écrit) se nettoie par
+  **retranscription** (le code de retranscription passe aussi en mode sûr).
+
 ## 2026-08-31 — Grounding : fin des faux médicaments de prose et des équivoques de dose
 
 *Suite à l'analyse de la note 13 (dictée réelle) : des mots de prose étaient

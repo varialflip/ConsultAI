@@ -866,6 +866,17 @@ des médicaments », défaut `false`). Une fois activé :
   pointillés) s'affiche sous le transcrit et **en haut de l'onglet
   « Validation »**, mise à jour en direct (`med_grounding`) puis définitive
   (`med_grounding_result`, persistée dans `med_grounding_json`).
+- **Inline sûr — le modèle de langage résout les noms déformés (approche
+  « donner des outils au LLM »)** : le moteur ne réécrit dans le texte envoyé
+  au modèle que les correspondances **exactes** (nom réel) et les **garbles
+  seedés**. Toute correspondance orthographique floue est laissée telle
+  quelle — le modèle la reconnaît avec la posologie et le contexte clinique
+  (consigne générale § 4) et écrit le nom correct, « à confirmer » en cas de
+  doute. La liste Validation, elle aussi en mode sûr, ne présente jamais une
+  invention du moteur.
+- **Hints au modèle** : la liste sûre des candidats détectés accompagne la
+  dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`) — des pistes pour le
+  modèle, jamais des vérités à recopier aveuglément.
 - **S'étend à l'audio importé et à la retranscription** : la liste est
   recalculée sur le texte complet, renvoyée dans la réponse (`med_items`) et
   diffusée par SSE.

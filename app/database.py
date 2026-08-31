@@ -1941,6 +1941,86 @@ _ANTECEDENTS_PLACEMENT_NEW_EN = (
 )
 
 
+#: Règle « le modèle résout les noms de médicaments déformés » (2026-08-31,
+#: approche A : « donner des outils au LLM »). Le grounding ne réécrit plus
+#: inline que ce qu'il sait déterministiquement ; les noms déformés restants
+#: (Monocore, antoloque, pantoloque…) sont laissés au modèle, qui reçoit les
+#: candidats sûrs comme hints. Ancrage : la ligne « Liste pointée, nom + dose »
+#: du § 4 MÉDICAMENTS livrée dans GENERAL_PROMPT ; la consigne est éditée par
+#: le médecin et vit en base — une ligne retravaillée est laissée intacte.
+_MEDS_RESOLUTION_OLD_FR = (
+    "- Liste pointée, nom + dose, sans titres ni colonnes ; une ligne par "
+    "médicament ou par groupe."
+)
+_MEDS_RESOLUTION_OLD_EN = (
+    "- Bulleted list, name + dose, no headings or columns; one line per "
+    "medication or group."
+)
+_MEDS_RESOLUTION_NEW_FR = (
+    _MEDS_RESOLUTION_OLD_FR
+    + "\n"
+    + "- **Les noms déformés par la reconnaissance vocale sont parfois laissés "
+    "TELS QUELS dans la transcription** (le moteur automatique de correction "
+    "n'intervient que lorsqu'il est sûr). Reconnais le médicament réel à "
+    "l'aide de la posologie et du contexte clinique, et écris son nom CORRECT "
+    "dans la note. Exemples : « pantoloque 40 » → Pantoloc 40 ; « Monocore "
+    "1,25 mg » → Monocor (bisoprolol) 1,25 mg ; « sélexa » → Celexa. Ne "
+    "recopie jamais un nom manifestement déformé tel quel. Les « médicaments "
+    "détectés » fournis dans le prompt sont des pistes à confirmer avec la "
+    "dictée, jamais des vérités à recopier aveuglément — un candidat "
+    "incohérent avec la pathologie ou la posologie est écarté (règle des "
+    "éléments douteux, § 1)."
+)
+_MEDS_RESOLUTION_NEW_EN = (
+    _MEDS_RESOLUTION_OLD_EN
+    + "\n"
+    + "- **Drug names deformed by speech recognition are sometimes left AS-IS "
+    "in the transcript** (the automatic correction engine only intervenes "
+    "when it is sure). Identify the real medication using the dosage and the "
+    "clinical context, and write its CORRECT name in the note. Examples: "
+    '"pantoloque 40" → Pantoloc 40; "Monocore 1.25 mg" → Monocor (bisoprolol) '
+    '1.25 mg; "sélexa" → Celexa. Never copy a clearly deformed name as-is. '
+    'The "detected medications" provided in the prompt are leads to be '
+    'confirmed against the dictation, never truths to copy blindly — a '
+    'candidate inconsistent with the pathology or dosage is set aside '
+    "(doubtful-items rule, section 1)."
+)
+
+
+def migrate_general_prompt_meds_resolution(db: Session) -> int:
+    """Porte dans la consigne générale EN BASE la règle de résolution des
+    noms de médicaments déformés par le modèle (2026-08-31, approche « donner
+    des outils au LLM »). Même mécanique que les migrations précédentes : la
+    ligne « Liste pointée, nom + dose » (ou « Bulleted list, name + dose »)
+    sert d'ancrage et doit y figurer EXACTEMENT ; une ligne retravaillée est
+    laissée intacte et signalée au journal."""
+    touches = 0
+    for cle, ancienne, nouvelle in (
+        ("general_prompt_fr", _MEDS_RESOLUTION_OLD_FR, _MEDS_RESOLUTION_NEW_FR),
+        ("general_prompt_en", _MEDS_RESOLUTION_OLD_EN, _MEDS_RESOLUTION_NEW_EN),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if nouvelle in row.value:
+            continue  # déjà en place — idempotent
+        if ancienne not in row.value:
+            logger.info(
+                "Consigne « %s » : ligne « Liste pointée, nom + dose » "
+                "modifiée, règle de résolution des noms de médicaments laissée "
+                "au panneau.",
+                cle,
+            )
+            continue
+        row.value = row.value.replace(ancienne, nouvelle)
+        row.updated_by = "migration"
+        touches += 1
+        logger.info("Consigne « %s » : règle meds-resolution appliquée.", cle)
+    if touches:
+        db.commit()
+    return touches
+
+
 def migrate_general_prompt_antecedents_hospitalisation_placement(db: Session) -> int:
     """
     Porte dans la consigne générale EN BASE la règle de placement des
@@ -2528,6 +2608,7 @@ def init_db() -> None:
         migrate_general_prompt_impression_plan_no_omission(db)
         migrate_general_prompt_plan_medicament_nu(db)
         migrate_general_prompt_antecedents_hospitalisation_placement(db)
+        migrate_general_prompt_meds_resolution(db)
         migrate_general_prompt_phonetic_origin(db)
         migrate_template_med_grouping(db)
         migrate_template_suivi_resume_stays(db)

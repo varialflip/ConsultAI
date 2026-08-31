@@ -1189,7 +1189,7 @@ def _normalize_part_text(text: str, words: Optional[list] = None) -> str:
         return text
     try:
         conf = med_grounding.conf_par_token(text, words or []) if words else None
-        corrige, _ = med_grounding.normalize(text, conf=conf)
+        corrige, _ = med_grounding.normalize(text, conf=conf, inline_safe=True)
         return corrige.strip() or text
     except Exception:
         return text

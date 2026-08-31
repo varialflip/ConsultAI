@@ -241,6 +241,19 @@ Trois gardes supplémentaires (note 13, 2026-08-31) :
   EN : « on and off ») frappe exactement la marque BDP « AND » (naproxène) —
   elle est dans `FRENCH_STOP`, comme « régulière », « aiguë », « couchée ».
 
+### Mode « inline_safe » : le modèle de langage est le résolveur (note 15, 2026-08-31)
+
+L'application utilise `normalize(..., inline_safe=True)` pour le texte envoyé
+au LLM : seules les correspondances **exactes** (nom réel, non-feuille) et les
+garbles STT **seedés** sont réécrits. Les résolutions orthographiques floues
+(« Monocore » → nitrate de miconazole, sim 0,75) ne s'appliquent **jamais**
+inline : le modèle de langage les tranche avec la posologie et le contexte
+clinique, secondé par les candidats sûrs fournis en hints (bloc
+`MEDICAMENTS_SOUPCONNES`). Ce mode remplace progressivement l'accumulation
+d'exceptions `FRENCH_STOP` : on cesse de bannir chaque marque confuse, on
+confie la résolution au modèle. `extract_med_items` applique aussi le mode
+sûr pour que la liste Validation ne porte jamais une invention du moteur.
+
 ---
 
 ## 7. Référence rapide des entrées de test

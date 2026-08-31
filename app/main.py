@@ -2704,6 +2704,7 @@ def _generate_and_publish(
     origin_tab: str,
     system_prompt: str,
     confiance_mots: Optional[List[dict]] = None,
+    med_hints: Optional[List[dict]] = None,
 ) -> dict:
     """
     Génère la note en continu et diffuse les morceaux en direct (SSE).
@@ -2778,6 +2779,7 @@ def _generate_and_publish(
         on_thought=_on_thought if show_thinking else None,
         system_override=system_prompt,
         confiance=confiance_mots,
+        med_hints=med_hints,
     )
 
     raw = ""
@@ -3050,7 +3052,9 @@ async def api_generate(
     changements: list = []
     if _med_grounding_on() and payload.transcript:
         try:
-            corrige, changements = med_grounding.normalize(payload.transcript)
+            corrige, changements = med_grounding.normalize(
+                payload.transcript, inline_safe=True,
+            )
             if corrige and corrige.strip():
                 payload.transcript = corrige
         except Exception:
@@ -3082,6 +3086,19 @@ async def api_generate(
         except Exception:
             logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
 
+    # Hints structurés pour le LLM : les candidats médicamenteux détectés par
+    # le moteur (extraction sûre, inline_safe) accompagnent la dictée MÊME
+    # quand le grounding a laissé un nom déformé tel quel (approche
+    # « donner des outils au LLM »). Le modèle recoupe ces pistes avec le
+    # contexte clinique au lieu d'un orthographe aveugle.
+    med_hints: list = []
+    if _med_grounding_on() and payload.transcript:
+        try:
+            med_hints = med_grounding.extract_med_items(payload.transcript)
+        except Exception:
+            med_hints = []
+            logger.exception("Hints méds indisponibles — génération sans candidats")
+
     try:
         result = await run_in_threadpool(
             _generate_and_publish,
@@ -3094,6 +3111,7 @@ async def api_generate(
             request.headers.get("x-consultai-tab", ""),
             system_prompt,
             confiance_mots,
+            med_hints,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -3621,7 +3639,9 @@ async def retranscribe_consultation(
                     conf_map = {}
             if _med_grounding_on():
                 try:
-                    texte = med_grounding.normalize(texte, conf=conf_map or None)[0] or texte
+                    texte = med_grounding.normalize(
+                        texte, conf=conf_map or None, inline_safe=True,
+                    )[0] or texte
                 except Exception:
                     logger.exception("Grounding retranscription impossible (consultation %s)", consultation_id)
             morceaux.append(texte)

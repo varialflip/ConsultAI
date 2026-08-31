@@ -873,7 +873,15 @@ class Matcher:
                         best = (level, base, brand, s, is_leaf, is_otc); break
         return best
 
-    def normalize(self, text, conf=None):
+    def normalize(self, text, conf=None, inline_safe=False):
+        # ``inline_safe`` — mode « texte envoyé au LLM » : on ne réécrit que les
+        # substitutions déterministes et auditées (exact, alias STT seedés) ;
+        # toute substitution orthographique FLOUE est laissée au modèle de
+        # langage, qui la résout avec le contexte clinique (approche A —
+        # « donner des outils au LLM »). Sans cela, le moteur remplace un mot
+        # bien transcrit par un voisin orthographique lointain de la base BDP
+        # (« Monocore » -> « nitrate de miconazole », note 15) : ajouter une
+        # exception par faux positif devient intenable.
         # accent-folded copy for signal detection so "médicament" matches "medicament"
         flat = unicodedata.normalize("NFD", text)
         flat = "".join(c for c in flat if unicodedata.category(c) != "Mn").lower()
@@ -1074,7 +1082,8 @@ class Matcher:
             # Proactive region: try to resolve a multi-token med phrase first.
             if proactive[i]:
                 ph = self._resolve_phrase(words, i, n, dose_unit, num_token,
-                                          anchor_hit, fragile)
+                                          anchor_hit, fragile,
+                                          garble_seed_only=inline_safe)
                 if ph is not None:
                     end, can, ph_score = ph
                     result.append(can)
@@ -1181,6 +1190,17 @@ class Matcher:
                      (conf[i] if i < len(conf) else 0.0))
                 if isinstance(c, (int, float)) and c >= CONF_HARD_FLOOR:
                     score = 0
+            # ---- inline_safe : refuser toute substitution non certaine (cf. plus haut) ----
+            # Le token seul n'est réécrit que (a) si c'est un garble STT SEEDÉ
+            # (auditable, déterministe : « sélexa » -> Celexa) ou (b) si la
+            # correspondance est EXACTE d'un vrai nom non-feuille
+            # (base_score ≈ 1,0, pas ``is_leaf``). Toute résolution orthographique
+            # floue — y compris un BRAND_LEAF exact toléré (« comprimé » ->
+            # acétaminophène, « Monocore » -> nitrate de miconazole) — est laissée
+            # au modèle de langage, qui la tranche avec le contexte clinique.
+            if inline_safe and w_phon not in self.exact_garble:
+                if is_leaf or base_score < 0.99:
+                    score = 0
             if replacement and score >= THRESHOLD and norm_orth(replacement).replace(" ", "") not in BAN_ORTH:
                 trail = "".join(re.findall(r"[^\w]+$", words[i]))
                 result.append(replacement + trail)
@@ -1231,7 +1251,7 @@ def matcher() -> Matcher:
     return _moteur
 
 
-def normalize(text: str, conf=None) -> tuple:
+def normalize(text: str, conf=None, inline_safe: bool = False) -> tuple:
     """Normalise les médicaments du texte → ``(texte_corrigé, changements)``.
 
     ``conf`` optionnel : mapping ``token → confiance`` (clé ``norm_phon``) ou
@@ -1239,11 +1259,17 @@ def normalize(text: str, conf=None) -> tuple:
     substitution floue pour les tokens très confiants sans contexte (voir
     ``CONF_HARD_FLOOR``).
 
+    ``inline_safe`` : mode « texte destiné au LLM » — seule les correspondances
+    EXACTES et les garbles STT SEEDÉS sont réécrits ; les résolutions
+    orthographiques floues sont laissées au modèle (il a le contexte clinique).
+    La DÉTECTION (``extract_med_items``) reste elle entière pour alimenter la
+    liste Validation : elle ne passe pas ce drapeau.
+
     ``changements`` = liste de ``(span, remplacement, score, ortho_sim)``,
     filtrée des auto-correspondances (``span == remplacement``) pour la
     lisibilité — consultez ``matcher().normalize`` pour la liste brute.
     """
-    fixed, changes = matcher().normalize(text, conf=conf)
+    fixed, changes = matcher().normalize(text, conf=conf, inline_safe=inline_safe)
     changes = [
         (span, repl, score, ortho)
         for span, repl, score, ortho in changes
@@ -1486,7 +1512,8 @@ def extract_med_items(text: str, conf=None) -> list:
     folique »…) dont la concaténation normalisée existe en base, puis repasse
     token-à-token pour les simples.
     """
-    fixed, _ = matcher().normalize((text or "").strip(), conf=conf)
+    fixed, _ = matcher().normalize((text or "").strip(), conf=conf,
+                                   inline_safe=True)
     jetons = re.findall(r"[\wÀ-ÿ'-]+", fixed)
     items = []
     vus = set()

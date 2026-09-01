@@ -3,6 +3,27 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — Confiance mot-à-mot : plus de perte à la retranscription
+
+*Le confidence map disparaissait après une retranscription : le client re-
+sauve automatiquement (debounce de 1,5 s) le transcript fraîchement écrit
+par le serveur, et `patch_consultation` effaçait `transcript_conf` dès que
+`raw_transcript` figurait dans le PATCH — même quand le texte était
+identique. Sans confiance, la génération perdait le bloc <CONFIANCE_MOTS>, le
+gate de « prose sûre » et les pistes phonétiques des mots douteux (d'où, sur
+l'enregistrement 22, l'absence de « Tresiba »).*
+
+- **`patch_consultation` — préserver la confiance quand le texte est
+  inchangé** : on ne détruit `transcript_conf` que si le nouveau
+  `raw_transcript` diffère réellement de celui stocké (comparaison après
+  normalisation des espaces — le client reformate les phrases en lignes via
+  `formatSentences`, le serveur stocke les blocs STT). Un PATCH qui re-
+  sauvegarde le texte de la dernière retranscription ne fait plus perdre la
+  confiance ; une édition réelle du contenu l'efface toujours.
+- **Transcript non éditable à l'écran** : le textarea reste `readonly` — le
+  cas « édition manuelle » ne se pose donc plus par l'interface ; le garde
+  serveur reste néanmoins pour les autres voies (import, API).
+
 ## 2026-09-01 — Prose sûre : pas de suggestion pour un mot déjà correct et bien entendu
 
 *Complément du fix « air — 2026 » : au-delà de l'alignement de la posologie,

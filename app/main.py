@@ -3438,12 +3438,18 @@ def patch_consultation(
             consultation.template_name = template_row.name if template_row else ""
         setattr(consultation, key, value)
 
-    # L'alignement confiance↔texte est rompu par une édition manuelle du
-    # transcript : on efface le mapping pour que la génération n'applique
-    # jamais la confiance d'un ancien STT à un texte que le médecin a luimême
-    # réécrit.
+    # L'alignement confiance↔texte n'est rompu que par une édition RÉELLE du
+    # transcript. Une retranscription vient d'écrire le texte ET la confiance
+    # dans la même transaction ; le client re-sauvegarde ensuite ce même texte
+    # via son debounce de sauvegarde — renvoyer le texte inchangé ne doit PAS
+    # perdre la confiance. On compare après normalisation des espaces : le
+    # client reformate les phrases en une ligne chacune (formatSentences), le
+    # serveur stocke les blocs STT — seuls les sauts/espaces diffèrent alors.
     if "raw_transcript" in updates:
-        consultation.transcript_conf = None
+        nouveau = " ".join((updates["raw_transcript"] or "").split())
+        courant = " ".join((consultation.raw_transcript or "").split())
+        if nouveau != courant:
+            consultation.transcript_conf = None
 
     consultation.updated_at = utcnow()
     db.commit()

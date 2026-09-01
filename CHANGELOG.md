@@ -3,18 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-01 — Dictaphone : clics audio de démarrage / arrêt
+## 2026-09-01 — Dictaphone : clics mécaniques « on/off » (hors de l'enregistrement)
 
-- Le dictaphone (seul, pas le bouton principal) émet désormais de brefs
-  transitoires audio pour confirmer l'état d'enregistrement sans regarder
-  l'écran :
-  - **démarrage** (et reprise après pause) : un clic **aigu** (1600 Hz) ;
-  - **arrêt** : un clic **grave** (800 Hz, une octave en dessous).
-- Générés par Web Audio (`playClick` : attaque quasi instantanée, décroissance
-  modérée, quelques harmoniques pour la netteté), ~90 ms, bien audibles.
-- Le clic de démarrage passe par les haut-parleurs **avant**
-  `mediaRecorder.start()`, celui d'arrêt **après** `mediaRecorder.stop()` : le
-  clic n'entre jamais dans l'enregistrement.
+- Le dictaphone (seul, pas le bouton principal) émet désormais de brefs clics
+  mécaniques pour confirmer l'état d'enregistrement sans regarder l'écran :
+  - **clic on** — démarrage et reprise après pause : plus brillant ;
+  - **clic off** — mise en pause **et** arrêt : plus sourd (même « interrupteur »).
+- Cliquetis organique (pas un bip sinusoïdal) : court transitoire de bruit
+  filtré par un passe-bande, ~35 ms, attaque quasi instantanée et chute rapide
+  — l'équivalent d'un bouton physique, sans être fatigant.
+- Le clic on passe par les haut-parleurs **avant** `mediaRecorder.start()` /
+  `resume()` ; le clic off avant `pause()` et après `stop()` : aucun clic
+  n'entre jamais dans l'enregistrement.
 - Aucun clic sur le bouton d'enregistrement principal (comportement inchangé).
 - Redéploiement : commit simple (source servie par le bind mount).
 

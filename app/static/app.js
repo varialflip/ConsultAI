@@ -1401,35 +1401,48 @@
     }, 1200);
   }
 
-  /** Clic audible (start haut / stop bas) via Web Audio. Un « clic » est un
-   *  court transitoire : attaque quasi instantanée suivie d'une décroissance
-   *  modérée (pas trop abrupte sinon inaudible) — plus distinctif et moins
-   *  envahissant qu'un bip soutenu. */
-  const CLICK_MS = 90;             // durée du clic
-  const START_CLICK_FREQ = 1600;   // clic aigu (une octave au-dessus du stop)
-  const STOP_CLICK_FREQ = 800;     // clic grave
-  // Harmoniques (multiplier de la fondamentale, amplitude) : le fondamental
-  // porte la hauteur, les partiels supérieurs donnent l'attaque « tick ».
-  const CLICK_HARMONICS = [[1, 0.8], [3.1, 0.35], [6.3, 0.25]];
+  /** Clic mécanique organique (on/off) via Web Audio. Plutôt qu'un bip
+   *  sinusoïdal (syntonique, vite fatigant), on synthétise un court transitoire
+   *  de bruit filtré — l'équivalent d'un interrupteur physique : attaque
+   *  quasi instantanée, corps bref, décroissance rapide. « haut » est plus
+   *  brillant (filtre plus aigu), « bas » plus sourd (filtre plus grave). */
+  const CLICK_DUR = 0.035;         // 35 ms : un « tick » sec, pas un son tenu
+  const CLICK_ON_FILTER = 2200;    // clic « on » : filtre passe-bande brillant
+  const CLICK_OFF_FILTER = 1300;   // clic « off » : filtre plus grave
   let _clickCtx = null;
-  function playClick(freq) {
+  let _clickNoiseBuffer = null;
+  function _clickNoise() {
+    const ctx = _clickCtx;
+    if (_clickNoiseBuffer && _clickNoiseBuffer.sampleRate === ctx.sampleRate) return _clickNoiseBuffer;
+    const len = Math.max(1, Math.ceil(ctx.sampleRate * CLICK_DUR));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) data[i] = Math.random() * 2 - 1;
+    _clickNoiseBuffer = buf;
+    return buf;
+  }
+  function playClick(bright) {
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!_clickCtx || _clickCtx.state === 'closed') _clickCtx = new AC();
       if (_clickCtx.state === 'suspended') _clickCtx.resume();
-      const dur = CLICK_MS / 1000;
       const now = _clickCtx.currentTime;
-      CLICK_HARMONICS.forEach(([mult, amp]) => {
-        const osc = _clickCtx.createOscillator();
-        const gain = _clickCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq * mult;
-        gain.gain.setValueAtTime(amp, now);
-        gain.gain.exponentialRampToValueAtTime(0.08, now + dur);
-        osc.connect(gain).connect(_clickCtx.destination);
-        osc.start(now);
-        osc.stop(now + dur);
-      });
+      const src = _clickCtx.createBufferSource();
+      src.buffer = _clickNoise();
+      // Filtre passe-bande : façonne la « couleur » du clic (aigu = on).
+      const bp = _clickCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = bright ? CLICK_ON_FILTER : CLICK_OFF_FILTER;
+      bp.Q.value = 1.1;
+      // Enveloppe : attaque instantanée, chute exponentielle rapide en 2 temps
+      // (un peu de corps puis éteint) pour le caractère « switch ».
+      const gain = _clickCtx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.7, now + 0.002);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + CLICK_DUR);
+      src.connect(bp).connect(gain).connect(_clickCtx.destination);
+      src.start(now);
+      src.stop(now + CLICK_DUR);
     } catch (_) { /* audio feedback is cosmetic — never block */ }
   }
 
@@ -1845,7 +1858,7 @@
     // téléversement, donc aussi le pire cas de perte sur une panne franche.
     // Le clic de démarrage (mode dictaphone uniquement) passe par les
     // haut-parleurs AVANT le start(): il ne peut pas entrer dans l'enregistrement.
-    if (dphone.active) playClick(START_CLICK_FREQ);
+    if (dphone.active) playClick(true);
     recorder.mediaRecorder.start(dictationConfig.chunkSeconds * 1000);
 
     state.recording = true;
@@ -1865,11 +1878,15 @@
   function togglePause() {
     if (!recorder.mediaRecorder || !state.recording) return;
     if (state.paused) {
-      if (dphone.active) playClick(START_CLICK_FREQ);
+      if (dphone.active) playClick(true);   // reprise = « clic on »
       recorder.mediaRecorder.resume();
       state.paused = false;
       resetVad();  // la pause a interrompu le signal : on repart de zéro
     } else {
+      // Mise en pause = « clic off », joué avant pause() tant que le micro
+      // enregistre encore côté navigateur — il sort par les haut-parleurs,
+      // jamais capturé (le pause() survient juste après).
+      if (dphone.active) playClick(false);
       recorder.mediaRecorder.pause();
       state.paused = true;
       resetVad();
@@ -1900,10 +1917,10 @@
         releaseWakeLock();
         updateRecordingUI();
         window.removeEventListener('beforeunload', warnBeforeUnload);
-        // Clic de fin (dictaphone uniquement) : joué après mediaRecorder.stop()
+        // Clic d'arrêt (dictaphone uniquement) : joué après mediaRecorder.stop()
         // (l'enregistrement est clos, le clic ne peut pas y entrer) mais tant
         // que les pistes du micro sont encore vivantes.
-        if (dphone.active) playClick(STOP_CLICK_FREQ);
+        if (dphone.active) playClick(false);
         stopTracks();
         resolve();
       };

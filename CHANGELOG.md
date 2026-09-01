@@ -3,6 +3,36 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — Transcrit brut au modèle : suggestions-only
+
+*Parité de comportement entre dictée, import et génération : le texte envoyé
+au modèle est la transcription brute, la correction des médicaments passe par
+les suggestions (liste pointée) plutôt que par une réécriture inline.* Suite de
+l'A/B « inline vs suggestions » sur trois consultations réelles : les deux
+bras se valent, mais les suggestions corrigent mieux les noms
+déformés et rendent la correction traçable (« Corrections et
+éléments à valider »).
+
+- **Suppression de la réécriture inline du transcript à la génération** —
+  `main.py` n'appelle plus `normalize(..., inline_safe=True)` sur le texte
+  adressé au modèle : il part brut. Le bloc <CONFIANCE_MOTS> gagne les noms
+  de médicaments déformés jusque-là exclus (suppression de `ignores`) : le
+  modèle voit le doute et le lève avec posologie et contexte.
+- **Dictée en direct en brut** — le texte affiché et le brouillon conservent
+  la transcription telle que reconnue (`_normalize_part_text` supprimée) ;
+  la correction apparaît dans la liste pointée sous le transcrit (SSE
+  `med_grounding`, hors champ du texte).
+- **Retranscription en brut** — même logique : le texte réécouté n'est plus
+  normalisé en place, la liste Validation est seule à porter la correction.
+- **Source unique des hints** — la génération réutilise
+  `extract_validation_items` (déterministes + phonétiques, dédupliqués) au
+  lieu de re-réunir `extract_med_items` + `phonetiques_texte` : même liste
+  que l'onglet Validation, la dictée, le « Terminer » et la retranscription.
+- **Note de l'A/B** : bras Y (brut + suggestions + confiance) non-inférieur
+  au bras X (inline), et supérieur sur le cas 13 (Zyprexa prescrit retenu là
+  où l'inline gravait l'ancien médicament arrêté) ; 13 noms correctement
+  résolus contre 7 en inline sur l'enregistrement 15.
+
 ## 2026-09-01 — Import audio : confiance mot-à-mot alignée sur la dictée
 
 *Parité de comportement entre les enregistrements importés et les dictées en

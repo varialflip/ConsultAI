@@ -1089,7 +1089,6 @@ def _store_part(
                 conf_part = med_grounding.conf_par_token(text, words)
             except Exception:
                 conf_part = None
-        text = _normalize_part_text(text, words)
     if text:
         session.parts.append(text)
         session.parts_conf.append(conf_part or {})
@@ -1177,31 +1176,6 @@ def _grounding_enabled() -> bool:
 def _norm_spaces(s: str) -> str:
     """Comparateur de contenu insensible à la casse/aux blancs multiples."""
     return " ".join((s or "").lower().split())
-
-
-def _normalize_part_text(text: str, words: Optional[list] = None) -> str:
-    """Applique la correction des médicaments à un bout de transcription.
-
-    Quand le grounding est actif, les noms déformés par la reconnaissance
-    vocale sont remplacés INLINE dès le stockage de la part : le texte affiché
-    (dictée) et le brouillon montrent les noms corrigés à leur place, sans
-    liste séparée. Déterministe, sans effet si la correction est désactivée.
-
-    ``words`` optionnel : ``words[]`` du STT (``{word, confidence}``) du même
-    segment — active le gate mot-à-mot : une substitution orthographique floue
-    très confiante, non portée par une dose/ancre, est refusée (anti-faux
-    positifs de prose, seuil ``CONF_HARD_FLOOR``).
-    """
-    if not text:
-        return text
-    if not _grounding_enabled():
-        return text
-    try:
-        conf = med_grounding.conf_par_token(text, words or []) if words else None
-        corrige, _ = med_grounding.normalize(text, conf=conf, inline_safe=True)
-        return corrige.strip() or text
-    except Exception:
-        return text
 
 
 def maybe_schedule_grounding(session_id: str, username: str) -> None:
@@ -1309,7 +1283,7 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
                 conf_map = med_grounding.conf_par_token(texte, words) if words else {}
             except Exception:
                 conf_map = {}
-            nouveaux.append(_normalize_part_text(texte, words))
+            nouveaux.append(texte)
             nouveaux_conf.append(conf_map)
         if texte:
             logger.info(

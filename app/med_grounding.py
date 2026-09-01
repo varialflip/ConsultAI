@@ -1579,11 +1579,13 @@ def normalize(text: str, conf=None, inline_safe: bool = False) -> tuple:
     substitution floue pour les tokens très confiants sans contexte (voir
     ``CONF_HARD_FLOOR``).
 
-    ``inline_safe`` : mode « texte destiné au LLM » — seule les correspondances
+    ``inline_safe`` : mode « résolution sûre » — seules les correspondances
     EXACTES et les garbles STT SEEDÉS sont réécrits ; les résolutions
-    orthographiques floues sont laissées au modèle (il a le contexte clinique).
-    La DÉTECTION (``extract_med_items``) reste elle entière pour alimenter la
-    liste Validation : elle ne passe pas ce drapeau.
+    orthographiques floues sont laissées telles quelles. Le texte envoyé au
+    modèle de langage est désormais BRUT (approche <CONFIANCE_MOTS> +
+    suggestions) ; ce mode sert à l'extraction (``extract_med_items`` →
+    hints des prompts et liste Validation), qui reste entière pour alimenter
+    la liste pointée.
 
     ``changements`` = liste de ``(span, remplacement, score, ortho_sim)``,
     filtrée des auto-correspondances (``span == remplacement``) pour la

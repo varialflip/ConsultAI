@@ -3060,31 +3060,11 @@ async def api_generate(
             "skipped": True,
         })
 
-    # Correction des médicaments : normaliser le transcript AVANT de l'envoyer
-    # au modèle, pour que la note n'emporte jamais les noms déformés par la
-    # reconnaissance vocale (sélexa → Celexa, trendate → Trandate…). Le
-    # grounding est déterministe et auditable (med_grounding_json) ; le
-    # brouillon conserve la version corrigée (raw_transcript est réécrit
-    # plus loin avec payload.transcript).
-    confiance_mots: Optional[List[dict]] = None
-    changements: list = []
-    if _med_grounding_on() and payload.transcript:
-        try:
-            corrige, changements = med_grounding.normalize(
-                payload.transcript, inline_safe=True,
-            )
-            if corrige and corrige.strip():
-                payload.transcript = corrige
-        except Exception:
-            changements = []
-            logger.exception("Grounding du transcript impossible — génération sur texte brut")
-
     # Confiance mot-à-mot : sans audio (fournisseur de note qui n'écoute pas),
     # on signale au LLM les mots que le STT a entendus avec incertitude, pour
     # concentrer son effort de correction là où il est utile et prévenir toute
-    # sur-correction du reste. Les noms déjà corrigés par le grounding (spans
-    # de ``changements``) sont exclus : leur correction est déterministe et
-    # auditable, le modèle n'a pas à la re-discuter.
+    # sur-correction du reste.
+    confiance_mots: Optional[List[dict]] = None
     if (
         audio_payload is None
         and payload.consultation_id
@@ -3093,30 +3073,22 @@ async def api_generate(
         try:
             consultation = _get_owned_consultation(db, payload.consultation_id, user)
             conf_map = json.loads(consultation.transcript_conf) if consultation.transcript_conf else {}
-            ignores = {
-                med_grounding.norm_phon(span)
-                for span, _, _, _ in changements if span
-            }
             if conf_map:
                 confiance_mots = med_grounding.doutes_pour_texte(
-                    payload.transcript, conf_map, ignores=ignores
+                    payload.transcript, conf_map
                 )
         except Exception:
             logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
 
-    # Hints structurés pour le LLM : (1) les candidats SAINS du moteur
-    # (extraction inline_safe) et (2) les candidats PHONÉTIQUES — le même
-    # moteur, en G2P français, rapproche un token non résolu (« dilote ») de son
-    # véritable voisin (Dilaudid). Les phonétiques sont des PISTES à confirmer,
+    # Hints structurés pour le LLM : items déterministes du moteur
+    # (extraction inline_safe, candidates SAINS) + candidats PHONÉTIQUES
+    # (G2P français, « dilote » → Dilaudid) — la même liste que l'onglet
+    # Validation, source unique. Les phonétiques sont des PISTES à confirmer,
     # jamais des réécritures : le modèle les recoupe avec le contexte clinique.
     med_hints: list = []
     if _med_grounding_on() and payload.transcript:
         try:
-            med_hints = med_grounding.extract_med_items(payload.transcript)
-            phon = med_grounding.matcher().phonetiques_texte(payload.transcript)
-            deja = {med_grounding.norm_phon(h.get("base") or h.get("name")) for h in med_hints}
-            med_hints += [h for h in phon
-                          if med_grounding.norm_phon(h.get("base") or h.get("name")) not in deja]
+            med_hints = med_grounding.extract_validation_items(payload.transcript)
         except Exception:
             med_hints = []
             logger.exception("Hints méds indisponibles — génération sans candidats")
@@ -3193,9 +3165,9 @@ async def api_generate(
     # silencieusement, exactement le bogue que ce choix corrige.
     consultation.edited_markdown = result["markdown"]
 
-    # Liste pointée des médicaments, recalculée sur le transcript CORRIGÉ (le
-    # grounding réécrit payload.transcript avant la génération) : la liste et
-    # la note concordent, et le JSON d'audit suit la régénération.
+    # Liste pointée des médicaments, recalculée sur le transcript (par défaut
+    # brut, la normalisation inline n'étant plus appliquée à la génération) :
+    # la liste et la note concordent, et le JSON d'audit suit la régénération.
     if _med_grounding_on():
         try:
             _apply_grounding(
@@ -3659,13 +3631,6 @@ async def retranscribe_consultation(
                     )
                 except Exception:
                     conf_map = {}
-            if _med_grounding_on():
-                try:
-                    texte = med_grounding.normalize(
-                        texte, conf=conf_map or None, inline_safe=True,
-                    )[0] or texte
-                except Exception:
-                    logger.exception("Grounding retranscription impossible (consultation %s)", consultation_id)
             morceaux.append(texte)
             conf_maps.append(conf_map)
         secondes += float(resultat.get("duration_seconds") or 0)

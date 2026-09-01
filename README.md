@@ -252,9 +252,10 @@ confiance mot-à-mot du STT (`words[].confidence`, si le service la fournit) est
 transmise au modèle : seuls les mots entendus avec incertitude sont signalés,
 et le modèle y concentre son effort de correction — en marquant « à confirmer »
 les doutes persistants dans « Corrections et éléments à valider » — tout en
-préservant fidèlement les mots sûrs (anti sur-correction). Les noms de
-médicaments déjà corrigés par le grounding déterministe sont exclus du
-signalement. La confiance est capturée aussi bien pour les **dictées en
+preservant fidèlement les mots sûrs (anti sur-correction). Le signalement
+couvre tous les mots douteux, y compris les noms de médicaments déformés : le
+modèle voit le doute et le lève avec la posologie et le contexte clinique. La
+confiance est capturée aussi bien pour les **dictées en
 direct** (tranche par tranche) que pour les **enregistrements importés**
 (segment fusionné au brouillon) dès que le service STT fournit
 `words[].confidence` — les deux voies nourrissent le même
@@ -865,6 +866,17 @@ des médicaments », défaut `false`). Une fois activé :
   secondes après la dictée (SSE `transcript_correct`). Conçu pour un **point
   de terminaison STT custom auto-hébergé** (aucune limite de taux) ; coûte des
   appels STT en arrière-plan.
+- **Transcrit brut au modèle — le modèle résout les noms déformés
+  (approche « suggestions-only »)** : le texte envoyé à la génération est la
+  transcription **brute** (la normalisation inline n'est plus appliquée au
+  LLM). Le moteur fournit au modèle, en plus du texte, les deux strates de
+  sa résolution : la liste pointée sûre et les candidats phonétiques (voir
+  plus bas) — des **pistes** qu'il recoupe avec la posologie et le contexte
+  clinique, « à confirmer » dans « Corrections et éléments à valider » en cas
+  de doute. Le transcrit reste donc le reflet exact de ce qui fut dicté
+  (noms déformés inclus), et la correction est surfaçable et traçable plutôt
+  que silencieuse. Même logique en dictée et en retranscription : le texte
+  affiché est brut, la liste pointée portant la correction.
 - **Liste pointée des médicaments.** Les noms déformés par la reconnaissance
   vocale sont normalisés contre la **base canadienne de produits
   pharmaceutiques (BDP)** livrée dans l'image (`app/meds.sqlite`, moteur
@@ -873,14 +885,6 @@ des médicaments », défaut `false`). Une fois activé :
   pointillés) s'affiche sous le transcrit et **en haut de l'onglet
   « Validation »**, mise à jour en direct (`med_grounding`) puis définitive
   (`med_grounding_result`, persistée dans `med_grounding_json`).
-- **Inline sûr — le modèle de langage résout les noms déformés (approche
-  « donner des outils au LLM »)** : le moteur ne réécrit dans le texte envoyé
-  au modèle que les correspondances **exactes** (nom réel) et les **garbles
-  seedés**. Toute correspondance orthographique floue est laissée telle
-  quelle — le modèle la reconnaît avec la posologie et le contexte clinique
-  (consigne générale § 4) et écrit le nom correct, « à confirmer » en cas de
-  doute. La liste Validation, elle aussi en mode sûr, ne présente jamais une
-  invention du moteur.
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`) — des pistes pour le
   modèle, jamais des vérités à recopier aveuglément. S'y ajoutent les
@@ -889,7 +893,10 @@ des médicaments », défaut `false`). Une fois activé :
   pour chaque jeton non résolu et « dosé » le meilleur voisin phonétique
   (dist ≤ 3, sim ≥ 0,72, non feuille, non cosmétique). « dilote » → Dilaudid,
   « kitsapine » → quetiapine, « Antoloque » → Pantoloc — le modèle les
-  accepte ou les écarte selon la posologie et le contexte clinique.
+  accepte ou les écarte selon la posologie et le contexte clinique. Les deux
+  strates proviennent d'une **source unique** (`extract_validation_items`),
+  la même que l'onglet Validation, la liste live de dictée, le « Terminer »
+  et la retranscription.
 - **Candidats phonétiques dans l'onglet « Validation »** : la liste pointée y
   rejoint les noms normalisés aux pistes du G2P — « Lirica » → LYRICA,
   « Norvasque » → NORVASC — rendues en italique avec la mention « à confirmer »
@@ -921,7 +928,8 @@ des médicaments », défaut `false`). Une fois activé :
   un chiffre nu ou ≥ 5 reste inchangé.
 - **S'étend à l'audio importé et à la retranscription** : la liste est
   recalculée sur le texte complet, renvoyée dans la réponse (`med_items`) et
-  diffusée par SSE.
+  diffusée par SSE — sans réécrire le transcrit (la génération reçoit le
+  texte brut).
 - **Confiance mot-à-mot (endpoint STT custom)** : quand le serveur renvoie
   `words[].confidence` (`response_format=json`), une substitution
   orthographique *floue* d'un mot dicté **très confiant** est refusée sauf si
@@ -955,15 +963,11 @@ des médicaments », défaut `false`). Une fois activé :
   posologie captée, chiffre de dose adjacent (« aspirine 80 », « calcium 500 »,
   « rivastigmine timbre 10 »), région de liste confirmée ou nom composé
   (« Vitamine D »). Un nom nu halluciné par le STT et canonisé (« diclofenac
-  diethylamine » entre deux actions) sort de la liste — le texte inline,
-  lui, n'est jamais touché.
+  diethylamine » entre deux actions) sort de la liste.
 - **Liste des médicaments : noms sans dose collée**. Un bigramme « nom +
   chiffre » (ex. « bisoprolol 2,5 », « calcium 500 ») n'est jamais traité
   comme un nom composé : le chiffre reste dans la **posologie** (« bisoprolol
   2,5 mg DIE »), jamais dans le nom de l'item.
-- **La liste normalisée est isolée par des lignes vides** dans le texte
-  transcrit (avant et après le bloc), pour repérer d'un coup d'œil où le
-  script a corrigé les noms.
 - Après génération de la note, l'onglet **Validation** s'ouvre sur grand
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 

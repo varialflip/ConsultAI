@@ -18,6 +18,7 @@ singleton, en lecture seule après construction).
 """
 from __future__ import annotations
 
+import functools
 import os
 import re
 import sqlite3
@@ -215,6 +216,16 @@ def _g2p_word(word):
 
 def phonetic_fr(phrase):
     return " ".join(_g2p_word(w) for w in norm_orth(phrase).split())
+
+
+#: Cache de la conversion G2P française : les mêmes tokens/alias sont
+#: phonétisés de façon répétée (construction des arbres BK du ``Matcher``,
+#: ``phonetiques_texte`` à chaque grounding). La fonction est pure et
+#: déterministe — le cache est sûr en multi-thread (vérifié : ``Matcher``
+#: partagé en lecture seule après construction). Borne de 4096 entrées suffit
+#: largement aux ~50 000 alias : on ne cache que la hot-path de la phonétique
+#: (appels répétés sur les mêmes tokens), pas la totalité du lexique.
+phonetic_fr = functools.lru_cache(maxsize=4096)(phonetic_fr)
 
 # ---------------------------------------------------------------- distance
 def lev(a, b):

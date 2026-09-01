@@ -1148,12 +1148,21 @@ def _store_part(
 
 #: Intervalle minimal entre deux passages de stabilisation d'une même dictée.
 _GROUNDING_GAP = 4.0
-_GROUNDING_MEDS_CAP = 3
+#: Plafond de candidats PHONÉTIQUES par passage de grounding incrémental.
+#: L'exhaustivité (``maxi_phon=40``) est réservée au grounding final
+#: (``_finalize_grounding``) : en cours de dictée, quelques pistes par
+#: frontière suffisent à alimenter la liste pointée sans exploser la queue.
+_GROUNDING_PHON_MAX = 8
 _grounding_lock = threading.Lock()
 _grounding_course: set = set()
 _grounding_cooldown: Dict[str, float] = {}
 _grounding_upto: Dict[str, int] = {}
 _grounding_meds: Dict[str, list] = {}
+#: Dernier ``tail`` de transcript sur lequel ``extract_validation_items`` a
+#: été exécuté pour cette session — la queue n'évoluant que par frontières
+#: stabilisées, on court-circuite la phonétique (coûteuse) tant qu'elle n'a
+#: pas bougé.
+_grounding_tail: Dict[str, str] = {}
 
 
 def _grounding_enabled() -> bool:
@@ -1276,10 +1285,14 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
     curseur = start
     while end - curseur > 0.05:
         restant = end - curseur
-        longueur = restant if restant <= high else find_cut_point(
-            session.audio_path, curseur, target, low, high)
+        if restant <= high:
+            longueur = restant
+            real = restant
+        else:
+            longueur, real = find_cut_point(
+                session.audio_path, curseur, target, low, high)
         try:
-            payload = extract_segment(session.audio_path, curseur, longueur)
+            payload = extract_segment(session.audio_path, curseur, longueur, real)
         except TranscriptionError:
             break
         if payload.duration_seconds < _MIN_SEGMENT_SECONDS:
@@ -1365,12 +1378,24 @@ def _merge_and_publish_meds(session: DictationSession) -> None:
     l'accumulateur de la session (clé = nom normalisé, première posologie
     non vide conservée) : pas de re-normalisation complète à chaque frontière,
     ce qui garde la passe compatible même avec une dictée de 30 min.
+
+    La résolution phonétique (BK-tree, facturée en CPU) n'est relancée que si
+    la queue a effectivement changé depuis la dernière fusion — une frontière
+    réécrite identique ne doit pas repayer cette passe, ni n'envoie un SSE
+    inutile.
     """
     owner = _session_owner(session)
     texte = " ".join(session.parts)
     tail = texte[-3000:].lstrip()              # ≈ derniers ~600 mots
+    if _grounding_tail.get(session.id) == tail:
+        return                                 # queue inchangée : rien à recalculer
+    _grounding_tail[session.id] = tail
     conf_tail = _conf_tail(session, tail)
-    nouveaux = med_grounding.extract_validation_items(tail, conf=conf_tail)
+    # En cours de dictée, un plafond phonétique bas suffit à alimenter la liste
+    # pointée : l'exhaustivité (maxi_phon=40) est réservée au grounding final
+    # (``_finalize_grounding``). Évite d'exploser la queue sur chaque frontière.
+    nouveaux = med_grounding.extract_validation_items(tail, conf=conf_tail,
+                                                      maxi_phon=_GROUNDING_PHON_MAX)
     accum = _grounding_meds.get(session.id, [])
     par_cle = {med_grounding.norm_phon(i.get("base") or i["name"]): i for i in accum}
     for item in nouveaux:
@@ -1437,6 +1462,7 @@ def _finalize_grounding(session_id: str, username: str) -> None:
             _grounding_course.discard(session_id)
             _grounding_upto.pop(session_id, None)
             _grounding_meds.pop(session_id, None)
+            _grounding_tail.pop(session_id, None)
 
 
 def _should_transcribe(session: DictationSession) -> bool:
@@ -1500,16 +1526,21 @@ def _transcribe_one(session: DictationSession, hints: str, final: bool,
     # En cours de dictée, on cherche un silence pour ne pas trancher un mot.
     # À la fin, il ne reste par construction qu'un reliquat plus court que la
     # fenêtre : on le prend entier, sans coupe donc sans risque.
+    real_duration = None
     if final:
         length = high
+        real_duration = length
     elif flush:
-        length = find_cut_point(session.audio_path, session.offset_seconds,
-                                _FLUSH_MIN, _FLUSH_MIN, high)
+        length, real_duration = find_cut_point(
+            session.audio_path, session.offset_seconds,
+            _FLUSH_MIN, _FLUSH_MIN, high)
     else:
-        length = find_cut_point(session.audio_path, session.offset_seconds, target, low, high)
+        length, real_duration = find_cut_point(
+            session.audio_path, session.offset_seconds, target, low, high)
 
     try:
-        payload = extract_segment(session.audio_path, session.offset_seconds, length)
+        payload = extract_segment(
+            session.audio_path, session.offset_seconds, length, real_duration)
     except TranscriptionError as exc:
         # Fin de fichier atteinte : ffmpeg ne produit plus rien.
         logger.debug("Dictée %s : plus de tranche extractible (%s)", session.id, exc)
@@ -1677,12 +1708,14 @@ def _transcribe_region(session: DictationSession, start: float, end: float, hint
     while end - curseur > 0.05:
         restant = end - curseur
         # Dernier morceau : entier, sans coupe donc sans risque.
-        longueur = (
-            restant if restant <= high
-            else find_cut_point(session.audio_path, curseur, target, low, high)
-        )
+        if restant <= high:
+            longueur = restant
+            real = restant
+        else:
+            longueur, real = find_cut_point(
+                session.audio_path, curseur, target, low, high)
         try:
-            payload = extract_segment(session.audio_path, curseur, longueur)
+            payload = extract_segment(session.audio_path, curseur, longueur, real)
         except TranscriptionError:
             break
         if payload.duration_seconds < _MIN_SEGMENT_SECONDS:

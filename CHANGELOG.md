@@ -3,6 +3,28 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — Dictée : passe ffmpeg fusionnée, cache G2P et grounding allégé
+
+*Optimisation du coût CPU et de la latence par tranche de dictée, sans
+changement de comportement observable (mêmes transcriptions, même facturation
+« à la durée »).*
+
+- **Fusion des passes ffmpeg** — `extract_segment` coupe (`-ss`/`-t`),
+  plafonne les silences (`silenceremove`) et encode (OGG/Opus) en **une seule
+  invocation**, au lieu de deux (`compress_silence` après coup). La durée
+  réelle est désormais lue sur l'horloge `time=` de la même passe de
+  `find_cut_point` (nouveau `_decode_time_from_log`) : on supprime aussi la
+  mesure `probe_duration` redondante. Le curseur de lecture est piloté par la
+  durée **non plafonnée** (`min(longueur, durée réelle)`), jamais par la durée
+  raccourcie — aucune dérive, donc aucune re-transcription.
+- **Cache G2P** — la conversion phonétique française (`phonetic_fr`) est
+  mémoïsée (`lru_cache`, 4096) : les mêmes tokens sont re-phonétisés à chaque
+  grounding/frontière, plus besoin de les recalculer.
+- **Grounding incrémental allégé** — `_merge_and_publish_meds` court-circuite
+  la phonétique coûteuse tant que la queue de transcript n'a pas bougé, et
+  plafonne à 8 les candidats phonétiques par frontière en cours de dictée
+  (l'exhaustivité reste réservée au grounding final « Terminer »).
+
 ## 2026-08-31 — Grounding : le générique écrase la marque-leaf homonyme (Trasodone → trazodone)
 
 *La dictée « Trasodone » affichait la marque parasite **NU-TRAZODONE** au lieu du

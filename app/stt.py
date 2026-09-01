@@ -326,14 +326,7 @@ def _probe_duration_decodage(path: str) -> float:
         return 0.0
     if result.returncode != 0:
         return 0.0
-    horloges = re.findall(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr or "")
-    if not horloges:
-        return 0.0
-    heures, minutes, secondes = horloges[-1]
-    try:
-        return int(heures) * 3600 + int(minutes) * 60 + float(secondes)
-    except ValueError:
-        return 0.0
+    return _decode_time_from_log(result.stderr) or 0.0
 
 
 def prepare_audio(raw: bytes, content_type: str = "") -> AudioPayload:
@@ -1341,18 +1334,25 @@ def detect_speech_ranges(
     return regions
 
 
-def find_cut_point(path: str, start: float, target: float, low: float, high: float) -> float:
+def find_cut_point(path: str, start: float, target: float, low: float, high: float) -> Tuple[float, float]:
     """
     Choisit où couper la tranche qui commence à ``start``.
 
-    Retourne un décalage **relatif à start**, compris entre ``low`` et
-    ``high``. On privilégie le milieu du silence le plus proche de ``target`` ;
-    faute de silence exploitable on coupe à ``target``, en acceptant qu'un mot
-    soit tronché — c'est le comportement de repli, pas le cas courant : une
-    dictée comporte une pause toutes les quelques secondes.
+    Retourne ``(cut, real_duration)`` :
+      * ``cut`` — décalage **relatif à start**, compris entre ``low`` et
+        ``high``. On privilégie le milieu du silence le plus proche de
+        ``target`` ; faute de silence exploitable on coupe à ``target``, en
+        acceptant qu'un mot soit tronqué — c'est le comportement de repli, pas
+        le cas courant : une dictée comporte une pause toutes les quelques
+        secondes.
+      * ``real_duration`` — durée réellement disponible depuis ``start``
+        (bornée par ``high`` et par la fin du fichier), tirée de la MÊME passe
+        de décodage. C'est elle qui pilote le curseur de lecture dans
+        ``extract_segment`` : on évite ainsi la mesure (``probe_duration``)
+        qu'exigerait sinon une passe ffmpeg supplémentaire.
     """
     if not _ffmpeg_available():
-        return target
+        return target, high
     try:
         log = _run_ffmpeg(
             [
@@ -1364,7 +1364,11 @@ def find_cut_point(path: str, start: float, target: float, low: float, high: flo
             timeout=300,
         )
     except (TranscriptionError, subprocess.SubprocessError):
-        return target
+        return target, high
+
+    # Durée réellement décodée dans la fenêtre (bornée par EOF sur un WebM
+    # tronqué) : lue sur l'horloge ``time=`` de cette passe ``-f null -``.
+    real_duration = _decode_time_from_log(log) or high
 
     # silencedetect émet « silence_start: x » puis « silence_end: y » ; sur un
     # silence encore ouvert à la fin de la fenêtre, le « end » manque.
@@ -1384,7 +1388,23 @@ def find_cut_point(path: str, start: float, target: float, low: float, high: flo
         distance = abs(middle - target)
         if best_distance is None or distance < best_distance:
             best, best_distance = middle, distance
-    return best
+    return best, real_duration
+
+
+def _decode_time_from_log(log: str) -> Optional[float]:
+    """Durée lue sur la dernière horloge ``time=`` d'une sortie ffmpeg ``-f null -``.
+
+    Renvoie ``None`` si aucune horloge exploitable n'est présente (décodeur
+    interrompu avant la fin, sortie tondue).
+    """
+    horloges = re.findall(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", log or "")
+    if not horloges:
+        return None
+    heures, minutes, secondes = horloges[-1]
+    try:
+        return int(heures) * 3600 + int(minutes) * 60 + float(secondes)
+    except ValueError:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1752,16 +1772,78 @@ def _apply_silence_trim(payload: AudioPayload, source_path: str) -> AudioPayload
     return payload
 
 
-def extract_segment(path: str, start: float, length: float) -> AudioPayload:
+def extract_segment(path: str, start: float, length: float,
+                    real_duration: Optional[float] = None) -> AudioPayload:
     """
     Extrait ``length`` secondes à partir de ``start`` et les normalise en
-    OGG/Opus. La durée retournée est celle mesurée sur le fichier produit,
-    et non celle demandée : c'est elle qui fait avancer le curseur de lecture,
-    et un écart cumulé de quelques dixièmes finirait par sauter un mot.
+    OGG/Opus.
+
+    La coupe et le plafonnement des silences (``stt_trim_silence``) sont faits
+    en UNE seule invocation ffmpeg — c'est la fusion qui supprime la seconde
+    passe de ré-encodage (``compress_silence``) qui doublait le coût CPU de
+    chaque tranche de dictée.
+
+    ``real_duration`` : la durée réellement disponible (non plafonnée) depuis
+    ``start``, telle que mesurée par ``find_cut_point``. Elle pilote le curseur
+    de lecture — jamais la durée raccourcie. Si omise (appelant n'ayant pas
+    passé par ``find_cut_point``), on en mesure une approximation = ``length``,
+    ce qui vaut quand le segment n'atteint pas la fin du fichier.
+
+    ``duration_seconds`` (curseur) = ``min(length, real_duration)``, la durée
+    RÉELLE du morceau avant plafonnement ; ``sent_seconds`` = la durée raccourcie
+    du fichier produit (celle qui part chez le fournisseur et qui est facturée).
+
+    Un segment entièrement muet (plafonné à vide) retombe sur une extraction
+    sans plafonnement : il faut quand même de L'AUDIO à envoyer — le curseur
+    doit avancer — et ``transcribe_payload`` décide alors de sauter l'appel.
     """
     if not _ffmpeg_available():
         raise TranscriptionError("ffmpeg est absent du conteneur.")
 
+    # Durée du morceau AVANT plafonnement = ce qui avance le curseur. Il ne
+    # faut JAMAIS dériver le curseur sur la durée raccourcie, sinon la tranche
+    # suivante repartirait trop tôt et une partie de la dictée serait
+    # transcrite deux fois.
+    if real_duration is not None:
+        cursor_duration = min(length, real_duration)
+    else:
+        cursor_duration = length
+
+    # Une seule passe ffmpeg : coupe (-ss/-t) + plafonnement (silenceremove) +
+    # encodage OGG/Opus, via le même chemin que trim_segment (repli identique
+    # quand la bascule est éteinte). ``trim_segment`` renvoie ``None`` quand la
+    # sortie est vide — cas d'un segment plafonné à rien (pas de parole).
+    resultat = trim_segment(path, fmt="ogg", seek_seconds=start, end_seconds=length)
+    if resultat is not None and resultat[0]:
+        content, _mime, trimmed_duration = resultat
+        if trimmed_duration <= 0:
+            resultat = None
+        else:
+            payload = AudioPayload(
+                content, "OGG_OPUS", 48000, cursor_duration, True, allow_silence=True,
+            )
+            # ``sent_seconds`` n'est renseigné QUE si le plafonnement a
+            # réellement raccourci le segment : quand la sortie vaut la durée
+            # brute (pas de silence à retirer, ou bascule éteinte), on laisse
+            # ``None`` — identique à « envoyer tel quel », et ``effective_seconds``
+            # retombe alors sur la durée réelle.
+            if trimmed_duration < cursor_duration - 0.05:
+                payload.sent_seconds = trimmed_duration
+            return payload
+
+    # Repli (tranche muette, ou ffmpeg a refusé le plafonnement) : on extrait
+    # sans plafonner — une seule passe cut+encode — pour que le curseur avance
+    # et que ``transcribe_payload`` puisse sauter l'appel si rien à reconnaître.
+    return _extract_segment_untrimmed(path, start, cursor_duration)
+
+
+def _extract_segment_untrimmed(path: str, start: float, length: float) -> AudioPayload:
+    """Coupe ``[start, start+length]`` et encode en OGG/Opus, SANS plafonner.
+
+    Chemin de repli de ``extract_segment`` pour les segments plafonnés à vide
+    ou quand le plafonnement échoue : il faut de l'audio à envoyer pour que le
+    curseur avance, le plafonnement étant une pure optimisation de facturation.
+    """
     workdir = tempfile.mkdtemp(prefix="consultai-segment-")
     dst = os.path.join(workdir, "segment.ogg")
     try:
@@ -1778,12 +1860,10 @@ def extract_segment(path: str, start: float, length: float) -> AudioPayload:
         duration = probe_duration(dst)
         if not content or duration <= 0:
             raise TranscriptionError("Tranche audio vide.")
-        # Le silence est attendu au milieu d'une consultation : une tranche
-        # muette ne doit pas interrompre la dictée.
         payload = AudioPayload(content, "OGG_OPUS", 48000, duration, True, allow_silence=True)
-        # La durée mesurée ci-dessus est celle qui fait avancer le curseur ;
-        # le raccourcissement ne touche que la copie envoyée.
-        return _apply_silence_trim(payload, dst)
+        # Sans plafonnement, la durée envoyée = la durée réelle.
+        payload.sent_seconds = None
+        return payload
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
@@ -2793,12 +2873,13 @@ def _transcribe_custom_chunked(
         while start < duree - 0.05:
             restant = duree - start
             # Dernier morceau : on le prend entier, sans coupe donc sans risque.
-            coupe = (
-                restant if restant <= high
-                else find_cut_point(src, start, chunk_seconds, low, high)
-            )
+            if restant <= high:
+                coupe = restant
+                real = restant
+            else:
+                coupe, real = find_cut_point(src, start, chunk_seconds, low, high)
             try:
-                seg = extract_segment(src, start, coupe)
+                seg = extract_segment(src, start, coupe, real)
             except TranscriptionError as exc:
                 # Fin de fichier atteinte : rien de plus à découper.
                 logger.debug("STT custom : plus de tranche extractible (%s)", exc)

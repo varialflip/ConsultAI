@@ -253,10 +253,9 @@ def build_user_prompt(
         ]
         if items:
             parts.append(
-                f"{libelles['confiance']}\n"
-                "<<<CONFIANCE_MOTS\n"
-                " | ".join(items) + "\n"
-                "CONFIANCE_MOTS>>>"
+                f"{libelles['confiance']}\n<<<CONFIANCE_MOTS\n"
+                + " | ".join(items)
+                + "\nCONFIANCE_MOTS>>>"
             )
 
     if med_hints:

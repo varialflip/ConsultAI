@@ -3064,6 +3064,7 @@ async def api_generate(
     # on signale au LLM les mots que le STT a entendus avec incertitude, pour
     # concentrer son effort de correction là où il est utile et prévenir toute
     # sur-correction du reste.
+    conf_map: dict = {}
     confiance_mots: Optional[List[dict]] = None
     if (
         audio_payload is None
@@ -3085,10 +3086,14 @@ async def api_generate(
     # (G2P français, « dilote » → Dilaudid) — la même liste que l'onglet
     # Validation, source unique. Les phonétiques sont des PISTES à confirmer,
     # jamais des réécritures : le modèle les recoupe avec le contexte clinique.
+    # ``conf_map`` est relayé aux hints : un nom sans dose mais entendu avec
+    # incertitude se voit proposer sa piste phonétique (cf. phonetiques_texte).
     med_hints: list = []
     if _med_grounding_on() and payload.transcript:
         try:
-            med_hints = med_grounding.extract_validation_items(payload.transcript)
+            med_hints = med_grounding.extract_validation_items(
+                payload.transcript, conf=conf_map or None,
+            )
         except Exception:
             med_hints = []
             logger.exception("Hints méds indisponibles — génération sans candidats")

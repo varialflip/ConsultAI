@@ -3,6 +3,32 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — Prompt : bloc CONFÍANCE propre + hints phonétiques des noms douteux
+
+*Suite de l'A/B sur les consultations réelles du jour : le pipeline test
+(transcription sans audio) restituait mal les noms déformés (« ricepte » →
+Risperidone au lieu d'Aricept) parce que (1) le bloc <CONFIANCE_MOTS> était
+mal formé et (2) les candidats phonétiques n'étaient proposés qu'avec une dose
+à portée — une énumération de médicaments sans dose restait muette.*
+
+- **Formatage du bloc <CONFIANCE_MOTS> corrigé** — une concaténation implicite
+  de chaînes plaçait l'en-tête et la balise d'ouverture après le premier mot
+  douteux (le séparateur « | » absorbait le libellé). Le bloc suit désormais
+  la forme `libellé\n<<<CONFIANCE_MOTS\n mot → % | mot → % | …\nCe bloc
+  final>>>` : un seul en-tête, items séparés par « | ».
+- **Hints phonétiques sur les noms DOUTEUX même sans dose** —
+  `extract_validation_items` propage les clés de confiance < 0,95 à
+  `phonetiques_texte` ; un jeton entendu avec incertitude se voit proposer sa
+  piste phonétique sans exiger de dose à portée (seuil 0,80), le doute STT
+  étant la preuve d'un nom possiblement déformé. Sur l'enregistrement 23 :
+  « ricepte → Aricept », « ziprexa → Zyprexa », « lanzapine → olanzapine »,
+  « maxérant → Metoclopramide (Maxeran) » remontent au modèle (avant : seul
+  benzetropine).
+- **Effet (consult 23, Mme Gauthier)** — le plan passe de « Je cesse la
+  risperidone » (nom inventé) à « Je cesse l'Aricept », et la liste
+  Médicaments porte Aricept / Zyprexa / Benztropine / Metoclopramide, les 4
+  noms corrects, en cohérence avec la note de production Gemini.
+
 ## 2026-09-01 — Transcrit brut au modèle : suggestions-only
 
 *Parité de comportement entre dictée, import et génération : le texte envoyé

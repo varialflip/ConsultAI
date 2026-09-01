@@ -1053,7 +1053,7 @@ class Matcher:
                 best = (row[0], row[1], row[2], s, row[3], row[4])
         return best
 
-    def phonetiques_texte(self, texte, maxi=10):
+    def phonetiques_texte(self, texte, maxi=10, conf_keys=None):
         """Candidats PHONÉTIQUES pour le modèle de langage (bloc hints).
 
         Pour chaque jeton « ressemblant à un médicament » (ni français courant,
@@ -1067,6 +1067,14 @@ class Matcher:
         ``maxi`` borne le nombre de candidats total (la phonétique brute est
         bruitée ; on ne donne que les pistes les mieux notées, les autres
         retombent sur le modèle seul).
+
+        ``conf_keys``: itérable de clés ``norm_phon`` dont la transcription est
+        DOUTEUSE (mots entendus avec incertitude par le STT). Pour ces tokens, le
+        contexte « dose à portée » n'est pas exigé — le doute lui-même est la
+        preuve qu'on est face à un nom susceptible d'avoir été déformé, et la
+        proximité phonétique élevée (>= 0,80, non ensuite filtrée par la
+        posologie) suffit à proposer la piste au modèle. Sans ce signal, une
+        énumération de médicaments sans dose (« du ziprexa ») resterait muette.
 
         Retourne une liste de dicts compatibles ``extract_med_items`` (+ la clé
         ``source``) pour le rendu unique des hints.
@@ -1114,7 +1122,12 @@ class Matcher:
                     and float(words[i - 1].replace(',', '.')) <= 999)
             )
             if not contexte:
-                continue
+                # Un jeton DOUTEUX (conf_keys) est admis sans dose à portée : le
+                # doute STT est la preuve d'un nom possiblement déformé. La
+                # proximité phonétique (filtre s >= 0.80 ci-dessous) sépare les
+                # vrais garbles du bruit de prose.
+                if not (conf_keys and p in conf_keys):
+                    continue
             cand = self._phonetic_candidats(jet)
             if not cand:
                 continue
@@ -1128,7 +1141,11 @@ class Matcher:
                     r"\b(mg|mcg|µg|g|ml|ui|unité|unites|comprimé|tid|bid|hs|prn|po|die)\b",
                     poso, re.I) and s < 0.72:
                 continue
-            if not poso and s < 0.72:
+            # Le token douteux (conf_keys) sans posologie crédible est admis à
+            # partir de 0,80 — le doute vient du STT, pas de la capacité du moteur
+            # à trouver la dose. Un token NON douteux sans dose exige 0,72 (voir
+            # ci-dessous) ; un douteux à 0,72-0,79 reste filtré (bruit de prose).
+            if not poso and s < (0.80 if (conf_keys and p in conf_keys) else 0.72):
                 continue
             # (canonical, base, brand, sim)
             if can is None or norm_phon(can) in vus:
@@ -1889,13 +1906,24 @@ def extract_validation_items(text: str, conf=None, maxi_phon: int = 40) -> list:
     fois le même médicament (déjà résolu → le candidat est écarté).
 
     ``conf`` et ``maxi_phon`` sont relayés tels quels (gate mot-à-mot de
-    ``extract_med_items``, borne de ``phonetiques_texte``).
+    ``extract_med_items``, borne de ``phonetiques_texte``). Les clés douteuses
+    de ``conf`` (< 0.95) servent de ``conf_keys`` à ``phonetiques_texte`` : un
+    nom sans dose à portée mais entendu avec incertitude se voit proposer sa
+    piste phonétique au modèle (voir ``Matcher.phonetiques_texte``).
     """
     items = extract_med_items(text, conf=conf)
     if not _RAPIDFUZZ_OK:
         return items
+    conf_keys = set()
+    if conf:
+        try:
+            conf_keys = {k for k, v in conf.items()
+                         if float(v) < 0.95}
+        except (TypeError, ValueError):
+            conf_keys = set()
     try:
-        phon = matcher().phonetiques_texte(text or "", maxi=maxi_phon)
+        phon = matcher().phonetiques_texte(text or "", maxi=maxi_phon,
+                                           conf_keys=conf_keys or None)
     except Exception:
         return items
     vus = {norm_phon(i.get("base") or i.get("name")) for i in items}

@@ -893,7 +893,11 @@ des médicaments », défaut `false`). Une fois activé :
   pour chaque jeton non résolu et « dosé » le meilleur voisin phonétique
   (dist ≤ 3, sim ≥ 0,72, non feuille, non cosmétique). « dilote » → Dilaudid,
   « kitsapine » → quetiapine, « Antoloque » → Pantoloc — le modèle les
-  accepte ou les écarte selon la posologie et le contexte clinique. Les deux
+  accepte ou les écarte selon la posologie et le contexte clinique. **Un jeton
+  entendu avec incertitude (confiance STT < 0,95) obtient sa piste même sans
+  dose à portée** (seuil 0,80 — le doute est la preuve d'un nom possiblement
+  déformé) : « ricepte » → Aricept, « ziprexa » → Zyprexa, « maxérant » →
+  Maxeran dans une énumération de médicaments sans posologie. Les deux
   strates proviennent d'une **source unique** (`extract_validation_items`),
   la même que l'onglet Validation, la liste live de dictée, le « Terminer »
   et la retranscription.

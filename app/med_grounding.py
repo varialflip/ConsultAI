@@ -1913,10 +1913,15 @@ def conf_par_token(text: str, words: list) -> dict:
     souvent différemment du ``split()`` du texte (ponctuation, articles
     soudés, variantes typographiques) : on avance dans les deux listes en
     parallèle en se calant sur les amorces normalisées, et les tokens orphelins
-    portent la confiance du mot STT le plus proche. Le résultat sert au gate
-    ``CONF_HARD_FLOOR`` de ``normalize(text, conf=...)`` ; un mot jamais joint
-    (ou une liste vide) laisse la substitution inchangée — le gate n'est actif
-    que là où la confiance est exploitable.
+    portent la confiance du mot STT le plus proche. Les tokens non
+    alphabétiques (chiffres, symboles, dont ``norm_phon`` est vide) sont eux
+    consommés de façon positionnelle s'ils correspondent à un mot STT aussi
+    vide — sans être ajoutés au mapping — afin que la dérive d'alignement
+    (toujours vraie pour ``w.startswith("")``) ne fasse pas dérailler le
+    marcheur en aval. Le résultat sert au gate ``CONF_HARD_FLOOR`` de
+    ``normalize(text, conf=...)`` ; un mot jamais joint (ou une liste vide)
+    laisse la substitution inchangée — le gate n'est actif que là où la
+    confiance est exploitable.
     """
     toks = text.split()
     result: dict = {}
@@ -1926,6 +1931,11 @@ def conf_par_token(text: str, words: list) -> dict:
     for tok in toks:
         t = norm_phon(tok)
         if not t:
+            # Jeton non alphabétique (chiffre, symbole) : ``norm_phon`` est vide.
+            # On consomme l'éventuel mot STT équivalent pour garder l'alignement
+            # des deux listes, sans l'ajouter au mapping (clé vide, inexploitable).
+            if wpos < len(words) and not ph[wpos]:
+                wpos += 1
             continue
         if wpos < len(words):
             w = ph[wpos]
@@ -1935,7 +1945,10 @@ def conf_par_token(text: str, words: list) -> dict:
                 wpos += 1
                 continue
             # Le token STT couvre le token texte (ou l'inverse) : on le joint.
-            if w.startswith(t) or t.startswith(w) or (len(t) >= 4 and (t in w or w in t)):
+            # ``w`` vide exclus : un chiffre/symbole ne doit jamais avaler le
+            # token suivant (``t.startswith("")`` est toujours vrai).
+            if w and (w.startswith(t) or t.startswith(w)
+                      or (len(t) >= 4 and (t in w or w in t))):
                 result[t] = words[wpos].get("confidence") or 1.0
                 dernier = result[t]
                 wpos += 1
@@ -1950,11 +1963,12 @@ def conf_par_token(text: str, words: list) -> dict:
     # Compléter les tokens que le passage parallèle a pu manquer.
     for tok in toks:
         t = norm_phon(tok)
-        if t not in result:
-            for w, c in zip(words, ph):
-                if c == t:
-                    result[t] = w.get("confidence") or 1.0
-                    break
+        if not t or t in result:
+            continue
+        for w, c in zip(words, ph):
+            if c == t:
+                result[t] = w.get("confidence") or 1.0
+                break
     return result
 
 

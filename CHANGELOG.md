@@ -21,6 +21,18 @@ résultat observable dans le corps des notes.*
   (l'épival) vers la liste des corrections signalées, au lieu d'une
   normalisation silencieuse : l'effet est réel mais limité à la traçabilité
   des corrections, pas au contenu clinique.
+- **Correction d'alignement de la confiance mot-à-mot** — `conf_par_token`,
+  qui aligne les `words[]` du STT aux tokens du texte, déraillait dès un
+  token non alphabétique (« 72 », symbole) : `norm_phon` vide au lieu de
+  faire avancer le marcheur, laissait `wpos` en arrière, et la sous-chaîne
+  vide (`tok.startswith("")`) avalait le mot suivant — le reste du texte
+  tombait alors dans la confiance par défaut (~1.0) et le bloc
+  <CONFIANCE_MOTS> restait vide même avec 34 mots douteux. Les tokens
+  numériques sont désormais consommés positionnellement (sans être ajoutés au
+  mapping, clé inexploitable) et les amorces vides exclues de la jointure :
+  sur l'enregistrement 13, 24 mots douteux atteignent le modèle (kézapine,
+  ketapine → quétiapine restent exclus car déjà corrigés par le grounding,
+  mais Zyprexa à 0.78 est maintenant signalé).
 
 ## 2026-09-01 — Dictée : passe ffmpeg fusionnée, cache G2P et grounding allégé
 

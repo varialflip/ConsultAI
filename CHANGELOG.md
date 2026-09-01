@@ -23,7 +23,34 @@ changement de comportement observable (mêmes transcriptions, même facturation
 - **Grounding incrémental allégé** — `_merge_and_publish_meds` court-circuite
   la phonétique coûteuse tant que la queue de transcript n'a pas bougé, et
   plafonne à 8 les candidats phonétiques par frontière en cours de dictée
-  (l'exhaustivité reste réservée au grounding final « Terminer »).
+  (  l'exhaustivité reste réservée au grounding final « Terminer »).
+
+### 2026-09-01 — Correction des médicaments : faux positifs de prose éliminés, exactitude des arborescences STT
+
+*Passe sur les 18 dictées de test (audio réel consommé via l'endpoint custom
+Cohere) : on a purgé les faux médicaments de prose et seedé les coquilles du
+STT réel pour une résolution déterministe.*
+
+- **Faux positifs de prose éliminés** — ajout à `FRENCH_STOP` (vecteur source,
+  `match_meds.py` + `app/med_grounding.py`) des mots français courants qui
+  tombaient au flou sur des marques DPD rares : `comprimé(s)` → Colprone,
+  `prescrites` (verbe) → pyrethrines, « l'avion » → acide alginique,
+  `savant` → Sylvant, « l'alcool » → alcool. Double ceinture : ces marques
+  sont aussi ajoutées à `BAN_ORTH` (pays cible bloquée, défense en profondeur).
+- **Coquilles STT seedées pour résolution EXACTE** — nouvelles entrées
+  `STT_GARBLE` observées sur les notes réelles : `guipitar`→Lipitor,
+  `tilinol`→Tylenol, `antoloch`→Pantoloc, `éliquée`/`eliquee`/`éliqué`→Eliquis,
+  et toute la famille quétiapine (`ketapine`, `kézapine`, `kétyapine`,
+  `kitapine`, `kitsapine`, « qui tapine ») qui matchetait de façon
+  INCONSISTANTE d'une note à l'autre. Résultats vérifiés sur les 18 notes :
+  plus de Colprone/Pyrethrines/« acide alginique »/Sylvant ni d'« alcool »
+  listés, et chaque faux négatif (Lipitor, Tylenol, quétiapine, Pantoloc)
+  retrouvé. Aucune régression sur les 4 références rangées (dictées 1/6,
+  consult 7, consultai 4).
+- **Rappel image** — `rapidfuzz` figure dans `requirements.txt` mais manquait
+  dans l'image de test : le grounding in-app y lève `RuntimeError`. La
+  reconstruction de l'image rétablit la correction des médicaments dans le
+  conteneur.
 
 ## 2026-08-31 — Grounding : le générique écrase la marque-leaf homonyme (Trasodone → trazodone)
 

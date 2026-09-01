@@ -163,6 +163,14 @@ def title_brand(s):
 BAN_ORTH = {
     "proteines",     # "électrophorèse des protéines" (lab), not the generic Protein S
     "proteine",      # singular of the above
+    # false-positive replacements observed on live audio (notes 4/10/12/15) :
+    # these DPD rows are cosmetic/rare/insecticidal and must never be written
+    # into a geriatric med list — they only ever fire via prose fuzzy matches.
+    "colprone",          # « comprimé(s) » (tablet) -> Colprone
+    "pyrethrines",       # « prescrites » (verb) -> pyrethrins
+    "sylvant",           # « savant » (prose) -> Sylvant
+    "acidealginique",    # « l'avion » (prose) -> acide alginique
+    "alcool",            # « l'alcool » (substance de vie) -> alcool
 }
 
 # Electrolytes / lab-ion single-word generics. These appear constantly in the
@@ -541,6 +549,15 @@ FRENCH_STOP |= {
     # « on and off ») frappe EXACTEMENT la marque BDP « AND » (naproxène,
     # OTC inactif) : on la bannit, comme « jasmin »/« lhopital ».
     "and",
+    # prose / dose-unit colliding with DPD fuzzy matches (notes 4/10/12/15) :
+    # « prescrites » (verbe, pluriel féminin — « …prescrites le 26 juin »)
+    # frappe PYRETHRINES ; « comprimé(s) » (unité de dose) frappe COLRONE ;
+    # « l'avion »/« savant » (prose) frappent ACIDE ALGINIQUE/SYLVANT ;
+    # « alcool » est une substance de vie, jamais une médication prescrite.
+    "prescrites", "prescrits",
+    "comprimes", "comprime",
+    "avion", "lavion", "savant",
+    "alcool", "lalcool",
 }
 
 # ---------------------------------------------------------------- matcher

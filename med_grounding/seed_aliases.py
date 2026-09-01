@@ -29,10 +29,12 @@ GARBLES = {
     "lipitax":     ("lipitor", "atorvastatin"),
     "pitax":       ("lipitor", "atorvastatin"),
     "dipipanone":  ("lipitor", "atorvastatin"),
+    "guipitar":    ("lipitor", "atorvastatin"),  # observé note 6 (délirium ICU)
     "tyrénol":     ("tylenol", "acetaminophen"),
     "tylénol":     ("tylenol", "acetaminophen"),
     "tirilnol":    ("tylenol", "acetaminophen"),
     "utilinole":   ("tylenol", "acetaminophen"),
+    "tilinol":     ("tylenol", "acetaminophen"),  # observé note 6 (délirium ICU)
     # dictee-6 observed
     "aricept":     ("aricept", None),
     "arisepte":    ("aricept", "donepezil"),
@@ -52,6 +54,16 @@ GARBLES = {
     "risperidone": (None, "risperidone"),
     # --- consultation 9 (démence Alzheimer, comportement) ---
     "ketiapine":   ("quetiapine", "quetiapine"),
+    # quétiapine — variants phonétiques du STT réel (notes 9/12/13/15). Elles
+    # tombaient de façon INCONSISTANTE au flou (ketapine matchait en note 9,
+    # kitapine/kitsapine/ketapine passaient en notes 12/13/15) : on les seed
+    # toutes pour la résolution EXACTE déterministe.
+    "ketapine":    ("quetiapine", "quetiapine"),
+    "kézapine":    ("quetiapine", "quetiapine"),
+    "kétyapine":   ("quetiapine", "quetiapine"),
+    "kitapine":    ("quetiapine", "quetiapine"),
+    "kitsapine":   ("quetiapine", "quetiapine"),
+    "qui tapine":  ("quetiapine", "quetiapine"),
     "dexilan":     ("dexilant", "dexilant"),
     # --- consultations 4/5/10/11 (troubles mnésiques / neurocognitifs) ---
     # « Hamelot d'épine » = amlodipine (bêta-bloquant), pas « adenine ».
@@ -71,6 +83,9 @@ GARBLES = {
     "liquisse":    ("eliquis", "apixaban"),
     "eliquissé":   ("eliquis", "apixaban"),
     "eliquisse":   ("eliquis", "apixaban"),
+    "éliquée":     ("eliquis", "apixaban"),   # observé note 10 : « sous éliquée »
+    "eliquee":     ("eliquis", "apixaban"),
+    "éliqué":      ("eliquis", "apixaban"),
     # generic French confusions
     "rosuvastatine http": (None, "rosuvastatin"),
     "rozu va statine":    (None, "rosuvastatin"),
@@ -87,6 +102,7 @@ GARBLES = {
     "pantoloc":           ("pantoloc", "pantoprazole"),
     "pantolot":           ("pantoloc", "pantoprazole"),
     "pantoloque":         ("pantoloc", "pantoprazole"),
+    "antoloch":           ("pantoloc", "pantoprazole"),  # observé note 15 (hanche post-op)
     "omeprazole":         (None, "omeprazole"),
     "apixaban":           (None, "apixaban"),
     "xarelto":            ("xarelto", None),

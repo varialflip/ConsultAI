@@ -897,7 +897,13 @@ des médicaments », défaut `false`). Une fois activé :
   entendu avec incertitude (confiance STT < 0,95) obtient sa piste même sans
   dose à portée** (seuil 0,80 — le doute est la preuve d'un nom possiblement
   déformé) : « ricepte » → Aricept, « ziprexa » → Zyprexa, « maxérant » →
-  Maxeran dans une énumération de médicaments sans posologie. Les deux
+  Maxeran dans une énumération de médicaments sans posologie. **Une
+  déformation éclatée en DEUX mots courts est re-sondée en paire collée**
+  (« très bas » → Tresiba, contexte de dose obligatoire — chaque token séparé
+  < 5 lettres est filtré par la passe unigramme) : `admelogue` (sim 0,78,
+  même zone que des noms propres courants « Lontin → Celontin », « Multiples →
+  Multipax ») reste volontairement hors des pistes, le transcript brut le
+  portant au modèle. Les deux
   strates proviennent d'une **source unique** (`extract_validation_items`),
   la même que l'onglet Validation, la liste live de dictée, le « Terminer »
   et la retranscription.

@@ -1179,6 +1179,71 @@ class Matcher:
             })
             if len(result) >= maxi:
                 break
+        # Passe des PAIRES adjacentes : un nom déformé peut éclater en deux
+        # mots français courts que le STT épelle séparément (« très bas » →
+        # TRESIBA, « la kro » → LYRICA). Chaque token seul (< 5 lettres) est
+        # filtré par la boucle ci-dessus ; on re-sonde alors la paire collée.
+        # RÉSERVÉE aux paires en contexte de dose (ou douteuses) : sans dose ni
+        # doute, « très bien », « tout bas » ne deviennent pas un médicament.
+        if len(result) < maxi:
+            for i in range(n - 1):
+                a = words[i].strip(" \t,;:.()\"'’")
+                b = words[i + 1].strip(" \t,;:.()\"'’")
+                pa = norm_phon(a)
+                pb = norm_phon(b)
+                # Au moins un des deux est court et « ressemble » au début de la
+                # déformation ; le tout doit rester raisonnable en taille.
+                paire = f"{a} {b}"
+                paire_p = norm_phon(paire)
+                if not paire_p:
+                    continue
+                if len(paire_p) < 5 or len(paire_p) > 14:
+                    continue
+                if paire_p in FRENCH_STOP or paire_p in self.exact or paire_p in self.exact_garble:
+                    continue
+                if len(pa) >= 5 or len(pb) >= 5:
+                    continue                  # déjà couvert par l'unigramme
+                # Contexte : une dose/unité à portée de la paire, ou un voisin
+                # chiffre petit, ou un doute STT sur l'un des deux mots.
+                j2 = min(i + 4, n)
+                contexte2 = (
+                    any(dose_unit[k] for k in range(i, j2))
+                    or (i + 2 < n and num_token[i + 2]
+                        and float(words[i + 2].replace(',', '.')) <= 999)
+                    or (i + 3 < n and num_token[i + 3]
+                        and float(words[i + 3].replace(',', '.')) <= 999)
+                    or (i > 0 and num_token[i - 1]
+                        and float(words[i - 1].replace(',', '.')) <= 999)
+                )
+                if not contexte2 and not (conf_keys and (pa in conf_keys or pb in conf_keys)):
+                    continue
+                cand2 = self._phonetic_candidats(paire)
+                if not cand2:
+                    continue
+                can2, base2, brand2, s2 = cand2
+                # Sans dose crédible, une paire doit être douteuse ET très
+                # proche pour ne pas faire de la prose un médicament.
+                poso2 = _dose_posology(texte, paire) or ""
+                cred2 = bool(re.search(
+                    r"\b(mg|mcg|µg|g|ml|ui|unité|unites|comprimé|tid|bid|hs|prn|po|die)\b",
+                    poso2, re.I))
+                seuil2 = 0.72 if (cred2 or (conf_keys and (pa in conf_keys or pb in conf_keys))) else 0.80
+                if s2 < seuil2:
+                    continue
+                if can2 is None or norm_phon(can2) in vus:
+                    continue
+                vus.add(norm_phon(can2))
+                result.append({
+                    "name": f"{a} {b}",
+                    "base": base2 or brand2 or can2,
+                    "brand": brand2,
+                    "posology": poso2,
+                    "score": int(round(s2 * 100)),
+                    "level": "BASE_GENERIC",
+                    "source": "phonetic",
+                })
+                if len(result) >= maxi:
+                    break
         return result
 
     def _phonetic_candidats(self, token):

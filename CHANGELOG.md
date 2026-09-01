@@ -3,6 +3,26 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — Hints : déformations éclatées en deux mots (bigramme phonétique)
+
+*Sur l'enregistrement 22, « insuline trsè bas » était dicté — le STT a rendu
+« très bas » (deux mots courts dont chacun est filtré par la passe
+unigramme) et Tresiba n'était jamais proposé. La passe unigramme sonde
+désormais les paires adjacentes quand chaque token est court (< 5 lettres).*
+
+- **Passe bigramme phonétique** (`Matcher.phonetiques_texte`) : après la passe
+  unigramme, les paires de tokens courts adjacents sont re-sondées collées
+  — « très bas » → **Tresiba** (score 75, posologie « 17 unités »). Réservée
+  aux paires en **contexte de dose** (ou douteuses) et à chaque token < 5
+  lettres (déjà couvert sinon par l'unigramme) : « très bien », « tout bas »
+  sans dose ne deviennent pas un médicament. Aucun faux positif sur les 4
+  consultations de référence (seules paires nouvelles : Tresiba).
+- **`admelogue` → Admelog reste hors pistes** (sim 0,78) : la zone 0,72-0,80
+  contient les vrais gains (admelog 0.78, solifénacine 0.75, florinef 0.75)
+  mais aussi des noms propres de prose (« Lontin » → Celontin 0.75,
+  « Multiples » → Multipax 0.78) qu'on refuse d'introduire. Le transcript
+  brut porte le mot au modèle.
+
 ## 2026-09-01 — Confiance mot-à-mot : plus de perte à la retranscription
 
 *Le confidence map disparaissait après une retranscription : le client re-

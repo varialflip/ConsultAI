@@ -1438,7 +1438,7 @@
       // (un peu de corps puis éteint) pour le caractère « switch ».
       const gain = _clickCtx.createGain();
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.7, now + 0.002);
+      gain.gain.exponentialRampToValueAtTime(0.35, now + 0.002);
       gain.gain.exponentialRampToValueAtTime(0.001, now + CLICK_DUR);
       src.connect(bp).connect(gain).connect(_clickCtx.destination);
       src.start(now);

@@ -68,6 +68,23 @@ HIGH_SIM = 0.80       # near-certain fuzzy matches; exempt from context signals
 #: ferait tomber. 0.92 est le point de bascule mesuré.
 CONF_HARD_FLOOR = 0.92
 
+#: Seuil de « prose sûre » : en deçà, un jeton est réputé DOUTEUX (il mérite
+#: une piste phonétique même sans dose) ; au-delà, il est réputé CONFIANT pour
+#: le STT. Combindé à une résolution EXACTE (le mot est déjà bien écrit, aucune
+#: corréction à proposer) et hors région de liste confirmée, un confident
+#: n'est pas suggéré comme médicament — c'est de la prose sûre (« Air Canada »
+#: → pas de suggestion « air »).
+#:
+#: ⚠ CRITÈRE ARBITRAIRE (calibré sur les transcripts réels disponibles) :
+#:   * max. observé d'un vrai nom déformé méritant correction = 0.928
+#:     (lanzapine, consult 23) ;
+#:   * min. observé d'un vrai médicament non déformé en liste = 0.952
+#:     (Hydrocortisone 10 mg BID, consult 22) ;
+#:   * faux positif cible « Air Canada » = 0.998.
+#: Le creux 0.928↔0.952 retient 0.95, mais il n'est PAS issu d'une étude
+#: statistique : à re-caliibrer dès que le corpus grossit (cf. README § 7.8).
+CONF_PROSE_SURE = 0.95
+
 #: Prose structurante à ne JAMAIS proposer comme candidat phonétique (léxique
 #: réduit, réservé à la DÉTECTION de hints — ne modifie pas ``FRENCH_STOP``,
 #: qui reste le garde de la réécriture inline).
@@ -1783,8 +1800,17 @@ def _is_cosmetic(base_or_brand) -> bool:
 
 
 def _append_item(items, vus, fixed, jeton, res, force_name=None,
-                 ancre_poso=False) -> None:
-    """Ajoute un item à la liste, dédupliqué par nom canonique."""
+                 ancre_poso=False, confiant=False) -> None:
+    """Ajoute un item à la liste, dédupliqué par nom canonique.
+
+    ``confiant`` : le jeton a été entendu par le STT avec une confiance >=
+    ``CONF_PROSE_SURE``. Combiné à une résolution EXACTE (toujours vraie ici —
+    on n'atteint cette fonction qu'après un ``_lookup_exact`` réussi), à une
+    posologie non crédible et à l'absence d'ancrage, c'est de la PROSE SÛRE :
+    le mot est déjà bien écrit dans le transcrit, il n'y a rien à suggérer
+    (« Air Canada » ne doit pas produire un item « air »). Ne pas trouver un
+    médicament mentionné en prose est acceptable — le LLM le voit tel quel.
+    """
     base = res.get("base") or res.get("brand") or jeton
     cle = norm_phon(base)
     if cle in vus:
@@ -1807,6 +1833,16 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # confirmée ou côte à côte d'un chiffre de dose (aspirine 80, calcium
     # 500, rivastigmine timbre 10).
     if not poso and not ancre_poso:
+        return False
+    # Prose sûre : jeton bien entendu (confiance haute), déjà bien écrit
+    # (résolution exacte — cf. en-tête), hors région de liste et sans vrai
+    # signal de dose -> on ne suggère rien. Ne s'applique JAMAIS à un vrai
+    # médicament en liste (``ancre_poso``) ni à un nom non résolu exactement
+    # (déformé) : ceux-là ont confiance en général < 0.95 ou une région.
+    poso_credible = bool(re.search(
+        r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm)\b",
+        poso, re.I))
+    if confiant and not poso_credible and not ancre_poso:
         return False
     vus.add(cle)
     items.append({
@@ -1871,6 +1907,16 @@ def extract_med_items(text: str, conf=None) -> list:
     vus = set()
     consommes = set()
     region = _region_medlist(fixed)
+    # Clés dont le STT est CONFIANT (>= CONF_PROSE_SURE) : servent au gate
+    # « prose sûre » de ``_append_item`` — un jeton confiant et déjà exact
+    # hors région n'est pas un médicament à suggérer.
+    confiant_cles = set()
+    if conf:
+        try:
+            confiant_cles = {k for k, v in conf.items()
+                             if float(v) >= CONF_PROSE_SURE}
+        except (TypeError, ValueError):
+            confiant_cles = set()
 
     def chiffre_voisin(i):
         """Un chiffre de dose est collé au nom (avant/après, à <= 2 jetons) ?"""
@@ -1881,7 +1927,7 @@ def extract_med_items(text: str, conf=None) -> list:
                 return True
         return False
 
-    # --- Bigrammes : noms composés ----------------------------------------
+# --- Bigrammes : noms composés ----------------------------------------
     for i in range(len(jetons) - 1):
         if i in consommes:
             continue
@@ -1889,9 +1935,12 @@ def extract_med_items(text: str, conf=None) -> list:
         res = _lookup_exact(paire)
         if res is None:
             continue
+        confiant_paire = (norm_phon(jetons[i]) in confiant_cles
+                          and norm_phon(jetons[i + 1]) in confiant_cles)
         if _append_item(items, vus, fixed, paire, res,
                         force_name=" ".join((jetons[i], jetons[i + 1])),
-                        ancre_poso=(i in region) or chiffre_voisin(i)):
+                        ancre_poso=(i in region) or chiffre_voisin(i),
+                        confiant=confiant_paire):
             consommes.add(i)
             consommes.add(i + 1)
 
@@ -1903,7 +1952,8 @@ def extract_med_items(text: str, conf=None) -> list:
         if not res:
             continue
         _append_item(items, vus, fixed, jeton, res,
-                     ancre_poso=(i in region) or chiffre_voisin(i))
+                     ancre_poso=(i in region) or chiffre_voisin(i),
+                     confiant=norm_phon(jeton) in confiant_cles)
     return items
 
 
@@ -1931,7 +1981,7 @@ def extract_validation_items(text: str, conf=None, maxi_phon: int = 40) -> list:
     if conf:
         try:
             conf_keys = {k for k, v in conf.items()
-                         if float(v) < 0.95}
+                         if float(v) < CONF_PROSE_SURE}
         except (TypeError, ValueError):
             conf_keys = set()
     try:

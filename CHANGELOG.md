@@ -3,6 +3,28 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — Prose sûre : pas de suggestion pour un mot déjà correct et bien entendu
+
+*Complément du fix « air — 2026 » : au-delà de l'alignement de la posologie,
+un jeton entendu par le STT avec une confiance élevée (≥ 0.95,
+`CONF_PROSE_SURE`), résolu exactement par le moteur (déjà bien écrit), hors
+région de liste confirmée et sans vrai signal de posologie, est traité comme
+de la prose sûre — on ne suggère rien (« Air Canada » ne produit plus d'item
+« air », et un chiffre parasite n'en fabrique pas une dose).*
+
+- **Gate « prose sûre » dans l'extraction des items** (`_append_item`) :
+  refus d'un jeton confiant + résolution exacte + hors ancrage/poser. Les
+  vrais médicaments en liste (calcium 500 DIE, Crestor 5 mg) restent retenus
+  (ancrage de région), et les vrais noms déformés (ricepte, ziprexa, confiance
+  < 0.95) restent suggérés.
+- **Validation ≡ LLM** : `_apply_grounding` passe désormais le même
+  `conf_map` que la génération (`med_hints`) : l'onglet Validation affiche
+  exactement ce qui sera envoyé au modèle, plus de seconde lecture divergente.
+- **⚠ Critère arbitraire** : le seuil 0.95 est calibré sur ~4 consultations
+  réelles (déformé max. 0.928 lanzapine, légitime min. 0.952 Hydrocortisone,
+  faux positif « air » 0.998) — à re-calibrer quand le corpus grossit
+  (`CONF_PROSE_SURE` dans `app/med_grounding.py`).
+
 ## 2026-09-01 — Validation : plus de faux médicament « air — 2026 » (alignement posologie)
 
 *L'onglet Validation d'une consultation affichait « air — 2026 » comme

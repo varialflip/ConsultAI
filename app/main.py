@@ -342,8 +342,16 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     text = (consultation.raw_transcript or "").strip()
     if not text:
         return []
+    # Même confiance qu'à la génération : le contenu de l'onglet Validation
+    # est EXACTEMENT ce qui sera envoyé au LLM (med_hints), pas une seconde
+    # lecture divergente. Sans conf (pas de transcript_conf), ``conf=None``
+    # désactive simplement le gate « prose sûre » — comportement historique.
     try:
-        items = med_grounding.extract_validation_items(text)
+        conf_map = json.loads(consultation.transcript_conf) if consultation.transcript_conf else {}
+    except (ValueError, TypeError):
+        conf_map = {}
+    try:
+        items = med_grounding.extract_validation_items(text, conf=conf_map or None)
     except Exception:
         logger.exception("Grounding méds impossible (consultation %s)", consultation.id)
         return []

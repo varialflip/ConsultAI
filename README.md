@@ -975,6 +975,20 @@ des médicaments », défaut `false`). Une fois activé :
   autre nom sur le mauvais (« air — 2026 » inventé à partir du bilan
   « calcium normal, TSH 3.2 »), alors que « Air » est ici le « Air Canada » de
   la prose — le nom commun court résidant en base n'est alors plus un item.
+- **Prose sûre : pas de suggestion pour un mot déjà correct et bien entendu**.
+  Un jeton que le STT a entendu avec une confiance ≥ 0.95
+  (`CONF_PROSE_SURE`), résolu **exactement** par le moteur (déjà bien écrit,
+  aucune corréction à proposer), **hors** région de liste confirmée et sans
+  vrai signal de posologie (« Air Canada » → pas d'item « air », « en 2024,
+  Air » → pas de dose parasite) n'est pas suggéré comme médicament — c'est de
+  la prose sûre que le LLM voit tel quel dans le transcrit brut. La régie
+  s'applique à l'identique à l'onglet Validation et aux hints du LLM : un
+  vrai médicament en liste (calcium 500 DIE, Crestor 5 mg) reste retenu même
+  confiant (ancrage de région), de même qu'un vrai nom déformé (ricepte,
+  ziprexa — confiance < 0.95). ⚠ Le seuil **0.95 est un critère arbitraire**
+  calibré sur ~4 consultations réelles (déformé max. 0.928 lanzapine, légitime
+  min. 0.952 Hydrocortisone) : à re-calibrer quand le corpus grossit
+  (`CONF_PROSE_SURE` dans `app/med_grounding.py`).
 - **Liste des médicaments : noms sans dose collée**. Un bigramme « nom +
   chiffre » (ex. « bisoprolol 2,5 », « calcium 500 ») n'est jamais traité
   comme un nom composé : le chiffre reste dans la **posologie** (« bisoprolol

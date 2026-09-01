@@ -1644,8 +1644,21 @@ def _dose_posology(text: str, name: str) -> str:
     S'autorise à sauter quelques mots de prose entre le nom et sa dose
     (« … prescrite à une dose de 12,5 mg BID PRN ») mais s'arrête au premier
     autre nom de médicament.
+
+    Le nom est cherché comme MOT ENTIER (borné par des non-lettres) — jamais
+    comme simple sous-chaîne : ``find('air')`` matcherait « aire » dans
+    « métastatique ganglionnaire » et alignerait la posologie d'un autre nom
+    (invention d'une dose « 2026 »). ``normalize`` réécrit le transcrit avec
+    des espaces, la borne ``(?<![a-zà-ÿ])`` protège des slurres comme
+    « kilomètre » pour « kilo ».
     """
-    idx = text.find(name)
+    idx = -1
+    pat = re.compile(
+        rf"(?<![a-zà-ÿ]){re.escape(name)}(?![a-zà-ÿ])"
+    )
+    m = pat.search(text)
+    if m:
+        idx = m.start()
     if idx < 0:
         return ""
     tail = text[idx + len(name):]

@@ -968,6 +968,13 @@ des médicaments », défaut `false`). Une fois activé :
   « rivastigmine timbre 10 »), région de liste confirmée ou nom composé
   (« Vitamine D »). Un nom nu halluciné par le STT et canonisé (« diclofenac
   diethylamine » entre deux actions) sort de la liste.
+- **La posologie s'aligne sur le MOT et non sur une sous-chaîne** : la
+  recherche du nom dans le texte utilisé par `_dose_posology` est bornée (le
+  nom doit être un mot entier). Sans cette borne, `find('air')` matchait
+  « aire » dans « métastatique ganglionnaire » et alignait la posologie d'un
+  autre nom sur le mauvais (« air — 2026 » inventé à partir du bilan
+  « calcium normal, TSH 3.2 »), alors que « Air » est ici le « Air Canada » de
+  la prose — le nom commun court résidant en base n'est alors plus un item.
 - **Liste des médicaments : noms sans dose collée**. Un bigramme « nom +
   chiffre » (ex. « bisoprolol 2,5 », « calcium 500 ») n'est jamais traité
   comme un nom composé : le chiffre reste dans la **posologie** (« bisoprolol

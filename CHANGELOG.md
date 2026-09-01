@@ -3,6 +3,20 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — Validation : plus de faux médicament « air — 2026 » (alignement posologie)
+
+*L'onglet Validation d'une consultation affichait « air — 2026 » comme
+médicament résolu : le nom « Air » de « Air Canada » (prose) réside comme
+générique dans la BDP, et la posologie était inventée.* 
+
+- **`_dose_posology` recherche le nom en MOT ENTIER, pas en sous-chaîne** —
+  `find('air')` matchait « aire » dans « métastatique ganglionnaire » et
+  alignait la posologie du bilan suivant (« calcium normal, TSH 3.2 ») sur le
+  mauvais nom → « air — 2026 ». Le vrai « air » (Air Canada) n'a pas de dose à
+  portée, donc plus d'item fantôme. Le fix est case-sensitive (comme avant) :
+  le « Calcium » des labos (majuscule) n'est pas confondu avec « calcium 500
+  DIE » de la liste des médicaments.
+
 ## 2026-09-01 — Prompt : bloc CONFÍANCE propre + hints phonétiques des noms douteux
 
 *Suite de l'A/B sur les consultations réelles du jour : le pipeline test

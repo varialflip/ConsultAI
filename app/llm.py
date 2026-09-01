@@ -757,6 +757,35 @@ _COHERE_MAX_TOKENS_DEFAUT = 32000
 #: la limite annoncée par l'API pour la famille command-a-plus.
 _COHERE_MAX_TOKENS_PLAFOND = 64000
 
+#: Budget de raisonnement (jetons de pensée) plafonné pour les modèles à
+#: raisonnement d'OpenRouter (Gemma 4, DeepSeek…). Sans borne, un tel modèle
+#: saturait TOUT le budget de sortie (commun : raisonnement + texte) dans sa
+#: réflexion — la note revenait vide ET tronquée (« finish_reason: length »),
+#: ce qui faisait reboucler la relance de ``generate_note_stream`` (doublement
+#: du budget, puis nouvel échec). On envoie ``reasoning.max_tokens`` : les
+#: modèles qui acceptent un budget le respectent rigoureusement, et OpenRouter
+#: mappe cette valeur en effort pour les modèles « effort-only » (Gemma) — le
+#: texte visible garde donc toujours une part du budget.
+#:
+#: Valeur calibrée en vivo (probe Gemma 4 31B → OpenRouter, budget de sortie
+#: 400) : 512 jetons de pensée → texte visible en ~6 s ; 1024 → ~34 s ;
+#: 2048 → raisonnement débordant (le texte ne sort pas / « length » sous un
+#: faible budget de sortie). On reste à 512 : la réflexion est courte, la note
+#: arrive vite, et le budget de sortie (10000 par défaut) garde toute sa marge
+#: pour le texte. L'effort « none » coupe entièrement le raisonnement.
+_OPENROUTER_REASONING_BUDGET = 512
+
+#: Bornes du chien de garde « raisonnement seul » : quand le modèle réfléchit
+#: (Gemma 4…) il émet un long flux de pensée SANS texte de note — chaque
+#: morceau de raisonnement compte comme « progrès », donc l'anti-blocage
+#: classique (``_STREAM_STALL_SECONDS``) ne se déclenche jamais et l'écran
+#: restait sur « Raisonnement du modèle… » jusqu'à épuisement du budget. On
+#: borne donc la réflexion isolée : au-delà de ces cumuls, la génération est
+#: déclarée bloquée (le raisonnement a probablement débordé du budget et la
+#: note ne sortira jamais).
+_STREAM_REASONING_MAX_CHARS = 24000    # ≈ 6-8 k jetons de pensée cumulés
+_STREAM_REASONING_MAX_SECONDS = 180    # borne aussi temporelle (débit lent)
+
 
 def _custom_max_tokens() -> int:
     """Budget de sortie du point de terminaison personnalisé (raisonnement + texte)."""
@@ -798,6 +827,33 @@ def _openrouter_reasoning_effort() -> Optional[str]:
     """
     effort = (runtime_config.value("openrouter_llm_reasoning_effort") or "").strip().lower()
     return effort if effort in ("none", "minimal", "low", "medium", "high") else None
+
+
+def _reasoning_param(effort: Optional[str]) -> Dict[str, object]:
+    """Paramètre OpenRouter ``reasoning`` pour une demande de raisonnement.
+
+    Les modèles à raisonnement partagent leur budget de sortie entre la PENSÉE
+    et le TEXTE visible. ``reasoning.effort`` n'exprime que l'effort relatif au
+    budget de sortie : un modèle qui réfléchit longuement (Gemma 4…) pouvait
+    donc s'octroyer la quasi-totalité du budget, renvoyer une note vide ET
+    tronquée (« finish_reason: length ») et faire reboucler la relance de
+    ``generate_note_stream`` (doublement du budget, puis nouvel échec).
+
+    On privilégie donc ``reasoning.max_tokens`` : une BORNE EXPLICITE des
+    jetons de pensée, indépendante du budget de sortie — le texte garde
+    toujours sa part. OpenRouter la respecte strictement sur les modèles qui
+    acceptent un budget (Gemini, Anthropic, certains Qwen) et la mappe en
+    effort sur les modèles « effort-only » (Gemma), qui restent donc bornés
+    eux aussi.
+
+    ``reasoning.effort`` et ``reasoning.max_tokens`` s'excluent (OpenRouter
+    exige « un et un seul ») : ``max_tokens`` l'emporte. « none » (désactivation
+    explicite) reste envoyé tel quel — certains modèles réfléchissent par
+    défaut et ont besoin de l'ordre de couper.
+    """
+    if effort == "none":
+        return {"effort": "none"}
+    return {"max_tokens": _OPENROUTER_REASONING_BUDGET}
 
 
 _LIMITE_DANS_ERREUR = re.compile(
@@ -2034,7 +2090,11 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
             # (DeepSeek…) y produit des réponses hors JSON (vérifié in vivo :
             # « Expecting property name… » sur 179 caractères) et gaspille des
             # jetons. Même règle que ``enable_thinking=False`` de Qwen.
-            kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
+            #
+            # Le budget de sortie est COMMUN (raisonnement + texte) : un modèle
+            # (Gemma 4…) qui réfléchit longtemps saturait tout avant la note
+            # (vide ET tronquée, relance en boucle). Voir ``_reasoning_param``.
+            kwargs.setdefault("extra_body", {})["reasoning"] = _reasoning_param(effort)
 
     try:
         stream = _call_tolerant(client.chat.completions.create, kwargs)
@@ -2075,6 +2135,19 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
     # plein raisonnement (observée avec glm-4.7-flash) figeait l'écran sur
     # « Raisonnement du modèle… » jusqu'au timeout de lecture (5 min).
     dernier_progres = time.monotonic()
+    # Chien de garde « raisonnement seul » : un modèle qui réfléchit émet un
+    # long flux de pensée (aucun texte de note). Chaque morceau de raisonnement
+    # compte comme progrès — l'anti-blocage ci-dessus ne se déclenche donc
+    # jamais — et l'écran restait sur « Raisonnement du modèle… » jusqu'à
+    # épuisement du budget, sans note. On borne la réflexion isolée : au-delà
+    # de ``_STREAM_REASONING_MAX_CHARS`` cumulés sans texte, OU au-delà de
+    # ``_STREAM_REASONING_MAX_SECONDS`` de réflexion, la génération est
+    # déclarée bloquée (le raisonnement a débordé du budget, la note ne
+    # sortira pas).
+    debut_raisonnement = time.monotonic()
+    raisonnement_accumule = 0
+    def _bloque_raisonnement(message: str) -> None:
+        logger.error("%s (%s) : %s", label, model, message)
     try:
         for chunk in stream:
             if time.monotonic() - dernier_progres > _STREAM_STALL_SECONDS:
@@ -2094,16 +2167,39 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
             # modèles o-…) n'est pas du texte de note : diffusé uniquement vers
             # ``on_thought``, sinon ignoré — seule la part ``reasoning_tokens``
             # de l'usage est retenue.
-            if on_thought is not None and delta is not None:
+            thinking = ""
+            if delta is not None:
                 thinking = (
                     getattr(delta, "reasoning_content", None)
                     or getattr(delta, "reasoning", None)
                     or ""
                 )
-                if thinking:
+                if on_thought is not None and thinking:
                     on_thought(str(thinking))
+            thinking = str(thinking)
+            if delta_content:
+                # Le modèle produit enfin du texte : la réflexion est terminée.
+                raisonnement_accumule = 0
+                debut_raisonnement = time.monotonic()
+            elif thinking:
+                raisonnement_accumule += len(thinking)
+                if raisonnement_accumule > _STREAM_REASONING_MAX_CHARS:
+                    _bloque_raisonnement(
+                        "raisonnement seul sans texte au-delà de "
+                        f"{_STREAM_REASONING_MAX_CHARS} caractères — bloqué"
+                    )
+                    raise _erreur_flux_bloque(provider, model)
+                if time.monotonic() - debut_raisonnement > _STREAM_REASONING_MAX_SECONDS:
+                    _bloque_raisonnement(
+                        f"réflexion seule durant plus de "
+                        f"{_STREAM_REASONING_MAX_SECONDS} s — bloqué"
+                    )
+                    raise _erreur_flux_bloque(provider, model)
             else:
-                thinking = ""
+                # Ni texte ni raisonnement ce morceau (événement vide/usage) :
+                # si rien ne suit, l'anti-blocage ``_STREAM_STALL_SECONDS``
+                # s'en chargera.
+                pass
             fr = getattr(choice, "finish_reason", "") or ""
             if fr:
                 finish_reason = str(fr)
@@ -2540,7 +2636,15 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
             # ("json_mode") : l'extraction des métadonnées est une tâche
             # mécanique et le raisonnement d'un modèle reflexif y produit des
             # réponses hors JSON, sans parler des jetons gaspillés.
-            kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": effort}
+            #
+            # Borne de raisonnement : remplacer la ressource de l'effort par
+            # un budget explicite. Un modèle à raisonnement (Gemma 4…) saturait
+            # tout le budget de sortie dans sa pensée (note vide ET tronquée,
+            # relance en boucle) ; ``reasoning.max_tokens`` borne la réflexion.
+            # OpenRouter mappe cette valeur en effort sur les modèles « effort-
+            # only », et la respecte strictement sur ceux qui acceptent un
+            # budget — le texte visible garde toujours sa part.
+            kwargs.setdefault("extra_body", {})["reasoning"] = _reasoning_param(effort)
 
     try:
         response = _call_tolerant(client.chat.completions.create, kwargs)

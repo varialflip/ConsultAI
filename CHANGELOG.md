@@ -3,6 +3,25 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — Import audio : confiance mot-à-mot alignée sur la dictée
+
+*Parité de comportement entre les enregistrements importés et les dictées en
+direct pour le signal de confiance envoyé au LLM — sans changement de
+résultat observable dans le corps des notes.* 
+
+- **Confiance mot-à-mot pour les fichiers importés** — `api_transcribe`
+  fusionnait le texte mais jetait les `words[].confidence` du STT. Il œuvre
+  désormais `conf_par_token` sur le segment importé et fusionne le résultat
+  dans `transcript_conf` (même accumulation « la plus basse gagne » que la
+  dictée par tranches) : le bloc <CONFIANCE_MOTS> atteint le modèle pour un
+  import comme pour une dictée, quand le service STT fournit la confiance par
+  mot. Aucun changement quand l'endpoint n'émet pas `words[]`.
+- **Mesure (Gemma 4, OpenRouter)** — à bloc identique au niveau du corps,
+  le bloc confiance fait BASCULER la correction d'un med lui-même déformé
+  (l'épival) vers la liste des corrections signalées, au lieu d'une
+  normalisation silencieuse : l'effet est réel mais limité à la traçabilité
+  des corrections, pas au contenu clinique.
+
 ## 2026-09-01 — Dictée : passe ffmpeg fusionnée, cache G2P et grounding allégé
 
 *Optimisation du coût CPU et de la latence par tranche de dictée, sans
@@ -58,6 +77,34 @@ STT réel pour une résolution déterministe.*
   dans l'image de test : le grounding in-app y lève `RuntimeError`. La
   reconstruction de l'image rétablit la correction des médicaments dans le
   conteneur.
+
+### 2026-09-01 — LLM : raisonnement borné (Gemma 4 & co) — stop à la boucle « Raisonnement du modèle… »
+
+*Avec le raisonnement activé (même « low »), Gemma 4 via OpenRouter sature son
+budget de sortie commun (pensée + texte) et renvoie une note vide ET tronquée
+(« finish_reason: length ») — ce qui faisait reboucler la relance automatique
+(doublement du budget, puis nouvel échec) et l'écran restait sur
+« Raisonnement du modèle… » sans jamais produire de note.*
+
+- **Borne de raisonnement explicite** — au lieu de `reasoning.effort` (relatif
+  au budget de sortie, donc sans vraie limite), on envoie désormais
+  `reasoning.max_tokens` (4096 jetons de pensée par défaut,
+  `_OPENROUTER_REASONING_BUDGET`) : la réflexion a une borne stricte et le
+  texte visible garde toujours sa part. OpenRouter mappe cette valeur en effort
+  sur les modèles « effort-only » (Gemma) et la respecte rigoureusement sur
+  ceux qui acceptent un budget (Gemini, Anthropic, certains Qwen).
+  « none » reste envoyé tel quel (coupe explicite du raisonnement).
+- **Chien de garde « raisonnement seul »** — chaque morceau de pensée comptait
+  comme « progrès », donc l'anti-blocage silencieux (90 s) ne se déclenchait
+  jamais et seule la note visible fixait la fin. On borne désormais la
+  réflexion isolée : au-delà de 24 000 caractères cumulés SANS texte, ou de
+  180 s de réflexion continue, la génération est déclarée bloquée
+  (le raisonnement a débordé du budget — signalé comme tel, avec le conseil de
+  réduire l'effort). Le raisonnement n'est plus compté quand le texte a repris.
+- Retour sur expérience : pour Gemma 4 sur OpenRouter, « sans raisonnement »
+  reste le réglage le plus stable/rapide ; si l'on tient au raisonnement,
+  garder `openrouter_llm_reasoning_effort` sur **low** et la note reste courte
+  (la borne de 4096 jetons coupe la réflexion bien avant l'épuisement).
 
 ## 2026-08-31 — Grounding : le générique écrase la marque-leaf homonyme (Trasodone → trazodone)
 

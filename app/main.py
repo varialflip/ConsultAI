@@ -2288,6 +2288,22 @@ async def api_transcribe(
             consultation.raw_transcript = (
                 f"{existing}\n\n{result['transcript']}" if existing else result["transcript"]
             )
+            # Confiance mot-à-mot du SEGMENT importé, fusionnée dans le brouillon
+            # comme le fait la dictée par tranches (``_merge_conf_into``) : le
+            # LLM reçoit de la même façon le bloc <CONFIANCE_MOTS> pour un
+            # fichier importé que pour une dictée en direct. ``words`` est absent
+            # quand l'endpoint n'émet pas de confiance par mot — on ne signale
+            # alors rien, exactement comme en dictée.
+            if result.get("words"):
+                try:
+                    conf_train = med_grounding.conf_par_token(
+                        result["transcript"], result["words"]
+                    )
+                    _merge_conf_into(consultation, conf_train)
+                except Exception:
+                    # Une panne de confiance ne doit pas faire perdre la
+                    # transcription, déjà écrite ci-dessus.
+                    logger.exception("Confiance import indisponible — rien à fusionner")
             consultation.audio_seconds = (consultation.audio_seconds or 0) + result["duration_seconds"]
             consultation.status = "transcrit"
             if result.get("provider"):

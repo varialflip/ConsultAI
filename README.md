@@ -254,7 +254,11 @@ et le modèle y concentre son effort de correction — en marquant « à confirm
 les doutes persistants dans « Corrections et éléments à valider » — tout en
 préservant fidèlement les mots sûrs (anti sur-correction). Les noms de
 médicaments déjà corrigés par le grounding déterministe sont exclus du
-signalement.
+signalement. La confiance est capturée aussi bien pour les **dictées en
+direct** (tranche par tranche) que pour les **enregistrements importés**
+(segment fusionné au brouillon) dès que le service STT fournit
+`words[].confidence` — les deux voies nourrissent le même
+`transcript_conf` et le même bloc <CONFIANCE_MOTS>.
 
 > **⚡ Préparation de l'audio pendant la dictée.** L'audio joint au modèle de
 > langage (plafonnement des silences + encodage) coûte ~0,9× le temps réel —
@@ -538,16 +542,19 @@ prévient que la transcription (ou la mise en forme) échouera.
 > Le **point de terminaison personnalisé** expose un **Budget de sortie**
 > (`custom_llm_max_tokens`, 32768 jetons par défaut) propre à ce fournisseur,
 > distinct du plafond de Gemini, et un réglage **Raisonnement**
-> (`custom_llm_reasoning_effort`, « Auto » par défaut) qui envoie
-> `reasoning.effort` aux modèles à raisonnement (DeepSeek via OpenRouter…). Un
-> tel modèle consomme une large part du budget dans sa pensée : si le budget
-> est trop bas, il renvoie une réponse vide (« motif : length ») — l'application
-> relance alors automatiquement avec un budget doublé, et le panneau explique
-> comment l'ajuster. Le raisonnement ne s'applique qu'à la **mise en forme de
-> la note** : l'extraction des métadonnées (tâche mécanique en JSON) ne le
-> reçoit jamais, un modèle reflexif y renvoyant du texte hors JSON. Pour
-> l'extraction, un **modèle rapide non raisonneur** (field « Modèle rapide »)
-> est recommandé.
+> (`custom_llm_reasoning_effort`, « Auto » par défaut) qui borne la réflexion
+> des modèles à raisonnement (Gemma 4, DeepSeek via OpenRouter…). Un
+> tel modèle consomme une large part du budget dans sa pensée : au lieu de
+> `reasoning.effort`, l'application envoie désormais une **borne explicite**
+> `reasoning.max_tokens` (512 jetons de pensée par défaut) pour que le texte
+> visible garde toujours sa part. Si le raisonnement déborde quand même, la
+> réponse vide (« motif : length ») déclenche une relance automatique au budget
+> doublé, et un **chien de garde** coupe un flux qui réfléchirait seul trop
+> longtemps (sans le moindre texte) — le panneau explique comment ajuster.
+> Le raisonnement ne s'applique qu'à la **mise en forme de la note** :
+> l'extraction des métadonnées (tâche mécanique en JSON) ne le reçoit jamais,
+> un modèle reflexif y renvoyant du texte hors JSON. Pour l'extraction, un
+> **modèle rapide non raisonneur** (field « Modèle rapide ») est recommandé.
 >
 > **OpenRouter** expose les **mêmes capacités** que le point de terminaison
 > personnalisé (Budget de sortie `openrouter_llm_max_tokens`, Raisonnement

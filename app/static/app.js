@@ -1401,6 +1401,38 @@
     }, 1200);
   }
 
+  /** Clic audible (start haut / stop bas) via Web Audio. Un « clic » est un
+   *  court transitoire : attaque quasi instantanée suivie d'une décroissance
+   *  modérée (pas trop abrupte sinon inaudible) — plus distinctif et moins
+   *  envahissant qu'un bip soutenu. */
+  const CLICK_MS = 90;             // durée du clic
+  const START_CLICK_FREQ = 1600;   // clic aigu (une octave au-dessus du stop)
+  const STOP_CLICK_FREQ = 800;     // clic grave
+  // Harmoniques (multiplier de la fondamentale, amplitude) : le fondamental
+  // porte la hauteur, les partiels supérieurs donnent l'attaque « tick ».
+  const CLICK_HARMONICS = [[1, 0.8], [3.1, 0.35], [6.3, 0.25]];
+  let _clickCtx = null;
+  function playClick(freq) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!_clickCtx || _clickCtx.state === 'closed') _clickCtx = new AC();
+      if (_clickCtx.state === 'suspended') _clickCtx.resume();
+      const dur = CLICK_MS / 1000;
+      const now = _clickCtx.currentTime;
+      CLICK_HARMONICS.forEach(([mult, amp]) => {
+        const osc = _clickCtx.createOscillator();
+        const gain = _clickCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq * mult;
+        gain.gain.setValueAtTime(amp, now);
+        gain.gain.exponentialRampToValueAtTime(0.08, now + dur);
+        osc.connect(gain).connect(_clickCtx.destination);
+        osc.start(now);
+        osc.stop(now + dur);
+      });
+    } catch (_) { /* audio feedback is cosmetic — never block */ }
+  }
+
   /** Waveform du micro — confirme visuellement que le micro capte bien. */
   function startWaveform(stream) {
     try {
@@ -1811,6 +1843,9 @@
 
     // Un fragment toutes les quelques secondes : c'est l'unité de
     // téléversement, donc aussi le pire cas de perte sur une panne franche.
+    // Le clic de démarrage (mode dictaphone uniquement) passe par les
+    // haut-parleurs AVANT le start(): il ne peut pas entrer dans l'enregistrement.
+    if (dphone.active) playClick(START_CLICK_FREQ);
     recorder.mediaRecorder.start(dictationConfig.chunkSeconds * 1000);
 
     state.recording = true;
@@ -1830,6 +1865,7 @@
   function togglePause() {
     if (!recorder.mediaRecorder || !state.recording) return;
     if (state.paused) {
+      if (dphone.active) playClick(START_CLICK_FREQ);
       recorder.mediaRecorder.resume();
       state.paused = false;
       resetVad();  // la pause a interrompu le signal : on repart de zéro
@@ -1850,6 +1886,12 @@
    */
   function stopMicrophone() {
     return new Promise((resolve) => {
+      const stopTracks = () => {
+        if (recorder.stream) {
+          recorder.stream.getTracks().forEach((track) => track.stop());
+          recorder.stream = null;
+        }
+      };
       const cleanup = () => {
         state.recording = false;
         state.paused = false;
@@ -1858,10 +1900,11 @@
         releaseWakeLock();
         updateRecordingUI();
         window.removeEventListener('beforeunload', warnBeforeUnload);
-        if (recorder.stream) {
-          recorder.stream.getTracks().forEach((track) => track.stop());
-          recorder.stream = null;
-        }
+        // Clic de fin (dictaphone uniquement) : joué après mediaRecorder.stop()
+        // (l'enregistrement est clos, le clic ne peut pas y entrer) mais tant
+        // que les pistes du micro sont encore vivantes.
+        if (dphone.active) playClick(STOP_CLICK_FREQ);
+        stopTracks();
         resolve();
       };
 

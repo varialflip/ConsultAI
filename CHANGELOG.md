@@ -47,6 +47,13 @@ STT réel pour une résolution déterministe.*
   listés, et chaque faux négatif (Lipitor, Tylenol, quétiapine, Pantoloc)
   retrouvé. Aucune régression sur les 4 références rangées (dictées 1/6,
   consult 7, consultai 4).
+- **`Sipradex` seedé en `STT_GARBLE` → Cipralex** — le STT (notes 5/8, Mme
+  Marcotte) rendait Cipralex « Sipradex » (S initial + D sourd). Sans seed,
+  la résolution floue est désactivée en mode inline (gate
+  `FRENCH_STOP`/inline_safe) : la liste affichait donc « Sipradex » à
+  confirmer au lieu du nom résolu. Seed `sipradex`/`sipravex`/`siprodex` →
+  Cipralex (escitalopram) : désormais corrigé en ligne, item confirmé
+  « Cipralex — 20 HS ».
 - **Rappel image** — `rapidfuzz` figure dans `requirements.txt` mais manquait
   dans l'image de test : le grounding in-app y lève `RuntimeError`. La
   reconstruction de l'image rétablit la correction des médicaments dans le

@@ -78,6 +78,12 @@ GARBLES = {
     "sartan":      (None, "valsartan"),
     "cipravex":    ("cipralex", "escitalopram"),
     "ciprabex":    ("cipralex", "escitalopram"),
+    # « Sipradex » (notes 5/8, Mme Marcotte) : le STT met un S initial et un D
+    # sourd (« sipradex ») — passait au PHONÉTIQUE, jamais résolu en Cipralex
+    # dans le texte ; seed direct pour la correction inline déterministe.
+    "sipradex":    ("cipralex", "escitalopram"),
+    "sipravex":    ("cipralex", "escitalopram"),
+    "siprodex":    ("cipralex", "escitalopram"),
     # « sous Eliquissé » = Eliquis (F.A.), pas « Latisse ».
     "liquissé":    ("eliquis", "apixaban"),
     "liquisse":    ("eliquis", "apixaban"),

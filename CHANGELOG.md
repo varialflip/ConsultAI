@@ -3,6 +3,47 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-02 — Pipeling « deux passes » : extraction LLM + rendu applicatif
+
+*La mise en forme reposait sur UNE passe unique : le modèle corrigeait la
+dictée et rédigeait la note complète, mise en page comprise. La longueur
+d'instructions croissante (chaque bogue ajoutait une consigne) dépassait le
+problème de transcription : c'est la fidélité d'une génération longue à un
+gros jeu de règles structurales qui devenait fragile. Le pipeling est scindé.*
+
+- **Passe 1 (LLM) — extraction/correction** : le modèle corrige la dictée
+  (homophonies, doutes, style par rubrique) et renvoie un objet structuré
+  (en-tête, sections, corrections) — la partie médicalement difficile, sans
+  jamais voir la mise en page.
+- **Passe 2 (application) — rendu déterministe** (`note_renderer`) : l'objet
+  est mis en page dans le gabarit par du code, sans modèle. La structure du
+  gabarit (titres, ordre, listes, numérotation du Plan) ne peut plus être
+  déformée, « complétée » ni meublée ; une rubrique sans contenu disparaît.
+  Rubriques à paragraphes, à puces, numérotées, blocs à libellés
+  (AVQ/AVD/Mobilité) et rubriques mixtes (résumé + plan de la gériatrie)
+  sont gérées ; typographie jointe sans lignes vides parasites.
+- **Bascules et repli** : nouveau réglage `note_pipeline`
+  (panneau → Note, défaut « two_pass ») ; **« single » = trajectoire
+  historique intégrale**. Toute extraction en échec (JSON invalide, appel
+  vide) ou mise en page incompatible (gabarit à tableau) retombe
+  automatiquement sur la passe unique — une dictée n'est jamais perdue.
+  Repli immédiat aussi au git (`two-pass-fallback`) et par le réglage.
+- **Homophonies extériorisées** (`homophones.py`) : la table du § 2.1 de la
+  consigne générale (qui grandissait à chaque erreur captée, pour toutes les
+  générations, pertinente ou non) devient une DONNÉE injectée par appel :
+  seules les lignes dont le fragment fautif figure dans la dictée arrivent au
+  modèle (`<<<HOMOPHONIES_CE_CALL>>>`). La consigne garde la méthode, plus
+  deux exemples canoniques ; la liste vit en code, sous contrôle de version.
+- **Contrôle de non-régression** : `tools/regression_pipeline.py` (hors
+  ligne) rend un rapport synthétique sur les QUATRE gabarits verrouillés et
+  vérifie l'ordre des rubriques, la disparition des sections vides, l'absence
+  de texte de remplissage, l'en-tête filtré, Plan numéroté, puces, blocs à
+  libellés, pied « Rédigé à l'aide de la reconnaissance vocale. » et rubrique
+  finale de corrections.
+- **Changement d'affichage prévu** : en « two_pass », la note n'arrive plus
+  au fil de l'eau pendant la génération (la passe 2 est instantanée) : l'écran
+  affiche « Traitement en cours… » puis la note complète d'un bloc.
+
 ## 2026-09-02 — Retranscription : suggestions de l'onglet Validation pour les méd nommés en prose
 
 *La retranscription de la consultation 19 (polypharmacie dictée en prose, sans

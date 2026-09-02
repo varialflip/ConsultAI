@@ -2792,6 +2792,44 @@ def _generate_and_publish(
             "origin_tab": origin_tab,
         })
 
+    # --- Pipeling « deux passes » --------------------------------------------
+    # note_pipeline = two_pass : passe 1 (extraction/correction par le LLM) +
+    # passe 2 (mise en page déterministe par note_renderer, sans modèle). Toute
+    # circonstance où la passe 1 échoue ou le gabarit n'est pas compatible
+    # retombe sur la passe unique classique ci-dessous — la dictée n'est jamais
+    # perdue, seulement produite par la trajectoire historique.
+    if runtime_config.value("note_pipeline") == "two_pass":
+        deux_pass = llm.generate_note_two_pass(
+            payload.transcript,
+            template_row.system_instructions,
+            template_row.layout_format,
+            _build_context_lines(payload),
+            payload.extra_instructions,
+            model_name,
+            template_row.language,
+            audio_payload,
+            system_override=system_prompt,
+            confiance=confiance_mots,
+            med_hints=med_hints or None,
+            on_stream_started=_publish_started,
+        )
+        if deux_pass is not None:
+            logger.info(
+                "Note générée en deux passes (%s / %s) — %d caractères, "
+                "extraction appliquée",
+                deux_pass["provider"], deux_pass["model"],
+                len(deux_pass["markdown"]),
+            )
+            if _generation_guard.is_current(payload.consultation_id, generation_seq):
+                live.publish(user.owner_key, "generation_chunk", {
+                    "type": "snapshot", "seq": 1,
+                    "markdown": deux_pass["markdown"],
+                    "consultation_id": payload.consultation_id,
+                    "generation_token": payload.generation_token,
+                    "origin_tab": origin_tab,
+                })
+            return deux_pass
+
     generator = llm.generate_note_stream(
         payload.transcript,
         template_row.system_instructions,

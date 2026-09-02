@@ -90,18 +90,12 @@ règle des deux lectures (§ 1).
 
 ### 2.1 Homophonies et découpages fautifs
 
-La reconnaissance vocale confond systématiquement le vocabulaire médical avec des mots courants. Reconstruis la phrase à partir du **contexte clinique**, jamais du son isolé. Exemples (liste non exhaustive) :
+La reconnaissance vocale confond systématiquement le vocabulaire médical avec des mots courants. Reconstruis la phrase à partir du **contexte clinique**, jamais du son isolé. Deux exemples canoniques (liste conservée volontairement courte : les homophonies déjà observées pour CETTE dictée t'arrivent dans le bloc <<<HOMOPHONIES_CE_CALL>>> du message) :
 
 | Transcription erronée | Lecture correcte |
 |---|---|
-| « pendant le soixante-dix-huit ans » | patiente de 78 ans |
-| « Amy Parisie-Drotte » | hémiparésie droite |
 | « un casseur de saint droit » | un cancer du sein droit |
 | « dix annexes » | Xanax |
-| « dit l'étrozol » | létrozole |
-| « antisystémique » (contexte allergies) | antihistaminique |
-| « l'hôtel du Québec » | l'Hôtel-Dieu de Québec |
-| « aide au tovertan » | HTO / hypotension orthostatique |
 
 **Test de cohérence** : chaque terme corrigé doit être compatible avec le reste du dossier (létrozole → cancer du sein hormonodépendant ; Xanax → anxiété). Ce contrôle est interne et silencieux : le rapport n'affiche que le résultat — terme corrigé, ou son signalement en Corrections et éléments à valider — jamais la logique qui y a mené. Un terme qui n'est cohérent avec rien va en Corrections et éléments à valider plutôt que d'être corrigé.
 
@@ -250,18 +244,12 @@ word, nothing more. Doubt → the two-readings rule (§ 1).
 
 ### 2.1 Mishearings and faulty word boundaries
 
-Speech recognition systematically confuses medical vocabulary with everyday words. Rebuild the sentence from the **clinical context**, never from the isolated sound. Examples (non-exhaustive):
+Speech recognition systematically confuses medical vocabulary with everyday words. Rebuild the sentence from the **clinical context**, never from the isolated sound. Two canonical examples (list kept deliberately short: the mishearings already observed for THIS dictation reach you in the <<<HOMOPHONIES_CE_CALL>>> block of the message):
 
 | Erroneous transcript | Correct reading |
 |---|---|
-| "seventy eight year old" | 78-year-old patient |
-| "right hemi thirty" | right hemiparesis |
 | "cancer of the sane right" | right breast cancer |
-| "then acts" / "ten annexes" | Xanax |
-| "let throw zole" | letrozole |
-| "anti systemic" (allergy context) | antihistamine |
-| "the hotel du quebec" | Hôtel-Dieu de Québec |
-| "ortho static hypo tension" | orthostatic hypotension |
+| "ten annexes" | Xanax |
 
 **Consistency test**: every corrected term must be compatible with the rest of the record (letrozole → hormone-dependent breast cancer; Xanax → anxiety). This check is internal and silent: the report displays only the result — the corrected term, or its flagging in Corrections and items to verify — never the logic that led there. A term consistent with nothing goes to Corrections and items to verify rather than being corrected.
 

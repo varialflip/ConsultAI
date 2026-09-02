@@ -495,7 +495,7 @@ cinq onglets :
 | Onglet | Contenu |
 |---|---|
 | Dictée | Service de reconnaissance vocale (sous-onglet par service : clé, modèle, langue), retrait des longues pauses, temps réel de la dictée (mode, VAD) |
-| Note | Modèle de langage (sous-onglet par fournisseur : clé, modèle, rapide, température, audio, raisonnement), consigne générale fr/en, affichage du raisonnement |
+| Note | Modèle de langage (sous-onglet par fournisseur : clé, modèle, rapide, température, audio, raisonnement), consigne générale fr/en, affichage du raisonnement, pipeling de génération (passe unique / deux passes) |
 | Comptes et accès | Inscription automatique, attributs du nom affiché et de l'avatar, comptes et groupes |
 | Données et sauvegarde | Purge des dossiers après délai, rotation des sauvegardes, export/import et restauration (§ 9) |
 | Statistiques | Usage et coûts par fournisseur |
@@ -692,6 +692,39 @@ des mots courants parfaitement orthographiés, ex. « un casseur de saint
 droit »), pas des fautes de frappe, et une correction rétablit le mot dicté
 sans ajouter d'information — elle n'introduit jamais un fait non dicté (doute →
 règle des deux lectures, § 1).
+
+**Pipeling de génération — passe unique ou deux passes.** Depuis le 2026-09-02,
+le panneau (Note) expose `note_pipeline` : la note peut être produite d'une
+seule traite par le modèle (**passe unique**, trajectoire historique) ou en
+**deux passes** (défaut) :
+
+- **Passe 1 — extraction/correction** : le modèle corrige la dictée
+  (homophonies, doutes, style de chaque rubrique) et renvoie un **objet
+  structuré** (en-tête, sections, corrections). Il ne voit jamais la mise en
+  page : impossible d'en déformer ou d'en « remplir » la structure, et aucun
+  jeton n'est dépensé à la reproduire.
+- **Passe 2 — rendu applicatif** : la mise en page est produite par du code
+  déterministe (`note_renderer`), pas par le modèle. Titres, ordre, listes à
+  puces, numérotation de l'Impression/du Plan, blocs à libellés
+  (AVQ/AVD/Mobilité), rubriques mixtes (résumé + plan), suppression des
+  rubriques et lignes d'en-tête sans contenu dicté, pied « Rédigé à l'aide de
+  la reconnaissance vocale. » et rubrique finale de corrections : tout cela est
+  garanti par construction.
+
+Trois niveaux de repli protègent le parcours : un échec de la passe 1 (JSON
+invalide) ou une mise en page incompatible (gabarit à tableau) retombe
+**automatiquement** sur la passe unique ; le réglage peut être remis sur
+« passe unique » à chaud depuis le panneau ; et le point de code d'avant le
+pipeling est marqué au git (`two-pass-fallback`). En « deux passes », la note
+n'arrive plus au fil de l'eau pendant la génération (la passe 2 est
+instantanée) : l'écran affiche « Traitement en cours… », puis la note
+complète.
+
+**Homophonies.** La liste des confusions vocales connues (ex. « un casseur de
+saint droit » → cancer du sein droit, « pantoloque » → Pantoloc) n'est plus
+cuite dans la consigne générale, qui grandissait à chaque erreur captée : elle
+vit en code (`app/homophones.py`) et seules les lignes pertinentes pour la
+dictée en cours arrivent au modèle dans le bloc `<<<HOMOPHONIES_CE_CALL>>>`.
 
 **Fidélité au contenu dicté.** La consigne générale interdit autant l'omission
 que l'invention (§ 1) : toute donnée clinique dictée figure dans la note —

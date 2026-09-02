@@ -14,6 +14,9 @@ GARBLES = {
     "l'a6":        ("lasix", "furosemide"),
     "l'asix":      ("lasix", "furosemide"),
     "asix":        ("lasix", "furosemide"),
+    # « la Six 20 » (consultation 21, transfert TNC vasculaire) : le STT scinde
+    # « Lasix » en « la Six » — bigramme, capté par la voie multi-mots.
+    "la six":      ("lasix", "furosemide"),
     "laxic":       ("lasix", "furosemide"),
     "laxil":       ("lasix", "furosemide"),
     "lasiks":      ("lasix", "furosemide"),
@@ -30,6 +33,9 @@ GARBLES = {
     "pitax":       ("lipitor", "atorvastatin"),
     "dipipanone":  ("lipitor", "atorvastatin"),
     "guipitar":    ("lipitor", "atorvastatin"),  # observé note 6 (délirium ICU)
+    # « Lipar 10 » (consultation 21, transfert TNC vasculaire) : lipitor/atorva-
+    # statin. Phonétiquement à 0,57 (sous tout seuil) — seed exact indispensable.
+    "lipar":       ("lipitor", "atorvastatin"),
     "tyrénol":     ("tylenol", "acetaminophen"),
     "tylénol":     ("tylenol", "acetaminophen"),
     "tirilnol":    ("tylenol", "acetaminophen"),

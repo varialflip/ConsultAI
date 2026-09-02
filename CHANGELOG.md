@@ -3,6 +3,45 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-02 — Grounding des listes de méd « transfert TNC vasculaire » (consultation 21)
+
+*La liste dictée (zone « Dans ses médicaments ») n'était détectée qu'à 4/9 :
+« Lipar » nulle part, « l'Aldactone »/« la Six »/« Doxazocin »/« Serpaline »
+perdus, Calcium absent. Cause racine : un crash `float()` sur les doses
+ponctuées (« 6,25, ») tuait silencieusement TOUS les hints phonétiques, et le
+repérage de liste exigeait une dose juste après chaque nom.*
+
+- **P0 — crash phonétique réparé** (`phonetiques_texte`) : les doses en fin de
+  liste (« 6,25, », « Doxazocin. 4. ») portent la ponctuation de liste ; le
+  `float()` brut sur « 6.25. » levait une exception que `extract_validation_items`
+  avalait — **plus aucun hint phonétique**. Helper `_dose_nb()` + `_dose_posology`
+  qui élaguent la ponctuation avant conversion : les pistes Aldactone, Doxazosin
+  et Sertraline remontent au modèle.
+- **P1 — seeds nouveaux** (`seed_aliases.py`, DB regénérée) : « lipar → Lipitor »
+  (phonétiquement 0,57, sous tout seuil — seed exact indispensable) et
+  « la Six → Lasix » (bigramme STT). Les deux DB (`app/` + `med_grounding/`)
+  remises à jour ensemble.
+- **P2a — article soudé** : « l'Aldactone » (STT colle l'article au nom) décodé
+  via `_strip_glued_article` — la forme découpée n'est essayée que si la forme
+  complète ne résout pas déjà, pour ne jamais tronquer un vrai nom
+  (« lasix » ≠ « la »+« six »).
+- **P2b — bigramme garble « la Six » → Lasix** : la voie multi-mots de
+  `_lookup_exact` testait maintenant `exact_garble` sur tout le bigramme,
+  là où elle ne craquait que les composés génériques — Lasix 20 détecté.
+- **P2c — formes galéniques** : « 1 comprimé »/« 1 capsule »… comptent comme
+  une vraie posologie (`_DOSE_WORDS` + `_append_item`) — Calcium 1 comprimé
+  n'est plus un électrolyte de lab écarté.
+- **P3 — liste permissive « transfert de dossier »** : une liste confirmée
+  (≥ 2 noms résolus + doses) étend son repérage aux noms nus avoisinants qui
+  résolvent en vrai médicament (`_extend_medlist_bare`).
+- **Anti-faux-positif de prose** : les hints phonétiques n'admettent plus un
+  jeton porté par un simple voisin numérique (« Lontin »+n° dossier,
+  « glycée 5,8 ») ni hors région confirmée (« continent », « visuelle ») ;
+  la posologie doit être crédible (`_poso_credible`) hors liste.
+- **Vérifié** : consultation 21 complète → les **9/9 médicaments** détectés,
+  zéro faux positif de prose ; les 4 consults de référence (dictee-1,
+  dictee-6, consult7, consultai4-gemini) **inchangées**.
+
 ## 2026-09-01 — G2P : la règle « gu+voyelle » répare admelogue / proguanil
 
 *« admelogue » (STT) restait hors des pistes phonétiques : le G2P français

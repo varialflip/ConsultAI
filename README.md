@@ -915,6 +915,29 @@ des médicaments », défaut `false`). Une fois activé :
   résolus. Même source partagée entre la liste live de dictée, le « Terminer »,
   la génération et la retranscription (`extract_validation_items`) ;
      `med_grounding_json` porte l'étiquette `source: "phonetic"`.
+- **Article soudé au nom** : `l'Aldactone`, `d'elestrox` (le STT colle
+  l'article au nom sans espace) sont décodés en essayant d'abord la forme
+  complète, puis — si elle ne résout dans aucune table — la forme décapitée
+  de son article. On ne tronque jamais un vrai nom qui commence par une
+  amorce d'article : `lasix` n'est pas découpé en `la`+`six`.
+- **Bigramme garble seedé (`la Six` → Lasix)** : la voie multi-mots de
+  `_lookup_exact` teste désormais `exact_garble` sur tout le bigramme (le STT
+  scinde parfois un nom en deux mots français, « la Six », « hamelot d'épine »),
+  là où elle ne craquait que les composés génériques de la BDP.
+- **Formes galéniques = posologie crédible** : « 1 comprimé », « 2 gouttes »,
+  « 1 timbre »… comptent comme une vraie dose (et non un simple chiffre ou une
+  case de lab) — le supplément « Calcium vitamine D 1 comprimé par jour » est
+  retenu, là où « Calcium 1,26 » du bilan reste une valeur de lab écartée.
+- **Liste permissive « transfert de dossier »** : une liste confirmée (≥ 2
+  noms résolus portant une dose) étend son repérage aux noms nus avoisinants
+  qui résolvent en vrai médicament (`_extend_medlist_bare`) — « Serpaline 50 »,
+  « Lipar 10 », « Doxazocin 4 » d'un transfert restent captés même sans forme
+  galénique ou unité collée.
+- **Anti-faux-positif de prose** : hors liste confirmée, un candidat
+  phonétique exige une **posologie crédible** (unité, fréquence, ou forme
+  galénique chiffrée) — un simple voisin numérique de lab/dossier (« glycée
+  5,8 », « Lontin » + n° dossier) ou un « gouttes » isolé n'autorise pas une
+  piste ; et un jeton douteux hors région n'est plus admis sur le seul doute.
 - **Substitutions de lettres proches départagées** : les erreurs du STT sont
   surtout **auditives** (`/s/↔/z/`, `/f/↔/v/`…), plus plausibles qu'une
   insertion. À distance de Levenshtein **minimale égale**, les candidats sont

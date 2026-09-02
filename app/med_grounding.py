@@ -878,6 +878,14 @@ class Matcher:
                 for t in range(start, idxs[j] + 1):
                     medlist[t] = True
             k = j + 1
+        # Passe PERMISSIVE « transfert de dossier » : une liste confirmée (au
+        # moins 2 noms résolus munis d'une dose) étend sa fenêtre aux NOMS NUS
+        # avoisinants qui se résolvent en vrai médicament (non feuille, non
+        # lab) dans un court intervalle. Les listes de transfert dictent
+        # souvent un nom sans dose (« Doxazosin. », « Serpaline 50 » gardés
+        # sans unité) : tant que le bloc a de vraies doses ailleurs, un nom
+        # résolu en prose 2 mots plus loin reste du médicament, pas du bruit.
+        medlist = _extend_medlist_bare(words, medlist, self._resolve_single)
         return medlist
 
     def _dose_suffix_phrase(self, words, i, n, dose_unit, num_token, proactive,
@@ -1002,16 +1010,32 @@ class Matcher:
         t = norm_phon(token)
         if not t:
             return None
+        # Article soudé (« l'Aldactone », « d'abitrate ») : le STT colle
+        # l'article au nom SANS espace. On ne décape la clé que si la forme
+        # complète ne résout déjà pas (jamais de « lasix » → « six » en
+        # découpant « la ») et qu'on cible le NOM NU derrière l'article.
+        # ``t_alt`` n'est essayé que si ``t`` ne frappe aucune table exacte.
         if t in self.exact_garble:
             level, base, brand, is_leaf, is_otc = self.exact_garble[t]
             return (level, base, brand, 1.0, is_leaf, is_otc)
         if t in self.exact:
             level, base, brand, is_leaf, is_otc = self.exact[t]
             return (level, base, brand, 1.0, is_leaf, is_otc)
+        t_alt = _strip_glued_article(t, t)
+        if t_alt != t:
+            if t_alt in self.exact_garble:
+                level, base, brand, is_leaf, is_otc = self.exact_garble[t_alt]
+                return (level, base, brand, 1.0, is_leaf, is_otc)
+            if t_alt in self.exact:
+                level, base, brand, is_leaf, is_otc = self.exact[t_alt]
+                return (level, base, brand, 1.0, is_leaf, is_otc)
         if not fuzzy:
             return None
         if len(t) < MIN_FUZZY_LEN:
             return None                     # short tokens: exact only, no fuzzy
+        # Pour le FLOU, préférer la forme découpée (la plus proche du vrai nom).
+        if t_alt != t and len(t_alt) >= MIN_FUZZY_LEN:
+            t = t_alt
         best = None
         best_sim = 0.0
         L = len(t)
@@ -1116,6 +1140,16 @@ class Matcher:
                 dose_unit[i] = True
             if re.fullmatch(r"\d+(?:[,.]\d+)?", w.strip(",;:.()")):
                 num_token[i] = True
+        # Régions « liste de médicaments » confirmées : on y exige une dose à
+        # portée pour admettre un débile/candidat phonétique ; hors région, un
+        # nombre nu de lab/dossier ne doit jamais autoriser une piste.
+        fragile = [False] * n
+        for i, w in enumerate(words):
+            pp = norm_phon(w)
+            if (pp in FRENCH_STOP or pp in ANCHOR_WORDS or pp in PROTOCOL_WORDS
+                    or words[i].isdigit()):
+                fragile[i] = True
+        region = self._medlist_regions(words, fragile, num_token, dose_unit)
         result: list = []
         vus = set()
         for i, w in enumerate(words):
@@ -1134,28 +1168,39 @@ class Matcher:
             # sinon ça spatit de la prose sur la phonétique même bruitée. Un gros
             # nombre (>999) est une date/n° de dosier, jamais une doze.
             j = min(i + 3, n)
-            num_apres = (i + 1 < n and num_token[i + 1]
-                         and float(words[i + 1].replace(',', '.')) <= 999) or \
-                        (i + 2 < n and num_token[i + 2]
-                         and float(words[i + 2].replace(',', '.')) <= 999)
+            d1 = _dose_nb(words[i + 1]) if i + 1 < n else None
+            d2 = _dose_nb(words[i + 2]) if i + 2 < n else None
+            dm = _dose_nb(words[i - 1]) if i > 0 else None
+            num_apres = (i + 1 < n and num_token[i + 1] and d1 is not None
+                         and d1 <= 999) or \
+                        (i + 2 < n and num_token[i + 2] and d2 is not None
+                         and d2 <= 999)
             contexte = (
                 any(dose_unit[k] for k in range(i, j))
                 or num_apres
-                or (i > 0 and num_token[i - 1]
-                    and float(words[i - 1].replace(',', '.')) <= 999)
+                or (i > 0 and num_token[i - 1] and dm is not None and dm <= 999)
             )
             if not contexte:
-                # Un jeton DOUTEUX (conf_keys) est admis sans dose à portée : le
-                # doute STT est la preuve d'un nom possiblement déformé. La
-                # proximité phonétique (filtre s >= 0.80 ci-dessous) sépare les
-                # vrais garbles du bruit de prose.
-                if not (conf_keys and p in conf_keys):
+                # Un jeton DOUTEUX (conf_keys) est admis sans dose à portée MAIS
+                # uniquement au sein d'une région « liste de médicaments »
+                # confirmée (``region[i]``) : le doute STT est la preuve d'un nom
+                # possiblement déformé. Hors liste, la prose douteuse
+                # (« Lontin », « continent », « visuelle ») ne doit jamais devenir
+                # une piste médicament.
+                if not (region[i] and conf_keys and p in conf_keys):
                     continue
             cand = self._phonetic_candidats(jet)
             if not cand:
                 continue
             can, base, brand, s = cand
             poso = _dose_posology(texte, jet) or ""
+            # Hors liste confirmée, la POSOLOGIE doit être crédible pour porter
+            # la piste phonétique : un simple voisin numérique (valeur de lab
+            # « 5,8 », n° de dossier) ou un « gouttes » isolé ne sont pas des
+            # doses de médicament. Dans une région de liste, un nombre nu
+            # suffit (dictée « …, Doxazocin. 4, … »).
+            if not region[i] and not _poso_credible(poso):
+                continue
             # Un candidat SANS TROUVE posologie crédible (vide, ou uniquement des
             # chiffres sans unité — n° de dossier/date) n'est admis que s'il est
             # très proche phonétiquement (>= 0,72, sépare les vrais garbles
@@ -1212,16 +1257,19 @@ class Matcher:
                 # Contexte : une dose/unité à portée de la paire, ou un voisin
                 # chiffre petit, ou un doute STT sur l'un des deux mots.
                 j2 = min(i + 4, n)
+                d2a = _dose_nb(words[i + 2]) if i + 2 < n else None
+                d2b = _dose_nb(words[i + 3]) if i + 3 < n else None
+                d2m = _dose_nb(words[i - 1]) if i > 0 else None
                 contexte2 = (
                     any(dose_unit[k] for k in range(i, j2))
-                    or (i + 2 < n and num_token[i + 2]
-                        and float(words[i + 2].replace(',', '.')) <= 999)
-                    or (i + 3 < n and num_token[i + 3]
-                        and float(words[i + 3].replace(',', '.')) <= 999)
-                    or (i > 0 and num_token[i - 1]
-                        and float(words[i - 1].replace(',', '.')) <= 999)
+                    or (i + 2 < n and num_token[i + 2] and d2a is not None
+                        and d2a <= 999)
+                    or (i + 3 < n and num_token[i + 3] and d2b is not None
+                        and d2b <= 999)
+                    or (i > 0 and num_token[i - 1] and d2m is not None
+                        and d2m <= 999)
                 )
-                if not contexte2 and not (conf_keys and (pa in conf_keys or pb in conf_keys)):
+                if not contexte2 and not (region[i] and region[i + 1] and conf_keys and (pa in conf_keys or pb in conf_keys)):
                     continue
                 cand2 = self._phonetic_candidats(paire)
                 if not cand2:
@@ -1230,9 +1278,7 @@ class Matcher:
                 # Sans dose crédible, une paire doit être douteuse ET très
                 # proche pour ne pas faire de la prose un médicament.
                 poso2 = _dose_posology(texte, paire) or ""
-                cred2 = bool(re.search(
-                    r"\b(mg|mcg|µg|g|ml|ui|unité|unites|comprimé|tid|bid|hs|prn|po|die)\b",
-                    poso2, re.I))
+                cred2 = _poso_credible(poso2)
                 seuil2 = 0.72 if (cred2 or (conf_keys and (pa in conf_keys or pb in conf_keys))) else 0.80
                 if s2 < seuil2:
                     continue
@@ -1726,6 +1772,47 @@ _UV_COSMETICS = {
 }
 
 
+def _dose_nb(w):
+    """Renvoie la valeur numérique d'un jeton-dose, ou ``None``.
+
+    Le jeton peut porter la dose avec sa ponctuation de liste (« 6,25, »,
+    « 20. ») — ``float`` brut, si :`` `` y reste, lèverait en
+    ``phonetiques_texte`` et tuerait tout le hint phonétique (c'est le bug P0).
+    On retire la ponctuation terminale avant conversion.
+    """
+    try:
+        return float(w.strip(" \t,;:.()\"").replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+_DOSE_UNIT_RE = re.compile(
+    r"\b(mg|mcg|µg|ug|g|ml|ui|unit|unite|unites|unité|unités|die|bid|tid|qid|"
+    r"prn|hs|po|peros|am|pm)\b", re.I)
+_DOSE_FORM_NUM_RE = re.compile(
+    r"\b\d+(?:[.,]\d+)?\s*(comprimé|comprimés|capsule|capsules|goutte|gouttes|"
+    r"timbre|timbres|crème|pommade|ampoule|suppositoire)\b", re.I)
+
+
+def _poso_credible(poso) -> bool:
+    """Une posologie est-elle CRÉDIBLE (unité, fréquence, ou forme galénique
+    QTEttée d'un nombre) ?
+
+    Un électrolyte/valeur de lab (poso « 5,8 »), un symbole de syntaxe
+    (« gouttes » isolé) ou un n° de dossier ne sont pas des posologies :
+    sans une unité/fréquence ou un « 1 comprimé »/« 2 gouttes », ce n'est pas
+    une dose de médicament, et la phonétique du token ne doit pas en porter
+    la preuve.
+    """
+    if not poso:
+        return False
+    if _DOSE_UNIT_RE.search(poso):
+        return True
+    if _DOSE_FORM_NUM_RE.search(poso):
+        return True
+    return False
+
+
 def _dose_posology(text: str, name: str) -> str:
     """Candidate posologie après ``name`` dans ``text`` (<= 8 jetons).
 
@@ -1799,13 +1886,54 @@ _FRENCH_OTC = {
 #: Mots de posologie francs (fréquence, route, unité) — à comparer en ÉGALITÉ,
 #: jamais en sous-chaîne (« tachycardie » contient « die » et ne doit pas être
 #: capturé comme posologie).
+#: Formes galéniques (comprimé, capsule…) : le STT compte une posologie par
+#: « 1 comprimé par jour » (Calcium+vitamine D) sans unité de dose — c'est une
+#: VRAIE posologie, pas un chiffre orphelin.
+_DOSE_FORM_WORDS = {
+    "comprime", "comprimes", "capsule", "capsules", "goutte", "gouttes",
+    "timbre", "timbre", "timbre", "timbres", "creme", "crème", "pommade",
+    "tube", "injection", "ampoule", "suppositoire", "bouchonnette",
+}
 _DOSE_WORDS = {
     "mg", "mcg", "µg", "ug", "g", "ml", "unite", "unites", "unités", "units", "ui",
     "die", "bid", "tid", "qid", "prn", "po", "peros", "am", "pm", "hs",
     "matin", "soir", "coucher", "jour", "jours", "semaine", "fois",
     "quotidien", "quotidienne", "microgramme", "microgrammes", "q1sem", "q2j",
     "souscut", "souscutane", "souscutanee", "sc",
-}
+} | _DOSE_FORM_WORDS
+
+
+def _strip_glued_article(t, fallback):
+    """Décapite un article français collé en tête d'un nom normalisé, sinon
+    renvoie ``fallback``.
+
+    Le STT colle souvent l'article au nom sans espace (« l'Aldactone »,
+    « d'erythrom »). Après ``norm_phon`` l'apostrophe a disparu : on devine les
+    amorces d'articles courtes (1-2 lettres, surtout ``l``/``d`` des formes
+    contractées l'/d'/la/du) suivies d'un nom plausible. On ne décape QUE ce
+    qui ressemble à un article de 1-2 lettres et jamais en laissant un reste
+    trop court ; et l'appelant ne passe ici que si la forme complète n'a pas
+    déjà résolu (sinon « lasix » serait coupé en « la »+« six »).
+    """
+    if not t:
+        return fallback
+    kept = t
+    for art in ("l", "d", "a", "au", "al", "le", "la", "les", "de", "du",
+                "des", "un", "une"):
+        if len(t) - len(art) < 4:          # reste trop court : pas un nom
+            continue
+        if t.startswith(art) and _is_medlike(t[len(art):]):
+            kept = t[len(art):]
+            break                           # première amorce plausible (article)
+    return kept
+
+
+def _is_medlike(s):
+    """Heuristique : un préfixe découpé est plausiblement un nom de méd en lui-
+    même (longueur raisonnable, commence souvent par une consonne aspirée)."""
+    if len(s) < 3 or len(s) > 16:
+        return False
+    return re.match(r"^[bcdfghjklmnpqrstvwxyz]", s, re.I) is not None
 
 
 def _lookup_exact(token: str) -> dict | None:
@@ -1819,6 +1947,12 @@ def _lookup_exact(token: str) -> dict | None:
     t = norm_phon(tok)
     if not t or len(t) < 3 or t in _ITEM_STOP:
         return None
+    # Article soudé (« l'Aldactone », « d'elestrox ») : on essaie la clé telle
+    # quelle, puis, si elle ne résout dans aucune table exacte, la clé découpée
+    # de l'article. `_strip_glued_article` ne revient sur la forme complète que
+    # si celle-ci ne matche pas (jamais « lasix » → « six »).
+    t_alt = _strip_glued_article(t, t)
+    ts = [t] + ([t_alt] if t_alt != t else [])
     # Mots de la langue courante / protocoles : jamais des noms de médicaments,
     # même s'ils figurent comme feuilles de marques dans la base.
     if t in FRENCH_STOP or t in ANCHOR_WORDS or t in PROTOCOL_WORDS:
@@ -1835,6 +1969,17 @@ def _lookup_exact(token: str) -> dict | None:
     # dans le nom. On l'exclut d'emblée — sans quoi « norm_orth » éliminerait
     # le chiffre et le bigramme retomberait sur le nom seul.
     if " " in tok:
+        # Un garble STT multi-mots seedé (« la six » → Lasix) : la clé
+        # normalisée (``norm_phon``) garde TOUS les mots collés, contrairement
+        # au composé générique ci-dessous qui teste ``norm_orth`` séparé. On le
+        # vérifie avant de craquer un bigramme nom+dose (le chiffre, lui, reste
+        # exclu des amORCEs et le ``norm_phon`` le perd — on ne matche donc pas
+        # une dose dans l'exact garble).
+        if t in m.exact_garble and not re.search(r"(?:\A|\s)\d", tok):
+            level, base, brand, _leaf, _otc = m.exact_garble[t]
+            if _is_cosmetic(base):
+                return None
+            return {"level": level, "base": base, "brand": brand}
         if re.search(r"(?:\A|\s)\d", tok):
             return None   # nom + dose : chiffre = posologie, pas le nom
         nspace = norm_orth(tok)
@@ -1893,7 +2038,9 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # supplément.
     base_cle = norm_orth(base).replace(" ", "")
     if base_cle in LAB_ION and not re.search(
-            r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm)\b",
+            r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm|"
+            r"comprimé|comprimés|capsule|capsules|goutte|gouttes|timbre|timbres|"
+            r"crème|pommade|ampoule|suppositoire)\b",
             poso, re.I):
         return False
     # Anti-fantôme : un nom de médicament NU (sans dose captée après, sans
@@ -1911,7 +2058,9 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # médicament en liste (``ancre_poso``) ni à un nom non résolu exactement
     # (déformé) : ceux-là ont confiance en général < 0.95 ou une région.
     poso_credible = bool(re.search(
-        r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm)\b",
+        r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm|"
+        r"comprimé|comprimés|capsule|capsules|goutte|gouttes|timbre|timbres|"
+        r"crème|pommade|ampoule|suppositoire)\b",
         poso, re.I))
     if confiant and not poso_credible and not ancre_poso:
         return False
@@ -2200,3 +2349,51 @@ def doutes_pour_texte(
                 {"mot": tok, "conf": round(valeur, 3), "position": i}
             )
     return result
+
+
+def _extend_medlist_bare(words, medlist, resolve):
+    """Étend une région de liste confirmée aux noms nus avoisinants.
+
+    Soit ``medlist`` (drapeaux par jeton) calculé par ``_medlist_regions`` sur
+    des noms munIS d'une dose. On repère chaque bloc confirmé (run contigu) et
+    on y rattache, à gauche et à droite dans un court intervalle (<= 4 jetons
+    sans dose), tout jeton qui se résout en un vrai médicament (non feuille,
+    non lab-ion, non stop/protocole). Couvre les listes de transfert de dossier
+    où un nom est dicté nu (« Doxazosin. », « Serpaline 50 ») — sans dose juste
+    après. La confirmation préalable par doses protège la prose : on ne marque
+    que des noms RÉSOLUS à proximité immédiate d'un vrai bloc de médicaments.
+    """
+    n = len(words)
+    runs = []
+    i = 0
+    while i < n:
+        if medlist[i]:
+            s = i
+            while i + 1 < n and medlist[i + 1]:
+                i += 1
+            runs.append((s, i))
+        i += 1
+    if not runs:
+        return medlist
+    out = medlist[:]
+    for s, e in runs:
+        lo = max(0, s - 4)
+        hi = min(n, e + 5)
+        for i in range(lo, hi):
+            if out[i]:
+                continue
+            if medlist[i]:            # déjà marqué
+                continue
+            w = words[i]
+            if not w or len(norm_phon(w)) < 5:
+                continue
+            if not w.isalpha():
+                continue
+            p = norm_phon(w)
+            if p in FRENCH_STOP or p in ANCHOR_WORDS or p in PROTOCOL_WORDS:
+                continue
+            cand = resolve(w)
+            if cand and not cand[4] and not cand[3] and not cand[5]:
+                if norm_orth(w).replace(" ", "") not in LAB_ION:
+                    out[i] = True
+    return out

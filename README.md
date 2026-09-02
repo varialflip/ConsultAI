@@ -1027,6 +1027,12 @@ comme n'importe quel fournisseur hébergé.
 > autoritaire, le texte sert de filet anti-omission (éléments dictés oubliés
 > d'un audio seul). Désactivé (défaut) : aucun appel vocal pendant
 > l'enregistrement, la note vient de l'audio seul.
+>
+> **Partout où l'audio est envoyé avec la transcription** (« Joindre aussi
+> l'audio », mode guide, contournement), **l'audio fait foi** : il corrige un
+> terme mal transcrit et récupère ce que la transcription aurait omis ; un
+> élément porté par la transcription seule mais que l'audio ne confirme pas est
+> signalé « à confirmer » en Corrections et éléments à valider.
 
 Vérification en une commande — ce qui est **réellement** en service, et non ce que
 dit le `.env` (le panneau le surcharge) :

@@ -1404,12 +1404,17 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Also attach audio (pauses capped)",
     ),
     "set.cap.send_audio.help": (
-        "Envoie l'extrait audio en plus de la transcription : le modèle peut "
-        "trancher un terme mal reconnu (nom propre, terme médical) en "
-        "l'écoutant. Ajoute un coût et quelques secondes par note.",
-        "Sends the audio clip alongside the transcript: the model can "
-        "resolve a poorly recognized term (proper noun, medical term) by "
-        "listening to it. Adds cost and a few seconds per note.",
+        "Envoie l'extrait audio en plus de la transcription : l'AUDIO FAIT "
+        "FOI — le modèle corrige un terme mal reconnu (nom propre, terme "
+        "médical) et récupère ce que la transcription aurait omis ; un "
+        "élément porté par la transcription seule mais que l'audio ne "
+        "confirme pas est signalé « à confirmer ». Ajoute un coût et quelques "
+        "secondes par note.",
+        "Sends the audio clip alongside the transcript: the AUDIO PREVAILS — "
+        "the model corrects a poorly recognized term (proper noun, medical "
+        "term) and recovers what the transcript would have missed; an item "
+        "carried by the transcript alone but not confirmed by the audio is "
+        "flagged \"to be confirmed\". Adds cost and a few seconds per note.",
     ),
     "set.cap.send_audio_max_minutes.label": (
         "Durée maximale envoyée (minutes)",
@@ -2173,17 +2178,22 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Also attach audio (pauses capped)",
     ),
     "set.custom_send_audio.help": (
-        "Envoie l'extrait audio en plus de la transcription : utile si le "
-        "point de terminaison (ex. OpenRouter) expose un modèle multimodal — "
-        "le modèle peut trancher un terme mal reconnu (nom propre, terme "
-        "médical) en l'écoutant. Sans effet si le modèle ne gère pas l'audio : "
-        "la note se génère alors comme avant. Ajoute un coût et quelques "
-        "secondes par note.",
-        "Sends the audio clip alongside the transcript: useful if the "
-        "endpoint (e.g. OpenRouter) exposes a multimodal model — the model "
-        "can resolve a poorly recognized term (proper noun, medical term) by "
-        "listening to it. No effect if the model does not handle audio: the "
-        "note is generated as before. Adds cost and a few seconds per note.",
+        "Envoie l'extrait audio en plus de la transcription : l'AUDIO FAIT "
+        "FOI — utile si le point de terminaison (ex. OpenRouter) expose un "
+        "modèle multimodal, le modèle corrige un terme mal reconnu (nom "
+        "propre, terme médical) et récupère ce que la transcription aurait "
+        "omis ; un élément porté par la transcription seule mais que l'audio "
+        "ne confirme pas est signalé « à confirmer ». Sans effet si le modèle "
+        "ne gère pas l'audio : la note se génère alors comme avant. Ajoute un "
+        "coût et quelques secondes par note.",
+        "Sends the audio clip alongside the transcript: the AUDIO PREVAILS — "
+        "useful if the endpoint (e.g. OpenRouter) exposes a multimodal model, "
+        "the model corrects a poorly recognized term (proper noun, medical "
+        "term) and recovers what the transcript would have missed; an item "
+        "carried by the transcript alone but not confirmed by the audio is "
+        "flagged \"to be confirmed\". No effect if the model does not handle "
+        "audio: the note is generated as before. Adds cost and a few seconds "
+        "per note.",
     ),
     "set.custom_send_audio_max_minutes.label": (
         "Durée maximale envoyée (minutes)",
@@ -2234,13 +2244,19 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.custom_bypass_stt_keep_transcript.help": (
         "Sans effet si l'option ci-dessus est désactivée. Activée : la "
         "reconnaissance vocale continue de tourner pendant la dictée (texte "
-        "visible et modifiable), mais la note se génère quand même à partir "
-        "de l'audio. Désactivée (par défaut) : aucun appel au service vocal "
-        "pendant l'enregistrement, économie maximale.",
+        "visible et modifiable) ET cette transcription accompagne la note comme "
+        "guide : l'audio reste la source autoritaire, mais le texte en soutien "
+        "réduit les omissions (éléments dictés absents de la transcription, "
+        "mal transcrits ou oubliés d'un audio seul). Désactivée (par défaut) : "
+        "aucun appel au service vocal pendant l'enregistrement, économie "
+        "maximale.",
         "No effect if the option above is off. On: speech recognition keeps "
-        "running during dictation (visible, editable text), but the note is "
-        "still generated from the audio. Off (default): no call to the "
-        "speech service during recording, maximum savings.",
+        "running during dictation (visible, editable text) AND that transcript "
+        "accompanies the note as a guide: the audio stays the authoritative "
+        "source, but the supporting text reduces omissions (dictated items "
+        "absent from the transcript, mis-transcribed, or missed from audio "
+        "alone). Off (default): no call to the speech service during "
+        "recording, maximum savings.",
     ),
 
     "provider.custom_endpoint": (

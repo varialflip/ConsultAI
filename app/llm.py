@@ -2588,16 +2588,31 @@ def _strip_prompt_markers(text: str) -> str:
 #: trancher un doute, jamais ajouter une donnée.
 _AUDIO_CROSSCHECK_NOTE = {
     "fr": (
-        "UN EXTRAIT AUDIO DE LA DICTÉE EST JOINT À CETTE REQUÊTE. Sers-t'en "
-        "uniquement pour lever un doute sur un terme mal transcrit ci-dessus "
-        "(nom propre, terme médical, dose) ; ne t'en sers jamais pour ajouter "
-        "un contenu absent de la transcription."
+        "UN EXTRAIT AUDIO DE LA DICTÉE EST JOINT À CETTE REQUÊTE, EN PLUS DE "
+        "LA TRANSCRIPTION. L'AUDIO FAIT FOI : en cas de divergence, c'est "
+        "l'audio qui l'emporte, pas la transcription — la reconnaissance "
+        "vocale se trompe (homophonies, noms propres, doses) et la "
+        "transcription peut aussi omettre des éléments audibles. Sers-t'en "
+        "pour corriger un terme mal transcrit, trancher un terme douteux "
+        "(nom propre, terme médical, dose) ET pour repérer toute information "
+        "présente dans l'audio mais absente de la transcription : elle figure "
+        "dans la note. Un élément présent seulement dans la transcription "
+        "mais que l'audio ne confirme pas reste douteux : retiens la lecture "
+        "la plus probable dans la note et signale-le « à confirmer » en "
+        "Corrections et éléments à valider."
     ),
     "en": (
-        "AN AUDIO EXCERPT OF THE DICTATION IS ATTACHED TO THIS REQUEST. Use "
-        "it only to resolve doubt about a poorly transcribed term above "
-        "(proper noun, medical term, dose); never use it to add content "
-        "absent from the transcript."
+        "AN AUDIO EXCERPT OF THE DICTATION IS ATTACHED TO THIS REQUEST, IN "
+        "ADDITION TO THE TRANSCRIPT. THE AUDIO PREVAILS: where they disagree, "
+        "the audio wins, not the transcript — speech recognition makes "
+        "mistakes (mishearings, proper nouns, doses) and the transcript may "
+        "also miss audible items. Use it to correct a mis-transcribed term, "
+        "settle a doubtful term (proper noun, medical term, dose) AND to catch "
+        "any information present in the audio but absent from the transcript: "
+        "it belongs in the note. An item present only in the transcript but "
+        "not confirmed by the audio stays doubtful: keep the most likely "
+        "reading in the note and flag it \"to be confirmed\" in the "
+        "corrections section."
     ),
 }
 
@@ -2639,7 +2654,11 @@ _AUDIO_GUIDED_NOTE = {
         "reviens sur la transcription pour vérifier qu'aucun élément dicté "
         "n'a été oublié. Toute information présente dans l'audio, même absente "
         "de la transcription (ou mal transcrite), figure dans la note. En cas "
-        "de divergence entre l'audio et la transcription, l'audio fait foi."
+        "de divergence entre l'audio et la transcription, l'audio fait foi. "
+        "Un élément présent seulement dans la transcription mais que l'audio "
+        "ne confirme pas reste douteux : retiens la lecture la plus probable "
+        "dans la note et signale-le « à confirmer » en Corrections et éléments "
+        "à valider."
     ),
     "en": (
         "SPEECH RECOGNITION WAS BYPASSED, BUT AN AUTOMATIC TRANSCRIPT OF THE "
@@ -2649,7 +2668,10 @@ _AUDIO_GUIDED_NOTE = {
         "to the transcript to make sure no dictated item was missed. Any "
         "information present in the audio, even absent from the transcript (or "
         "mis-transcribed), belongs in the note. Where the audio and the "
-        "transcript disagree, the audio prevails."
+        "transcript disagree, the audio prevails. An item present only in the "
+        "transcript but not confirmed by the audio stays doubtful: keep the "
+        "most likely reading in the note and flag it \"to be confirmed\" in "
+        "the corrections section."
     ),
 }
 

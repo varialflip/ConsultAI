@@ -123,6 +123,16 @@ TABLE_FR: List[dict] = [
         "contexte": "cardiovasculaire",
     },
     {
+        "erreur": "pestor",
+        "lecture": "Crestor",
+        "contexte": "statine — dyslipidémie, coronaropathie",
+    },
+    {
+        "erreur": "restore 5",
+        "lecture": "Crestor 5",
+        "contexte": "statine — dyslipidémie, coronaropathie",
+    },
+    {
         "erreur": "sélexa",
         "lecture": "Celexa",
         "contexte": "trouble dépressif",

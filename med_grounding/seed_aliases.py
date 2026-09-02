@@ -101,6 +101,15 @@ GARBLES = {
     # generic French confusions
     "rosuvastatine http": (None, "rosuvastatin"),
     "rozu va statine":    (None, "rosuvastatin"),
+    # « Restore 5 » (Cohere consult 25) / « Pestor V » (Parakeet prod) = Crestor
+    # (rosuvastatine). Sans seed, « restore » frappe l'alias BRAND_LEAF du
+    # laxatif OTC SOOTHE RESTORE et est rejeté silencieusement par le filtre
+    # des feuilles, ce qui vide aussi la phonétique (le jeton « déjà résolu »
+    # est sauté). On le seed en STT_GARBLE : résolution EXACTE déterministe vers
+    # Crestor, insensible à la casse/au variant.
+    "restore":            ("crestor", "rosuvastatin"),
+    "restor":             ("crestor", "rosuvastatin"),
+    "pestor":             ("crestor", "rosuvastatin"),
     "simvastatine":       (None, "simvastatin"),
     "atrovastatine":      (None, "atorvastatin"),
     "metoprolol":         (None, "metoprolol"),

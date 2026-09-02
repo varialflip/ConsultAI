@@ -3,6 +3,30 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-01 — G2P : la règle « gu+voyelle » répare admelogue / proguanil
+
+*« admelogue » (STT) restait hors des pistes phonétiques : le G2P français
+encodait « gue » final comme « gu »+« e » → /admelɔgye/, à distance 0,78
+d'« admelog » (/admelɔg/), sous le seuil des hints — le LLM recopiait donc
+« admelogue » tel quel. Or les deux mots se prononcent à l'identique : c'est
+une règle d'orthographe française manquante, pas un problème de seuil ni un
+besoin de tool-call.*
+
+- **Règle G2P « gu+voyelle » ajoutée** (runtime `app/med_grounding.py` et
+  scripts `med_grounding/match_meds.py` alignés) : « u » de « gu » muet devant
+  e/i/é (`gue/gui/gué/gü` → /g/), /w/ devant a/o (`gua/guo` → /gwa//gwɔ/ pour
+  « proguanil », « guanfacine »). « admelogue » et « admelog » codent
+  désormais le même phonème /admelɔg/ (sim 1,0) — la piste Admelog remonte au
+  modèle.
+- **Une refonte complète du G2P a été testée puis écartée** : c/g doux,
+  s/z, nasales, e muet amélioraient la phonétique mais CASSENT les hints
+  existants (tresiba, solifumacine) par l'interaction avec les seuils de
+  l'arbre BK. La correction **additive** (gu+voyelle seulement) règle le cas
+  sans régression : vérifié sur les 4 consultations réelles (tresiba,
+  solifumacine, ricepte… conservés ; aucun faux positif de prose nouveau).
+- **Règle dialecto-neutre** : « gue » = /g/ est l'orthographe française
+  standard, indépendante de l'accent régional — documentée comme telle.
+
 ## 2026-09-01 — Hints : déformations éclatées en deux mots (bigramme phonétique)
 
 *Sur l'enregistrement 22, « insuline trsè bas » était dicté — le STT a rendu

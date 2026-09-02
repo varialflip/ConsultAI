@@ -212,6 +212,12 @@ G2P_RULES = [
     ("ill", "ij"), ("ail", "aj"), ("eil", "ɛj"), ("euil", "œj"),
     ("gn", "ɲ"), ("ch", "ʃ"), ("ph", "f"), ("th", "t"), ("sh", "ʃ"),
     ("qu", "k"),
+    # gu+voyelle : le « u » de « gu » n'est muet que devant e/i/é (il durcit
+    # le g : « admelogue » = /admelɔg/, pas /admelɔgye/) ; devant a/o il forme
+    # /gw/ (« proguanil » = /pʁɔgwanil/). Règle d'orthographe française
+    # standard (indépendante de l'accent régional).
+    ("gué", "g"), ("gue", "g"), ("gui", "g"), ("gü", "g"),
+    ("gua", "gwa"), ("guo", "gwɔ"),
     ("ç", "s"), ("c", "k"), ("g", "g"), ("j", "ʒ"), ("h", ""),
     ("q", "k"), ("x", "ks"), ("y", "i"), ("w", "w"), ("z", "z"), ("s", "s"),
     ("f", "f"), ("v", "v"), ("p", "p"), ("b", "b"), ("t", "t"), ("d", "d"),

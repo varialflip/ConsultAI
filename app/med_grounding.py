@@ -95,6 +95,16 @@ CONF_PROSE_SURE = 0.95
 #: PLUS strict que le 0.80 de la piste en liste (cf. phonetiques_texte).
 CONF_PHON_PROSE_DOUTEUSE = 0.85
 
+#: Seuil minimal de similarité pour une PAIRE de deux mots séparés, tous deux
+#: DOUTEUX (conf_keys), admise en PROSE sans dose (« Donné Pézil » →
+#: donepezil 0.82). Exiger les DEUX mots douteux (et non un seul) est un signal
+#: bien plus fort que le doute d'un jeton isolé : un couple de mots français
+#: courants dont les DEUX membres tombent en dessous du seuil de confiance et
+#: dont la concaténation colle phonétiquement à un vrai médicament est très
+#: rarement de la prose. Balayage du corpus : « Donné Pézil » est le seul
+#: couple de ce type (cf. phonetiques_texte, passe des paires).
+CONF_PHON_PAIRE_PROSE_DOUTEUSE = 0.80
+
 #: Prose structurante à ne JAMAIS proposer comme candidat phonétique (léxique
 #: réduit, réservé à la DÉTECTION de hints — ne modifie pas ``FRENCH_STOP``,
 #: qui reste le garde de la réécriture inline).
@@ -1272,6 +1282,12 @@ class Matcher:
                 pb = norm_phon(b)
                 # Au moins un des deux est court et « ressemble » au début de la
                 # déformation ; le tout doit rester raisonnable en taille.
+                # Une paire dont les DEUX mots font >= 5 lettres est normalement
+                # déjà couverte par l'unigramme — sauf quand aucun des deux ne
+                # résout seul (« Donné » → rien, « Pézil » → rien, mais
+                # « Donné Pézil » → donepezil) : on la ré-admet alors si les
+                # deux sont DOUTEUX (le fragment seul est trop court en sens
+                # mais la concaténation est un nom réellement scindé).
                 paire = f"{a} {b}"
                 paire_p = norm_phon(paire)
                 if not paire_p:
@@ -1280,8 +1296,10 @@ class Matcher:
                     continue
                 if paire_p in FRENCH_STOP or paire_p in self.exact or paire_p in self.exact_garble:
                     continue
+                paire_douteuse = bool(conf_keys and pa in conf_keys and pb in conf_keys)
                 if len(pa) >= 5 or len(pb) >= 5:
-                    continue                  # déjà couvert par l'unigramme
+                    if not paire_douteuse:
+                        continue              # déjà couvert par l'unigramme
                 # Contexte : une dose/unité à portée de la paire, ou un voisin
                 # chiffre petit, ou un doute STT sur l'un des deux mots.
                 j2 = min(i + 4, n)
@@ -1297,7 +1315,13 @@ class Matcher:
                     or (i > 0 and num_token[i - 1] and d2m is not None
                         and d2m <= 999)
                 )
-                if not contexte2 and not (region[i] and region[i + 1] and conf_keys and (pa in conf_keys or pb in conf_keys)):
+                # Admission en PROSE DOUTEUSE : les deux mots de la paire sont
+                # douteux (conf_keys), hors région et sans dose — comme le garde
+                # à jeton unique (CONF_PHON_PROSE_DOUTEUSE), mais l'exigence des
+                # DEUX mots douteux permet un seuil un rien plus bas.
+                prose_douteuse = (paire_douteuse and not contexte2
+                                  and not (region[i] and region[i + 1]))
+                if not contexte2 and not prose_douteuse and not (region[i] and region[i + 1] and conf_keys and (pa in conf_keys or pb in conf_keys)):
                     continue
                 cand2 = self._phonetic_candidats(paire)
                 if not cand2:
@@ -1307,7 +1331,7 @@ class Matcher:
                 # proche pour ne pas faire de la prose un médicament.
                 poso2 = _dose_posology(texte, paire) or ""
                 cred2 = _poso_credible(poso2)
-                seuil2 = 0.72 if (cred2 or (conf_keys and (pa in conf_keys or pb in conf_keys))) else 0.80
+                seuil2 = 0.72 if (cred2 or ((conf_keys and (pa in conf_keys or pb in conf_keys)) and not prose_douteuse)) else (CONF_PHON_PAIRE_PROSE_DOUTEUSE if prose_douteuse else 0.80)
                 if s2 < seuil2:
                     continue
                 if can2 is None or norm_phon(can2) in vus:

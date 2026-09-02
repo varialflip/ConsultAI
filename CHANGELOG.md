@@ -21,12 +21,19 @@ dictés en prose — chaque médicament réel (déformé ou non) était écarté
   Zyprexa 1.0, benzetropine→benztropine 0.92, ricepte→Aricept 0.875, maxérant→
   Maxeran), tandis que le bruit de prose douteux reste filtré (Lontin→Celontin
   0.75, continent→Cortiment 0.78, visuelle→Vivelle 0.80).
+- **P1 — paire de mots scindés en prose** : « Donné Pézil » (les deux mots
+  douteux, chacun >= 5 lettres mais ne résolvant pas seul) est reconnu comme
+  le **donepezil** scindé par le STT — la passe des paires ré-admet un couple
+  dont les deux membres sont DOUTEUX, même hors dose et hors région, pour une
+  similarité >= `CONF_PHON_PAIRE_PROSE_DOUTEUSE` (0.80, le doute sur les DEUX
+  mots étant un signal bien plus fort que le doute isolé). Balayage du corpus :
+  « Donné Pézil » est le seul couple de ce type, aucun faux positif.
 - **Méd correctement entendu non listé** : « maxéran » (0.999, exact) reste
   écarté par le gate « prose sûre » — il est déjà bien écrit, le LLM le voit
   tel quel ; seul le variant déformé « maxérant » obtient une piste.
-- **Vérifié** : consultation 19 → **5 suggestions** (Aricept, benztropine,
-  Zyprexa, olanzapine, Maxeran), zéro faux positif de prose ; consultations 17
-  et 21 **inchangées** (pas de Lontin/continent/visuelle).
+- **Vérifié** : consultation 19 → **6 suggestions** (Aricept, benztropine,
+  Zyprexa, olanzapine, Maxeran, donepezil), zéro faux positif de prose ;
+  consultations 17 et 21 **inchangées** (pas de Lontin/continent/visuelle).
 
 ## 2026-09-02 — Grounding des listes de méd « transfert TNC vasculaire » (consultation 21)
 

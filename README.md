@@ -912,7 +912,12 @@ des médicaments », défaut `false`). Une fois activé :
   visuelle→Vivelle 0.80). **Une
   déformation éclatée en DEUX mots courts est re-sondée en paire collée**
   (« très bas » → Tresiba, contexte de dose obligatoire — chaque token séparé
-  < 5 lettres est filtré par la passe unigramme). **La règle G2P « gu+voyelle »
+  < 5 lettres est filtré par la passe unigramme). **Une paire de mots plus
+  longs, dont les DEUX membres sont douteux (< 0.95), est ré-admise même en
+  prose sans dose** (≥ `CONF_PHON_PAIRE_PROSE_DOUTEUSE` = 0.80 — le doute sur
+  les deux mots est un signal fort, corpus : « Donné Pézil » → donepezil seul
+  couple du genre) : le nom scindé par le STT est reconnu.
+  **La règle G2P « gu+voyelle »
   répare les noms éclatés à « gue »** : « admelogue » et « admelog » codent
   désormais le même phonème /admelɔg/ (le « u » de « gu » est muet devant
   e/i, /w/ devant a/o — « proguanil » = /pʁɔgwanil/) ; la piste Admelog remonte

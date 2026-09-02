@@ -884,7 +884,10 @@ des médicaments », défaut `false`). Une fois activé :
   réseau). La liste (nom normalisé + posologie, en **puces**, jamais de
   pointillés) s'affiche sous le transcrit et **en haut de l'onglet
   « Validation »**, mise à jour en direct (`med_grounding`) puis définitive
-  (`med_grounding_result`, persistée dans `med_grounding_json`).
+  (`med_grounding_result`, persistée dans `med_grounding_json`). L'accumulation
+  **en cours de dictée est elle aussi persistée** dans `med_grounding_json` au
+  même rythme que le transcrit — un `Refresh` ne vide plus l'onglet — puis
+  écrasée par version définitive du « Terminer ».
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`) — des pistes pour le
   modèle, jamais des vérités à recopier aveuglément. S'y ajoutent les

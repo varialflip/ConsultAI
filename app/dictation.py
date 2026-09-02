@@ -1121,6 +1121,16 @@ def _store_part(
         # le mieux ce que contient le texte accumulé.
         from app import preferences
         consultation.stt_language = preferences.document_language()
+        # Liste de médicaments ACCUMULÉE (``_grounding_meds``) persistée au même
+        # rythme que le transcrit : un Refresh en cours de dictée restaure
+        # l'onglet Validation au lieu de le vider. Le transcrite est écrit dès
+        # qu'il existe (ce que fait le bloc au-dessus) ; on fait de même pour le
+        # med-matcher, sans attendre le « Terminer » (``_finalize_grounding``
+        # demeure la source définitive et écrasera ce brouillon). Un accumulateur
+        # vide ou une dictée sans grounding sont laissés tels quels.
+        med_accum = _grounding_meds.get(session.id)
+        if _grounding_enabled() and med_accum:
+            consultation.med_grounding_json = json.dumps(med_accum, ensure_ascii=False)
         consultation.updated_at = utcnow()
         db.commit()
         if text:

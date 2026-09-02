@@ -41,6 +41,11 @@ repérage de liste exigeait une dose juste après chaque nom.*
 - **Vérifié** : consultation 21 complète → les **9/9 médicaments** détectés,
   zéro faux positif de prose ; les 4 consults de référence (dictee-1,
   dictee-6, consult7, consultai4-gemini) **inchangées**.
+- **Persistance de l'onglet Validation en cours de dictée** : la liste du
+  med-matcher n'était écrite en base qu'au « Terminer » (`_finalize_grounding`)
+  — un `Refresh` en pleine dictée la vidait. Elle est désormais persistée au
+  même rythme que le transcrit (transaction de `_append_part`), puis écrasée
+  par la version définitive du grounding final.
 
 ## 2026-09-01 — G2P : la règle « gu+voyelle » répare admelogue / proguanil
 

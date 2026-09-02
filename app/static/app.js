@@ -3600,6 +3600,31 @@
     return lignes;
   }
 
+  //: Largeur de ligne du texte simple (monospace, comme les colonnes
+  //: Médicaments). Les items de liste trop longs y sont repliés avec un
+  //: retrait suspendu : les lignes de continuation s'alignent sous le texte
+  //: après la puce/le numéro, jamais sous la puce elle-même.
+  const LINE_WIDTH = 80;
+
+  /**
+   * Rend une liste numérotée en un bloc.
+   * Les étiquettes « N. » sont élargies à la largeur de la plus large pour que
+   * le texte des items s'aligne verticalement entre eux (1., 10., 100.), sur
+   * des NBSP comme partout ailleurs (le champ riche du DME aplatit les espaces
+   * ordinaires). Le repli porte le retrait suspendu qui aligne les
+   * continuations sous le texte, après le numéro.
+   */
+  function renderNumberedList(items) {
+    const largeurEtiquette = Math.max(...items.map((it) => it.label.length + 2));
+    return items.flatMap((it) => {
+      const etiquette = `${it.label}.`.padEnd(largeurEtiquette, NBSP);
+      const entete = `${it.creux}${etiquette}`;
+      const wrap = wrapText(it.texte, LINE_WIDTH, entete);
+      if (!wrap.length) return [entete];
+      return wrap.map((l, i) => (i === 0 ? `${entete}${l}` : l));
+    });
+  }
+
   function markdownToPlainText(markdown) {
     const lignes = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
     const out = [];
@@ -3609,6 +3634,9 @@
     //: faut d'abord voir toute la liste pour la couper en deux moitiés.
     const meds = [];
     let inMeds = false;
+    //: Items d'une liste numérotée en attente : on doit voir toute la liste
+    //: pour élargir les étiquettes à la largeur du plus grand numéro.
+    const numList = [];
 
     const viderTableau = () => {
       if (tableau.length) {
@@ -3624,16 +3652,25 @@
       }
     };
 
+    const viderNum = () => {
+      if (numList.length) {
+        out.push(...renderNumberedList(numList));
+        numList.length = 0;
+      }
+    };
+
     lignes.forEach((brute) => {
       const ligne = brute.replace(/\s+$/, '');
 
       // --- Tableaux : accumulés puis alignés d'un bloc ---
       if (/^\s*\|/.test(ligne)) {
         viderMeds();
+        viderNum();
         if (!TABLE_SEPARATOR.test(ligne)) tableau.push(splitTableRow(ligne));
         return;
       }
       viderTableau();
+      viderNum();
 
       const titre = ligne.match(/^(#{1,6})\s+(.*)$/);
       if (titre) {
@@ -3658,6 +3695,7 @@
       // --- Filet horizontal ---
       if (/^\s*([-*_])\1{2,}\s*$/.test(ligne)) {
         viderMeds();
+        viderNum();
         out.push('', '─'.repeat(60), '');
         return;
       }
@@ -3665,7 +3703,7 @@
       // --- Listes ---
       const puce = ligne.match(/^(\s*)[-*+]\s+(.*)$/);
       if (puce) {
-        const creux = '  '.repeat(Math.floor(puce[1].length / 2));
+        const creux = NBSP.repeat(Math.floor(puce[1].length / 2));
         const contenu = stripInlineMarkdown(puce[2]);
         if (inMeds && puce[1].length === 0) {
           //: Puces de premier niveau de la rubrique : accumulées, elles seront
@@ -3673,15 +3711,26 @@
           meds.push(contenu);
         } else {
           if (inMeds) viderMeds();
-          out.push(`${creux}• ${contenu}`);
+          viderNum();
+          //: Retrait suspendu : les continuations d'une puce longue s'alignent
+          //: sous le texte après « • », pas sous la puce ni à la marge.
+          const entete = `${creux}• `;
+          const wrap = wrapText(contenu, LINE_WIDTH, entete);
+          if (!wrap.length) out.push(entete);
+          else out.push(...wrap.map((l, i) => (i === 0 ? `${entete}${l}` : l)));
         }
         return;
       }
       const numero = ligne.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
       if (numero) {
+        //: On ne rejette rien ici : l'étiquette élargie demande de voir toute
+        //: la liste. Les items s'accumulent et seront rendus d'un bloc.
         viderMeds();
-        const creux = '  '.repeat(Math.floor(numero[1].length / 2));
-        out.push(`${creux}${numero[2]}. ${stripInlineMarkdown(numero[3])}`);
+        numList.push({
+          creux: NBSP.repeat(Math.floor(numero[1].length / 2)),
+          label: numero[2],
+          texte: stripInlineMarkdown(numero[3]),
+        });
         return;
       }
 
@@ -3689,6 +3738,7 @@
       const citation = ligne.match(/^\s*>\s?(.*)$/);
       if (citation) {
         viderMeds();
+        viderNum();
         out.push(`  | ${stripInlineMarkdown(citation[1])}`);
         return;
       }
@@ -3698,11 +3748,13 @@
       if (inMeds && ligne === '') return;
 
       viderMeds();
+      viderNum();
       out.push(stripInlineMarkdown(ligne));
     });
 
     viderTableau();
     viderMeds();
+    viderNum();
 
     // Deux sauts de ligne consécutifs au maximum : au-delà, le DME étire la
     // note sur des écrans inutiles.

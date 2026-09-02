@@ -3,6 +3,25 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-02 — Texte simple : les listes respectent l'alinéa
+
+*Coller la note dans le champ riche du DME aplatissait l'indentation des listes
+(pointées et numérotées) et ne repliait pas le texte long : les items partaient
+à la marge gauche et leurs lignes de continuation repartaient sous la puce/le
+numéro.*
+
+- **Alinea d'entrée conservé** : l'indentation des puces et des listes
+  numérotées utilise désormais des espaces insécables (comme les tableaux et
+  les colonnes Médicaments) — elle survit au collage dans un champ riche qui
+  aplatit les espaces ordinaires.
+- **Repli avec retrait suspendu** : les items de liste trop longs sont repliés
+  à ~80 colonnes ; les lignes de continuation s'alignent sous le texte après la
+  puce/le numéro, jamais sous la puce ni à la marge.
+- **Numérotées alignées verticalement** : les étiquettes « N. » sont élargies à
+  la largeur du plus grand numéro (1., 10., 100.) pour que le texte des items
+  commence à la même colonne.
+- Redéploiement : commit simple (source servie par le bind mount).
+
 ## 2026-09-01 — Dictaphone : clics mécaniques « on/off » (hors de l'enregistrement)
 
 - Le dictaphone (seul, pas le bouton principal) émet désormais de brefs clics
@@ -78,6 +97,19 @@ transcription conservée les contenait.*
   comportement historique (audio seul) est inchangé.
 - `transcript_used` devient vrai dans ce mode (la transcription a pris part à
   la note) : `stt_used` s'affiche alors comme avant.
+- **L'audio fait foi partout où audio et transcription sont envoyés ensemble** :
+  le `_AUDIO_CROSSCHECK_NOTE` (« Joindre aussi l'audio », sans contournement)
+  disait auparavant « ne t'en sers jamais pour ajouter un contenu absent de la
+  transcription » — l'inverse de la conduite voulue. Unifié : l'audio corrige un
+  terme mal transcrit ET récupère ce que la transcription aurait omis.
+- **« Réellement entendu » s'entend de l'AUDIO** quand un extrait audio est
+  joint (consigne générale § 1) : un élément présent dans la transcription mais
+  que l'audio ne confirme pas reste douteux → lecture la plus probable dans le
+  corps + « à confirmer » en Corrections (jamais rejeté sans trace, jamais pris
+  pour acquis). Appliqué à la consigne générale FR/EN en base.
+- Textes d'aide mis à jour : « Joindre aussi l'audio » (générique et
+  personnalisé), « Conserver une transcription… » (générique et personnalisé),
+  notice du pied de dictée.
 - Appliqué aux deux chemins (`generate_note` et `generate_note_stream`) ; texte
   d'aide du réglage « Conserver une transcription… » mis à jour.
 

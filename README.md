@@ -887,7 +887,9 @@ des médicaments », défaut `false`). Une fois activé :
   (`med_grounding_result`, persistée dans `med_grounding_json`). L'accumulation
   **en cours de dictée est elle aussi persistée** dans `med_grounding_json` au
   même rythme que le transcrit — un `Refresh` ne vide plus l'onglet — puis
-  écrasée par version définitive du « Terminer ».
+  écrasée par version définitive du « Terminer ». Les hits **déterministes**
+  s'affichent sous leur **nom canonique** (« la Six » → **Lasix**) ; les
+  candidats phonétiques gardent le nom dicté + flèche vers la cible.
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`) — des pistes pour le
   modèle, jamais des vérités à recopier aveuglément. S'y ajoutent les
@@ -900,7 +902,14 @@ des médicaments », défaut `false`). Une fois activé :
   entendu avec incertitude (confiance STT < 0,95) obtient sa piste même sans
   dose à portée** (seuil 0,80 — le doute est la preuve d'un nom possiblement
   déformé) : « ricepte » → Aricept, « ziprexa » → Zyprexa, « maxérant » →
-  Maxeran dans une énumération de médicaments sans posologie. **Une
+  Maxeran dans une énumération de médicaments sans posologie. **Dans la
+  prose** (gabarit de phrases courantes, hors région « liste de médicaments »
+  confirmée et hors dose à portée), la piste d'un jeton douteux n'est admise
+  que pour une similarité phonétique **très élevée** (≥ `CONF_PHON_PROSE_DOUTEUSE`
+  = 0.85) — les vrais garbles dictés en prose passent (ziprexa→Zyprexa 1.0,
+  benzetropine→benztropine 0.92, ricepte→Aricept 0.875) mais le bruit de prose
+  douteux reste filtré (Lontin→Celontin 0.75, continent→Cortiment 0.78,
+  visuelle→Vivelle 0.80). **Une
   déformation éclatée en DEUX mots courts est re-sondée en paire collée**
   (« très bas » → Tresiba, contexte de dose obligatoire — chaque token séparé
   < 5 lettres est filtré par la passe unigramme). **La règle G2P « gu+voyelle »

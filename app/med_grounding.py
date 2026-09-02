@@ -85,6 +85,16 @@ CONF_HARD_FLOOR = 0.92
 #: statistique : à re-caliibrer dès que le corpus grossit (cf. README § 7.8).
 CONF_PROSE_SURE = 0.95
 
+#: Seuil minimal de similarité phonétique pour admettre en PROSE (hors région
+#: « liste de médicaments » confirmée et hors dose à portée) la piste d'un
+#: jeton DOUTEUX (conf_keys). Le doute STT est la preuve d'un nom déformé
+#: (« ziprexa » → Zyprexa 1.0, « ricepte » → Aricept 0.875), mais un vrai mot de
+#: prose douteux y ressemble trop (*Lontin* → Celontin 0.75, *continent* →
+#: Cortiment 0.78, *visuelle* → Vivelle 0.80) pour être admis sans garde. Ce
+#: seuil (calibré : vrais garbles >= 0.875, faux positifs de prose <= 0.80) est
+#: PLUS strict que le 0.80 de la piste en liste (cf. phonetiques_texte).
+CONF_PHON_PROSE_DOUTEUSE = 0.85
+
 #: Prose structurante à ne JAMAIS proposer comme candidat phonétique (léxique
 #: réduit, réservé à la DÉTECTION de hints — ne modifie pas ``FRENCH_STOP``,
 #: qui reste le garde de la réécriture inline).
@@ -1180,6 +1190,8 @@ class Matcher:
                 or num_apres
                 or (i > 0 and num_token[i - 1] and dm is not None and dm <= 999)
             )
+            admis_prose_douteuse = False
+            cand = None
             if not contexte:
                 # Un jeton DOUTEUX (conf_keys) est admis sans dose à portée MAIS
                 # uniquement au sein d'une région « liste de médicaments »
@@ -1188,8 +1200,21 @@ class Matcher:
                 # (« Lontin », « continent », « visuelle ») ne doit jamais devenir
                 # une piste médicament.
                 if not (region[i] and conf_keys and p in conf_keys):
-                    continue
-            cand = self._phonetic_candidats(jet)
+                    # Sauf si le jeton, en PROSE DOUTEUSE (hors région, zéro dose),
+                    # colle phonétiquement de très près à un vrai médicament —
+                    # c'est alors un NOM DE MÉDICAMENT déformé dicté en prose
+                    # (« du ziprexa », « la ricepte »), pas un mot de prose. La
+                    # similarité très élevée (>= CONF_PHON_PROSE_DOUTEUSE) sépare
+                    # ces vrais garbles du bruit de prose douteux (Lontin→Celontin,
+                    # continent→Cortiment). Le résultat est réutilisé en aval.
+                    if not (conf_keys and p in conf_keys):
+                        continue
+                    cand = self._phonetic_candidats(jet)
+                    if not cand or cand[3] < CONF_PHON_PROSE_DOUTEUSE:
+                        continue
+                    admis_prose_douteuse = True
+            if cand is None:
+                cand = self._phonetic_candidats(jet)
             if not cand:
                 continue
             can, base, brand, s = cand
@@ -1198,8 +1223,11 @@ class Matcher:
             # la piste phonétique : un simple voisin numérique (valeur de lab
             # « 5,8 », n° de dossier) ou un « gouttes » isolé ne sont pas des
             # doses de médicament. Dans une région de liste, un nombre nu
-            # suffit (dictée « …, Doxazocin. 4, … »).
-            if not region[i] and not _poso_credible(poso):
+            # suffit (dictée « …, Doxazocin. 4, … »). Seule exception hors liste
+            # : un jeton admis comme PROSE DOUTEUSE (déjà filtré à la similarité
+            # >= CONF_PHON_PROSE_DOUTEUSE) — le nom déformé en prose n'a pas à
+            # attendre une dose voisine pour être proposé.
+            if not region[i] and not admis_prose_douteuse and not _poso_credible(poso):
                 continue
             # Un candidat SANS TROUVE posologie crédible (vide, ou uniquement des
             # chiffres sans unité — n° de dossier/date) n'est admis que s'il est
@@ -2015,6 +2043,24 @@ def _is_cosmetic(base_or_brand) -> bool:
     return cle in {norm_orth(e).replace(" ", "") for e in _UV_COSMETICS}
 
 
+def _res_display(res: dict) -> str | None:
+    """Nom canonique d'une résolution ORDER exacte (dict ``_lookup_exact``).
+
+    ``res`` = ``{level, base, brand}``. Retourne le nom affichable via le
+    ``_canonicalize`` du moteur (pour « la Six » → ``Lasix``) ; None si aucune
+    valeur exploitable.
+    """
+    lvl = res.get("level")
+    base = res.get("base")
+    brand = res.get("brand")
+    if not (lvl and (base or brand)):
+        return None
+    try:
+        return matcher()._canonicalize(lvl, base or brand, brand, False) or None
+    except Exception:
+        return None
+
+
 def _append_item(items, vus, fixed, jeton, res, force_name=None,
                  ancre_poso=False, confiant=False) -> None:
     """Ajoute un item à la liste, dédupliqué par nom canonique.
@@ -2065,8 +2111,13 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     if confiant and not poso_credible and not ancre_poso:
         return False
     vus.add(cle)
+    # Résolution EXACTE (déterministe) : on affiche le NOM CANONIQUE, pas le
+    # jeton dicté. Un garble seedé (« la Six ») doit apparaître comme « Lasix »,
+    # pas comme la lettre du STT. Les candidats phonétiques, eux, gardent le
+    # nom dicté + une flèche vers la cible (étiquette ``source:"phonetic"``) —
+    # ils ne passent d'ailleurs jamais par ``_append_item``.
     items.append({
-        "name": force_name or jeton,
+        "name": _res_display(res) or force_name or jeton,
         "base": base,
         "posology": poso,
         "score": 100 if res["level"] in ("BRAND", "BASE_GENERIC") else 65,

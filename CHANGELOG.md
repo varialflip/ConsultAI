@@ -3,6 +3,31 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-02 — Retranscription : suggestions de l'onglet Validation pour les méd nommés en prose
+
+*La retranscription de la consultation 19 (polypharmacie dictée en prose, sans
+doses : « du maxéran, de la ricepte, de la benzetropine et du ziprexa ») ne
+produisait **aucune** suggestion dans l'onglet Validation. La confiance
+mot-à-mot, elle, était bonne (268 clés, 28 douteuses < 0.95) : ce n'était pas
+le bug « tout à 1.0 », mais la suppression systématique des noms de méd nus
+dictés en prose — chaque médicament réel (déformé ou non) était écarté.*
+
+- **P0 — pistes phonétiques en « prose douteuse »** (`phonetiques_texte`) :
+  un jeton DOUTEUX (< 0.95) sans dose à portée n'était admis qu'au sein d'une
+  région « liste de médicaments » confirmée ; en prose (« la ricepte »), il
+  retombait muet. Un nouveau garde autorise la piste hors région, mais
+  uniquement pour une similarité phonétique **très élevée**
+  (`CONF_PHON_PROSE_DOUTEUSE = 0.85`) : les vrais garbles passent (ziprexa→
+  Zyprexa 1.0, benzetropine→benztropine 0.92, ricepte→Aricept 0.875, maxérant→
+  Maxeran), tandis que le bruit de prose douteux reste filtré (Lontin→Celontin
+  0.75, continent→Cortiment 0.78, visuelle→Vivelle 0.80).
+- **Méd correctement entendu non listé** : « maxéran » (0.999, exact) reste
+  écarté par le gate « prose sûre » — il est déjà bien écrit, le LLM le voit
+  tel quel ; seul le variant déformé « maxérant » obtient une piste.
+- **Vérifié** : consultation 19 → **5 suggestions** (Aricept, benztropine,
+  Zyprexa, olanzapine, Maxeran), zéro faux positif de prose ; consultations 17
+  et 21 **inchangées** (pas de Lontin/continent/visuelle).
+
 ## 2026-09-02 — Grounding des listes de méd « transfert TNC vasculaire » (consultation 21)
 
 *La liste dictée (zone « Dans ses médicaments ») n'était détectée qu'à 4/9 :
@@ -46,6 +71,11 @@ repérage de liste exigeait une dose juste après chaque nom.*
   — un `Refresh` en pleine dictée la vidait. Elle est désormais persistée au
   même rythme que le transcrit (transaction de `_append_part`), puis écrasée
   par la version définitive du grounding final.
+- **Affichage canonique dans l'onglet Validation** : une résolution EXACTE
+  (déterministe) affiche désormais le **nom canonique** et non la lettre du
+  STT — « la Six » apparaît comme **Lasix**, pas comme le garble. Les
+  candidats phonétiques, eux, gardent le nom dicté + flèche vers la cible
+  (« l'Aldactone » → ALDACTONE), qu'ils servent de piste à confirmer.
 
 ## 2026-09-01 — G2P : la règle « gu+voyelle » répare admelogue / proguanil
 

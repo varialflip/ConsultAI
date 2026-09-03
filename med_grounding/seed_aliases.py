@@ -115,6 +115,10 @@ GARBLES = {
     "metoprolol":         (None, "metoprolol"),
     "bisoprolol":         (None, "bisoprolol"),
     "perindopril":        (None, "perindopril"),
+    # « Périn de prille, 1 mg per os » (consultation 10, Trouble neurocognitif) :
+    # le STT scinde perindopril en deux mots (« périn de prille » ≈ per-in-do-
+    # pril), aucune piste phonétique ne le rattrapait — l'ACEI était omis.
+    "perin de prille":    (None, "perindopril"),
     "ramipril":           (None, "ramipril"),
     "amlodipine":         (None, "amlodipine"),
     "eliquis":            ("eliquis", None),

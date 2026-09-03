@@ -29,6 +29,12 @@ grounding (`app/med_grounding.py`) :
   « proches aidants »/« prothèses dentaires ») flouait phonétiquement sur
   « protein s ». Les formes manquantes `prochain`/`prochaine`/`prochains`/
   `prochaines` sont ajoutées à `FRENCH_STOP` auprès de `proche`/`proches`.
+- **Résolution multi-mots des courants** : le join orthographique de phrase
+  (`_resolve_phrase` — « Périn de prille » → perindopril) est désormais
+  « common-aware » : un médicament courant y est admis un cran en dessous
+  (`COMMON_JOIN_FLOOR` 0.62 vs 0.70, `COMMON_JOIN_GAP` 0.08 vs 0.12). C'est le
+  plus prescrit, donc le plus déformé. Seed `perin de prille` → perindopril
+  ajouté en parallèle (`med_grounding/seed_aliases.py`).
 
 ## 2026-09-02 — Pipeling « deux passes » : extraction LLM + rendu applicatif
 

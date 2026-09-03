@@ -71,6 +71,11 @@ COMMON_ORTHO_FLOOR  = 0.58  # vs ORTHO_FLOOR 0.62 : mais permet un candidat
 COMMON_PHON_FLOOR   = 0.68  # vs 0.72 dans l'arbre BK phonétique
 COMMON_PHON_PROSE   = 0.82  # vs CONF_PHON_PROSE_DOUTEUSE 0.85 (prose douteuse)
 COMMON_PHON_NOPOSO  = 0.68  # vs 0.72 (token non douteux sans dose)
+COMMON_JOIN_FLOOR   = 0.62  # vs 0.70 : phrase multi-mots (join ortho) d'un
+                            # médicament COURANT acceptée un cran plus bas
+COMMON_JOIN_GAP     = 0.08  # vs 0.12 : ambiguïté d'un courant tolérée (le
+                            # 2e plus proche voisin peut être proche sans
+                            # que le 1er soit un faux positif)
 
 #: Seuil de confiance mot-à-mot (STT ``words[].confidence``) : au-dessus, une
 #: substitution orthographique *floue* d'un token est refusée quand il n'est
@@ -878,7 +883,15 @@ class Matcher:
                             best = (s, level, base, brand, is_otc)
                         elif s > second:
                             second = s
-            if best is None or best[0] < 0.70 or (best[0] - second) < 0.12:
+            if best is None:
+                continue
+            # Un candidat COURANT est admis un cran en dessous (seuil ET écart
+            # au 2e voisin) : c'est le plus prescrit, donc le plus dicté.
+            # ex. « Périn de prille » → perindopril (0.769, 2e = 0.615).
+            best_is_common = norm_phon(best[2] or "") in self.common
+            floor = COMMON_JOIN_FLOOR if best_is_common else 0.70
+            gap = COMMON_JOIN_GAP if best_is_common else 0.12
+            if best[0] < floor or (best[0] - second) < gap:
                 continue              # weak or ambiguous -> stay conservative
             can = self._canonicalize(best[1], best[2], best[3], best[4])
             if can:

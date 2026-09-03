@@ -24,6 +24,10 @@ CE QUE LE MODULE GARANTIT
 * une ligne d'en-tête sans valeur disparaît ;
 * les listes de médicaments / antécédents / examen restent des listes, l'Impression
   et le Plan restent numérotés (détection par le gabarit, pas par devinette) ;
+* chaque item de liste est normalisé : tout marqueur de tête que la passe 1
+  aurait déjà émis (« - … », « 1. … ») est retiré avant re-marquage selon le
+  gabarit — le rendu ne produit jamais « - - … » ni « 1. 1. … »
+  (``_nettoyer_item``, idempotent) ;
 * la ligne « Rédigé à l'aide de la reconnaissance vocale. » est conservée ;
 * la rubrique finale « Corrections et éléments à valider » est toujours émise
   (vide → « Aucun élément à signaler. »).
@@ -80,6 +84,10 @@ _PARAGRAPH_RE = re.compile(r"^\s*\{\{")
 _EMPTY_RE = re.compile(r"^\s*$")
 #: Tableau Markdown (les gabarits à tableaux ne sont pas rendus ici).
 _TABLE_RE = re.compile(r"\|")
+#: Marqueur de liste numérotée en tête d'item émis par le modèle (``1. …``).
+_ORD_MARK_RE = re.compile(r"^\d+[.)]\s+")
+#: Marqueur de liste à puces en tête d'item émis par le modèle (``- …``).
+_BUL_MARK_RE = re.compile(r"^[-•*]\s+")
 
 
 @dataclass
@@ -221,6 +229,30 @@ def _chercher(contenu: dict, cle: str) -> Optional[str]:
     return texte or None
 
 
+def _nettoyer_item(item: str) -> str:
+    """Item de liste sans marqueur de tête que le modèle aurait déjà émis.
+
+    Le LLM de la passe 1 répond parfois des items DÉJÀ marqués (« - Alerte… »,
+    « 1. Trouble… ») malgré la consigne du « rendu par l'application ». Or le
+    renderer re-préfixe chaque item (puce ``- `` ou numéro ``N. ``) selon le
+    gabarit : sans nettoyage, le rendu aboutit à « - - … » / « 1. 1. … »
+    (observé sur la Note 8, modèle gemma — rubriques Examen, Investigation,
+    Impression, Plan). On retire donc tout marqueur de tête (numéroté, puis
+    puce — au besoin répété, un modèle peut émettre « - 1. … ») et on aplatit
+    les sauts de ligne : un item est TOUJOURS une ligne unique. La
+    normalisation est idempotente : nettoyer puis re-marquer donne exactement
+    un marqueur, quel que soit le comportement du modèle.
+    """
+    texte = " ".join((item or "").split())
+    while True:
+        avant = texte
+        texte = _ORD_MARK_RE.sub("", texte)
+        texte = _BUL_MARK_RE.sub("", texte)
+        if texte == avant:
+            break
+    return texte
+
+
 def _paragraphes(texte: str) -> List[str]:
     propre = "\n".join(
         " ".join(l.split()) for l in (texte or "").splitlines() if l.strip()
@@ -248,14 +280,14 @@ def _rendre_contenu(section: Section, contenu) -> Optional[str]:
         if str(phrases).strip():
             blocs.extend(_paragraphes(str(phrases)))
         if items:
-            propres = [x.strip() for x in items if str(x).strip()]
+            propres = [_nettoyer_item(x) for x in items if str(x).strip()]
             if section.numbered:
                 blocs.append("\n".join(f"{i}. {x}" for i, x in enumerate(propres, 1)))
             else:
                 blocs.append("\n".join(f"- {x}" for x in propres))
         return _joindre(blocs) if blocs else None
     if isinstance(contenu, list):
-        propres = [str(x).strip() for x in contenu if str(x).strip()]
+        propres = [_nettoyer_item(x) for x in contenu if str(x).strip()]
         if not propres:
             return None
         if section.numbered:
@@ -267,14 +299,14 @@ def _rendre_contenu(section: Section, contenu) -> Optional[str]:
     if not texte:
         return None
     if section.bullet or section.numbered:
-        items = [x.strip() for x in texte.splitlines() if x.strip()]
+        items = [_nettoyer_item(x) for x in texte.splitlines() if x.strip()]
         if len(items) > 1:
             if section.numbered:
                 return "\n".join(f"{i}. {x}" for i, x in enumerate(items, 1))
             return "\n".join(f"- {x}" for x in items)
         if section.numbered:
-            return f"1. {texte}"
-        return f"- {texte}"
+            return f"1. {_nettoyer_item(texte)}"
+        return f"- {_nettoyer_item(texte)}"
     return _joindre(_paragraphes(texte))
 
 

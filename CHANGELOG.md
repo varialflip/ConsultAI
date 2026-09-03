@@ -3,6 +3,20 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-03 — Marqueurs de liste épurés au rendu (plus de « - - » ni « 1. 1. »)
+
+Le renderer de la passe 2 (`note_renderer.py`) re-marque chaque item de liste
+(puce `- ` ou numéro `N. `) selon le gabarit, mais ne retirait pas les
+marqueurs de tête que le modèle de la passe 1 peut déjà avoir émis malgré la
+consigne. Certains modèles renvoyaient des items préfixés (« - Alerte… »,
+« 1. Trouble… ») : le rendu aboutissait à « - - … » (Examen, Investigation) et
+« 1. 1. … » (Impression, Plan) — observé sur la Note 8 (gemma). Un nettoyage
+idempotent (`_nettoyer_item`) retire désormais tout marqueur de tête
+(numéroté, puce, au besoin répété) avant re-marquage, sur tous les chemins de
+liste (liste pure, rubrique mixte phrases/items, texte multi-lignes). La
+normalisation est universelle : quel que soit le modèle, exactement un
+marqueur. Les dosages en tête d'item (« 2.5 mg », « 1.5 ») ne sont pas touchés.
+
 ## 2026-09-03 — Correction médicaments : liste « courants » priorisée + seuils abaissés
 
 Les médicaments les plus dictés en consultation (ordonnance géronto/gériatrique

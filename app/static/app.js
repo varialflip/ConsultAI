@@ -3429,8 +3429,9 @@
             'text/html': new Blob([html], { type: 'text/html' }),
             // Version texte : la structure par la seule disposition, jamais
             // du Markdown brut — c'est ce que reçoit un champ qui refuse
-            // le HTML, et « ## » en clair n'y aide personne.
-            'text/plain': new Blob([markdownToPlainText(markdown)], { type: 'text/plain' }),
+            // le HTML, et « ## » en clair n'y aide personne. Version alignée
+            // (NBSP) : survit au champ riche comme les tableaux.
+            'text/plain': new Blob([markdownToAligned(markdown)], { type: 'text/plain' }),
           }),
         ]);
       } else {
@@ -3607,6 +3608,19 @@
   const LINE_WIDTH = 80;
 
   /**
+   * Replie un item de liste avec un retrait suspendu : la première ligne porte
+   * l'en-tête (« • » ou « N. »), les continuations s'alignent SOUS le texte de
+   * la première ligne sur des NBSP — jamais le marqueur répété ni un retour à
+   * la marge.
+   */
+  function alignerRepli(texte, entete) {
+    const retrait = NBSP.repeat(entete.length);
+    const wrap = wrapText(texte, LINE_WIDTH, retrait);
+    if (!wrap.length) return [entete];
+    return wrap.map((l, i) => (i === 0 ? `${entete}${l}` : l));
+  }
+
+  /**
    * Rend une liste numérotée en un bloc.
    * Les étiquettes « N. » sont élargies à la largeur de la plus large pour que
    * le texte des items s'aligne verticalement entre eux (1., 10., 100.), sur
@@ -3618,14 +3632,11 @@
     const largeurEtiquette = Math.max(...items.map((it) => it.label.length + 2));
     return items.flatMap((it) => {
       const etiquette = `${it.label}.`.padEnd(largeurEtiquette, NBSP);
-      const entete = `${it.creux}${etiquette}`;
-      const wrap = wrapText(it.texte, LINE_WIDTH, entete);
-      if (!wrap.length) return [entete];
-      return wrap.map((l, i) => (i === 0 ? `${entete}${l}` : l));
+      return alignerRepli(it.texte, `${it.creux}${etiquette}`);
     });
   }
 
-  function markdownToPlainText(markdown) {
+  function markdownToAligned(markdown) {
     const lignes = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
     const out = [];
     let tableau = [];
@@ -3712,12 +3723,9 @@
         } else {
           if (inMeds) viderMeds();
           viderNum();
-          //: Retrait suspendu : les continuations d'une puce longue s'alignent
-          //: sous le texte après « • », pas sous la puce ni à la marge.
-          const entete = `${creux}• `;
-          const wrap = wrapText(contenu, LINE_WIDTH, entete);
-          if (!wrap.length) out.push(entete);
-          else out.push(...wrap.map((l, i) => (i === 0 ? `${entete}${l}` : l)));
+          //: Retrait suspendu via alignerRepli : les continuations d'une puce
+          //: longue s'alignent sous le texte, pas sous « • » ni à la marge.
+          out.push(...alignerRepli(contenu, `${creux}• `));
         }
         return;
       }
@@ -3761,6 +3769,120 @@
     return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\s+$/g, '') + '\n';
   }
 
+  /**
+   * Version « Texte » historique : listes sans alinéa renforcé, ni repli aligné
+   * ni numérotées élargies — rendu linéaire simple (espaces ordinaires). C'est
+   * le comportement d'origine ; la version alignée vit dans markdownToAligned.
+   */
+  function markdownToPlainText(markdown) {
+    const lignes = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+    const out = [];
+    let tableau = [];
+    //: Cellules « Médicaments » en attente de mise en colonnes, et indicateur
+    //: de rubrique. On ne peut pas décider de l'alignement ligne à ligne : il
+    //: faut d'abord voir toute la liste pour la couper en deux moitiés.
+    const meds = [];
+    let inMeds = false;
+
+    const viderTableau = () => {
+      if (tableau.length) {
+        out.push(...renderPlainTable(tableau));
+        tableau = [];
+      }
+    };
+
+    const viderMeds = () => {
+      if (meds.length) {
+        out.push(...renderMedsColumns(meds));
+        meds.length = 0;
+      }
+    };
+
+    lignes.forEach((brute) => {
+      const ligne = brute.replace(/\s+$/, '');
+
+      // --- Tableaux : accumulés puis alignés d'un bloc ---
+      if (/^\s*\|/.test(ligne)) {
+        viderMeds();
+        if (!TABLE_SEPARATOR.test(ligne)) tableau.push(splitTableRow(ligne));
+        return;
+      }
+      viderTableau();
+
+      const titre = ligne.match(/^(#{1,6})\s+(.*)$/);
+      if (titre) {
+        const niveau = titre[1].length;
+        const texte = stripInlineMarkdown(titre[2]).replace(/[:\s]+$/, '');
+        viderMeds();
+        //: Rubrique « Médicaments » de niveau 2 → rendue sur deux colonnes.
+        inMeds = niveau === 2 && MEDS_HEADING_RE.test(texte);
+        if (out.length) out.push('');
+        if (niveau === 1) {
+          out.push(texte, '═'.repeat(Math.max(texte.length, 3)));
+        } else if (niveau === 2) {
+          out.push(texte, '─'.repeat(Math.max(texte.length, 3)));
+        } else {
+          // Au-delà du deuxième niveau, un filet de plus nuirait à la
+          // lisibilité : la position et le deux-points suffisent.
+          out.push(`${texte} :`);
+        }
+        return;
+      }
+
+      // --- Filet horizontal ---
+      if (/^\s*([-*_])\1{2,}\s*$/.test(ligne)) {
+        viderMeds();
+        out.push('', '─'.repeat(60), '');
+        return;
+      }
+
+      // --- Listes ---
+      const puce = ligne.match(/^(\s*)[-*+]\s+(.*)$/);
+      if (puce) {
+        const creux = '  '.repeat(Math.floor(puce[1].length / 2));
+        const contenu = stripInlineMarkdown(puce[2]);
+        if (inMeds && puce[1].length === 0) {
+          //: Puces de premier niveau de la rubrique : accumulées, elles seront
+          //: rendues deux par rangée (lecture verticale) à la fin de la rubrique.
+          meds.push(contenu);
+        } else {
+          if (inMeds) viderMeds();
+          out.push(`${creux}• ${contenu}`);
+        }
+        return;
+      }
+      const numero = ligne.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
+      if (numero) {
+        viderMeds();
+        const creux = '  '.repeat(Math.floor(numero[1].length / 2));
+        out.push(`${creux}${numero[2]}. ${stripInlineMarkdown(numero[3])}`);
+        return;
+      }
+
+      // --- Citation ---
+      const citation = ligne.match(/^\s*>\s?(.*)$/);
+      if (citation) {
+        viderMeds();
+        out.push(`  | ${stripInlineMarkdown(citation[1])}`);
+        return;
+      }
+
+      //: Dans la rubrique Médicaments, les lignes vides ne coupent pas la
+      //: liste : on continue d'accumuler jusqu'au prochain contenu réel.
+      if (inMeds && ligne === '') return;
+
+      viderMeds();
+      out.push(stripInlineMarkdown(ligne));
+    });
+
+    viderTableau();
+    viderMeds();
+
+    // Deux sauts de ligne consécutifs au maximum : au-delà, le DME étire la
+    // note sur des écrans inutiles.
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\s+$/g, '') + '\n';
+  }
+
   async function copyPlainText() {
     const markdown = $('markdownEditor').value;
     if (!markdown.trim()) {
@@ -3770,6 +3892,20 @@
     try {
       await navigator.clipboard.writeText(markdownToPlainText(markdown));
       toast(T('copy.plain_done'), 'success');
+    } catch (err) {
+      toast(T('copy.failed', { error: err.message }), 'error');
+    }
+  }
+
+  async function copyAlignedText() {
+    const markdown = $('markdownEditor').value;
+    if (!markdown.trim()) {
+      toast(T('copy.nothing'), 'warning');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(markdownToAligned(markdown));
+      toast(T('copy.aligned_done'), 'success');
     } catch (err) {
       toast(T('copy.failed', { error: err.message }), 'error');
     }
@@ -7353,6 +7489,7 @@
     // --- Export ---
     $('btnCopyRich').addEventListener('click', copyRichText);
     $('btnCopyPlain').addEventListener('click', copyPlainText);
+    $('btnCopyAligned').addEventListener('click', copyAlignedText);
     $('btnCopyMd').addEventListener('click', copyMarkdown);
     $('btnPdf').addEventListener('click', exportPdf);
 

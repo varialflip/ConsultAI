@@ -551,6 +551,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Plain-text copy: underlined sections and ASCII-aligned tables. For "
         "an EMR that does not accept HTML.",
     ),
+    "copy.aligned": ("Aligné", "Aligned"),
+    "copy.aligned_short": ("Aligné", "Aligned"),
+    "copy.aligned_title": (
+        "Copie en texte seul avec listes alignées : puces et numérotées au "
+        "retrait suspendu, numéros élargis à la même colonne, indentation "
+        "conservée dans un champ riche (espaces insécables).",
+        "Plain-text copy with aligned lists: hanging-indent bullets and "
+        "numbers, numbers widened to one column, indentation kept in a rich "
+        "field (non-breaking spaces).",
+    ),
+    "copy.aligned_done": (
+        "Texte aligné copié — prêt pour le DME.",
+        "Aligned text copied — ready for the EMR.",
+    ),
     "copy.markdown": ("Markdown", "Markdown"),
     "copy.markdown_title": (
         "Copier le Markdown brut, tel qu'il est dans l'éditeur",

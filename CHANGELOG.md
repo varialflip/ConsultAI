@@ -3,23 +3,29 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-02 — Texte simple : les listes respectent l'alinéa
+## 2026-09-02 — Copie « Aligné » : les listes respectent l'alinéa
 
 *Coller la note dans le champ riche du DME aplatissait l'indentation des listes
 (pointées et numérotées) et ne repliait pas le texte long : les items partaient
 à la marge gauche et leurs lignes de continuation repartaient sous la puce/le
 numéro.*
 
-- **Alinea d'entrée conservé** : l'indentation des puces et des listes
-  numérotées utilise désormais des espaces insécables (comme les tableaux et
-  les colonnes Médicaments) — elle survit au collage dans un champ riche qui
-  aplatit les espaces ordinaires.
-- **Repli avec retrait suspendu** : les items de liste trop longs sont repliés
-  à ~80 colonnes ; les lignes de continuation s'alignent sous le texte après la
-  puce/le numéro, jamais sous la puce ni à la marge.
-- **Numérotées alignées verticalement** : les étiquettes « N. » sont élargies à
-  la largeur du plus grand numéro (1., 10., 100.) pour que le texte des items
-  commence à la même colonne.
+- **Nouveau bouton « Aligné »** (4e bouton de copie, entre « Texte » et
+  « Markdown ») : texte simple avec listes alignées, fait pour le champ riche
+  du DME —
+  - **Alinea d'entrée conservé** : l'indentation des puces et des listes
+    numérotées utilise des espaces insécables (comme les tableaux et les
+    colonnes Médicaments) — elle survit à un champ riche qui aplatit les
+    espaces ordinaires.
+  - **Repli avec retrait suspendu** : les items trop longs sont repliés à
+    ~80 colonnes ; les lignes de continuation s'alignent sous le texte après la
+    puce/le numéro, jamais sous la puce ni à la marge.
+  - **Numérotées alignées verticalement** : les étiquettes « N. » sont élargies
+    à la largeur du plus grand numéro (1., 10., 100.) pour que le texte des
+    items commence à la même colonne.
+- **Le bouton « Texte » retrouve son comportement d'origine** (rendu linéaire
+  simple) ; la copie riche (« Mise en forme ») garde la version alignée pour
+  son repli texte.
 - Redéploiement : commit simple (source servie par le bind mount).
 
 ## 2026-09-01 — Dictaphone : clics mécaniques « on/off » (hors de l'enregistrement)

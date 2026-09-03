@@ -697,6 +697,17 @@ alimentés** : la ligne qui les porte est retirée de la note — l'identité du
 patient n'est pas collectée, voir § 11.) Une ligne dont le champ reste inconnu
 est retirée du document.
 
+**Copier la note.** Quatre boutons groupés réexportent la note générée :
+
+| Bouton | Contenu |
+|---|---|
+| **Mise en forme** | HTML + texte, pour Word ou un DME qui accepte le HTML |
+| **Texte** | Texte seul, rendu linéaire simple (sections soulignées, tableaux en ASCII) |
+| **Aligné** | Texte seul avec listes alignées : puces et numérotées au retrait suspendu, numéros élargis à une colonne, indentation conservée en champ riche (espaces insécables) — idéal pour le dossier électronique |
+| **Markdown** | Le Markdown brut, tel qu'il est dans l'éditeur |
+
+**PDF** reste à part : impression navigateur, puis « Enregistrer au format PDF ».
+
 ### 7.5 La langue du gabarit pilote la chaîne
 
 Le champ **Langue** d'un gabarit n'est pas une étiquette : il décide des

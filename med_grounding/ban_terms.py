@@ -53,6 +53,15 @@ SUNSCREEN_TERMS = re.compile(
 #: Any name containing this lemma is banned (clinical prose, not a drug).
 BAN_LEMMA = re.compile(r"g[eé]riatr", re.IGNORECASE)
 
+#: Marques bannies par leur nom EXACT (uppercased) : retirées de la base au
+#: même titre que les écrans solaires. NAUSEX (dimenhydrinate, marque OTC
+#: annulée) : « nausées » (pluriel de « nausée », symptôme) résolvait vers la
+#: marque NAUSEX à 83 % (faux positif, note 37) — le bannissement empêche toute
+#: collision exacte ou floue future.
+BAN_BRANDS = frozenset({
+    "NAUSEX",
+})
+
 
 def norm_flat(s: str) -> str:
     s = unicodedata.normalize("NFD", s)
@@ -81,6 +90,8 @@ def is_sunscreen(brand: str, base: str) -> bool:
 
 def banned(brand: str, base: str) -> bool:
     if brand and BAN_LEMMA.search(brand):
+        return True
+    if brand and brand.strip().upper() in BAN_BRANDS:
         return True
     return is_sunscreen(brand, base)
 

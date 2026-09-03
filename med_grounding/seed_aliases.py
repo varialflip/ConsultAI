@@ -71,6 +71,12 @@ GARBLES = {
     "kitsapine":   ("quetiapine", "quetiapine"),
     "qui tapine":  ("quetiapine", "quetiapine"),
     "dexilan":     ("dexilant", "dexilant"),
+    # « d'excellent » = « d'Exelon » (timbre rivastigmine) : le STT (Cohere,
+    # consultation 3) entend « excellent » pour la marque Exelon du timbre de
+    # rivastigmine. « excellent » est un mot de prose très confiant (0.937) qui
+    # tombait sur CELEXA par le flou ; seed direct vers Exelon (rivastigmine)
+    # pour la correction inline déterministe.
+    "d'excellent": ("exelon", "rivastigmine"),
     # --- consultations 4/5/10/11 (troubles mnésiques / neurocognitifs) ---
     # « Hamelot d'épine » = amlodipine (bêta-bloquant), pas « adenine ».
     "hamelot d'épine": (None, "amlodipine"),

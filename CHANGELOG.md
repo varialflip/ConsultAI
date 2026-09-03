@@ -5,6 +5,36 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-09-03 — Validation « Médicaments normalisés » : format uniforme + faux positifs chassés
 
+## 2026-09-03 — Grounding : récuration prose/STT très confiant, lab, base régénérée
+
+27 faux positifs constatés sur le corpus récent, traités en quatre axes :
+
+- **Garde « prose très confiante »** (`SUGGEST_HIGH_SIM = 0.85`) : un jeton
+  capté par le STT avec quasi-certitude (≥ 0.95) mais à similarité faible est
+  un mot français stable, pas un garble — exclu même sous un canal dose de
+  forme (« timbre », « crème »). Élimine `commencé→CALQUENCE`,
+  `Retour→CRESTOR`, `façon→YOCON`, `applique→ELIQUIS`, `composante→acamprosate`.
+- **Pluriel + prose STT déformée** : `_HINTS_PROSE` reconnaît les pluriels
+  (`nausées`, `douleurs`) et les formes STT déformées (`vicelle` = « vit
+  seule », `peritine` = ferritine, `viales` = flacons). La marque OTC **NAUSEX**
+  est **bannie** de la base (impossible de résoudre le symptôme en dimenhydrinate).
+- **`dillé`/`dillée` = DIE** : mots de fréquence posologique normalisés
+  (`DOSE_FREQ_SINGLE`) et jamais des médicaments (`PROTOCOL_WORDS`).
+- **Laboratoire vs médicament** : gate `LAB_ION` étendu (fonctionne désormais
+  aussi pour les entrées à espaces : « vitamine d ») + appliqué aux pistes
+  phonétiques/suggestion — « La vitamine D est réduite à 41 » est traitée comme
+  bilan, « vitamine D 10 000 UI » reste un supplément.
+
+Base régénérée (`build_db` → `seed_common` → `seed_aliases` → `prune_db` →
+`ban_terms` → `fix_inactive_otc` → `prune_scope` → `prune_otc` →
+`prune_generic_mfg`) : les **sels manquants** (acetate/valerate/carbonate/
+nitrate/gluconate/lactate…) font enfin de `fludrocortisone`, `formoterol`,
+`leuprolide`… des génériques nus (résolution exacte, plus de repli phonétique
+vers hydrocortisone). `d'excellent → Exelon` (timbre rivastigmine) seedé en
+STT_GARBLE déterministe.
+
+## 2026-09-03 — Validation « Médicaments normalisés » : format uniforme + faux positifs chassés
+
 L'onglet « Validation » affiche désormais chaque médicament de façon uniforme —
 garble d'origine en italique → nom corrigé en gras (marque en capitale initiale,
 générique en minuscules), dose en clair, confiance en fin de ligne

@@ -183,6 +183,17 @@ CONF_SUGGEST_SIM  = 0.60   # similarité phonétique minimale d'une piste à pro
 #: de la marge (mesuré sur tout le corpus 2026-09-03). Le canal DOSE, lui,
 #: garde `CONF_SUGGEST_SIM` : la preuve physique de la dose admet plus bas.
 SUGGEST_DOUBT_SIM = 0.75  # similarité minimale d'une piste du canal DOUTE
+#: Plancher de SIMILARITÉ pour une piste portée par un jeton entendu TRÈS
+#: confiant par le STT (stt >= CONF_PROSE_SURE). Un mot que le STT a capté avec
+#: quasi-certitude (>0.95) et qui ne colle pourtant pas de près (sim < 0.85) à
+#: un nom est un mot FRANÇAIS STABLE, pas un garble de médicament — même quand
+#: une « dose » de forme (timbre, crème) ou un chiffre voisin l'admet. Mesuré
+#: sur le corpus 2026-09-03 : commencé 0.9999, Retour 0.9999, façon 0.9997,
+#: applique 0.9993, composante 0.99999, d'excellent 0.937 (résolu par seed),
+#: nausées 0.944 (pluriel) — tous en dessous de 0.85 en sim ; les vrais garbles
+#: sont à stt <= 0.90 (trigabalin 0.85, physothérodine 0.90, Polia 0.86…).
+#: 0.85 laisse un mètre de tolérance sous les vrais noms déformés à dose réelle.
+SUGGEST_HIGH_SIM = 0.85  # sim minimale d'une piste quand le STT est >= 0.95
 
 #: Seuil de confiance mot-à-mot (STT ``words[].confidence``) : au-dessus, une
 #: substitution orthographique *floue* d'un token est refusée quand il n'est
@@ -261,7 +272,25 @@ _HINTS_PROSE = {
     # était résolu en « hemine 25 mg » (faux positif observé c36 2026-09-03).
     "hemine", "lhemine",
     "hospitalisation", "chirurgie", "tension", "poids", "taille",
+    # Prose / lab / formes STT déformées observées sur le corpus (2026-09-03) :
+    #   - « vicelle » = « vit seule » (contexte social, STT déformé) ;
+    #   - « Péritine 48 » = ferritine (bilan), jamais un médicament ;
+    #   - « viales » = flacons (gestion des viales), jamais un médicament ;
+    #   - « nausées » (pluriel) → NAUSEX via le pluriel (singulier nausée gardé).
+    "vicelle", "peritine", "peritines", "viale", "viales",
 }
+
+def _est_prose(p: str) -> bool:
+    """Un token normalisé est-il de la PROSE structurante (ou son pluriel) ?
+
+    Un mot de prose à l'infinitif/singulier peut être dicté au pluriel
+    (« nausées », « douleurs », « chutes ») : le garde `_HINTS_PROSE` ne
+    contenant que quelques formes, on replie le `-s` final. Ne touche jamais
+    aux vrais noms : un médicament au pluriel n'est pas une entrée du lexique.
+    """
+    if p in _HINTS_PROSE:
+        return True
+    return p.endswith("s") and p[:-1] in _HINTS_PROSE
 
 # ---------------------------------------------------------------- normalization
 def norm_orth(s):
@@ -371,6 +400,16 @@ LAB_ION = {
     "uree", "urée", "acide urique", "glycemie", "glycémie", "tsh", "ferritine",
     "vitamine b12", "vitamine d",
 }
+#: ``LAB_ION`` normalisée SANS espaces (le gate ``_append_item`` compare sur
+#: ``norm_orth(base)`` dépourvu d'espace — « vitamine d » → « vitamined »).
+LAB_ION_FLAT = {norm_orth(x).replace(" ", "") for x in LAB_ION}
+
+def _is_lab_ion(base_or_brand) -> bool:
+    """Vrai si le candidat résolu est un ion/paramètre de laboratoire
+    (calcium, sodium, vitamine d, ferritine…) — traité comme lab sauf si une
+    véritable posologie l'accompagne (voir les gates appelants)."""
+    return bool(base_or_brand
+                and norm_orth(base_or_brand).replace(" ", "") in LAB_ION_FLAT)
 
 # ---------------------------------------------------------------- French G2P (optional)
 G2P_RULES = [
@@ -567,8 +606,9 @@ PROTOCOL_WORDS = {"bid","tid","qid","qd","qod","prn","hs","die","po","peros","q"
                   "die","am","pm","per","os","par","jour","mg","mcg","µg","g","ml",
                   "unités","unites","ui","ui/j","once","semaine","ann",
                   # fréquences françaises de la posologie (« au besoin » = PRN,
-                  # « fois par jour » = BID/TID) : jamais des noms de médicaments.
-                  "besoin","besoins","fois","coucher"}
+                  # « fois par jour » = BID/TID, « dillé » = DIE) : jamais des
+                  # noms de médicaments.
+                  "besoin","besoins","fois","coucher","dille"}
 
 # ----------------------------------------------------------------- latin dosing
 # Canonical route/frequency output for the medication list (per Wikimedica).
@@ -592,6 +632,10 @@ DOSE_FREQ_SINGLE = {
     # « déjeunés » = « AM » (5 mg d'yeux déjeunés → 5 mg DIE AM). Observés sur
     # la consultation 11 (STT custom, confirmés à l'audience).
     "dyeux": "DIE", "dejeunes": "AM",
+    # « dillé »/« dillée » = DIE (observé notes 4/11/21 : « 5 mg dillé déjeuner »
+    # = 5 mg DIE AM). Le STT (Cohere) déforme « DIE » en « dillé » à 3 reprises
+    # sur le corpus 2026-09-03.
+    "dille": "DIE", "dilée": "DIE", "dillé": "DIE", "dillée": "DIE",
     "quotidien": "DIE", "quotidienne": "DIE",
     "bd": "BID", "bid": "BID", "tid": "TID", "qid": "QID",
     "prn": "PRN", "besoin": "PRN",
@@ -1436,7 +1480,7 @@ class Matcher:
                 continue
             if p in FRENCH_STOP or p in ANCHOR_WORDS or p in PROTOCOL_WORDS:
                 continue
-            if p in _HINTS_PROSE:
+            if _est_prose(p):
                 continue                  # prose structurante (« droite »,
                                           # « piles ») — jamais un med
             if p in self.exact_garble or p in self.exact:
@@ -1538,6 +1582,12 @@ class Matcher:
                     continue
             # (canonical, base, brand, sim)
             if can is None or norm_phon(can) in vus:
+                continue
+            # Électrolyte / ion de laboratoire (vitamine D, ferritine…) résolu
+            # phonétiquement : ce n'est un médicament QUE muni d'une vraie
+            # posologie. « La vitamine D est réduite à 41 » est une valeur de
+            # bilan, pas un supplément (observé note 15).
+            if (_is_lab_ion(base or brand) and not poso):
                 continue
             vus.add(norm_phon(can))
             result.append({
@@ -1703,8 +1753,8 @@ class Matcher:
             p = norm_phon(jet)
             if not p or len(p) < 5:
                 continue
-            if (p in FRENCH_STOP or p in ANCHOR_WORDS or p in PROTOCOL_WORDS
-                    or p in _HINTS_PROSE or words[i].isdigit()):
+            if (_est_prose(p) or p in FRENCH_STOP or p in ANCHOR_WORDS
+                    or p in PROTOCOL_WORDS or words[i].isdigit()):
                 continue
             if p in self.exact_garble or p in self.exact:
                 continue                     # déjà résolu déterministiquement
@@ -1777,6 +1827,21 @@ class Matcher:
             #     label bas via de la prose à confiance Cohere réduite.
             if not (has_dose or (sim >= SUGGEST_DOUBT_SIM
                                  and label < SUGGEST_CONF_MAX)):
+                continue
+            # Garde « prose très confiante » : un jeton capté par le STT avec
+            # quasi-certitude (>= CONF_PROSE_SURE) mais dont la correspondance
+            # au candidat est faible (< SUGGEST_HIGH_SIM) est un mot FRANÇAIS
+            # stable, pas un nom de médicament déformé — même quand un mot de
+            # forme (« timbre », « crème ») ou un chiffre voisin a déclenché le
+            # canal dose (commencé→CALQUENCE, Retour→CRESTOR, façon→YOCON,
+            # applique→ELIQUIS, composante→acamprosate, observés 2026-09-03).
+            if (stt_val is not None and stt_val >= CONF_PROSE_SURE
+                    and sim < SUGGEST_HIGH_SIM):
+                continue
+            # Électrolyte/ion de laboratoire (vitamine D, ferritine…) : un
+            # supplément n'est retenu QUE muni d'une posologie réelle ; sinon
+            # c'est une valeur de bilan, pas un médicament.
+            if _is_lab_ion(base or brand) and not has_dose:
                 continue
             vus.add(cle)
             result.append({
@@ -2631,7 +2696,7 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # « Calcium 1,26 » du bilan est lab, « Calcium 500 mg PO DIE » est un
     # supplément.
     base_cle = norm_orth(base).replace(" ", "")
-    if base_cle in LAB_ION and not re.search(
+    if base_cle in LAB_ION_FLAT and not re.search(
             r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm|"
             r"comprimé|comprimés|capsule|capsules|goutte|gouttes|timbre|timbres|"
             r"crème|pommade|ampoule|suppositoire)\b",
@@ -2648,7 +2713,7 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # STT est faible (< 0.95, garble) ou qui porte une dose est admis même
     # sans ancre — la liste curatée + la preuve physique éliminent le doute.
     jeton_p = norm_phon(jeton)
-    prose_interdit = jeton_p in _HINTS_PROSE
+    prose_interdit = _est_prose(jeton_p)
     # Garde dur : un mot de prose structurant (test cognitif, symptôme…) n'est
     # JAMAIS un item médicament, même porté par une dose/ancre (« L'hémine
     # mentale est à 25 » → hémine = clométhiazole serait un faux positif).

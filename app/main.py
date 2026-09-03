@@ -2800,16 +2800,37 @@ def _generate_and_publish(
     #
     # La passe 1 reçoit le transcript PRÉ-CORRIGÉ inline (mêmes substitutions
     # déterministes et auditées que la passe unique : garbles seedés, exacts —
-    # jamais de flou orthographique). Le LLM n'a plus à deviner les noms de
-    # médicaments déformés connus (« Restore 5 » → « Crestor 5 », « la Six » →
-    # « Lasix ») : charge cognitive en moins, et l'obéissance aux hints n'est
-    # plus le seul recours. « payload.transcript » (brut) reste la source pour
-    # la persistance, les hints et la confiance mot-à-mot.
+    # plus la réécriture agressive des MÉDICAMENTS COURANTS gagnée par
+    # similarité + confiance STT, voir COMMON_INLINE_*). Le LLM n'a plus à
+    # deviner les noms de médicaments déformés connus (« Restore 5 » →
+    # « Crestor 5 », « la Six » → « Lasix », « ketapine » → « quetiapine ») :
+    # charge cognitive en moins, et l'obéissance aux hints n'est plus le seul
+    # recours. « payload.transcript » (brut) reste la source pour la
+    # persistance, les hints et la confiance mot-à-mot.
+    #
+    # La confiance STT mot-à-mot (transcript_conf) est nécessaire à la
+    # réécriture agressive des courants (le plafond COMMON_INLINE_STT écarte la
+    # prose) : on la recharge ici à partir de la consultation, indépendamment
+    # du charger du corridor de génération (conf_map n'est pas passée dans
+    # cette fonction).
+    conf_for_inline: dict = {}
+    if payload.consultation_id:
+        try:
+            with SessionLocal() as _db_inline:
+                _consult_inline = _get_owned_consultation(
+                    _db_inline, payload.consultation_id, user)
+                conf_for_inline = (json.loads(_consult_inline.transcript_conf)
+                                   if _consult_inline.transcript_conf else {})
+        except Exception:
+            conf_for_inline = {}
     if runtime_config.value("note_pipeline") == "two_pass":
         deux_pass_transcript = payload.transcript
         if _med_grounding_on() and payload.transcript:
             try:
-                corrige, _ = med_grounding.normalize(payload.transcript, inline_safe=True)
+                corrige, _ = med_grounding.normalize(
+                    payload.transcript, inline_safe=True,
+                    conf=conf_for_inline or None,
+                )
                 if corrige and corrige.strip():
                     deux_pass_transcript = corrige
             except Exception:
@@ -3498,10 +3519,15 @@ def patch_consultation(
     # perdre la confiance. On compare après normalisation des espaces : le
     # client reformate les phrases en une ligne chacune (formatSentences), le
     # serveur stocke les blocs STT — seuls les sauts/espaces diffèrent alors.
+    # La confiance est RETENUE tant que le transcript existe : elle est
+    # indexée par clé phonétique (norm_phon) et ré-alignée à la lecture
+    # (voir med_grounding), donc elle résiste aux éditions mineures. On ne la
+    # purge que si le texte est réellement vidé — il n'y a alors plus rien à
+    # cui aligner.
     if "raw_transcript" in updates:
         nouveau = " ".join((updates["raw_transcript"] or "").split())
         courant = " ".join((consultation.raw_transcript or "").split())
-        if nouveau != courant:
+        if nouveau != courant and not nouveau:
             consultation.transcript_conf = None
 
     consultation.updated_at = utcnow()
@@ -3734,7 +3760,11 @@ async def retranscribe_consultation(
         return {"transcript": "\n\n".join(morceaux), "superseded": True}
 
     consultation.raw_transcript = "\n\n".join(morceaux)
-    consultation.transcript_conf = None
+    # La confiance est conservée (retention tant que le transcript existe) :
+    # on fusionne les confiances de la retranscription dans le mapping déjà
+    # présent plutôt que de le vider. Un enregistrement écarté (muet, absent)
+    # ne fait ainsi pas perdre la confiance des autres. ``_merge_conf_into``
+    # garde la valeur la plus basse — la prudence demeure.
     for cmap in conf_maps:
         _merge_conf_into(consultation, cmap)
     consultation.audio_seconds = int(round(secondes))

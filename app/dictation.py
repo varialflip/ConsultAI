@@ -1319,7 +1319,12 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
         consultation = db.get(Consultation, session.consultation_id)
         if consultation is not None:
             consultation.raw_transcript = " ".join(session.parts).strip()
-            consultation.transcript_conf = None
+            # La confiance est CONSERVÉE tant que le transcript existe : la
+            # stabilisation remplace une tranche de texte, mais la confiance des
+            # tranches inchangées reste valide. On fusionne donc les nouvelles
+            # confiances dans le mapping existant au lieu de repartir de zéro
+            # (``_merge_conf_into`` garde la valeur la plus basse, le mot ayant
+            # été ambigu au moins une fois — prudence conservée).
             for cmap in session.parts_conf:
                 _merge_conf_into(consultation, cmap)
             consultation.updated_at = utcnow()

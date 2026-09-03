@@ -35,6 +35,54 @@ grounding (`app/med_grounding.py`) :
   (`COMMON_JOIN_FLOOR` 0.62 vs 0.70, `COMMON_JOIN_GAP` 0.08 vs 0.12). C'est le
   plus prescrit, donc le plus déformé. Seed `perin de prille` → perindopril
   ajouté en parallèle (`med_grounding/seed_aliases.py`).
+- **Réécriture inline agressive des courants** (`COMMON_INLINE_MINLEN/SIM/STT`):
+  au-delà du mode `inline_safe` historique, un jeton COURANT est réécrit dans le
+  corps du texte même pour une correspondance imparfaite quand il passe trois
+  garde-fous : longueur phonétique ≥ 5, similarité ≥ 0.80, confiance STT < 0.98.
+  « quetzapine »→quetiapine, « méthormine »→metformin, « Dapamide »→indapamide,
+  « Hydrochlorothiadide »→hydrochlorothiazide. Le garde de longueur (5) bloque
+  des faux positifs courts que le plafond de confiance seul ne suffisait pas à
+  arrêter (« six »→Lasix dans des dates « vingt-six », prose, STT 0.955-0.977).
+- **Piste SUGGESTION étiquetée en confiance** (`suggestions_texte` +
+  `SUGGEST_CONF_MAX`/`CONF_SUGGEST_SIM`) : toute résolution vers un médicament
+  (courant ou non) est proposée au modèle — jamais réécrite — quand elle est
+  portée par une dose/forme voisine OU très douteuse sans dose. Chaque piste
+  porte une **confiance combinée** `√(STT × similarité)` rendue dans
+  `MEDICAMENTS_PHONETIQUES` (« confiance 0.871 ») : plus elle est basse, plus le
+  nom est probablement déformé. Le canal dose (mg/BID/« timbre »…) sauve les
+  vrais garbles NON courants (activant→ativan, Poumadin→warfarine,
+  Piclone→zopiclone, d'hertapenem→ertapenem) ; le canal doute (sans dose,
+  confiance combinée < 0.72) ne retient que les noms nus très mal entendus.
+Vérifié sur 12 dictées réelles : ~60 % de bruit de prose en moins (les mots
+   ordinaires flouentaient vers des noms obscurs de la BDP) sans perdre un seul
+   garble réel.
+- **Priorité COURANTS renforcée sur les listes de médicaments, selon confiance** :
+  la liste `common_meds` (curatée + JSON) coupe davantage de garde-fous quand la
+  confiance STT le justifie —
+  - la réécriture inline agressive d'un COURANT passe désormais avec **ou une
+    dose voisine, ou une confiance STT < 0.95** (au lieu du seul plafond 0.98) :
+    la dose est la preuve physique qui sépare un vrai garble dicté (« myrtazapine »
+    →mirtazapine, « Dapamide »→indapamide, « méthormine »→metformin, tous portés
+    par une posologie) de la prose parfaitement entendue ;
+  - l'admission en liste Validation (anti-fantôme) cède pour un COURANT nu porté
+    par une dose ou une confiance < 0.95, et pour une résolution EXACTE à
+    confiance faible — sauve les listes dictées SANS doses individuelles
+    (« il prend du Lyrica, de la trazodone, du tilénol… » qui apparaissaient
+    auparavant comme « fantômes » rejetés) ;
+  - la passe des paires phonétiques n'exclut plus les paires collées à une entrée
+    EXACTE de la base quand les deux mots ne résolvent pas seuls (bug
+    « Doné Pézil » → donepezil, normalisé `donepezil` = clé exacte, écarté à
+    tort ; « donné Pézil » de l'autre dictée passait par chance orthographique).
+  Vérifié sur les 20 transcripts de référence : +lyrica/+trazodone/+acetaminophen
+  (cid 6), +insuline (cid 22), +metformin (cid 24), +donepezil (cid 27), zéro faux
+  positif nouveau.
+- **Filet de prose élargi à la réécriture inline** : `_HINTS_PROSE` (mots de
+  prose clinique qui colisent avec un nom de marque) s'applique désormais aussi à
+  la réécriture inline agressive et à l'admission d'item, pas seulement à la piste
+  phonétique. Corrige une corruption de prose préexistante (le corpus n'en
+  montrait qu'un seul cas, porté par `_resolve_single` à 0.83) : « nausée »
+  → dimenhydrinate/NAUSEX était réécrit dans le corps du texte (« Il n'y a pas de
+  nausée » devenait « … de dimenhyDRINATE ») et listé dans l'onglet Validation.
 
 ## 2026-09-02 — Pipeling « deux passes » : extraction LLM + rendu applicatif
 

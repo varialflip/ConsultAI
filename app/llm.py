@@ -234,10 +234,16 @@ def _bloc_meds(med_hints: List[dict], libelles: dict) -> List[str]:
         nom = h.get("name") or ""
         poso = h.get("posology") or ""
         if h.get("source") == "phonetic":
-            phonetiques.append(
-                f"- « {nom} » → {h.get('base') or h.get('brand')}"
-                + (f" — posologie captée : {poso}" if poso else "")
-            )
+            ligne = f"- « {nom} » → {h.get('base') or h.get('brand')}"
+            # ``conf`` = étiquette de confiance combinée (STT × similarité,
+            # cf. ``Matcher.suggestions_texte``) : le modèle la pondère avec le
+            # contexte clinique — plus elle est basse, plus la piste est forte
+            # (STT incertain + phonétique proche → nom déformé probable).
+            if isinstance(h.get("conf"), (int, float)):
+                ligne += f" — confiance {h['conf']:.3f}"
+            if poso:
+                ligne += f" — posologie captée : {poso}"
+            phonetiques.append(ligne)
         else:
             certains.append(
                 f"- {nom}" + (f" — posologie captée : {poso}" if poso else "")

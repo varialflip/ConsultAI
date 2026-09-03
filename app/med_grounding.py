@@ -19,6 +19,8 @@ singleton, en lecture seule après construction).
 from __future__ import annotations
 
 import functools
+import json
+import math
 import os
 import re
 import sqlite3
@@ -77,6 +79,100 @@ COMMON_JOIN_GAP     = 0.08  # vs 0.12 : ambiguïté d'un courant tolérée (le
                             # 2e plus proche voisin peut être proche sans
                             # que le 1er soit un faux positif)
 
+#: ---------------------------------------------------------------------------
+#: Liste « courante » curatée, chargée À CHAQUE RUN (fichier JSON).
+#: ---------------------------------------------------------------------------
+#: Chemin du fichier JSON de la liste curatée des médicaments courants
+#: (paires `generic_name`/`brand_name`). Chargé à la CONSTRUCTION de chaque
+#: ``Matcher`` (donc à chaque démarrage / recréation du moteur), ce qui
+#: permet de l'éditer et de redéployer le conteneur sans reconstruire la base
+#: DPD. Le fichier est l'autorité : ses noms sont admis comme « courants »
+#: MÊME s'ils sont absents de la base DPD (contrairement à `seed_common.py`
+#: qui les ignore silencieusement). Les clés générique ET marque sont toutes
+#: deux ajoutées à ``self.common`` (clé = ``norm_phon``). Les marques multi-mots
+#: (« Effexor XR », « Cardizem CD », « NovoMix 30 ») sont enregistrées comme
+#: phrases pour le chemin de joint multi-tokens (voir ``load_common_json``).
+COMMON_JSON_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                "common_meds.json")
+
+#: ---------------------------------------------------------------------------
+#: Correction INLINE agressive des MÉDICAMENTS COURANTS (réécriture du texte).
+#: ---------------------------------------------------------------------------
+#: Un jeton qui résout vers un médicament COURANT est réécrit dans le texte
+#: (inline) quand il satisfait les conditions conjointes :
+#:   1. score du résolveur ``base_score`` (= ``cand[3]`` : similarité ORTHO de
+#:      ``_resolve_single`` — ou PHONÉTIQUE du repli ``_resolve_phonetic`` quand
+#:      l'ortho échoue) >= COMMON_INLINE_SIM ;
+#:   2. confiance STT < COMMON_INLINE_STT (garble vraisemblable), OU une dose
+#:      réelle à proximité (la prose ne porte jamais de dose — preuve physique
+#:      qui passe un courant même parfaitement entendu : myrtazapine→mirtazapine
+#:      à 0.96, Dapamide→indapamide à 0.97, méthormine→metformin à 0.99) ;
+#:   3. hors garde-fous de prose (``FRENCH_STOP`` / ``_HINTS_PROSE``).
+#:
+#: ⚠ CRITÈRES ARBITRAIRES, calibrés sur 20 transcripts réels (2026-09-03).
+#: La similarité ORTHO (ce que voit réellement ``normalize``) sépare les vrais
+#: garbles courants (ziprexa→zyprexa 0.857, solifénacine→solifenacin 0.917,
+#: methformine→metformin 0.818, Dapamide→indapamide 0.80, serpaline→sertraline
+#: 0.80) de la prose ; les non-courants plus déformés (médeformine→metformin
+#: 0.75, paroxytique→paroxetine 0.727, péritine→risperidone 0.75) retombent sur
+#: la piste SUGGESTION (leur faible confiance STT les y admet). Le plancher
+#: 0.80 exclut la prose ``instants``→fentanyl (ortho 0.75, STT 0.973 — la SEULE
+#: prose assez proche pour franchir le plafond de confiance).
+#: La confiance STT est le garde de prose DÉCISIF dans la zone 0.80 : requis
+#: (prose, ortho 0.80, STT 0.998) est EXCLU par le plafond pendant que Dapamide
+#: (vrai, ortho 0.80, STT 0.973) passe. Sans plafond, ``requis`` serait réécrit
+#: en ropinirole (faux positif PERMANENT dans le texte). Le seuil d'admission
+#: d'un courant SANS dose est passé de 0.98 à la barre de doute ``0.95``, et la
+#: DOSE ouvre en plus un canal de réécriture indépendant de la confiance.
+#: Réduire COMMON_INLINE_SIM / hausser COMMON_INLINE_STT ⇒ plus agressif (risque
+#: de prose réécrite) ; l'inverse ⇒ plus prudent. À RECALIBRER avec le corpus.
+COMMON_INLINE_SIM = 0.80   # score résolveur (ortho, cf. cand[3]) minimal inline
+COMMON_INLINE_STT = 0.98   # historique : plafond de confiance « prose sûre »
+COMMON_INLINE_CONF = 0.95  # confiance STT max d'un courant SANS dose réécrit inline
+#: Longueur phonétique minimale pour la réécriture inline agressive. Mesuré sur
+#: le corpus réel : « six »→LASIX (ortho 0.80, STT 0.955-0.977) est de la PROSE
+#: — dates « deux mille vingt-six » (2026), « six mois/semaines », « point
+#: vingt-six » — et passe pourtant les deux gardes (mots courts = sim ortho
+#: élevée par hasard, nombres dictés à confiance < 0.98). Les vrais garbles
+#: courants font ≥ 5 phonèmes (ketapine/quetzapine 7, myrtazapine 7, méthormine
+#: 6, dapamide 5, Hydrochlorothiadide). 5 exclut « six » sans rien faire tomber
+#: de réel. À RECALIBRER avec le corpus.
+COMMON_INLINE_MINLEN = 5   # longueur phonétique minimale d'un jeton réécrit inline
+
+#: ---------------------------------------------------------------------------
+#: Piste SUGGESTION pour le modèle de langage (jamais une réécriture).
+#: ---------------------------------------------------------------------------
+#: Tout jeton qui résout vers un médicament (COURANT ou non, « un médecin peut
+#: envoyer n'importe quel médicament à la liste de suggestion §AGENT ») est
+#: proposé au LLM quand il est porté par une dose voisine OU suffisamment
+#: douteux — et qu'il n'a pas déjà été réécrit inline. La piste porte une
+#: ÉTIQUETTE DE CONFIANCE combinée ``sqrt(conf_stt × similarité_phonétique)``
+#: (moyenne géométrique : la proposition est d'autant plus forte que le STT
+#: était incertain ET que la correspondance phonétique est proche) — le modèle
+#: de langage la classe et la pondère avec le contexte clinique.
+#:
+#: ⚠ Admission en deux canaux, mesurés sur 12 dictées réelles :
+#:   * CANAL DOSE : un jeton à portée d'une posologie (mg/g/ml/unité/BID…) est
+#:     proposé quel que soit son niveau de confiance — la dose est la preuve
+#:     physique qu'il s'agit d'un médicament. C'est lui qui sauve les vrais
+#:     garbles NON COURANTS (ceux que l'inline ne peut pas corriger) : l'aldol
+#:     +PRN, activant 210 mg, Poumadin 4 mg, Piclone 7,5 mg HS, d'apaglyflosine
+#:     10 mg, Citagliptine 50 mg BID, d'hertapenem… tous portés par une dose.
+#:   * CANAL DOUTE : SANS dose, seul un jeton TRÈS DOUTEUX est proposé
+#:     (``confiance combinée < SUGGEST_CONF_MAX``). Pourquoi si bas : la
+#:     dictée réelle donne aux mots de PROSE ordinaires une confiance STT
+#:     0.6-0.94 ; un seuil STT souple (CONF_SUGGEST=0.95, ancienne valeur)
+#:     inondait le prompt de ~10-12 fausses pistes/consultation qui résolvent
+#:     vers des noms obscurs de la DPD complète (Boustani→fentanyl, centre→
+#:     contrave, Antoine→lanthane — 124/146 pistes hors ``self.common``). Le
+#:     canal dose (preuve physique) fait le travail ; le canal doute ne sert
+#:     qu'aux noms nus vraiment mal entendus.
+#: ``CONF_SUGGEST_SIM`` reste le plancher de similarité phonétique d'une piste.
+#: À RECALIBRER avec le corpus.
+CONF_SUGGEST      = 0.95   # (conservé) confiance STT de référence du canal doute
+SUGGEST_CONF_MAX  = 0.72   # confiance COMBINÉE max d'une piste sans dose voisine
+CONF_SUGGEST_SIM  = 0.60   # similarité phonétique minimale d'une piste à proposer
+
 #: Seuil de confiance mot-à-mot (STT ``words[].confidence``) : au-dessus, une
 #: substitution orthographique *floue* d'un token est refusée quand il n'est
 #: porté ni par une dose ni par un ancre ni par une région médicament
@@ -127,13 +223,27 @@ CONF_PHON_PROSE_DOUTEUSE = 0.85
 #: couple de ce type (cf. phonetiques_texte, passe des paires).
 CONF_PHON_PAIRE_PROSE_DOUTEUSE = 0.80
 
-#: Prose structurante à ne JAMAIS proposer comme candidat phonétique (léxique
-#: réduit, réservé à la DÉTECTION de hints — ne modifie pas ``FRENCH_STOP``,
-#: qui reste le garde de la réécriture inline).
+#: Prose structurante à ne JAMAIS proposer comme candidat phonétique, NI
+#: réécrire inline, NI admettre comme item (« symptom words » + mots
+#: d'interface qui tombent opportunément sur un nom de marque : nausée →
+#: dimenhydrinate/NAUSEX, prescription → delavirdine, traitement →
+#: miconazole). Léxique réduit, réservé à la DÉTECTION de hints — ne modifie
+#: pas ``FRENCH_STOP``, qui reste le garde de la réécriture inline.
 _HINTS_PROSE = {
     "droite", "gauche", "piles", "vide", "doigt", "mamelle", "epaule",
     "hanche", "genou", "cheville", "poignet", "coude", "colonne", "poitrine",
     "ventre", "abdomen", "groupe", "taches",
+    # Symptômes / plaintes / concepts cliniques qui colisent avec un nom de
+    # marque (vérifié sur le corpus 2026-09-03 : nausée → dimenhydrinate est
+    # LE seul qui franchissait les gardes inline ; les autres sont ajoutés
+    # par précaution, la plupart sous le plancher COMMON_INLINE_SIM).
+    "nausée", "nausee", "vomissement", "douleur", "fievre", "frissons",
+    "fatigue", "sommeil", "anxiete", "depression", "prescription",
+    "symptome", "diabete", "traitement", "medication", "presentation",
+    "comportement", "autonomie", "delire", "agitation", "urgence",
+    "fonction", "plaint", "bilan", "confusion", "memoire", "marche",
+    "equilibre", "appetit", "chutes", "secours", "social", "logement",
+    "hospitalisation", "chirurgie", "tension", "poids", "taille",
 }
 
 # ---------------------------------------------------------------- normalization
@@ -626,6 +736,62 @@ FRENCH_STOP |= {
     "alcool", "lalcool",
 }
 
+# ------------------------------------------------- common list (JSON, per-run)
+def load_common_json(path: str | None = None) -> tuple[set, dict]:
+    """Charge à CHAQUE RUN la liste curatée des médicaments courants (JSON).
+
+    Lit ``COMMON_JSON_PATH`` (une liste de sections, chacune portant des paires
+    ``{"generic_name": …, "brand_name": …}``) et retourne :
+
+    * ``common_keys`` : set de clés ``norm_phon`` à ajouter à ``self.common``
+      pour traiter ces médicaments comme « courants ». On y met BOTH le nom
+      générique ET le nom de marque (jeton par jeton) : quelle que soit la façon
+      dont le STT les a dictés, la résolution les reconnaît comme courants.
+    * ``brand_phrases`` : mapping ``tuple(strip_api_duplicate, …, pour les marques
+      MULTI-MOTS (``{"brand_name": "Effexor XR", …}``) → nom générique canonique.
+      Ces marques multi-mots ne peuvent pas être posées comme simple clé
+      ``norm_phon`` (l'espace est perdu par ``norm_phon``) : on les mémorise
+      pour le chemin de joint multi-tokens (qui reste inchangé, voir
+      ``_resolve_phrase``). Les marques à UN SEUL mot sont simplement ajoutées
+      à ``common_keys``.
+
+    Le fichier est l'AUTORITÉ : on n'exige pas que les noms existent dans la
+    base DPD (contrairement à ``seed_common.py``). Un fichier absent ou illisible
+    renvoie un ensemble vide — le moteur démarre avec la seule liste DPD
+    (`table common_meds`), comme historiquement. Aucune exception ne doit
+    empêcher le démarrage.
+    """
+    common_keys: set = set()
+    brand_phrases: dict = {}
+    path = path or COMMON_JSON_PATH
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError, TypeError):
+        return common_keys, brand_phrases
+    if not isinstance(data, dict):
+        return common_keys, brand_phrases
+    for section, pairs in data.items():
+        if not isinstance(pairs, list):
+            continue
+        for pair in pairs:
+            if not isinstance(pair, dict):
+                continue
+            generic = str(pair.get("generic_name") or "").strip()
+            brand = str(pair.get("brand_name") or "").strip()
+            if not brand:
+                continue
+            if generic:
+                common_keys.add(norm_phon(generic))
+            brand_words = [tok for tok in re.split(r"\s+", brand) if tok]
+            if len(brand_words) == 1:
+                common_keys.add(norm_phon(brand))
+            else:
+                key = tuple(w.lower() for w in brand_words)
+                brand_phrases.setdefault(key, generic)
+    return common_keys, brand_phrases
+
+
 # ---------------------------------------------------------------- matcher
 class Matcher:
     def __init__(self, db=DB, use_phonetic=False):
@@ -690,9 +856,15 @@ class Matcher:
             self.ortho.append((n, level, base, brand, is_leaf, bool(is_otc)))
             self.ortho_by_len.setdefault(len(n), []).append(
                 (n, level, base, brand, is_leaf, bool(is_otc)))
-        # Médicaments « courants » (table `common_meds`) — clé = norm_phon du
-        # base_generic canonique. Servent à abaisser sélectivement les barrières
-        # d'admission (voir COMMON_*) pour les noms les plus dictés/déformés.
+        # Médicaments « courants » — clé = norm_phon du base_generic canonique.
+        # Servent à abaisser sélectivement les barrières d'admission (voir
+        # COMMON_*) et à piloter la correction INLINE agressive (COMMON_INLINE_*)
+        # pour les noms les plus dictés/déformés. Deux sources se complètent :
+        #   * la table DPD `common_meds` (génériques curés par `seed_common.py`) ;
+        #   * la liste JSON curatée `COMMON_JSON_PATH` (génériques + MARQUES de
+        #     l'autorité, rechargée à chaque construction du moteur).
+        # Les marques multi-mots (Effexor XR…) sont gardées dans
+        # `self.common_brand_phrases` pour le chemin de joint multi-tokens.
         try:
             self.common = frozenset(
                 norm_phon(b)
@@ -708,6 +880,11 @@ class Matcher:
             # anciennes bases pré-2026-09 n'en ont pas). Le moteur doit alors
             # DÉMARRER avec un set vide — le comportement reste l'historique.
             self.common = frozenset()
+        # Union avec la liste JSON curatée, chargée à chaque run.
+        _json_keys, _json_phrases = load_common_json()
+        self.common_brand_phrases = _json_phrases
+        if _json_keys:
+            self.common = frozenset(self.common | _json_keys)
         self.bk_ortho = BKTree(lev)
         self.ortho_node = {}
         for n, level, base, brand, is_leaf, is_otc in self.ortho:
@@ -1357,8 +1534,16 @@ class Matcher:
                     continue
                 if len(paire_p) < 5 or len(paire_p) > 14:
                     continue
-                if paire_p in FRENCH_STOP or paire_p in self.exact or paire_p in self.exact_garble:
+                if paire_p in FRENCH_STOP:
                     continue
+                if paire_p in self.exact or paire_p in self.exact_garble:
+                    # Si les deux mots résolvent individuellement, le
+                    # unigramme gère déjà.  Sinon c'est un garble scindé
+                    # (« Doné Pézil » → donepezil) — ne pas rejeter.
+                    a_res = self._resolve_single(a)
+                    b_res = self._resolve_single(b)
+                    if a_res and b_res:
+                        continue
                 paire_douteuse = bool(conf_keys and pa in conf_keys and pb in conf_keys)
                 if len(pa) >= 5 or len(pb) >= 5:
                     if not paire_douteuse:
@@ -1411,6 +1596,128 @@ class Matcher:
                 })
                 if len(result) >= maxi:
                     break
+        return result
+
+    #: Mots qui portent la preuve qu'un jeton voisin est un MÉDICAMENT pour la
+    #: passe de SUGGESTION : unités de dose (mg, BID, HS…) et FORMES
+    #: PHARMACEUTIQUES (timbre, comprimé, gélule, patch…). Un tel mot à portée
+    #: admet un jeton même non douteux (CANAL DOSE) — c'est lui qui sauve les
+    #: vrais garbles NON COURANTS sans unité chiffrée, par ex. « ajout
+    #: d'hertapenem, de timbre de nicotine… » → ertapenem (la forme « timbre »
+    #: marque le contexte médicament). Ces formes n'apparaissent quasiment
+    #: jamais à côté de la prose, donc élargir ne réintroduit pas le bruit.
+    _SUGGEST_DOSE_UNIT = frozenset({
+        "mg", "mcg", "µg", "g", "ml", "unités", "unites", "ui", "bid", "tid",
+        "hs", "prn", "qid", "die", "po", "peros",
+        # formes pharmaceutiques
+        "timbre", "timbre.", "patch", "comprime", "comprimé", "gelule",
+        "gélule", "capsule", "creme", "crème", "pommade", "onguent",
+        "collyre", "gouttes", "injection", "perfusion", "inhalateur",
+        "sirop", "suppositoire", "solution", "suspension",
+    })
+
+    def suggestions_texte(self, texte, conf=None, maxi=25):
+        """Suggestion pour le modèle de langage (JAMAIS une réécriture).
+
+        Tout jeton qui résout vers un médicament — COURANT OU NON, car « le
+        moteur peut envoyer n'importe quel médicament à la liste de
+        suggestion ; seuls les SEUILS sont considérés différemment » — est
+        proposé (a) s'il est porté par une dose voisine (CANAL DOSE : la
+        preuve physique qu'il s'agit d'un médicament, quel que soit son
+        niveau de confiance) ou (b) s'il est TRÈS DOUTEUX sans dose (CANAL
+        DOUTE : confiance COMBINÉE ``sqrt(conf_stt × similarité)`` <
+        ``SUGGEST_CONF_MAX``), et qu'il satisfait la similarité
+        ``CONF_SUGGEST_SIM``. La piste porte toujours cette ÉTIQUETTE de
+        confiance combinée (moyenne géométrique : d'autant plus basse que le
+        STT hésitait ET que la correspondance phonétique est proche = nom
+        déformé probable) — le modèle la classe et la pondère avec le
+        contexte clinique.
+
+        Le canal dose sauve les vrais garbles NON COURANTS (Lirica, activant,
+        Poumadin, Piclone, d'apaglyflosine, Citagliptine…, tous portés par une
+        posologie) ; le canal doute ne sert qu'aux noms nus très mal entendus.
+        Mesuré sur 12 dictées réelles : un seuil STT souple inondait le prompt
+        de ~10-12 fausses pistes de prose qui résolvent vers des noms obscurs
+        de la DPD complète (Boustani→fentanyl, centre→contrave, Antoine→
+        lanthane) ; restreindre le doute à la confiance combinée très basse
+        (0.72) nettoie ~73 % de ce bruit sans perdre un seul garble réel — le
+        seul cas à risque (quetzapine→quetiapine, commun sans dose) étant déjà
+        corrigé par l'inline agressif.
+        Un jeton déjà réécrit inline ou résolu exactement n'est pas re-suggéré.
+
+        ``conf`` : mapping ``norm_phon → confiance STT`` (``transcript_conf``) ;
+        sans lui, ``SUGGEST_CONF_MAX`` ne peut alimenter le canal doute — seuls
+        les jetons portés par une dose sont alors suggérés (prudence).
+        """
+        words = texte.split()
+        n = len(words)
+        region = self._medlist_regions(
+            words, [False] * n, [False] * n, [False] * n)
+        result: list = []
+        vus = set()
+        for i, w in enumerate(words):
+            jet = w.strip(" \t,;:.()\"'’")
+            p = norm_phon(jet)
+            if not p or len(p) < 5:
+                continue
+            if (p in FRENCH_STOP or p in ANCHOR_WORDS or p in PROTOCOL_WORDS
+                    or p in _HINTS_PROSE or words[i].isdigit()):
+                continue
+            if p in self.exact_garble or p in self.exact:
+                continue                     # déjà résolu déterministiquement
+            cand = self._resolve_single(words[i])
+            if cand is None and self.use_phonetic:
+                cand = self._resolve_phonetic(words[i])
+            if cand is None:
+                continue
+            level, base, brand, sim, is_leaf, is_otc = cand
+            if sim < CONF_SUGGEST_SIM:
+                continue
+            if is_leaf or _is_cosmetic(base or brand):
+                continue                     # unités/feuilles OTC : jamais une piste
+            can = self._canonicalize(level, base, brand, bool(is_otc))
+            if not can:
+                continue
+            cle = norm_phon(base or brand or can)
+            if cle in vus:
+                continue
+            # Dose à portée : un voisin chiffre+unité OU un token d'unité OTC.
+            window = " ".join(words[max(0, i - 2): i + 3])
+            has_dose = bool(DOSE_RE.search(window)) or any(
+                tok.strip(" ,;:.()").lower() in self._SUGGEST_DOSE_UNIT
+                for tok in words[max(0, i - 2): i + 3])
+            stt_val = None
+            if isinstance(conf, dict):
+                c = conf.get(p)
+                if isinstance(c, (int, float)):
+                    stt_val = float(c)
+            # ÉTIQUETTE de confiance combinée STT × similarité (moyenne
+            # géométrique : d'autant plus basse que le STT hésite ET que la
+            # correspondance phonétique est proche = nom déformé probable).
+            label = round(math.sqrt((stt_val if stt_val is not None else 1.0)
+                                    * sim), 3)
+            # Admission en deux canaux (voir constantes SUGGEST_*) :
+            #   * CANAL DOSE  : une posologie voisine est la preuve physique
+            #     que c'est un médicament — proposé quel que soit `label` ;
+            #   * CANAL DOUTE : sans dose, seul un nom TRÈS DOUTEUX
+            #     (``label < SUGGEST_CONF_MAX``) est proposé — un seuil STT
+            #     souple inondait le prompt de fausses pistes de prose qui
+            #     résolvent vers des noms obscurs de la DPD complète.
+            if not (has_dose or label < SUGGEST_CONF_MAX):
+                continue
+            vus.add(cle)
+            result.append({
+                "name": jet,                 # le token déformé tel quel
+                "base": base or brand or can,
+                "brand": brand,
+                "posology": _dose_posology(texte, jet) or "",
+                "score": int(round(sim * 100)),
+                "level": level,
+                "source": "phonetic",
+                "conf": label,               # étiquette combinée STT × similarité
+            })
+            if len(result) >= maxi:
+                break
         return result
 
     def _phonetic_candidats(self, token):
@@ -1726,6 +2033,41 @@ class Matcher:
             # signal de contexte au lieu de deux. Vérifié sur le base du
             # candidat résolu (jamais sur la prose).
             is_common = norm_phon(base or "") in self.common
+            # ---- correction INLINE agressive des MÉDICAMENTS COURANTS ----
+            # (condition pré-calculée AVANT le scoring pour pouvoir contourner le
+            # « narrative gate » ci-dessous.) Pour un médicament COURANT
+            # (self.common : DPD + liste JSON `COMMON_JSON_PATH`) on réécrit le
+            # texte même pour une correspondance imparfaite (garbles dictés :
+            # quetzapine→quetiapine, myrtazapine→mirtazapine, méthormine→
+            # metformin). Garde-fous conjoints :
+            #   * ``COMMON_INLINE_MINLEN`` : longueur phonétique minimale — exclut
+            #     « six »→LASIX (prose, cf. constante) ;
+            #   * ``COMMON_INLINE_SIM`` : score resolveur minimal (ortho) ;
+            #   * ``COMMON_INLINE_CONF`` : un courant SANS dose n'est réécrit que
+            #     si le STT l'a déformé (confiance < 0.95) ;
+            #   * OU une dose réelle à proximité : preuve physique que la prose
+            #     ne porte jamais — réécrit les courants même parfaitement
+            #     entendus (myrtazapine→mirtazapine 0.96, Dapamide→indapamide
+            #     0.97, méthormine→metformin 0.99, tous dosés) ;
+            #   * ``_HINTS_PROSE`` : mots de prose clinique jamais réécrits
+            #     (nausée→dimenhydrinate, prescription→delavirdine…).
+            # La prose est de toute façon déjà exclue en amont (``FRENCH_STOP`` /
+            # ``_HINTS_PROSE``, cf. plus haut). Sans mapping de confiance STT
+            # (conf=None) on ne peut pas séparer prose/haute-confiance : on NE
+            # fait PAS cette réécriture agressive (prudence — retombe sur la
+            # règle inline_safe historique).
+            allow_common_inline = False
+            if (is_common and len(w_phon) >= COMMON_INLINE_MINLEN
+                    and base_score >= COMMON_INLINE_SIM and conf is not None
+                    and w_phon not in _HINTS_PROSE):
+                _ci = (conf.get(w_phon, 0.0) if isinstance(conf, dict) else
+                       (conf[i] if i < len(conf) else 0.0))
+                # Les courants passent le garde de confiance STT quand :
+                #  - confiance basse / garble (< COMMON_INLINE_CONF), OU
+                #  - dose réelle à proximité (la prose ne porte jamais de dose).
+                if (not isinstance(_ci, (int, float)) or _ci < COMMON_INLINE_CONF
+                        or has_poso):
+                    allow_common_inline = True
             ortho_floor = COMMON_ORTHO_FLOOR if is_common else ORTHO_FLOOR
             if base_score >= 0.99 and not is_leaf:
                 score = 100                     # genuine drug name, exact
@@ -1751,6 +2093,15 @@ class Matcher:
                     score = 0                   # leaves need a real dose, or a
                                                 # direct high-confidence verb
                                                 # anchor (tilénol -> Tylenol)
+
+            # La réécriture agressive d'un courant PASSÉ AUX GARDES (similarité
+            # + confiance STT) ne dépend pas du « narrative gate » : c'est un
+            # nom déformé, pas de la prose — on force le score pour que la
+            # substitution soit retenue même sans dose ni ancre. Le garde STT a
+            # déjà écarté la prose ; ne restent que des noms de médicaments
+            # courants (cf. constantes COMMON_INLINE_*).
+            if allow_common_inline:
+                score = THRESHOLD
 
             replacement = self._canonicalize(level, base, brand, is_otc)
             replacement = tallman(replacement)
@@ -1781,7 +2132,8 @@ class Matcher:
             # collé : la haute confiance STT du mot suffit alors à le protéger.
             if (score >= THRESHOLD and base_score < 0.99 and conf is not None
                     and not (has_anchor or region_credit)
-                    and not (has_poso and poso_dir == "arriere")):
+                    and not (has_poso and poso_dir == "arriere")
+                    and not allow_common_inline):
                 c = (conf.get(w_phon, 0.0) if isinstance(conf, dict) else
                      (conf[i] if i < len(conf) else 0.0))
                 # Un médicament COURANT porté par une dose est admis même un peu
@@ -1803,7 +2155,13 @@ class Matcher:
             # floue — y compris un BRAND_LEAF exact toléré (« comprimé » ->
             # acétaminophène, « Monocore » -> nitrate de miconazole) — est laissée
             # au modèle de langage, qui la tranche avec le contexte clinique.
-            if inline_safe and w_phon not in self.exact_garble:
+            # Seule EXCEPTION (réclamation agressive des courants) : un jeton qui
+            # résout vers un MÉDICAMENT COURANT et passe ``allow_common_inline``
+            # (calculé plus haut : ``COMMON_INLINE_SIM`` + ``COMMON_INLINE_CONF``
+            # ou dose voisine, hors ``_HINTS_PROSE``) est réécrit même flou — les
+            # courants déformés sont les plus coûteux à manquer, et la confiance
+            # STT / la dose / le filet de prose écartent la prose.
+            if inline_safe and w_phon not in self.exact_garble and not allow_common_inline:
                 if is_leaf or base_score < 0.99:
                     score = 0
             if replacement and score >= THRESHOLD and norm_orth(replacement).replace(" ", "") not in BAN_ORTH:
@@ -2172,7 +2530,8 @@ def _res_display(res: dict) -> str | None:
 
 
 def _append_item(items, vus, fixed, jeton, res, force_name=None,
-                 ancre_poso=False, confiant=False) -> None:
+                 ancre_poso=False, confiant=False, is_common=False,
+                 conf_val=None) -> None:
     """Ajoute un item à la liste, dédupliqué par nom canonique.
 
     ``confiant`` : le jeton a été entendu par le STT avec une confiance >=
@@ -2182,6 +2541,12 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     le mot est déjà bien écrit dans le transcrit, il n'y a rien à suggérer
     (« Air Canada » ne doit pas produire un item « air »). Ne pas trouver un
     médicament mentionné en prose est acceptable — le LLM le voit tel quel.
+
+    ``is_common`` / ``conf_val`` : le jeton est un médicament courant (liste
+    curatée) et sa confiance STT. Quand un courant a une faible confiance
+    (< 0.95) ou une dose à proximité, le garde anti-fantôme cède : la liste
+    curatée + la preuve physique (dose) ou le doute STT prouvent qu'il s'agit
+    d'un vrai médicament, pas d'un artefact.
     """
     base = res.get("base") or res.get("brand") or jeton
     cle = norm_phon(base)
@@ -2206,7 +2571,22 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # import. ``ancre_poso`` vaut vrai pour un token en région de liste
     # confirmée ou côte à côte d'un chiffre de dose (aspirine 80, calcium
     # 500, rivastigmine timbre 10).
-    if not poso and not ancre_poso:
+    # EXCEPTION : un médicament courant (liste curatée) dont la confiance
+    # STT est faible (< 0.95, garble) ou qui porte une dose est admis même
+    # sans ancre — la liste curatée + la preuve physique éliminent le doute.
+    jeton_p = norm_phon(jeton)
+    prose_interdit = jeton_p in _HINTS_PROSE
+    courant_admis = (is_common and not prose_interdit
+                     and (not isinstance(conf_val, (int, float))
+                          or conf_val < 0.95 or poso))
+    # Résolution EXACTE avec confiance STT faible : le STT a déformé un vrai
+    # nom de médicament — pas de la prose. Couvre les médicaments non courants
+    # (ex. Lyrica) où la liste curatée ne s'applique pas mais la correspondance
+    # exacte DPD + confiance faible prouve la genuinité.
+    exact_admis = (not prose_interdit
+                   and isinstance(conf_val, (int, float)) and conf_val < 0.95
+                   and res.get("level") in ("BRAND", "BASE_GENERIC"))
+    if not poso and not ancre_poso and not courant_admis and not exact_admis:
         return False
     # Prose sûre : jeton bien entendu (confiance haute), déjà bien écrit
     # (résolution exacte — cf. en-tête), hors région de liste et sans vrai
@@ -2318,10 +2698,20 @@ def extract_med_items(text: str, conf=None) -> list:
             continue
         confiant_paire = (norm_phon(jetons[i]) in confiant_cles
                           and norm_phon(jetons[i + 1]) in confiant_cles)
+        _base_pair = norm_phon(res.get("base") or res.get("brand") or paire)
+        _is_common_pair = _base_pair in matcher().common
+        _conf_pair = None
+        if conf:
+            _ci_a = conf.get(norm_phon(jetons[i]))
+            _ci_b = conf.get(norm_phon(jetons[i + 1]))
+            if _ci_a is not None and _ci_b is not None:
+                _conf_pair = min(float(_ci_a), float(_ci_b))
         if _append_item(items, vus, fixed, paire, res,
                         force_name=" ".join((jetons[i], jetons[i + 1])),
                         ancre_poso=(i in region) or chiffre_voisin(i),
-                        confiant=confiant_paire):
+                        confiant=confiant_paire,
+                        is_common=_is_common_pair,
+                        conf_val=_conf_pair):
             consommes.add(i)
             consommes.add(i + 1)
 
@@ -2332,9 +2722,14 @@ def extract_med_items(text: str, conf=None) -> list:
         res = _lookup_exact(jeton)
         if not res:
             continue
+        _base_u = norm_phon(res.get("base") or res.get("brand") or jeton)
+        _is_common_u = _base_u in matcher().common
+        _conf_u = conf.get(norm_phon(jeton)) if conf else None
         _append_item(items, vus, fixed, jeton, res,
                      ancre_poso=(i in region) or chiffre_voisin(i),
-                     confiant=norm_phon(jeton) in confiant_cles)
+                     confiant=norm_phon(jeton) in confiant_cles,
+                     is_common=_is_common_u,
+                     conf_val=_conf_u)
     return items
 
 
@@ -2354,6 +2749,13 @@ def extract_validation_items(text: str, conf=None, maxi_phon: int = 40) -> list:
     de ``conf`` (< 0.95) servent de ``conf_keys`` à ``phonetiques_texte`` : un
     nom sans dose à portée mais entendu avec incertitude se voit proposer sa
     piste phonétique au modèle (voir ``Matcher.phonetiques_texte``).
+
+    S'y rejoignent aussi les suggestions CONFANCE-ÉTIQUETÉES de
+    ``Matcher.suggestions_texte`` (tout médicament douteux ou porté par une
+    dose, avec ``conf = sqrt(stt × similarité)``) : la strate de suggestion
+    « agressive » qui alimente le prompt du modèle de langage. Prières sur les
+    deux listes par ``norm_phon(base)`` pour ne jamais afficher deux fois le
+    même médicament.
     """
     items = extract_med_items(text, conf=conf)
     if not _RAPIDFUZZ_OK:
@@ -2369,9 +2771,14 @@ def extract_validation_items(text: str, conf=None, maxi_phon: int = 40) -> list:
         phon = matcher().phonetiques_texte(text or "", maxi=maxi_phon,
                                            conf_keys=conf_keys or None)
     except Exception:
-        return items
+        phon = []
+    try:
+        sugg = matcher().suggestions_texte(text or "", conf=conf,
+                                           maxi=maxi_phon)
+    except Exception:
+        sugg = []
     vus = {norm_phon(i.get("base") or i.get("name")) for i in items}
-    for h in phon:
+    for h in [*sugg, *phon]:
         cle = norm_phon(h.get("base") or h.get("name"))
         if cle in vus:
             continue

@@ -1077,13 +1077,57 @@ des médicaments », défaut `false`). Une fois activé :
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 
 Les noms de la liste curatée des **médicaments courants** (ordonnance
-géronto/gériatrique & ambulatoire, table `common_meds`, renseignée par
-`med_grounding/seed_common.py`) bénéficient d'un bonus de score et de barrières
-d'admission légèrement abaissées (constantes `COMMON_*` dans
-`app/med_grounding.py`) : ce sont les plus dictés, donc les plus déformés par
-la reconnaissance vocale, et les plus coûteux à manquer. Le bonus ne s'applique
-jamais aux mots de prose (les garde-fous `FRENCH_STOP`/`_HINTS_PROSE`
-subsistent).
+géronto/gériatrique & ambulatoire, table `common_meds` + fichier JSON
+`app/common_meds.json`, renseignée par `med_grounding/seed_common.py`) sont les
+plus dictés, donc les plus déformés par la reconnaissance vocale, et les plus
+coûteux à manquer. Ils bénéficient de deux traitement privilégiés (constantes
+`COMMON_*` et `SUGGEST_*` dans `app/med_grounding.py`) :
+
+- **Réécriture inline agressive.** Au-delà du mode `inline_safe` historique
+  (garbles seedés seuls), un jeton COURANT jamais déclenché est **réécrit dans
+  le corps du texte** même pour une correspondance imparfaite, quand il passe
+  les garde-fous suivants : longueur phonétique ≥ `COMMON_INLINE_MINLEN`,
+  similarité ≥ `COMMON_INLINE_SIM`, hors `_HINTS_PROSE` (mots de prose clinique
+  qui colisent : nausée→dimenhydrinate, prescription→delavirdine…), et — selon
+  la confiance STT — **soit** une confiance basse (< 0.95, un garble vraisemblable :
+  le STT a déformé le nom), **soit une dose réelle à proximité** (la prose ne
+  porte jamais de dose, donc le courrier passera même parfaitement entendu :
+  myrtazapine→mirtazapine à confiance 0.96, Dapamide→indapamide à 0.97,
+  méthormine→metformin à 0.99, tous portés par une posologie). C'est la preuve
+  physique qui sépare un vrai garble d'un mot de prose parfaitement entendu.
+  « quetzapine »→quetiapine, « myrtazapine »→mirtazapine, « méthormine »→
+  metformin, « Dapamide »→indapamide, « Hydrochlorothiadide »→
+  hydrochlorothiazide. Le garde de longueur exclut des faux positifs courts
+  (« six »→Lasix dans des dates « vingt-six ») que seul le plafond de confiance
+  ne suffisait pas à bloquer. Sans confiance STT disponible, la réécriture
+  agressive est désactivée (retombe sur la règle historique).
+- **Admission en liste Validation des courants avec dose ou garble.** Un nom de
+  médicament COURANT (liste curatée) — ou une résolution EXACTE avec confiance
+  STT faible — est admis dans la liste Validation même nu (sans posologie captée
+  ni ancre), quand il est porté par une dose voisine OU une confiance STT < 0.95
+  (le STT l'a déformé). C'est ce qui sauve les listes de médicaments dictées
+  **sans doses individuelles** (« il prend du Lyrica, de la trazodone, du
+  tilénol… »), où l'item « fantôme » du STT canonisé serait sinon rejeté
+  (anti-fantôme). La preuve physique (dose) ou le doute STT écarte la prose ;
+  `_HINTS_PROSE` reste le filet final.
+- **Piste SUGGESTION avec étiquette de confiance.** Toute résolution vers un
+  médicament (courant **ou non**) est proposée au modèle — jamais réécrite —
+  quand elle est portée par une dose voisine OU très douteuse sans dose. Chaque
+  piste porte une **confiance combinée** `√(confiance STT × similarité)`
+  (moyenne géométrique) rendue dans le bloc `MEDICAMENTS_PHONETIQUES`
+  (ex. « confiance 0.871 ») : plus elle est basse, plus le STT hésitait et plus
+  la correspondance phonétique est proche — donc plus l'orthographe est
+  probablement déformée. Le modèle pondère cette étiquette avec la posologie et
+  le contexte clinique. Admission en deux canaux : le **canal dose** (une
+  posologie ou une FORME pharmaceutique voisine — mg, BID, « timbre »… —
+  prouve qu'il s'agit d'un médicament) sauve les vrais garbles NON courants que
+  l'inline ne peut pas corriger (activant→ativan, Poumadin→warfarine,
+  Piclone→zopiclone, d'hertapenem→ertapenem) ; le **canal doute** (sans dose,
+  confiance combinée < `SUGGEST_CONF_MAX`) ne retient que les noms nus très mal
+  entendus. Mesuré sur 12 dictées réelles : ce réglage réduit de ~60 % le bruit
+  de prose (les mots ordinaires résolvent vers des noms obscurs de la BDP) sans
+  perdre un seul garble réel. Le bonus ne s'applique jamais aux mots de prose
+  (les garde-fous `FRENCH_STOP`/`_HINTS_PROSE` subsistent).
 
 La base BDP peut être régénérée depuis les extraits bruts (dossier
 `med_grounding/` du dépôt, scripts `build_db.py` / `seed_common.py` /

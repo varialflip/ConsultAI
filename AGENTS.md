@@ -113,6 +113,13 @@ même commit** :
   compatibilité mais non alimentés).
 - Sauvegardes **sanitisées** : jamais d'audio ni de données cliniques dans les
   archives.
+- Le moteur de grounding charge au démarrage `app/common_meds.json` (liste
+  curatée des **médicaments courants**, complémentaire de la table BDP
+  `common_meds` / `med_grounding/seed_common.py`) : toute modification de ce
+  fichier ou des constantes `COMMON_*` / `SUGGEST_*` / `_HINTS_PROSE` de
+  `app/med_grounding.py`
+  doit être re-validée sur les transcripts de référence (faux positifs de
+  prose vs garbles réels) avant redéploiement.
 
 Le déploiement de référence tourne sur la machine `/opt/dictai` : tout réglage
 de production y est vérifiable par `sudo docker exec consultai python3 -c …`

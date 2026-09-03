@@ -386,6 +386,11 @@ BAN_ORTH = {
     "sylvant",           # « savant » (prose) -> Sylvant
     "acidealginique",    # « l'avion » (prose) -> acide alginique
     "alcool",            # « l'alcool » (substance de vie) -> alcool
+    # « vitamin e » (générique ANGLAIS) ne doit jamais être écrit — en français
+    # clinique c'est « vitamine E ». « La vitamine D est réduite à 41 » résolvait
+    # vers « vitamin e » (faux positif note 15) ; le générique français
+    # « vitamine e » reste par ailleurs un ion de laboratoire (LAB_ION).
+    "vitamine",          # English leaf "vitamin e" -> affichage "vitamine e" évité
 }
 
 # Electrolytes / lab-ion single-word generics. These appear constantly in the
@@ -1589,6 +1594,10 @@ class Matcher:
             # bilan, pas un supplément (observé note 15).
             if (_is_lab_ion(base or brand) and not poso):
                 continue
+            # Output banni (« vitamin e » = anglais, jamais écrit en français).
+            if ((base or brand or "") and norm_orth(base or brand)
+                    .replace(" ", "") in BAN_ORTH):
+                continue
             vus.add(norm_phon(can))
             result.append({
                 "name": jet,              # le token déformé tel quel
@@ -1842,6 +1851,10 @@ class Matcher:
             # supplément n'est retenu QUE muni d'une posologie réelle ; sinon
             # c'est une valeur de bilan, pas un médicament.
             if _is_lab_ion(base or brand) and not has_dose:
+                continue
+            # Output banni (« vitamin e » = anglais, jamais écrit en français).
+            if ((base or brand or "") and norm_orth(base or brand)
+                    .replace(" ", "") in BAN_ORTH):
                 continue
             vus.add(cle)
             result.append({
@@ -2742,6 +2755,12 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
         r"crème|pommade|ampoule|suppositoire)\b",
         poso, re.I))
     if confiant and not poso_credible and not ancre_poso:
+        return False
+    # Canonical output banni : ne doit JAMAIS apparaître dans la liste
+    # (« vitamin e » = générique anglais ; en clinique française c'est
+    # « vitamine E »). Conséquence : l'anglais produit une entrée « vitamine e »
+    # qui reste un ion de laboratoire (LAB_ION), jamais un médicament de liste.
+    if (base or "").strip() and norm_orth(base).replace(" ", "") in BAN_ORTH:
         return False
     vus.add(cle)
     # Résolution EXACTE (déterministe) : on affiche le NOM CANONIQUE, pas le

@@ -3,8 +3,6 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-03 — Validation « Médicaments normalisés » : format uniforme + faux positifs chassés
-
 ## 2026-09-03 — Grounding : récuration prose/STT très confiant, lab, base régénérée
 
 27 faux positifs constatés sur le corpus récent, traités en quatre axes :
@@ -23,7 +21,10 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 - **Laboratoire vs médicament** : gate `LAB_ION` étendu (fonctionne désormais
   aussi pour les entrées à espaces : « vitamine d ») + appliqué aux pistes
   phonétiques/suggestion — « La vitamine D est réduite à 41 » est traitée comme
-  bilan, « vitamine D 10 000 UI » reste un supplément.
+  bilan, « vitamine D 10 000 UI » reste un supplément. Le générique **anglais**
+  `vitamin e` est banni des sorties (`BAN_ORTH`) : en clinique française on
+  écrit « vitamine E », pas « vitamin e » ; le français `vitamine e` reste un
+  ion de laboratoire.
 
 Base régénérée (`build_db` → `seed_common` → `seed_aliases` → `prune_db` →
 `ban_terms` → `fix_inactive_otc` → `prune_scope` → `prune_otc` →

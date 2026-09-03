@@ -172,6 +172,17 @@ COMMON_INLINE_MINLEN = 5   # longueur phonétique minimale d'un jeton réécrit 
 CONF_SUGGEST      = 0.95   # (conservé) confiance STT de référence du canal doute
 SUGGEST_CONF_MAX  = 0.72   # confiance COMBINÉE max d'une piste sans dose voisine
 CONF_SUGGEST_SIM  = 0.60   # similarité phonétique minimale d'une piste à proposer
+#: Plancher de SIMILARITÉ propre au CANAL DOUTE (nom NU sans dose voisine).
+#: Sans lui, un mot de prose flou (ou un nom propre) à faible label pouvait
+#: passer : coupe→copper (0.667), Godette→MODECATE (0.625), section→pectin
+#: (0.714), Robert→ROTER (0.667), débuté→DOBUTREX (0.625) — des mots courants
+#: clairement entendus dont le STT Cohere donne une confiance basse, le label
+#: combiné sqrt(stt × sim) tombant alors sous `SUGGEST_CONF_MAX`. Les vrais
+#: noms nus mal entendus (Tépin→gatifloxacine 0.88, physothérodine→fesoterodine
+#: 0.92) sont tous nettement au-dessus : 0.75 sépare les deux populations avec
+#: de la marge (mesuré sur tout le corpus 2026-09-03). Le canal DOSE, lui,
+#: garde `CONF_SUGGEST_SIM` : la preuve physique de la dose admet plus bas.
+SUGGEST_DOUBT_SIM = 0.75  # similarité minimale d'une piste du canal DOUTE
 
 #: Seuil de confiance mot-à-mot (STT ``words[].confidence``) : au-dessus, une
 #: substitution orthographique *floue* d'un token est refusée quand il n'est
@@ -243,6 +254,12 @@ _HINTS_PROSE = {
     "comportement", "autonomie", "delire", "agitation", "urgence",
     "fonction", "plaint", "bilan", "confusion", "memoire", "marche",
     "equilibre", "appetit", "chutes", "secours", "social", "logement",
+    # Tests cognitifs dictés avec leur score (« mini mental à 25 », dit aussi
+    # « hemine mentale » par le STT) : « hémine » = déformation de « mini » dans
+    # « mini mental » (MMSE). Or « hemine » est AUSSI un vrai générique DPD
+    # (clométhiazole, sédatif) : sans ce garde, « L'hémine mentale est à 25 »
+    # était résolu en « hemine 25 mg » (faux positif observé c36 2026-09-03).
+    "hemine", "lhemine",
     "hospitalisation", "chirurgie", "tension", "poids", "taille",
 }
 
@@ -548,7 +565,10 @@ ANCHOR_WORDS = set(re.findall(r"[a-z]+", " ".join(STRONG_ANCHORS) + " comme medi
 # protocol token yet also a brand-leaf of BIAXIN BID). Never treat these AS meds.
 PROTOCOL_WORDS = {"bid","tid","qid","qd","qod","prn","hs","die","po","peros","q",
                   "die","am","pm","per","os","par","jour","mg","mcg","µg","g","ml",
-                  "unités","unites","ui","ui/j","once","semaine","ann"}
+                  "unités","unites","ui","ui/j","once","semaine","ann",
+                  # fréquences françaises de la posologie (« au besoin » = PRN,
+                  # « fois par jour » = BID/TID) : jamais des noms de médicaments.
+                  "besoin","besoins","fois","coucher"}
 
 # ----------------------------------------------------------------- latin dosing
 # Canonical route/frequency output for the medication list (per Wikimedica).
@@ -741,6 +761,10 @@ FRENCH_STOP |= {
     # phonétiquement vers ATROMID S (faux positif observé 2026-09-03).
     "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix",
     "fois", "une",
+    # prose d'organisation (« service de garde/nuit », « service hospitalier ») :
+    # « service » porté par une dose voisine était admis en CANAL DOSE et
+    # résolvait orthographiquement vers la sérine (faux positif 2026-09-03).
+    "service", "services",
 }
 
 # ------------------------------------------------- common list (JSON, per-run)
@@ -1417,6 +1441,18 @@ class Matcher:
                                           # « piles ») — jamais un med
             if p in self.exact_garble or p in self.exact:
                 continue                  # déjà résolu déterministiquement
+            if p in self.common:
+                # Le jeton EST déjà un médicament courant (liste curatée) :
+                # le STT l'a écrit tel quel, il n'y a rien à corriger — on ne
+                # remappe jamais un vrai nom connu vers un AUTRE candidat
+                # phonétique (ex. « Fludrocortisone » → hydrocortisone).
+                continue
+            # QUEUE de composé déjà résolu (« acide folique ») : ne pas remapper
+            # le 2e mot d'un composé médicament vers un autre candidat.
+            if i > 0:
+                prev = words[i - 1].strip(" \t,;:.()\"'’")
+                if prev and _lookup_exact(f"{prev} {jet}"):
+                    continue
             # Contexte : une dose/ancre à portée ou un voisin chiffre petit —
             # sinon ça spatit de la prose sur la phonétique même bruitée. Un gros
             # nombre (>999) est une date/n° de dosier, jamais une doze.
@@ -1672,9 +1708,35 @@ class Matcher:
                 continue
             if p in self.exact_garble or p in self.exact:
                 continue                     # déjà résolu déterministiquement
+            if p in self.common:
+                # Le jeton EST déjà un médicament courant (liste curatée) :
+                # le STT l'a écrit tel quel, la résolution ne doit pas le
+                # remapper vers un autre médicament (ex. « Fludrocortisone »
+                # → hydrocortisone via le flou orthographique), même porté
+                # par une dose.
+                continue
+            # QUEUE de composé déjà résolu (« acide folique 5 mg ») : « folique »
+            # est le 2e mot d'un composé que l'extraction déterministe a déjà
+            # consommé à 100 %. On ne re-suggère pas une queue de composé vers un
+            # AUTRE médicament (folique → ELIQUIS aurait fait doublon avec le
+            # « acide folique » déjà au rapport).
+            if i > 0:
+                prev = words[i - 1].strip(" \t,;:.()\"'’")
+                if prev and _lookup_exact(f"{prev} {jet}"):
+                    continue
             cand = self._resolve_single(words[i])
-            if cand is None and self.use_phonetic:
-                cand = self._resolve_phonetic(words[i])
+            # Un repli PHONÉTIQUE peut porter une similarité bien plus haute que
+            # l'orthographique (physothérodine→fesoterodine : ortho 0.714,
+            # phonétique 0.917) : on le sonde aussi pour le canal DOUTE, où une
+            # forte similarité phonétique est précisément la preuve d'un nom
+            # déformé dicté (« le physothérodine » → Toviaz).
+            cand_phon = (self._resolve_phonetic(words[i])
+                         if self.use_phonetic else None)
+            # On préfère TOUJOURS la voie la plus proche : candidat ET similarité
+            # restent cohérents (un ortho lointain ne sert pas de candidat avec la
+            # similarité d'un phonétique qui a choisi une autre cible).
+            if cand_phon is not None and (cand is None or cand_phon[3] > cand[3]):
+                cand = cand_phon
             if cand is None:
                 continue
             level, base, brand, sim, is_leaf, is_otc = cand
@@ -1707,10 +1769,14 @@ class Matcher:
             #   * CANAL DOSE  : une posologie voisine est la preuve physique
             #     que c'est un médicament — proposé quel que soit `label` ;
             #   * CANAL DOUTE : sans dose, seul un nom TRÈS DOUTEUX
-            #     (``label < SUGGEST_CONF_MAX``) est proposé — un seuil STT
+            #     (``label < SUGGEST_CONF_MAX``) ET à similarité élevée
+            #     (``sim >= SUGGEST_DOUBT_SIM``) est proposé — un seuil STT
             #     souple inondait le prompt de fausses pistes de prose qui
-            #     résolvent vers des noms obscurs de la DPD complète.
-            if not (has_dose or label < SUGGEST_CONF_MAX):
+            #     résolvent vers des noms obscurs de la DPD complète, et un
+            #     mot de prose stable (coupe/section/Robert) franchissait le
+            #     label bas via de la prose à confiance Cohere réduite.
+            if not (has_dose or (sim >= SUGGEST_DOUBT_SIM
+                                 and label < SUGGEST_CONF_MAX)):
                 continue
             vus.add(cle)
             result.append({
@@ -2538,7 +2604,7 @@ def _res_display(res: dict) -> str | None:
 
 def _append_item(items, vus, fixed, jeton, res, force_name=None,
                  ancre_poso=False, confiant=False, is_common=False,
-                 conf_val=None) -> None:
+                 conf_val=None, garble=None) -> None:
     """Ajoute un item à la liste, dédupliqué par nom canonique.
 
     ``confiant`` : le jeton a été entendu par le STT avec une confiance >=
@@ -2583,6 +2649,11 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # sans ancre — la liste curatée + la preuve physique éliminent le doute.
     jeton_p = norm_phon(jeton)
     prose_interdit = jeton_p in _HINTS_PROSE
+    # Garde dur : un mot de prose structurant (test cognitif, symptôme…) n'est
+    # JAMAIS un item médicament, même porté par une dose/ancre (« L'hémine
+    # mentale est à 25 » → hémine = clométhiazole serait un faux positif).
+    if prose_interdit:
+        return False
     courant_admis = (is_common and not prose_interdit
                      and (not isinstance(conf_val, (int, float))
                           or conf_val < 0.95 or poso))
@@ -2619,6 +2690,10 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
         "posology": poso,
         "score": 100 if res["level"] in ("BRAND", "BASE_GENERIC") else 65,
         "level": res["level"],
+        # Le jeton DICTÉ d'origine quand il diffère du nom canonique affiché
+        # (« ketapine » → quétiapine) : l'onglet Validation affiche alors
+        # « _ketiapine_ → **quétiapine** » au lieu de deux fois le nom corrigé.
+        "garble": garble or None,
     })
     return True
 
@@ -2668,8 +2743,18 @@ def extract_med_items(text: str, conf=None) -> list:
     folique »…) dont la concaténation normalisée existe en base, puis repasse
     token-à-token pour les simples.
     """
-    fixed, _ = matcher().normalize((text or "").strip(), conf=conf,
-                                   inline_safe=True)
+    fixed, changes = matcher().normalize((text or "").strip(), conf=conf,
+                                         inline_safe=True)
+    # Cartographie norm_phon(corrigé) -> jeton dicté d'origine : la correction
+    # inline de `normalize` est appliquée au texte avant l'extraction, et sans
+    # cette table le garble (« ketapine ») serait perdu au profit du seul nom
+    # corrigé (« quétiapine »). On la reflète ensuite dans les items pour
+    # afficher « _ketiapine_ → **quétiapine** » dans l'onglet Validation.
+    garble_map = {}
+    for orig, repl, _sc, _sim in changes:
+        o = orig.strip(" \t,;:.()\"'’")
+        if repl and o and norm_phon(o) != norm_phon(repl):
+            garble_map[norm_phon(repl)] = o
     jetons = re.findall(r"[\wÀ-ÿ'-]+", fixed)
     items = []
     vus = set()
@@ -2718,7 +2803,8 @@ def extract_med_items(text: str, conf=None) -> list:
                         ancre_poso=(i in region) or chiffre_voisin(i),
                         confiant=confiant_paire,
                         is_common=_is_common_pair,
-                        conf_val=_conf_pair):
+                        conf_val=_conf_pair,
+                        garble=garble_map.get(norm_phon(paire))):
             consommes.add(i)
             consommes.add(i + 1)
 
@@ -2736,7 +2822,8 @@ def extract_med_items(text: str, conf=None) -> list:
                      ancre_poso=(i in region) or chiffre_voisin(i),
                      confiant=norm_phon(jeton) in confiant_cles,
                      is_common=_is_common_u,
-                     conf_val=_conf_u)
+                     conf_val=_conf_u,
+                     garble=garble_map.get(norm_phon(jeton)))
     return items
 
 

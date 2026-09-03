@@ -34,17 +34,29 @@ CREATE TABLE IF NOT EXISTS common_meds (
 """
 
 # Salt / dosage-form suffixes to strip to derive the base generic name.
+# ``acetate``/``valerate``/``carbonate``/``nitrate``/``gluconate``/``lactate``
+# manquaient : « FLUDROCORTISONE 21-ACETATE » produisait le générique
+# « fludrocortisone 21 acetate » au lieu de « fludrocortisone » (2026-09-03).
+# Du coup 15 racines n'avaient que leur forme salifiée (fludrocortisone,
+# formoterol, lithium, miconazole, cortisone, medroxyprogesterone, …) et la
+# plus dictée d'elles résolvait en phonétique vers hydrocortisone.
 SALT_SUFFIX_EN = [
     "hydrochloride", "hydrobromide", "besylate", "tartrate", "maleate",
     "sodium", "potassium", "calcium", "magnesium", "succinate", "dihydrate",
     "monohydrate", "anhydrous", "phosphate", "sulfate", "sulphate", "fumarate",
     "citrate", "mesylate", "tosylate", "camsylate", "niphedipine",
+    "acetate", "valerate", "gluconate", "lactate", "carbonate", "nitrate",
+    "bicarbonate", "propionate", "dipropionate", "butyrate", "enanthate",
+    "estolate", "palmitate", "pivalate", "stearate", "undecylenate",
 ]
 SALT_SUFFIX_FR = [
     "chlorhydrate", "bromhydrate", "besylate", "tartrate", "maleate",
     "sodique", "potassique", "calcique", "magnesique", "succinate", "dihydrate",
     "monohydrate", "anhydre", "phosphate", "sulfate", "sulphate", "fumarate",
     "citrate", "mesylate", "tosylate", "camsylate",
+    "acetate", "valerate", "gluconate", "lactate", "carbonate", "nitrate",
+    "bicarbonate", "propionate", "dipropionate", "butyrate", "enanthate",
+    "estolate", "palmitate", "pivalate", "stearate", "undecylenate",
 ]
 # Brand-name frequency suffixes / strength tokens to drop from brand names.
 BRAND_STOP = re.compile(
@@ -128,7 +140,14 @@ def strip_salts(name, fr=False):
     words = n.split()
     # Remove ONE trailing salt token (e.g. "diphenhydramine hydrochloride")
     salts = SALT_SUFFIX_FR if fr else SALT_SUFFIX_EN
+    stripped_salt = False
     if len(words) >= 2 and words[-1] in salts:
+        words = words[:-1]
+        stripped_salt = True
+    # Stéroïdes « FLUDROCORTISONE 21-ACETATE » : le marqueur de position (21)
+    # précède le sel. On ne l'enlève que si un sel vient d'être retiré, pour ne
+    # jamais dépouiller un vrai nombre de dose (« VITAMIN B12 » reste intact).
+    if stripped_salt and len(words) >= 2 and words[-1].isdigit():
         words = words[:-1]
     # Handle explicit French "X de Y" salt patterns -> keep "Y"
     if len(words) >= 3 and words[-2] == "de" and words[-1] in {"citalopram"}:

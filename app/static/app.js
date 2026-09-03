@@ -585,6 +585,20 @@
   }
 
   /**
+   * Capitalise chaque mot d'un nom de MARQUE sorti tout-en-majuscules de la
+   * base (``TRESIBA`` → ``Tresiba``) ; un mot déjà « consumer-styled »
+   * (``Eliquis``) est laissé tel quel. Équivalent JS de ``title_brand`` du
+   * moteur de grounding.
+   */
+  function titleBrand(s) {
+    return String(s).split(' ').map((w) =>
+      w && w === w.toUpperCase()
+        ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+        : w
+    ).join(' ');
+  }
+
+  /**
    * Liste pointée des médicaments normalisés : alimente l'onglet
    * « Validation » (``#secondPassMeds``). La correction elle-même est
    * appliquée INLINE dans le texte de la dictée (le serveur normalise les
@@ -603,11 +617,20 @@
         const sorted = [...liste].sort((a, b) => (b.score || 0) - (a.score || 0));
         const lignes = [`## ${T('medgrounding.title')}`];
         for (const item of sorted) {
-          const cible = item.brand || item.base || item.name;
+          // Nom corrigé : marque en capitale initiale, générique en minuscules.
+          // Les items déterministes (``source`` absent) portent déjà leur nom
+          // canonique tel quel.
+          const cible = !item.source ? item.name
+            : item.brand ? titleBrand(item.brand)
+              : (item.base || item.name).toLowerCase();
+          // Forme dicTÉE d'origine : quand la correction inline a été appliquée
+          // (« ketapine » → quétiapine), on montre le garble en italique plutôt
+          // que deux fois le nom corrigé.
+          const dicté = item.garble || item.name;
           const dose = item.posology ? ` ${item.posology}` : '';
           const tag = item.source === 'phonetic'
               ? ` ${T('medgrounding.confirm')}` : '';
-          lignes.push(`- _${item.name}_ → **${cible}**${dose} _(${item.score}%${tag})_`);
+          lignes.push(`- _${dicté}_ → **${cible}**${dose} _(${item.score}%${tag})_`);
         }
         vueValidation.innerHTML = markdownToHtml(lignes.join('\n'));
         vueValidation.classList.remove('hidden');

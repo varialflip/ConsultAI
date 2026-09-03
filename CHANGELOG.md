@@ -3,6 +3,29 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-03 — Validation « Médicaments normalisés » : format uniforme + faux positifs chassés
+
+L'onglet « Validation » affiche désormais chaque médicament de façon uniforme —
+garble d'origine en italique → nom corrigé en gras (marque en capitale initiale,
+générique en minuscules), dose en clair, confiance en fin de ligne
+(`%` + « à confirmer » pour les pistes), tri par confiance décroissante. Une
+correction inline porte aussi le garble dicté (`ketapine` → `_ketiapine_ →
+**quétiapine**`).
+
+Durcissement du moteur de grounding contre les faux positifs de prose portés
+par une dose ou un doute STT bas :
+- mots de fréquence français (`trois`… `fois`, `besoin`, `coucher`) et
+  organisationnels (`service`) exclus des candidats médicaments ;
+- `SUGGEST_DOUBT_SIM = 0.75` : une piste sans dose voisine exige une forte
+  similarité (ortho ou phonétique) — élimine `coupe→copper`, `Godette→MODECATE`,
+  `section→pectin`, `Robert→ROTER`, `débuté→DOBUTREX` sans perdre `Tépin`/
+  `physothérodine` ;
+- un jeton déjà médicament courant n'est jamais remappé vers un autre
+  (`Fludrocortisone`→cortisone) ni une queue de composé (`folique`→ELIQUIS
+  quand `acide folique` est déjà résolu) ;
+- `hemine` (déformation de « mini » dans « mini mental ») bloqué via
+  `_HINTS_PROSE` (`hémine mentale` ≠ clométhiazole).
+
 ## 2026-09-03 — Marqueurs de liste épurés au rendu (plus de « - - » ni « 1. 1. »)
 
 Le renderer de la passe 2 (`note_renderer.py`) re-marque chaque item de liste

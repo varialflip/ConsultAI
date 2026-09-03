@@ -362,23 +362,38 @@ _EXTRACTION_SCHEMA_EN = """\
 
 
 def _hint_formes(layout_parsed) -> str:
-    """Fiche compacte par rubrique : forme attendue pour la passe 1."""
-    lignes = []
+    """Codes de forme par rubrique (``P``/``L``/``N``/``M``/``B``) — compact.
+
+    La version antérieure décrivait chaque rubrique en une phrase entière
+    (~2-3 lignes × 13 rubriques) ; cette fiche tient sur une ligne par rubrique
+    avec un code d'une lettre, le LLM ayant déjà le schéma en tête. Le rendu
+    final normalise de toute façon la forme (le renderer met en page).
+    """
+    codes = {
+        "P": "P  = paragraphe (str)",
+        "L": "L  = liste à puces (list[str])",
+        "N": "N  = liste numérotée (list[str])",
+        "M": "M  = mélange paragraphe + éléments numérotés ({\"phrases\", \"items\"})",
+        "B": "B  = bloc à libellés ({\"Libellé\": \"valeur\"})",
+    }
+    lignes = [" | ".join(codes.values())]
     for section in layout_parsed.sections:
         if section.labeled:
-            forme = "bloc à libellés : " + ", ".join(f"« {l} »" for l in section.labeled)
+            code = "B"
         elif section.numbered and section.paragraph:
-            forme = "mélange : { phrases, items } (paragraphe + éléments numérotés)"
+            code = "M"
         elif section.numbered:
-            forme = "liste d'éléments (chaque élément une entrée)"
+            code = "N"
         elif section.bullet:
-            forme = "liste d'éléments à puces (chaque élément une entrée)"
-        elif section.paragraph:
-            forme = "paragraphe(s) séparés par une ligne vide"
+            code = "L"
         else:
-            forme = "selon la consigne générale (examen : liste pointée ; récit : paragraphes)"
-        lignes.append(f'  "{section.title}" : {forme}')
-    return "{\n" + "\n".join(lignes) + "\n}"
+            code = "P"
+        if section.labeled:
+            detail = " (libellés : " + ", ".join(f'« {l} »' for l in section.labeled) + ")"
+        else:
+            detail = ""
+        lignes.append(f'  "{section.title}" : {code}{detail}')
+    return "\n".join(lignes)
 
 
 def build_extract_user_prompt(
@@ -417,19 +432,20 @@ def build_extract_user_prompt(
         "Schéma attendu :\n" + schema + "\n\n"
         "Rubriques : " + str(len(layout_parsed.sections)) + "\n" + cles + "\n\n"
         "En-têtes :\n" + en_tete + "\n\n"
-        "Forme attendue de chaque rubrique :\n" + _hint_formes(layout_parsed) + "\n\n"
+        "Forme de chaque rubrique (codes) :\n" + _hint_formes(layout_parsed) + "\n\n"
         "Règles d'extraction :\n"
-        "- Respecte la consigne générale pour corriger les homophonies, "
-        "condenser, styliser et ne JAMAIS inventer ni omettre (règles § 1).\n"
+        "- Respecte la consigne pour corriger les homophonies, condenser, "
+        "styliser et ne JAMAIS inventer ni omettre (règles § 1).\n"
         "- Rubrique sans contenu dicté → clé ABSENTE de l'objet (jamais \"\", "
         "\"Non servi\", \"À déterminer\", \"…\").\n"
-        "- Élément réellement entendu mais douteux → conserve la lecture la "
-        "plus probable dans sa rubrique ET signale-le en une ligne dans "
-        "« corrections », au format télégraphique (« Xanax 0,5 → à confirmer »).\n"
-        "- Listes (médicaments, antécédents, examen) : une chaîne par ligne. "
-        "L'Impression et le Plan : une entrée par problème / action.\n"
+        "- Élément réellement entendu mais douteux → la lecture la plus "
+        "probable dans sa rubrique ET une ligne en « corrections », au format "
+        "télégraphique (« Xanax 0,5 → à confirmer »).\n"
+        "- Listes (médicaments, antécédents, examen) : une chaîne par élément. "
+        "Impression et Plan : une entrée par problème / action.\n"
         "- N'inclus JAMAIS le nom ni le numéro de dossier du patient.\n"
-        "- Les clés utilisent EXACTEMENT les intitulés fournis ci-dessus."
+        "- Intitulés de clés : proches de ceux fournis (casse, accents et "
+        "variantes mineures sont normalisés à la réception)."
     )
     parts.append(f"<<<EXTRACTION\n{tache}\nEXTRACTION>>>")
 
@@ -2180,7 +2196,7 @@ def _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, o
     )
 
 
-def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=None, on_stream_started=None, on_thought=None):
+def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=None, on_stream_started=None, on_thought=None, reasoning_off=False):
     """
     Version en continu de ``_complete_openai``/``_complete_qwen_omni``.
 
@@ -2226,32 +2242,40 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
     }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
-        if provider == "qwen_omni":
-            # Même raison que la version non-streaming : le raisonnement de Qwen
-            # y gaspille des jetons sur cette tâche mécanique.
-            kwargs["enable_thinking"] = False
+    if provider == "qwen_omni" and (json_mode or reasoning_off):
+        # Même raison que la version non-streaming : le raisonnement de Qwen
+        # y gaspille des jetons sur cette tâche mécanique (extraction,
+        # métadonnées) et peut faire déborder ``max_tokens``.
+        kwargs["enable_thinking"] = False
 
     if provider in ("custom", "openrouter"):
-        effort = (
-            _custom_reasoning_effort() if provider == "custom"
-            else _openrouter_reasoning_effort()
-        )
-        if effort and not json_mode:
-            # Modèles à raisonnement (DeepSeek…) : effort demandé, s'il est
-            # honoré par le point de terminaison (OpenRouter ``reasoning.effort``).
-            # Passé par ``extra_body`` : ``reasoning`` n'est pas un paramètre du
-            # SDK OpenAI, qui refuse les arguments inconnus en kwargs directs.
-            #
-            # JAMAIS en mode JSON ("json_mode") : l'extraction des métadonnées
-            # est une tâche mécanique et le raisonnement d'un modèle reflexif
-            # (DeepSeek…) y produit des réponses hors JSON (vérifié in vivo :
-            # « Expecting property name… » sur 179 caractères) et gaspille des
-            # jetons. Même règle que ``enable_thinking=False`` de Qwen.
-            #
-            # Le budget de sortie est COMMUN (raisonnement + texte) : un modèle
-            # (Gemma 4…) qui réfléchit longtemps saturait tout avant la note
-            # (vide ET tronquée, relance en boucle). Voir ``_reasoning_param``.
-            kwargs.setdefault("extra_body", {})["reasoning"] = _reasoning_param(effort)
+        if reasoning_off:
+            # Extraction (passe 1) : tâche mécanique — on coupe le raisonnement
+            # quel que soit l'effort réglé au panneau. ``{"effort": "none"}`` est
+            # la forme documentée OpenRouter pour les modèles qui réfléchissent
+            # par défaut (DeepSeek v4 : ``reasoning_tokens = 0`` vérifié).
+            kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": "none"}
+        else:
+            effort = (
+                _custom_reasoning_effort() if provider == "custom"
+                else _openrouter_reasoning_effort()
+            )
+            if effort and not json_mode:
+                # Modèles à raisonnement (DeepSeek…) : effort demandé, s'il est
+                # honoré par le point de terminaison (OpenRouter ``reasoning.effort``).
+                # Passé par ``extra_body`` : ``reasoning`` n'est pas un paramètre
+                # du SDK OpenAI, qui refuse les arguments inconnus en kwargs directs.
+                #
+                # JAMAIS en mode JSON ("json_mode") : l'extraction des métadonnées
+                # est une tâche mécanique et le raisonnement d'un modèle reflexif
+                # (DeepSeek…) y produit des réponses hors JSON (vérifié in vivo :
+                # « Expecting property name… » sur 179 caractères) et gaspille des
+                # jetons. Même règle que ``enable_thinking=False`` de Qwen.
+                #
+                # Le budget de sortie est COMMUN (raisonnement + texte) : un modèle
+                # (Gemma 4…) qui réfléchit longtemps saturait tout avant la note
+                # (vide ET tronquée, relance en boucle). Voir ``_reasoning_param``.
+                kwargs.setdefault("extra_body", {})["reasoning"] = _reasoning_param(effort)
 
     try:
         stream = _call_tolerant(client.chat.completions.create, kwargs)
@@ -2426,6 +2450,7 @@ def complete_stream(
     audio: Optional[Tuple[bytes, str]] = None,
     on_stream_started: Optional[Callable[[], None]] = None,
     on_thought: Optional[Callable[[str], None]] = None,
+    reasoning_off: bool = False,
 ):
     """
     Version en continu de ``complete()``.
@@ -2453,9 +2478,9 @@ def complete_stream(
     elif provider == "openai":
         gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="openai", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider in ("custom", "openrouter"):
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider=provider, audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider=provider, audio=audio, on_stream_started=on_stream_started, on_thought=on_thought, reasoning_off=reasoning_off)
     elif provider == "qwen_omni":
-        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
+        gen = _stream_openai_like(system, user, model, temperature, max_tokens, json_mode, provider="qwen_omni", audio=audio, on_stream_started=on_stream_started, on_thought=on_thought, reasoning_off=reasoning_off)
     elif provider in ("cohere", "mistral"):
         completion = complete(
             system, user, model=model, temperature=temperature,
@@ -2765,6 +2790,7 @@ def extract_note_data(
             provider=provider,
             audio=audio_to_send,
             on_stream_started=on_stream_started,
+            reasoning_off=True,
         )
         raw = ""
         dernier: Optional[Completion] = None

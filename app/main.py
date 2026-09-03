@@ -2796,11 +2796,26 @@ def _generate_and_publish(
     # note_pipeline = two_pass : passe 1 (extraction/correction par le LLM) +
     # passe 2 (mise en page déterministe par note_renderer, sans modèle). Toute
     # circonstance où la passe 1 échoue ou le gabarit n'est pas compatible
-    # retombe sur la passe unique classique ci-dessous — la dictée n'est jamais
-    # perdue, seulement produite par la trajectoire historique.
+    # retombe sur la passe unique classique — la dictée n'est jamais perdue.
+    #
+    # La passe 1 reçoit le transcript PRÉ-CORRIGÉ inline (mêmes substitutions
+    # déterministes et auditées que la passe unique : garbles seedés, exacts —
+    # jamais de flou orthographique). Le LLM n'a plus à deviner les noms de
+    # médicaments déformés connus (« Restore 5 » → « Crestor 5 », « la Six » →
+    # « Lasix ») : charge cognitive en moins, et l'obéissance aux hints n'est
+    # plus le seul recours. « payload.transcript » (brut) reste la source pour
+    # la persistance, les hints et la confiance mot-à-mot.
     if runtime_config.value("note_pipeline") == "two_pass":
+        deux_pass_transcript = payload.transcript
+        if _med_grounding_on() and payload.transcript:
+            try:
+                corrige, _ = med_grounding.normalize(payload.transcript, inline_safe=True)
+                if corrige and corrige.strip():
+                    deux_pass_transcript = corrige
+            except Exception:
+                logger.exception("Pré-correction inline indisponible — passe 1 sur transcript brut")
         deux_pass = llm.generate_note_two_pass(
-            payload.transcript,
+            deux_pass_transcript,
             template_row.system_instructions,
             template_row.layout_format,
             _build_context_lines(payload),

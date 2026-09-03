@@ -3,6 +3,29 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-03 — Correction médicaments : liste « courants » priorisée + seuils abaissés
+
+Les médicaments les plus dictés en consultation (ordonnance géronto/gériatrique
+& ambulatoire : metformine, quétiapine, ramipril, levothyroxine…) sont aussi
+les plus déformés par la reconnaissance vocale et les plus coûteux à manquer.
+Une table `common_meds` curatée (~118 médicaments, renseignée par
+`med_grounding/seed_common.py`) les distingue désormais dans le moteur de
+grounding (`app/med_grounding.py`) :
+
+- **Bonus de score** (`COMMON_BONUS`) : un médicament courant franchit le seuil
+  de réécriture avec UN SEUL signal de contexte au lieu de deux.
+- **Barrières abaissées** (`COMMON_ORTHO_FLOOR`, `COMMON_PHON_FLOOR`,
+  `COMMON_PHON_PROSE`, `COMMON_PHON_NOPOSO`) : un nom courant légèrement
+  déformé entre plus facilement en piste phonétique « à confirmer » et en
+  prose douteuse.
+- **Confiance STT** : un candidat courant porté par une dose est corrigé même
+  un cran au-dessus de la barre de prose sûre (plancher de rejet remonté à 0.96
+  vs 0.92), seuls les tokens presque sûrs restant refusés.
+- Les garde-fous restent intacts : les mots de prose (`FRENCH_STOP`,
+  `_HINTS_PROSE`, prose sûre) restent bloqués et les médicaments hors liste
+  conservent leurs seuils historiques — pas de nouvelle source de faux positifs
+  (vérifié sur les transcripts de référence).
+
 ## 2026-09-02 — Pipeling « deux passes » : extraction LLM + rendu applicatif
 
 *La mise en forme reposait sur UNE passe unique : le modèle corrigeait la

@@ -1076,8 +1076,18 @@ des médicaments », défaut `false`). Une fois activé :
 - Après génération de la note, l'onglet **Validation** s'ouvre sur grand
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 
+Les noms de la liste curatée des **médicaments courants** (ordonnance
+géronto/gériatrique & ambulatoire, table `common_meds`, renseignée par
+`med_grounding/seed_common.py`) bénéficient d'un bonus de score et de barrières
+d'admission légèrement abaissées (constantes `COMMON_*` dans
+`app/med_grounding.py`) : ce sont les plus dictés, donc les plus déformés par
+la reconnaissance vocale, et les plus coûteux à manquer. Le bonus ne s'applique
+jamais aux mots de prose (les garde-fous `FRENCH_STOP`/`_HINTS_PROSE`
+subsistent).
+
 La base BDP peut être régénérée depuis les extraits bruts (dossier
-`med_grounding/` du dépôt, scripts `build_db.py` / `seed_aliases.py` /
+`med_grounding/` du dépôt, scripts `build_db.py` / `seed_common.py` /
+`seed_aliases.py` /
 `prune_db.py` / `ban_terms.py` / `fix_inactive_otc.py` / `prune_scope.py` /
 `prune_otc.py` / `prune_generic_mfg.py`) ;
 ce dossier ne fait pas partie du conteneur. La base est **assainie pour le

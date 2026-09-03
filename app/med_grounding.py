@@ -55,6 +55,23 @@ MIN_FUZZY_LEN = 5      # tokens shorter than this are exact-match only (no fuzzy
                        # their garble is unrecoverable by ortho anyway.
 HIGH_SIM = 0.80       # near-certain fuzzy matches; exempt from context signals
 
+#: Ensemble des médicaments « courants » (table `common_meds` de la base).
+#: Curé sur l'ordonnance géronto-gériatrique/ambulatoire (listes fournies
+#: dans `med_grounding/seed_common.py`). Pour ces médicaments on baisse
+#: légèrement les barrières d'admission et on gratifie d'un bonus de score :
+#: ce sont les plus dictés, donc les plus déformés par la reconnaissance
+#: vocale (« ketapine » → quetiapine, « lipitar » → lipitor) et les plus
+#: coûteux à manquer. Le bonus/la baisse ne s'applique JAMAIS aux mots de
+#: prose (``FRENCH_STOP`` / ``_HINTS_PROSE`` restent de stricts garde-fous).
+COMMON_BONUS        = 10    # points de score supplémentaires accordés à un
+                            # candidat courant (fait franchir THRESHOLD avec un
+                            # SEUL signal : 40 + 25 + 10 = 75 >= 65)
+COMMON_ORTHO_FLOOR  = 0.58  # vs ORTHO_FLOOR 0.62 : mais permet un candidat
+                            # courant déformé mais présent d'entrer encore
+COMMON_PHON_FLOOR   = 0.68  # vs 0.72 dans l'arbre BK phonétique
+COMMON_PHON_PROSE   = 0.82  # vs CONF_PHON_PROSE_DOUTEUSE 0.85 (prose douteuse)
+COMMON_PHON_NOPOSO  = 0.68  # vs 0.72 (token non douteux sans dose)
+
 #: Seuil de confiance mot-à-mot (STT ``words[].confidence``) : au-dessus, une
 #: substitution orthographique *floue* d'un token est refusée quand il n'est
 #: porté ni par une dose ni par un ancre ni par une région médicament
@@ -667,6 +684,24 @@ class Matcher:
             self.ortho.append((n, level, base, brand, is_leaf, bool(is_otc)))
             self.ortho_by_len.setdefault(len(n), []).append(
                 (n, level, base, brand, is_leaf, bool(is_otc)))
+        # Médicaments « courants » (table `common_meds`) — clé = norm_phon du
+        # base_generic canonique. Servent à abaisser sélectivement les barrières
+        # d'admission (voir COMMON_*) pour les noms les plus dictés/déformés.
+        try:
+            self.common = frozenset(
+                norm_phon(b)
+                for (b,) in self.conn.execute(
+                    "SELECT m.base_generic FROM common_meds c "
+                    "JOIN medications m ON m.id = c.medication_id "
+                    "WHERE m.level='BASE_GENERIC'"
+                )
+                if b
+            )
+        except sqlite3.OperationalError:
+            # Base non régénérée : la table `common_meds` peut manquer (les
+            # anciennes bases pré-2026-09 n'en ont pas). Le moteur doit alors
+            # DÉMARRER avec un set vide — le comportement reste l'historique.
+            self.common = frozenset()
         self.bk_ortho = BKTree(lev)
         self.ortho_node = {}
         for n, level, base, brand, is_leaf, is_otc in self.ortho:
@@ -1220,7 +1255,12 @@ class Matcher:
                     if not (conf_keys and p in conf_keys):
                         continue
                     cand = self._phonetic_candidats(jet)
-                    if not cand or cand[3] < CONF_PHON_PROSE_DOUTEUSE:
+                    # Un médicament COURANT douteux est admis en prose un cran
+                    # plus bas (0.82 vs 0.85) : les noms courants sont les plus
+                    # déformés et le doute STT est la preuve d'un nom dicté.
+                    if not cand or cand[3] < (COMMON_PHON_PROSE
+                                              if norm_phon(cand[1] or "") in self.common
+                                              else CONF_PHON_PROSE_DOUTEUSE):
                         continue
                     admis_prose_douteuse = True
             if cand is None:
@@ -1243,16 +1283,25 @@ class Matcher:
             # chiffres sans unité — n° de dossier/date) n'est admis que s'il est
             # très proche phonétiquement (>= 0,72, sépare les vrais garbles
             # kitsapine→quetiapine 0,78 du bruit de prose droite/piles 0,67).
+            # Un médicament courant passe un cran plus bas (0.68).
+            is_common = norm_phon(base or "") in self.common
+            no_unit_floor = COMMON_PHON_FLOOR if is_common else 0.72
             if poso and not re.search(
                     r"\b(mg|mcg|µg|g|ml|ui|unité|unites|comprimé|tid|bid|hs|prn|po|die)\b",
-                    poso, re.I) and s < 0.72:
+                    poso, re.I) and s < no_unit_floor:
                 continue
             # Le token douteux (conf_keys) sans posologie crédible est admis à
             # partir de 0,80 — le doute vient du STT, pas de la capacité du moteur
             # à trouver la dose. Un token NON douteux sans dose exige 0,72 (voir
             # ci-dessous) ; un douteux à 0,72-0,79 reste filtré (bruit de prose).
-            if not poso and s < (0.80 if (conf_keys and p in conf_keys) else 0.72):
-                continue
+            # Un candidat courant relève ses seuils respectifs d'un cran.
+            if not poso:
+                d_seuil = 0.80 if (conf_keys and p in conf_keys) else 0.72
+                if is_common:
+                    d_seuil = (COMMON_PHON_FLOOR if (conf_keys and p in conf_keys)
+                               else COMMON_PHON_NOPOSO)
+                if s < d_seuil:
+                    continue
             # (canonical, base, brand, sim)
             if can is None or norm_phon(can) in vus:
                 continue
@@ -1371,15 +1420,20 @@ class Matcher:
         best = None
         for dist, node in voie[:12]:
             s = sim(q, node)
-            if s < 0.72:
-                continue
-            sw = sim_phon_w(q, node)
-            if best is not None and sw <= best[0]:
-                continue
+            # Plancher: 0.68 pour un médicament courant, sinon 0.72. Évalué sur
+            # la base du candidat (les barrières COMMON_* ne s'appliquent
+            # qu'aux noms de l'ensemble curaté).
             row = self.bk_node.get(node)
             if row is None:
                 continue
             level, base, brand, is_leaf, is_otc = row
+            ph_floor = (COMMON_PHON_FLOOR
+                        if norm_phon(base or "") in self.common else 0.72)
+            if s < ph_floor:
+                continue
+            sw = sim_phon_w(q, node)
+            if best is not None and sw <= best[0]:
+                continue
             if is_leaf:
                 continue
             if _is_cosmetic(base or brand):
@@ -1651,9 +1705,17 @@ class Matcher:
                 result.append(words[i]); i += 1; continue
 
             level, base, brand = cand[0], cand[1], cand[2]
+            # Un candidat appartenant à l'ensemble « courant » bénéficie d'un
+            # plancher orthographique plus bas et d'un bonus de score : les
+            # noms courants sont les plus dictés/déformés (ketapine →
+            # quetiapine), le bonus leur fait franchir THRESHOLD avec un seul
+            # signal de contexte au lieu de deux. Vérifié sur le base du
+            # candidat résolu (jamais sur la prose).
+            is_common = norm_phon(base or "") in self.common
+            ortho_floor = COMMON_ORTHO_FLOOR if is_common else ORTHO_FLOOR
             if base_score >= 0.99 and not is_leaf:
                 score = 100                     # genuine drug name, exact
-            elif base_score < ORTHO_FLOOR:
+            elif base_score < ortho_floor:
                 score = 0
             else:
                 # Being inside a confirmed med-list region is itself strong
@@ -1667,7 +1729,8 @@ class Matcher:
                 has_noun = noun_ctx[i] and (base_score >= HIGH_SIM or has_poso)
                 score = (PHONETIC_WEIGHT
                          + (ANCHOR_WEIGHT if (has_anchor or region_credit or has_noun) else 0)
-                         + (POSOLOGY_WEIGHT if has_poso else 0))
+                         + (POSOLOGY_WEIGHT if has_poso else 0)
+                         + (COMMON_BONUS if is_common else 0))
                 if not (has_anchor or has_poso or has_noun or region_credit):
                     score = 0                   # narrative gate
                 elif is_leaf and not has_poso and not (has_anchor and base_score >= HIGH_SIM):
@@ -1707,7 +1770,16 @@ class Matcher:
                     and not (has_poso and poso_dir == "arriere")):
                 c = (conf.get(w_phon, 0.0) if isinstance(conf, dict) else
                      (conf[i] if i < len(conf) else 0.0))
-                if isinstance(c, (int, float)) and c >= CONF_HARD_FLOOR:
+                # Un médicament COURANT porté par une dose est admis même un peu
+                # au-dessus de la barre de prose sûre (lanzapine → olanzapine à
+                # ~0.928) : la dose est la preuve physique qui manquait à la
+                # prose (cf. commentaire global CONF_HARD_FLOOR). On REHAUSSE le
+                # plancher (0.96) : seuls les tokens presque sûrs (~prose à
+                # 1.00) restent rejetés ; la zone 0.92-0.96 d'un nom courant
+                # + dose est réécrite au lieu d'être refusée.
+                hard_floor = (0.96 if (is_common and has_poso)
+                              else CONF_HARD_FLOOR)
+                if isinstance(c, (int, float)) and c >= hard_floor:
                     score = 0
             # ---- inline_safe : refuser toute substitution non certaine (cf. plus haut) ----
             # Le token seul n'est réécrit que (a) si c'est un garble STT SEEDÉ

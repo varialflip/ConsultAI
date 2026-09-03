@@ -599,19 +599,15 @@
     const vueValidation = $('secondPassMeds');
     if (vueValidation) {
       if (liste.length) {
+        // Tri par confiance décroissante (score = similarité 0-100).
+        const sorted = [...liste].sort((a, b) => (b.score || 0) - (a.score || 0));
         const lignes = [`## ${T('medgrounding.title')}`];
-        for (const item of liste) {
-          if (item.source === 'phonetic') {
-            // Candidats phonétiques du moteur de grounding (« Lirica » →
-            // LYRICA) : des PISTES transmises au LLM pour confirmation, jamais
-            // des certitudes — rendues distinctes (italique, flèche, mention).
-            const cible = item.brand || item.base || item.name;
-            lignes.push(`- _${item.name}_ → **${cible}**`
-              + `${item.posology ? ` — ${item.posology}` : ''}`
-              + ` _(${T('medgrounding.confirm')})_`);
-          } else {
-            lignes.push(`- **${item.name}**${item.posology ? ` — ${item.posology}` : ''}`);
-          }
+        for (const item of sorted) {
+          const cible = item.brand || item.base || item.name;
+          const dose = item.posology ? ` ${item.posology}` : '';
+          const tag = item.source === 'phonetic'
+              ? ` ${T('medgrounding.confirm')}` : '';
+          lignes.push(`- _${item.name}_ → **${cible}**${dose} _(${item.score}%${tag})_`);
         }
         vueValidation.innerHTML = markdownToHtml(lignes.join('\n'));
         vueValidation.classList.remove('hidden');

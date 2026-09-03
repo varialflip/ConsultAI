@@ -734,6 +734,13 @@ FRENCH_STOP |= {
     "comprimes", "comprime",
     "avion", "lavion", "savant",
     "alcool", "lalcool",
+    # Mots de fréquence / nombres français utilisés dans les phrases de
+    # posologie (« trois fois par jour », « deux fois BID ») : ne doivent
+    # JAMAIS être proposés comme candidats phonétiques de médicaments.
+    # « trois » (5 car.) franchissait le filtre len >= 5 et résolvait
+    # phonétiquement vers ATROMID S (faux positif observé 2026-09-03).
+    "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix",
+    "fois", "une",
 }
 
 # ------------------------------------------------- common list (JSON, per-run)

@@ -547,6 +547,7 @@ FRENCH_STOP |= {
     "histoire", "probleme", "antecedents", "suivi", "suivie", "congeg",
     # collisions observed from DPD fuzzy matches
     "unite", "unites", "diéam", "dieam", "prille", "aide", "proches", "proche",
+    "prochain", "prochaine", "prochains", "prochaines",
     "demande", "demandes", "faites", "faite", "fais", "os", "per", "indice",
     "indices", "cardiaque", "avril", "mai", "juin", "juillet", "mars", "janvier",
     "fevrier", "septembre", "octobre", "novembre", "decembre", "aod", "hta",

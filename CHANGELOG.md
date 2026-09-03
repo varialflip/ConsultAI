@@ -25,6 +25,10 @@ grounding (`app/med_grounding.py`) :
   `_HINTS_PROSE`, prose sûre) restent bloqués et les médicaments hors liste
   conservent leurs seuils historiques — pas de nouvelle source de faux positifs
   (vérifié sur les transcripts de référence).
+- Correction d'une collision de prose : « des prochains dents » (dictée =
+  « proches aidants »/« prothèses dentaires ») flouait phonétiquement sur
+  « protein s ». Les formes manquantes `prochain`/`prochaine`/`prochains`/
+  `prochaines` sont ajoutées à `FRENCH_STOP` auprès de `proche`/`proches`.
 
 ## 2026-09-02 — Pipeling « deux passes » : extraction LLM + rendu applicatif
 

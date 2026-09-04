@@ -340,6 +340,15 @@
        le corps de texte vaut 14px / interligne 24px. Sans le préciser ici,
        les deux messages jumeaux s'affichaient à une taille différente. */
     #transcript::placeholder { color: #94a3b8; font-style: italic; font-size: 0.875rem; line-height: 1.7142857; }
+
+    /* Miroir HTML du transcrit : le textarea (saisie) et le miroir (affichage)
+       doivent partager EXACTEMENT la même métrique de police et de ligne, sans
+       quoi les <span> de correction dériveraient des mots du textarea. */
+    #transcript, #transcriptHtml { font-family: inherit; font-size: 13px; line-height: 1.7142857; height: 100%; }
+    #transcriptHtml { background: transparent; border: none; resize: none; outline: none; }
+    /* Terme corrigé/suggéré : italique + souligné + filet pointillé, souligne
+       la correction sans alourdir — un rollover montre le garble d'origine. */
+    .term-corr { font-style: italic; text-decoration: underline dotted; color: #0f766e; cursor: help; }
   </style>
 </head>
 
@@ -772,10 +781,21 @@
         </button>
       </div>
       <div class="flex-1 min-h-0 flex flex-col" id="transcriptView">
-        <textarea id="transcript" spellcheck="true" readonly
-                  class="flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 text-[13px]
-                         leading-relaxed text-slate-700 thin-scroll"
-                  placeholder="{{ t('transcript.placeholder') }}"></textarea>
+        <div class="relative flex-1 min-h-0 w-full">
+          <!-- Saisie autoritaire (READONLY — jamais édité) : porte la VALEUR
+               (``.value``) lue par la sauvegarde/génération. -->
+          <textarea id="transcript" spellcheck="true" readonly
+                    class="flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 text-[13px]
+                           leading-relaxed text-slate-700 thin-scroll"
+                    placeholder="{{ t('transcript.placeholder') }}"></textarea>
+          <!-- Miroir HTML décoratif : rend les corrections/suggestions en
+               italique-souligné avec rollover (calqué sur le textarea —
+               mêmes métriques de police et de défilement). -->
+          <div id="transcriptHtml" aria-hidden="true"
+               class="absolute inset-0 m-0 p-4 text-[13px] leading-relaxed
+                      text-transparent thin-scroll pointer-events-none
+                      whitespace-pre-wrap break-words"></div>
+        </div>
 
         <!-- LIGNES PROVISOIRES (mode « streaming ») — le texte en cours de
              reconnaissance, publié en deltas, affiché en italique au-dessus du
@@ -785,6 +805,11 @@
         <div id="liveLines" class="hidden shrink-0 px-4 sm:px-6 py-1.5 text-[13px]
                                    italic leading-relaxed text-slate-400 thin-scroll"
              aria-live="polite"></div>
+
+        <!-- Info-bulle des corrections (rollover) — positionnée en absolu par JS. -->
+        <div id="transcriptTooltip" class="hidden fixed z-50 max-w-xs px-2.5 py-1.5
+             rounded-md border border-slate-300 bg-white text-[12px] leading-snug
+             text-slate-700 shadow-md"></div>
 
         <!-- PIED DE LA DICTÉE — même rôle que celui de la note (moteur qui a
              produit CE texte, état de sauvegarde), mais sur ce panneau-ci : sur

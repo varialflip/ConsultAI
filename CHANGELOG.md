@@ -3,6 +3,28 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Termes gériatriques : module à part, réécriture déterministe + surlignage
+
+- **Nouveau module `geriatric_terms`** (`app/geriatric_terms.py` + `geriatric_terms.json`),
+  séparé de la correction des médicaments (`med_grounding`) : établissements,
+  abréviations et tests cognitifs du réseau québécois (Hôtel-Dieu de Québec,
+  HTO, CLSC, MMSE…). Le fichier ne porte **aucun nom de médicament**, et un mot
+  déjà corrigé par la correction des médicaments est **protégé de collision**
+  (le médicament gagne) — il n'est donc jamais réécrit deux fois.
+- **Réécriture déterministe dans le texte (canal 1)** : les termes au sens
+  unique (`mini mental`/`MMS`/`mini mental status` → `MMSE`, multi-désignations
+  convergées) sont corrigés AVANT le modèle, zéro attention de l'LLM. À la
+  génération, une réécriture n'est appliquée que si la reconnaissance vocale
+  était incertaine (confiance < 0.98) — on ne « corrige » pas un mot bien
+  entendu. Pendant la dictée, les termes corrigés apparaissent **surlignés en
+  italique-souligné** dans la transcription avec un rollover `[garble] →
+  [correction]`.
+- **Canaux homophones repensés** : `homophones.py` est supprimé ; ses entrées
+  migrent dans `geriatric_terms.json` — les **homophonies ambiguës** (canal
+  `prompt_hints`, lecture possible multiple) restent injectées au modèle dans
+  le bloc `<<<HOMOPHONIES_CE_CALL>>>` (jugement clinique), et seules les lignes
+  pertinentes de la dictée voyagent dans le prompt.
+
 ## 2026-09-04 — Retrait du pipeling « deux passes » : retour à la passe unique
 
 - **Le pipeling « deux passes » est retiré** (`note_renderer.py`, le réglage

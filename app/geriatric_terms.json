@@ -1,0 +1,93 @@
+{
+  "_comment": "Termes gériatriques québécois curatés, corrigés AVANT/PENDANT la dictée et la génération (voir geriatric_terms.py). Aucun nom de médicament ici (ceux-ci sont gérés par med_grounding) : termes cliniques, d'établissement ou abréviations. Un mot déjà corrigé inline par med_grounding est protégé (diffusion med gagne). deterministic_replacements = réécriture sûre dans le texte ; prompt_hints = homophonies ambiguës laissées au jugement du LLM (bloc HOMOPHONIES_CE_CALL). Entrées françaises pour l'instant.",
+  "deterministic_replacements": [
+    {
+      "garble": "hôtel dieu du québec",
+      "correct": "Hôtel-Dieu de Québec",
+      "langue": "fr"
+    },
+    {
+      "garble": "hôtel dieu de québec",
+      "correct": "Hôtel-Dieu de Québec",
+      "langue": "fr"
+    },
+    {
+      "garble": "hôtel dieu",
+      "correct": "Hôtel-Dieu",
+      "langue": "fr"
+    },
+    {
+      "garble": "aide au tovertan",
+      "correct": "HTO (hypotension orthostatique)",
+      "langue": "fr"
+    },
+    {
+      "garble": "mini mental",
+      "correct": "MMSE",
+      "langue": "fr"
+    },
+    {
+      "garble": "miny mental",
+      "correct": "MMSE",
+      "langue": "fr"
+    },
+    {
+      "garble": "mini mental status",
+      "correct": "MMSE",
+      "langue": "fr"
+    },
+    {
+      "garble": "mms exam",
+      "correct": "MMSE",
+      "langue": "fr"
+    },
+    {
+      "garble": "hôpital régional de saint jérôme",
+      "correct": "Hôpital régional de Saint-Jérôme",
+      "langue": "fr"
+    },
+    {
+      "garble": "clinique d'évaluation des capacités cognitives",
+      "correct": "CLSC",
+      "langue": "fr"
+    }
+  ],
+  "prompt_hints": [
+    {
+      "fragment": "casseur de saint droit",
+      "lecture": "cancer du sein droit",
+      "contexte": "latéralité + oncologie",
+      "langue": "fr"
+    },
+    {
+      "fragment": "casseur de saint gauche",
+      "lecture": "cancer du sein gauche",
+      "contexte": "latéralité + oncologie",
+      "langue": "fr"
+    },
+    {
+      "fragment": "amy parisi",
+      "lecture": "hémiparésie",
+      "contexte": "examen neurologique",
+      "langue": "fr"
+    },
+    {
+      "fragment": "amy parisie",
+      "lecture": "hémiparésie",
+      "contexte": "examen neurologique",
+      "langue": "fr"
+    },
+    {
+      "fragment": "parisie drotte",
+      "lecture": "hémiparésie droite",
+      "contexte": "latéralité + neurologie",
+      "langue": "fr"
+    },
+    {
+      "fragment": "parisie droit",
+      "lecture": "hémiparésie droite",
+      "contexte": "latéralité + neurologie",
+      "langue": "fr"
+    }
+  ]
+}

@@ -54,7 +54,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from app import audio_cache, live, llm, med_grounding, recordings, runtime_config, stt, usage
+from app import audio_cache, geriatric_terms, live, llm, med_grounding, recordings, runtime_config, stt, usage
 from app.config import settings
 from app.database import Consultation, SessionLocal, utcnow
 from sqlalchemy.orm import Session
@@ -1401,7 +1401,25 @@ def _merge_and_publish_meds(session: DictationSession) -> None:
         "session_id": session.id,
         "index": len(session.parts),
         "items": merged,
+        # Termes gériatriques réécrits inline dans le texte de CETTE dictée
+        # (module À PART de med_grounding) : paires {garble, correct} pour le
+        # surlignage + rollover du front-end. Même langue que le gabarit.
+        "geriatric": _geriatric_corrections(texte),
     })
+
+
+def _geriatric_corrections(texte: str) -> list:
+    """Paires ``{garble, correct}`` de termes gériatriques réécrits inline."""
+    if not (texte or "").strip():
+        return []
+    from app import preferences
+    try:
+        _corr, changements = geriatric_terms.apply_inline_replacements(
+            texte, langue=preferences.document_language(),
+        )
+        return changements
+    except Exception:
+        return []
 
 
 def schedule_final_grounding(session_id: str, username: str) -> None:
@@ -1451,6 +1469,7 @@ def _finalize_grounding(session_id: str, username: str) -> None:
                 "consultation_id": session.consultation_id,
                 "session_id": session.id,
                 "items": items,
+                "geriatric": _geriatric_corrections(text),
             })
     except Exception:
         logger.exception("Grounding final impossible (dictée %s)", session_id)

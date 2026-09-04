@@ -40,7 +40,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import httpx
 
-from app import homophones, i18n, runtime_config
+from app import geriatric_terms, i18n, runtime_config
 from app.config import (
     COHERE_DEFAULT_LLM_MODEL,
     MISTRAL_DEFAULT_LLM_MODEL,
@@ -277,6 +277,7 @@ def build_user_prompt(
     language: Optional[str] = None,
     confiance: Optional[List[dict]] = None,
     med_hints: Optional[List[dict]] = None,
+    geriatric_hints: Optional[List[dict]] = None,
 ) -> str:
     """
     Assemble le message utilisateur.
@@ -326,6 +327,14 @@ def build_user_prompt(
     if bloc_confiance:
         parts.append(bloc_confiance)
     parts.extend(_bloc_meds(med_hints or [], libelles))
+
+    # Homophonies ambiguës gériatriques (module À PART, geriatric_terms.py) :
+    # termes dont la lecture n'est PAS univoque — laissés au jugement clinique
+    # du modèle, jamais réécrits à l'aveugle. Un terme au sens unique, lui, est
+    # déjà réécrit inline avant le LLM (apply_inline_replacements).
+    bloc_hom = _bloc_homophones(geriatric_hints or [], libelles['homophones'])
+    if bloc_hom:
+        parts.append(bloc_hom)
 
     # Vide seulement en contournement du STT (audio envoyé seul) : dans tous
     # les autres cas, ``generate_note`` a déjà refusé une transcription vide
@@ -2434,6 +2443,10 @@ def generate_note_stream(
         layout_format, context_lines, extra_instructions, langue,
         confiance=confiance,
         med_hints=med_hints,
+        geriatric_hints=geriatric_terms.pertinent_hints(
+            transcript if (not audio_only or transcript_guide) else "",
+            langue,
+        ),
     )
     if audio_to_send is not None:
         if audio_only:
@@ -3014,6 +3027,10 @@ def generate_note(
         layout_format, context_lines, extra_instructions, langue,
         confiance=confiance,
         med_hints=med_hints,
+        geriatric_hints=geriatric_terms.pertinent_hints(
+            transcript if (not audio_only or transcript_guide) else "",
+            langue,
+        ),
     )
     if audio_to_send is not None:
         if audio_only:

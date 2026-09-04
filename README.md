@@ -706,8 +706,23 @@ règle des deux lectures, § 1).
 **Homophonies.** La liste des confusions vocales connues (ex. « un casseur de
 saint droit » → cancer du sein droit, « pantoloque » → Pantoloc) n'est plus
 cuite dans la consigne générale, qui grandissait à chaque erreur captée : elle
-vit en code (`app/homophones.py`) et seules les lignes pertinentes pour la
-dictée en cours arrivent au modèle dans le bloc `<<<HOMOPHONIES_CE_CALL>>>`.
+vit en code (`app/geriatric_terms.py` + `geriatric_terms.json`) et seules les
+lignes pertinentes pour la dictée en cours arrivent au modèle dans le bloc
+`<<<HOMOPHONIES_CE_CALL>>>` (canal `prompt_hints`).
+
+**Termes gériatriques québécois.** Outre les homophonies ambiguës (laissées au
+jugement du modèle), les termes au sens unique — établissements (Hôtel-Dieu de
+Québec), abréviations cliniques (HTO, CLSC), tests cognitifs (MMSE, y compris
+les multi-désignations « mini mental » / « MMS » / « mini mental status ») —
+sont **réécrits déterministiquement dans le texte** AVANT le modèle
+(`apply_inline_replacements`), zéro attention de l'LLM. Le fichier
+`app/geriatric_terms.json` (module à part de `med_grounding`) ne porte aucun
+nom de médicament ; un mot déjà corrigé par la correction des médicaments n'est
+jamais retouché (le médicament gagne sur la collision). À la génération, une
+réécriture n'est appliquée que si la reconnaissance vocale était incertaine
+(confiance < 0.98). Pendant la dictée, les termes corrigés apparaissent
+**surlignés en italique-souligné** dans la transcription, avec un rollover
+`[garble] → [correction]`.
 
 **Fidélité au contenu dicté.** La consigne générale interdit autant l'omission
 que l'invention (§ 1) : toute donnée clinique dictée figure dans la note —

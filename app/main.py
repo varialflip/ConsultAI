@@ -79,7 +79,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 from app import __version__
 
-from app import audio_cache, backup, changelog, dictation, i18n, live, llm, med_grounding, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
+from app import audio_cache, backup, changelog, dictation, geriatric_terms, i18n, live, llm, med_grounding, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
 from app import users as users_service
 from app.auth import (
     AuthMiddleware,
@@ -357,10 +357,22 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
         return []
     consultation.med_grounding_json = json.dumps(items, ensure_ascii=False)
     db.commit()
+    # Termes gériatriques (module À PART) : paires {garble, correct} pour le
+    # surlignage du transcrit, calculées sur le texte complet.
+    geriatric: list = []
+    try:
+        _g_corr, _g_ch = geriatric_terms.apply_inline_replacements(
+            text, langue=preferences.document_language(), conf=conf_map or None,
+        )
+        geriatric = _g_ch or []
+    except Exception:
+        logger.exception("Termes gériatriques indisponibles (consultation %s)", consultation.id)
+        geriatric = []
     live.publish(consultation.owner, "med_grounding_result", {
         "consultation_id": consultation.id,
         "origin_tab": origin_tab,
         "items": items,
+        "geriatric": geriatric,
     })
     return items
 
@@ -3115,6 +3127,24 @@ async def api_generate(
             }
         except Exception:
             logger.exception("Pré-correction inline indisponible — DICTÉE brute")
+
+    # Termes gériatriques québécois (module À PART, cf. geriatric_terms.py) :
+    # réécriture déterministe dans le texte AVANT le LLM, zéro attention du
+    # modèle. ``protect`` = les jetons déjà corrigés par med_grounding ci-dessus
+    # (collision : le médicament gagne, on n'écrase pas ses corrections).
+    # ``conf`` (norm_phon → confiance) limite aux garbles probables : un jeton
+    # entendu >= 0.98 n'est pas réécrit — on ne « corrige » pas un terme
+    # parfaitement dicté.
+    if payload.transcript:
+        try:
+            n_transcript, _gch = geriatric_terms.apply_inline_replacements(
+                n_transcript or payload.transcript,
+                langue=template_row.language,
+                protect=inline_fixed,
+                conf=conf_map or None,
+            )
+        except Exception:
+            logger.exception("Termes gériatriques indisponibles — DICTÉE brute")
 
     # Hints structurés pour le LLM : items déterministes du moteur + candidats
     # PHONÉTIQUES (G2P français, « dilote » → Dilaudid). Source : la liste

@@ -531,10 +531,16 @@
   //: ``transcript_correct`` (remplacement d'un bloc d'index donné) sans
   //: dépendre du texte accumulé final plus long à reconstruire.
   let committedParts = [];
+  //: Registre des corrections termiques (gériatriques) pour le
+  //: surlignage du transcrit : liste {garble, correct, confidence}.
+  //: Alimenté par les événements ``med_grounding`` / ``med_grounding_result``
+  //: (champ ``geriatric``) et ``transcript_correct``.
+  let transcriptCorrections = [];
   const transcriptReveal = createTextReveal((shown) => {
     const box = $('transcript');
     if (!box) return;
     box.value = shown;
+    renderTranscriptHtml(shown);
     scrollTranscriptToBottom();
     // La boîte ne contient qu'un préfixe pendant le dévoilement : il faut
     // garder hasUnsavedChanges() cohérent, sans quoi la modale de conflit
@@ -551,6 +557,7 @@
   function resetTranscriptReveal() {
     transcriptReveal.reset();
     committedText = $('transcript').value;
+    renderTranscriptHtml(committedText);
     // Le texte est remplacé en bloc (retranscription, ouverture, reprise) :
     // on re-synchronise le tableau des parts sur ce nouveau contenu.
     committedParts = committedText ? [committedText] : [];
@@ -575,6 +582,9 @@
   function applyTranscriptCorrection(payload) {
     if (!payload || !Array.isArray(payload.parts)) return;
     committedParts = payload.parts.slice();
+    if (Array.isArray(payload.corrections)) {
+      transcriptCorrections = payload.corrections.slice();
+    }
     if (payload.session_id && payload.session_id === dictation.sessionId) {
       // Notre onglet : resynchronise la borne des parts déjà consommées pour
       // que applyDictationParts ne reprenne pas une version déjà remplacée.
@@ -582,6 +592,65 @@
     }
     rebuildCommittedText({ pulse: true });
     updateActionButtons();
+  }
+
+  /* --- Miroir HTML du transcrit : corrections surlignées + rollover -----*
+   * Le transcrit est un <textarea readonly> (jamais édité) ; il ne peut pas
+   * rendre de styles. ``#transcriptHtml`` le surimprime : mêmes métriques,
+   * text-transparent, les termes corrigés en <span> italique-souligné avec
+   * une info-bulle « [garble] → [correction] (confiance) » au survol.
+   * ---------------------------------------------------------------------- */
+
+  function renderTranscriptHtml(text) {
+    const el = $('transcriptHtml');
+    if (!el) return;
+    el.textContent = text || '';               // pas d'HTML injecté : purge
+    if (!(text || '').trim() || !transcriptCorrections.length) return;
+    let html = esc(text);
+    for (const c of transcriptCorrections) {
+      if (!c || !c.correct) continue;
+      const cible = esc(c.correct);
+      const garble = esc(c.garble || '');
+      const conf = c.confidence ? esc(c.confidence) : '';
+      const span = `<span class="term-corr" ` +
+        `data-garble="${escAttr(garble)}" ` +
+        `data-correct="${escAttr(cible)}" ` +
+        `data-conf="${escAttr(conf)}">${cible}</span>`;
+      html = html.split(cible).join(span);
+    }
+    el.innerHTML = html;
+  }
+
+  function escAttr(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function syncTranscriptScroll() {
+    const box = $('transcript');
+    const el = $('transcriptHtml');
+    if (box && el) el.scrollTop = box.scrollTop;
+  }
+
+  function showTranscriptTooltip(el) {
+    const tip = $('transcriptTooltip');
+    if (!tip) return;
+    const garble = el.dataset.garble || '';
+    const correct = el.dataset.correct || '';
+    const conf = el.dataset.conf || '';
+    let s = `<i>${garble}</i> → <b>${correct}</b>`;
+    if (conf) s += ` <span class="text-slate-400">(${conf})</span>`;
+    tip.innerHTML = s;
+    tip.classList.remove('hidden');
+    const r = el.getBoundingClientRect();
+    tip.style.left = Math.min(r.left, window.innerWidth - 280) + 'px';
+    tip.style.top = (r.top - tip.offsetHeight - 6) + 'px';
+  }
+
+  function hideTranscriptTooltip() {
+    const tip = $('transcriptTooltip');
+    if (tip) tip.classList.add('hidden');
   }
 
   /**
@@ -989,6 +1058,10 @@
       if (data.superseded) return;
       $('transcript').value = formatSentences(data.transcript);
       resetTranscriptReveal();
+      if (Array.isArray(data.geriatric)) {
+        transcriptCorrections = data.geriatric.slice();
+        renderTranscriptHtml($('transcript').value);
+      }
       if (data.med_items) {
         state.medGroundingOn = true;
         renderMedItems(data.med_items);
@@ -1212,6 +1285,7 @@
     const box = $('transcript');
     box.scrollTop = box.scrollHeight;
     requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+    syncTranscriptScroll();
   }
 
   /** Recopie dans la transcription les tranches que le serveur vient de rendre. */
@@ -2278,6 +2352,11 @@
         existing ? `${existing}\n\n${result.transcript}` : result.transcript,
       );
       resetTranscriptReveal();
+
+      if (Array.isArray(result.geriatric)) {
+        transcriptCorrections = result.geriatric.slice();
+        renderTranscriptHtml($('transcript').value);
+      }
 
       if (result.med_items) {
         state.medGroundingOn = true;
@@ -6609,6 +6688,10 @@
   function onMedGrounding(evt) {
     const payload = JSON.parse(evt.data || '{}');
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    if (Array.isArray(payload.geriatric)) {
+      transcriptCorrections = payload.geriatric.slice();
+      renderTranscriptHtml($('transcript').value);
+    }
     if (payload.items) {
       state.medGroundingOn = true;
       renderMedItems(payload.items);
@@ -6621,6 +6704,10 @@
     // L'onglet qui a émis ignore son propre résultat (il le pose par la
     // réponse HTTP) ; les suiveurs l'appliquent.
     if (payload.origin_tab && payload.origin_tab === state.tabId) return;
+    if (Array.isArray(payload.geriatric)) {
+      transcriptCorrections = payload.geriatric.slice();
+      renderTranscriptHtml($('transcript').value);
+    }
     if (payload.items) {
       state.medGroundingOn = true;
       renderMedItems(payload.items);
@@ -7286,6 +7373,18 @@
     $('btnPause').addEventListener('click', togglePause);
     $('btnFinish').addEventListener('click', finishRecording);
     $('btnAbort').addEventListener('click', abortRecording);
+
+    // --- Miroir HTML du transcrit : sync du défilement + rollover ---
+    $('transcript').addEventListener('scroll', syncTranscriptScroll);
+    if ($('transcriptHtml')) {
+      $('transcriptHtml').addEventListener('pointerover', (ev) => {
+        const t = ev.target.closest('.term-corr');
+        if (t) showTranscriptTooltip(t);
+        else hideTranscriptTooltip();
+      });
+      $('transcriptHtml').addEventListener('pointerout', hideTranscriptTooltip);
+    }
+    if ($('transcriptTooltip')) hideTranscriptTooltip();
 
     // --- Mode dictaphone (téléphone retourné) ---
     const dphoneMain = $('btnDictaphoneMain');

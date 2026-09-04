@@ -2067,34 +2067,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Same transient reasoning (thinking) display, for non-admin users. Off "
         "by default: the model's thinking may contain unrevised drafts.",
     ),
-    "set.note_pipeline.label": (
-        "Pipeling de génération de note",
-        "Note generation pipeline",
-    ),
-    "set.note_pipeline.help": (
-        "« Deux passes » : le modèle corrige et extrait la dictée en un objet "
-        "structuré (passe 1), puis l'application le met en page dans le gabarit, "
-        "sans modèle (passe 2, déterministe). La structure du gabarit ne peut "
-        "plus être ni déformée ni « remplie » par le modèle. « Passe unique » "
-        "replie sur la trajectoire historique (le modèle rédige toute la note, "
-        "mise en page comprise). Une passe 1 en échec ou une mise en page "
-        "incompatible retombe automatiquement sur la passe unique.",
-        "'Two pass': the model corrects the dictation and extracts it into a "
-        "structured object (pass 1), then the application lays it out in the "
-        "template, with no model (pass 2, deterministic). The template "
-        "structure can no longer be distorted or 'filled in' by the model. "
-        "'Single pass' falls back to the historic path (the model writes the "
-        "whole note, layout included). A failed pass 1 or an incompatible "
-        "layout falls back automatically to the single pass.",
-    ),
-    "set.note_pipeline.single": (
-        "Passe unique (repli)",
-        "Single pass (fallback)",
-    ),
-    "set.note_pipeline.two_pass": (
-        "Deux passes : extraction + rendu applicatif",
-        "Two passes: extraction + app rendering",
-    ),
     "set.anthropic_api_key.label": ("Clé API Anthropic", "Anthropic API key"),
     "set.anthropic_api_key.help": ("", ""),
 

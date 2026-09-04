@@ -2793,54 +2793,6 @@ def _generate_and_publish(
             "origin_tab": origin_tab,
         })
 
-    # --- Pipeling « deux passes » --------------------------------------------
-    # note_pipeline = two_pass : passe 1 (extraction/correction par le LLM) +
-    # passe 2 (mise en page déterministe par note_renderer, sans modèle). Toute
-    # circonstance où la passe 1 échoue ou le gabarit n'est pas compatible
-    # retombe sur la passe unique classique — la dictée n'est jamais perdue.
-    #
-    # La DICTÉE (passe 1 comme passe unique) est celle déjà PRÉ-CORRIGÉE inline
-    # par ``api_generate`` (``n_transcript``, substitutions déterministes et
-    # auditées : garbles seedés, exacts — plus la réécriture agressive des
-    # MÉDICAMENTS COURANTS gagnée par similarité + confiance STT, voir
-    # COMMON_INLINE_*). Le LLM n'a plus à deviner les noms de médicaments
-    # déformés connus (« Restore 5 » → « Crestor 5 », « la Six » → « Lasix »,
-    # « ketapine » → « quetiapine ») : charge cognitive en moins, et l'obéissance
-    # aux hints n'est plus le seul recours. « payload.transcript » (brut) reste
-    # la source de la persistance et de la confiance mot-à-mot ; les hints, eux,
-    # viennent de la liste live persistée (voir api_generate).
-    if runtime_config.value("note_pipeline") == "two_pass":
-        deux_pass = llm.generate_note_two_pass(
-            n_transcript or payload.transcript,
-            template_row.system_instructions,
-            template_row.layout_format,
-            _build_context_lines(payload),
-            payload.extra_instructions,
-            model_name,
-            template_row.language,
-            audio_payload,
-            system_override=system_prompt,
-            confiance=confiance_mots,
-            med_hints=med_hints or None,
-            on_stream_started=_publish_started,
-        )
-        if deux_pass is not None:
-            logger.info(
-                "Note générée en deux passes (%s / %s) — %d caractères, "
-                "extraction appliquée",
-                deux_pass["provider"], deux_pass["model"],
-                len(deux_pass["markdown"]),
-            )
-            if _generation_guard.is_current(payload.consultation_id, generation_seq):
-                live.publish(user.owner_key, "generation_chunk", {
-                    "type": "snapshot", "seq": 1,
-                    "markdown": deux_pass["markdown"],
-                    "consultation_id": payload.consultation_id,
-                    "generation_token": payload.generation_token,
-                    "origin_tab": origin_tab,
-                })
-            return deux_pass
-
     generator = llm.generate_note_stream(
         n_transcript or payload.transcript,
         template_row.system_instructions,
@@ -3138,10 +3090,9 @@ async def api_generate(
         except Exception:
             logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
 
-    # DICTÉE harmonisée 1 passe / 2 passes : le texte corrigé par l'inline sûr
-    # (``inline_safe=True``) est envoyé au modèle dans les DEUX pipelines — le
-    # pipeline deux passes le faisait déjà, le pipeline unique envoyait du brut.
-    # Corriger la dictée rend les étapes cohérentes ; la liste des corrections
+    # DICTÉE harmonisée : le texte corrigé par l'inline sûr
+    # (``inline_safe=True``) est envoyé au modèle. Corriger la dictée rend la
+    # génération cohérente avec les hints ; la liste des corrections
     # ``inline_fixed`` sert ci-dessous à MUSCLER les hints (un item déjà écrit
     # littéralement dans la DICTÉE ne doit plus être re-suggéré : redondant et
     # confusant pour le modèle). Ce ``normalize`` déterministe coûte ~5-14 s sur

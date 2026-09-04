@@ -776,22 +776,6 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "false", choices=ON_OFF,
     ),
 
-    # --- Pipeling de génération de la note -----------------------------------
-    # « single » : une passe unique historique — le LLM rédige la note complète,
-    # mise en page comprise. « two_pass » : extraction structurée par le LLM
-    # (passe 1) + mise en page déterministe par note_renderer (passe 2) ; en
-    # cas d'échec de la passe 1 ou d'une mise en page incompatible, l'appli
-    # retombe automatiquement sur la passe unique. Voir llm.generate_note_two_pass.
-    Setting(
-        "note_pipeline", "choice", "group.note",
-        default=lambda: "two_pass",
-        choices=(
-            ("single", "set.note_pipeline.single"),
-            ("two_pass", "set.note_pipeline.two_pass"),
-        ),
-        section="sect.prompts",
-    ),
-
     # --- Consigne générale ---------------------------------------------------
     # Une consigne par langue. C'est la LANGUE DU GABARIT qui décide laquelle
     # est employée — voir llm.build_system_prompt. Les valeurs livrées viennent

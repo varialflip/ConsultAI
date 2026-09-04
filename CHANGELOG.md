@@ -3,7 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-04 — Grounding : réutilisation de la liste live, dictée inline harmonisée 1/2 passes
+## 2026-09-04 — Retrait du pipeling « deux passes » : retour à la passe unique
+
+- **Le pipeling « deux passes » est retiré** (`note_renderer.py`, le réglage
+  `note_pipeline`, l'extraction structurée JSON de la passe 1 et
+  `tools/regression_pipeline.py` sont supprimés). La génération repose de
+  nouveau sur **une seule passe** : le modèle lit le gabarit et rédige la note
+  Markdown complète, structure comprise. Le retrait élimine les régressions
+  constatées (JSON invalidé, perte de contenu à la traversée
+  dictée → JSON → Markdown, gabarits à tableaux inéligibles à la passe 2) au
+  profit de la fiabilité éprouvée de la passe unique.
+
+## 2026-09-04 — Grounding : réutilisation de la liste live, dictée inline harmonisée
 
 - **Corrections localisées par rubrique + contexte** : chaque ligne de
   « Corrections et éléments à valider » commence désormais par la rubrique du

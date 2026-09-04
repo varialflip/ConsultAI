@@ -19,6 +19,16 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   n'apparaît qu'une seule fois (aucun doublon, quelle que soit sa répétition
   dans la dictée). Consigne générale (FR/EN) et user prompt mis à jour,
   migration en base respectant les consignes personnalisées.
+- **Corrections : les séparateurs de liste ne sont plus signalés** :
+  `normalize` laissait les virgules/points-virgules du STT entre les entrées
+  de la liste de médicaments, que le modèle retirait ensuite et signalait sans
+  sens clinique (« Amatine, 7,5 mg, TID » → « Amatine 7,5 mg TID »). Le texte
+  inline envoyé au modèle est désormais nettoyé de ces séparateurs **dans les
+  régions de liste confirmées** (`med_grounding.nettoyer_separateurs_liste`,
+  appliqué à `n_transcript` — jamais à l'extraction ni à la posologie
+  stockée), et la consigne (§ 6 + user prompt) interdit de signaler un
+  nettoyage purement typographique sans changement de sens clinique. Les
+  virgules décimales (7,5 / 1,25) et la prose hors liste restent intactes.
 - **Réutilisation de la liste pointée (latence au « Terminer »)** : la liste
   des médicaments est désormais calculée **une seule fois**, en continu pendant
   la dictée (`med_grounding_json`, accumulée par frontière à `maxi_phon=8`) et

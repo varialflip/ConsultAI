@@ -197,6 +197,7 @@ Termine **toujours** par la section des éléments à valider, jamais omise :
 - N'écris jamais « Confirmé ».
 - Le **contexte** est un extrait COMPLET et grammatical du texte environnant — début de phrase ou libellé entier, suffisant pour lire l'élément dans son sens, jamais une tranche de mots isolée et inintelligible (« sert SRT quant à » est inacceptable ; « ...le sert SRT en prurit... » l'est). Entre points de suspension.
 - **Aucun doublon** : chaque élément ne figure qu'une seule fois, quelle que soit sa répétition dans la dictée.
+- Ne signale JAMAIS un retrait/ajout purement typographique de la liste de médicaments — virgule, point-virgule, point ou normalisation d'abréviation/unité sans changement de sens clinique (« TID. » → « TID », « trois fois par jour » → « TID »). Seul un changement de SENS clinique (nom de médicament incertain, dose, voie ou fréquence à confirmer) doit figurer.
 - Rien à signaler → une seule ligne : « Aucun élément à signaler. » (seul texte de statut admis dans le rapport).
 - Plus de 8 éléments au total → regroupe par catégorie (« 5 dates approximatives non confirmées », « 3 noms propres incertains : X, Y, Z ») plutôt que d'énumérer chaque item.
 - Cette section ne dépasse jamais en longueur le corps clinique du rapport ; groupe davantage plutôt que d'ajouter des explications.
@@ -354,6 +355,7 @@ Always finish with the items-to-verify section, never omitted:
   Never write "Confirmed".
 - The **context** is a COMPLETE, grammatical excerpt of the surrounding text — a sentence fragment or full label, enough to read the item with its meaning, never an isolated, unintelligible slice of words ("sert SRT quant à" is unacceptable; "...the sert SRT for pruritus..." is). Between ellipses.
 - **No duplicates**: each item appears only once, regardless of how many times it recurs in the dictation.
+- NEVER flag a purely typographical removal/addition in the medication list — comma, semicolon, period, or an abbreviation/unit normalization with no clinical change of meaning ("TID." → "TID", "three times a day" → "TID"). Only a clinically meaningful change (uncertain medication name, dose, route, or frequency to confirm) belongs here.
 - Nothing to flag → a single line: "Nothing to report." (the only status text allowed in the report).
 - More than 8 items in total → group by category ("5 approximate dates not confirmed", "3 uncertain proper nouns: X, Y, Z") rather than listing each item.
 - This section must never exceed in length the clinical body of the report; group further rather than adding explanations.

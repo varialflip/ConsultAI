@@ -671,7 +671,11 @@ commence par la **rubrique** du gabarit où se trouve l'élément (titre exact,
 entre crochets) suivie d'un **contexte** (extrait de 5-10 mots autour de
 l'élément, entre points de suspension), pour le localiser aisément dans le
 document — « [Médicaments] ...Xanax 0,5... → à confirmer ». Au-delà de 8
-éléments, ils sont regroupés par catégorie. La consigne générale l'exige (§ 6).
+éléments, ils sont regroupés par catégorie. Un nettoyage purement typographique
+de la liste de médicaments (virgule, point-virgule, point, normalisation
+d'abréviation/unité **sans changement de sens clinique**) n'est **jamais**
+signalé ; seuls comptent les éléments à sens clinique (nom, dose, voie,
+fréquence à confirmer). La consigne générale l'exige (§ 6).
 
 **Structure des rubriques.** La consigne générale impose deux règles de mise en
 forme (§ 1 et § 3), renforcées en 2026-08-17 pour les modèles plus sensibles :
@@ -915,6 +919,15 @@ des médicaments », défaut `false`). Une fois activé :
   continuent, eux, d'être proposés au modèle. Les deux strates restent la
   source unique (`extract_validation_items` → liste live / « Terminer » /
   retranscription), réutilisée à la génération plutôt que recalculée.
+- **Nettoyage des séparateurs de liste dans le texte inline.** Le STT insère
+  des virgules entre les entrées de la liste de médicaments ; `normalize` les
+  conservait, et le modèle les retirait ensuite en les signalant sans sens
+  clinique (« Amatine, 7,5 mg, TID »). Le texte envoyé au modèle est donc
+  nettoyé de ces séparateurs (virgules, points-virgules, points de jeton
+  protocolaire) **dans les régions de liste confirmées uniquement**
+  (`med_grounding.nettoyer_separateurs_liste`, appliqué à `n_transcript`).
+  Jamais l'extraction ni la posologie stockée ; virgules décimales (7,5) et
+  prose hors liste intactes.
 - **Liste pointée des médicaments.** Les noms déformés par la reconnaissance
   vocale sont normalisés contre la **base canadienne de produits
   pharmaceutiques (BDP)** livrée dans l'image (`app/meds.sqlite`, moteur

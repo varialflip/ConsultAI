@@ -190,13 +190,16 @@ Avant d'émettre le rapport, dernière passe destinée à écarter toute inventi
 
 Termine **toujours** par la section des éléments à valider, jamais omise :
 
-- Une ligne par élément, format télégraphique, sans justification. Chaque ligne commence par la **rubrique** du gabarit où se trouve l'élément (titre exact, entre crochets), suivie d'un **contexte** — extrait de 5 à 10 mots du texte environnant, entre points de suspension, suffisant pour retrouver l'élément dans le document. Deux mentions possibles, et pas d'autres :
-  - correction retenue avec confiance → « [Rubrique] ...contexte... → correction apportée : terme corrigé » ;
-  - lecture encore incertaine → « [Rubrique] ...contexte... → à confirmer ».
-  N'écris jamais « Confirmé ».
+- Une ligne par **rubrique** du gabarit où se trouvent les éléments (titre exact, entre crochets). Tous les items de la même rubrique se regroupent sur une SEULE ligne, séparés par « ; », dans l'ordre où ils apparaissent — une rubrique, une ligne, jamais une ligne par item.
+- Deux mentions possibles, et pas d'autres :
+  - correction retenue avec confiance → « [Rubrique] ...contexte au complet : Xanax 0,5... → correction apportée : terme corrigé » ;
+  - lecture encore incertaine → « [Rubrique] ...contexte au complet : MMSE 26/30... → à confirmer ».
+- N'écris jamais « Confirmé ».
+- Le **contexte** est un extrait COMPLET et grammatical du texte environnant — début de phrase ou libellé entier, suffisant pour lire l'élément dans son sens, jamais une tranche de mots isolée et inintelligible (« sert SRT quant à » est inacceptable ; « ...le sert SRT en prurit... » l'est). Entre points de suspension.
+- **Aucun doublon** : chaque élément ne figure qu'une seule fois, quelle que soit sa répétition dans la dictée.
 - Rien à signaler → une seule ligne : « Aucun élément à signaler. » (seul texte de statut admis dans le rapport).
-- Plus de 8 éléments → regroupe par catégorie plutôt que d'énumérer individuellement (« 5 dates approximatives non confirmées », « 3 noms propres incertains : X, Y, Z »).
-- Cette section ne dépasse jamais en longueur le corps clinique du rapport ; regroupe davantage plutôt que d'ajouter des explications.
+- Plus de 8 éléments au total → regroupe par catégorie (« 5 dates approximatives non confirmées », « 3 noms propres incertains : X, Y, Z ») plutôt que d'énumérer chaque item.
+- Cette section ne dépasse jamais en longueur le corps clinique du rapport ; groupe davantage plutôt que d'ajouter des explications.
 """
 
 GENERAL_PROMPT_EN = """\
@@ -344,12 +347,15 @@ Before emitting the report, a final pass to rule out any invention:
 
 Always finish with the items-to-verify section, never omitted:
 
-- One line per item, telegraphic format, no justification. Each line starts with the **section** heading from the template where the item appears (exact heading, in square brackets), followed by a **context** — a 5-to-10-word excerpt from the surrounding text, between ellipsis, sufficient to locate the item in the document. Two mentions possible, and no others:
-  - correction retained with confidence → "[Section] ...context... → correction made: corrected term" ;
-  - still uncertain reading → "[Section] ...context... → to be confirmed".
+- One line per **section** heading from the template where the items appear (exact heading, in square brackets). All items from the same section are grouped onto a SINGLE line, separated by ";", in order of appearance — one section, one line, never one line per item.
+- Two mentions possible, and no others:
+  - correction retained with confidence → "[Section] ...full context: Xanax 0.5... → correction made: corrected term" ;
+  - still uncertain reading → "[Section] ...full context: MMSE 26/30... → to be confirmed".
   Never write "Confirmed".
+- The **context** is a COMPLETE, grammatical excerpt of the surrounding text — a sentence fragment or full label, enough to read the item with its meaning, never an isolated, unintelligible slice of words ("sert SRT quant à" is unacceptable; "...the sert SRT for pruritus..." is). Between ellipses.
+- **No duplicates**: each item appears only once, regardless of how many times it recurs in the dictation.
 - Nothing to flag → a single line: "Nothing to report." (the only status text allowed in the report).
-- More than 8 items → group by category rather than listing individually ("5 approximate dates not confirmed", "3 uncertain proper nouns: X, Y, Z").
+- More than 8 items in total → group by category ("5 approximate dates not confirmed", "3 uncertain proper nouns: X, Y, Z") rather than listing each item.
 - This section must never exceed in length the clinical body of the report; group further rather than adding explanations.
 """
 

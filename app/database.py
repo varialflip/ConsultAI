@@ -2123,16 +2123,17 @@ def migrate_general_prompt_phonetic_origin(db: Session) -> int:
 
 
 #: Empreintes des consignes générales EN BASE (instance de test) avant la
-#: localisation des corrections (rubrique + contexte). Même mécanique que les
-#: migrations précédentes : on ne remplace la valeur en base que si elle est
-#: encore EXACTEMENT le défaut livré (l'ancien format télégraphique § 6, sans
-#: rubrique ni contexte), pour ne jamais écraser une consigne personnalisée.
-#: Empreintes relevées sur la base ``consultai-test`` le 2026-09-04, dont la
-#: copie du prompt était l'ancien défaut pré-édition (vérifié : section § 6
-#: télégraphique avec « à confirmer », sans « [Rubrique] »).
+#: reformulation de la section finale (regroupement par rubrique, contexte
+#: complet, anti-doublounage). Même mécanique que les migrations précédentes :
+#: on ne remplace la valeur en base que si elle est encore EXACTEMENT le défaut
+#: livré — ici la version « une ligne par item » avec localisation par rubrique
+#: (livrée le 2026-09-04), pour ne jamais écraser une consigne personnalisée.
+#: Empreintes relevées directement sur la base ``consultai-test`` le
+#: 2026-09-04 (contenu vérifié : § 6 « une ligne par item » avec ``[Rubrique]``
+#: / ``[Section]``), plus fiable qu'un hash tiré du module.
 _OLD_GENERAL_PROMPT_SHA_LOCALISATION = {
-    "general_prompt_fr": "eafbb04c5b922821947667bb759aa151021b01291641a309fcdaa61e273933f1",
-    "general_prompt_en": "c87b0a1c1d67be2a8e4a07d9c286387418b026ff18e1963d46acb65f2fd22a2b",
+    "general_prompt_fr": "010c4361380d0ebcfd7d4bde0bb5623e835e15b29da9f5f93dcb05a721b42340",
+    "general_prompt_en": "7ca64e9fe171abc0f8b87c630903786d5c70366e1358414f917701ecc4e25012",
 }
 
 

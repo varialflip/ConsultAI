@@ -11,6 +11,14 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   aisément l'élément dans le document (« [Médicaments] ...Xanax 0,5... →
   à confirmer »). Consigne générale et schéma d'extraction mis à jour, avec
   migration en base respectant les consignes personnalisées.
+- **Corrections : regroupement par rubrique, contexte complet, anti-doublons** :
+  pour alléger la lecture quand beaucoup d'items partagent la même rubrique,
+  tous les éléments d'une rubrique sont désormais regroupés sur une seule
+  ligne (séparés par « ; ») ; le contexte demandé est un extrait complet et
+  grammatical, jamais une tranche inintelligible ; et chaque élément
+  n'apparaît qu'une seule fois (aucun doublon, quelle que soit sa répétition
+  dans la dictée). Consigne générale (FR/EN) et user prompt mis à jour,
+  migration en base respectant les consignes personnalisées.
 - **Réutilisation de la liste pointée (latence au « Terminer »)** : la liste
   des médicaments est désormais calculée **une seule fois**, en continu pendant
   la dictée (`med_grounding_json`, accumulée par frontière à `maxi_phon=8`) et

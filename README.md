@@ -919,15 +919,6 @@ des médicaments », défaut `false`). Une fois activé :
   continuent, eux, d'être proposés au modèle. Les deux strates restent la
   source unique (`extract_validation_items` → liste live / « Terminer » /
   retranscription), réutilisée à la génération plutôt que recalculée.
-- **Nettoyage des séparateurs de liste dans le texte inline.** Le STT insère
-  des virgules entre les entrées de la liste de médicaments ; `normalize` les
-  conservait, et le modèle les retirait ensuite en les signalant sans sens
-  clinique (« Amatine, 7,5 mg, TID »). Le texte envoyé au modèle est donc
-  nettoyé de ces séparateurs (virgules, points-virgules, points de jeton
-  protocolaire) **dans les régions de liste confirmées uniquement**
-  (`med_grounding.nettoyer_separateurs_liste`, appliqué à `n_transcript`).
-  Jamais l'extraction ni la posologie stockée ; virgules décimales (7,5) et
-  prose hors liste intactes.
 - **Liste pointée des médicaments.** Les noms déformés par la reconnaissance
   vocale sont normalisés contre la **base canadienne de produits
   pharmaceutiques (BDP)** livrée dans l'image (`app/meds.sqlite`, moteur

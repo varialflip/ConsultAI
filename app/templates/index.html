@@ -341,17 +341,18 @@
        les deux messages jumeaux s'affichaient à une taille différente. */
     #transcript::placeholder { color: #94a3b8; font-style: italic; font-size: 0.875rem; line-height: 1.7142857; }
 
-    /* Miroir HTML du transcrit : le textarea (saisie) et le miroir (affichage)
-       doivent partager EXACTEMENT la même métrique de police et de ligne, sans
-       quoi les <span> de correction dériveraient des mots du textarea. */
+    /* Miroir HTML du transcrit : le textarea (saisie/scrollbar + valeur) et le
+       miroir (affichage) doivent partager EXACTEMENT la même métrique de police
+       et de ligne, sans quoi les <span> de correction dériveraient des mots.
+       Le texte du textarea est transparent (cf. sa classe) ; le miroir est LA
+       surface visible. ``overflow-y: auto`` rend le miroir scrollable : ses
+       ``scrollTop`` est synchronisé à celui du textarea (voir app.js). */
     #transcript, #transcriptHtml { font-family: inherit; font-size: 13px; line-height: 1.7142857; height: 100%; }
-    #transcriptHtml { background: transparent; border: none; resize: none; outline: none; }
-    /* Terme corrigé/suggéré : italique + souligné + filet pointillé, souligne
-       la correction sans alourdir — un rollover montre le garble d'origine.
-       ``pointer-events: auto`` : le conteneur (#transcriptHtml) est
-       ``pointer-events: none`` pour laisser le textarea scrollable/interactif,
-       mais chaque span reprend les événements pour déclencher l'info-bulle. */
-    .term-corr { font-style: italic; text-decoration: underline dotted; color: #0f766e; cursor: help; pointer-events: auto; }
+    #transcriptHtml { background: transparent; border: none; outline: none; overflow-y: auto; }
+    /* Terme corrigé/suggéré : italique + souligné pointillé. La COULEUR reste
+       celle du texte normal (aucun changement de teinte) : seul le style
+       italique-souligné + le rollover distinguent la cible. */
+    .term-corr { font-style: italic; text-decoration: underline dotted; cursor: help; }
   </style>
 </head>
 
@@ -786,18 +787,20 @@
       <div class="flex-1 min-h-0 flex flex-col" id="transcriptView">
         <div class="relative flex-1 min-h-0 w-full">
           <!-- Saisie autoritaire (READONLY — jamais édité) : porte la VALEUR
-               (``.value``) lue par la sauvegarde/génération. -->
+               (``.value``) lue par la sauvegarde/génération. Son TEXTE est
+               transparent : l'affichage réel est le miroir HTML (#transcriptHtml),
+               qui porte les surlignages + info-bulles. Les deux surfaces sont
+               superposées et défilent de façon synchronisée. -->
           <textarea id="transcript" spellcheck="true" readonly
                     class="flex-1 min-h-0 w-full resize-none border-0 focus:ring-0 p-4 text-[13px]
-                           leading-relaxed text-slate-700 thin-scroll"
+                           leading-relaxed text-transparent caret-transparent thin-scroll transcript-mirror"
                     placeholder="{{ t('transcript.placeholder') }}"></textarea>
-          <!-- Miroir HTML décoratif : rend les corrections/suggestions en
-               italique-souligné avec rollover (calqué sur le textarea —
-               mêmes métriques de police et de défilement). -->
+          <!-- Miroir HTML : affichage SEUL du transcrit (texte complet, en
+               couleurs normales) avec les termes corrigés/suggérés en
+               italique-souligné + rollover. Défile synchronisé au textarea. -->
           <div id="transcriptHtml" aria-hidden="true"
                class="absolute inset-0 m-0 p-4 text-[13px] leading-relaxed
-                      text-transparent thin-scroll pointer-events-none
-                      whitespace-pre-wrap break-words"></div>
+                      text-slate-700 thin-scroll whitespace-pre-wrap break-words"></div>
         </div>
 
         <!-- LIGNES PROVISOIRES (mode « streaming ») — le texte en cours de

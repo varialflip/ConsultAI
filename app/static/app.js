@@ -638,7 +638,13 @@
   function syncTranscriptScroll() {
     const box = $('transcript');
     const el = $('transcriptHtml');
-    if (box && el) el.scrollTop = box.scrollTop;
+    if (!box || !el) return;
+    // Deux surfaces superposées : le textarea (scrollbar native, transparent)
+    // et le miroir HTML (surface visible). On aligne leurs scrollTop en
+    // évitant les boucles (garde par dernier scroll).
+    if (Math.abs(el.scrollTop - box.scrollTop) > 1) {
+      el.scrollTop = box.scrollTop;
+    }
   }
 
   function showTranscriptTooltip(el) {
@@ -649,7 +655,10 @@
     const conf = el.dataset.conf || '';
     const poso = el.dataset.poso || '';
     const source = el.dataset.source || '';
-    let s = `<i>${garble}</i> → <b>${correct}</b>`;
+    // Médicament correctement transcrit (garble == correct) : inutile de
+    // répéter « quétiapine → quétiapine » ; on montre le nom + infos.
+    const memGarble = garble.toLowerCase() === correct.toLowerCase() ? '' : garble;
+    let s = memGarble ? `<i>${memGarble}</i> → <b>${correct}</b>` : `<b>${correct}</b>`;
     // Médicament : posologie et « à confirmer » pour les pistes phonétiques.
     if (source === 'phonetic') {
       s += ` <span class="text-slate-500">${poso}</span>`;
@@ -7436,6 +7445,13 @@
     // --- Miroir HTML du transcrit : sync du défilement + rollover ---
     $('transcript').addEventListener('scroll', syncTranscriptScroll);
     if ($('transcriptHtml')) {
+      // La surface visible est le miroir : rouler dessus doit aussi déplacer
+      // le textarea (scrollbar native + lecture du ``scrollTop``), et son
+      // propre défilement doit refléter la position du textarea.
+      $('transcriptHtml').addEventListener('scroll', () => {
+        const box = $('transcript');
+        if (box) box.scrollTop = $('transcriptHtml').scrollTop;
+      });
       $('transcriptHtml').addEventListener('pointerover', (ev) => {
         const t = ev.target.closest('.term-corr');
         if (t) showTranscriptTooltip(t);

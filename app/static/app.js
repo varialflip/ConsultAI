@@ -737,10 +737,17 @@
         if (!name) continue;
         const garble = it.garble || name;
         const score = typeof it.score === 'number' ? `${it.score}` : '';
-        out.push({
-          garble, correct: name, confidence: score,
-          posology: it.posology || '', source: it.source || '',
-        });
+        const base = { correct: name, confidence: score,
+          posology: it.posology || '', source: it.source || '' };
+        // Le médicament a été DÉFORMÉ par le STT : on marque aussi bien la
+        // forme fautive (garble) que la forme correcte si le texte la contient
+        // (ex. « rispiridone » ET « risperidone » dans la même dictée).
+        if (garble && garble.toLowerCase() !== name.toLowerCase()) {
+          out.push({ ...base, garble });
+          out.push({ ...base, garble: name });
+        } else {
+          out.push({ ...base, garble: name });
+        }
       }
     }
     return out;

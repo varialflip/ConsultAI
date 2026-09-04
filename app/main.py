@@ -3511,7 +3511,24 @@ def create_consultation(
 @app.get("/api/consultations/{consultation_id}")
 def get_consultation(consultation_id: int, request: Request, db: Session = Depends(get_db)):
     user = current_user(request)
-    return _get_owned_consultation(db, consultation_id, user).to_dict()
+    consultation = _get_owned_consultation(db, consultation_id, user)
+    data = consultation.to_dict()
+    # Termes gériatriques (module À PART) : paire {garble, correct} pour le
+    # SURlignage du transcrit à la réouverture (NOTAMMENT après refresh) —
+    # mêmes curations que pendant la dictée / à la génération.
+    try:
+        texte = (consultation.raw_transcript or "").strip()
+        if texte:
+            _g_corr, geriatric = geriatric_terms.apply_inline_replacements(
+                texte, langue=preferences.document_language(),
+            )
+            data["geriatric"] = geriatric or []
+        else:
+            data["geriatric"] = []
+    except Exception:
+        logger.exception("Termes gériatriques indisponibles (consultation %s)", consultation_id)
+        data["geriatric"] = []
+    return data
 
 
 @app.patch("/api/consultations/{consultation_id}")

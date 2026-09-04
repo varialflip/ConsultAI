@@ -3,6 +3,17 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Transcription : persistance des info-bulles au rechargement
+
+- **Les tooltips du transcrit persistent désormais après refresh / réouverture
+  d'un brouillon.** `GET /api/consultations/{id}` renvoie le champ `geriatric`
+  (termes gériatriques recalculés) aux côtés du `med_grounding_json` existant,
+  et `openDraft` (frontend) reconstruit le registre `transcriptCorrections` à
+  partir de `draft.geriatric` + des médicaments persistés puis ré-affiche le
+  surlignage. Auparavant la persistance s'appuyait uniquement sur
+  `med_grounding_json` (onglet Validation), et l'onglet Transcription perdait
+  ses tooltips au rechargement.
+
 ## 2026-09-04 — Transcription : surlignage + info-bulles (termes gériatriques ET médicaments)
 
 - **L'onglet Transcription surligne désormais les cibles au rollover.** La

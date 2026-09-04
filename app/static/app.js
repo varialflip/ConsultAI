@@ -4426,6 +4426,15 @@
           medItemsPersistés = JSON.parse(draft.med_grounding_json);
         } catch (_) { medItemsPersistés = []; }
       }
+      // Tooltips du transcrit à la réouverture (après refresh) : reconstruire
+      // le registre à partir des termes gériatriques (calculés à la volée,
+      // champ ``geriatric``) + des médicaments persistés.
+      if (draft.geriatric || medItemsPersistés.length) {
+        transcriptCorrections = buildTranscriptCorrections(draft.geriatric, medItemsPersistés);
+        renderTranscriptHtml($('transcript').value);
+      } else {
+        transcriptCorrections = [];
+      }
       if (Array.isArray(medItemsPersistés) && medItemsPersistés.length) {
         state.medGroundingOn = true;
         renderMedItems(medItemsPersistés);

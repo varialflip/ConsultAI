@@ -1502,6 +1502,13 @@ class Matcher:
                 prev = words[i - 1].strip(" \t,;:.()\"'’")
                 if prev and _lookup_exact(f"{prev} {jet}"):
                     continue
+            # TÊTE de composé déjà résolu (« Hamelot d'épine » → amlodipine) :
+            # « Hamelot » seul ne doit pas repasser en phonétique vers ADMELOG
+            # alors que le bigramme complet est seedé déterministe.
+            if i + 1 < len(words):
+                nxt = words[i + 1].strip(" \t,;:.()\"'’")
+                if nxt and _lookup_exact(f"{jet} {nxt}"):
+                    continue
             # Contexte : une dose/ancre à portée ou un voisin chiffre petit —
             # sinon ça spatit de la prose sur la phonétique même bruitée. Un gros
             # nombre (>999) est une date/n° de dosier, jamais une doze.
@@ -1622,6 +1629,14 @@ class Matcher:
                 b = words[i + 1].strip(" \t,;:.()\"'’")
                 pa = norm_phon(a)
                 pb = norm_phon(b)
+                # Une paire portant un mot de PROTOCOLE / dose (« BID
+                # oméprazole ») ou une ancre n'est jamais un médicament : le
+                # mot de posologie se colle à un nom déjà résolu ou à de la
+                # prose, pas d'un garble scindé (faux positif 2026-09-03).
+                if (pa in PROTOCOL_WORDS or pb in PROTOCOL_WORDS
+                        or pa in ANCHOR_WORDS or pb in ANCHOR_WORDS
+                        or _est_prose(pa) or _est_prose(pb)):
+                    continue
                 # Au moins un des deux est court et « ressemble » au début de la
                 # déformation ; le tout doit rester raisonnable en taille.
                 # Une paire dont les DEUX mots font >= 5 lettres est normalement
@@ -1685,6 +1700,11 @@ class Matcher:
                 if s2 < seuil2:
                     continue
                 if can2 is None or norm_phon(can2) in vus:
+                    continue
+                # Output banni (« vitamin e » = anglais) : la paire de la passe
+                # phonétique doit respecter le même garde que l'unigramme.
+                if ((base2 or brand2 or "") and norm_orth(base2 or brand2)
+                        .replace(" ", "") in BAN_ORTH):
                     continue
                 vus.add(norm_phon(can2))
                 result.append({
@@ -1782,6 +1802,12 @@ class Matcher:
             if i > 0:
                 prev = words[i - 1].strip(" \t,;:.()\"'’")
                 if prev and _lookup_exact(f"{prev} {jet}"):
+                    continue
+            # TÊTE de composé déjà résolu (« Hamelot d'épine » → amlodipine) :
+            # « Hamelot » seul ne doit pas repasser en suggestion vers ADMELOG.
+            if i + 1 < len(words):
+                nxt = words[i + 1].strip(" \t,;:.()\"'’")
+                if nxt and _lookup_exact(f"{jet} {nxt}"):
                     continue
             cand = self._resolve_single(words[i])
             # Un repli PHONÉTIQUE peut porter une similarité bien plus haute que

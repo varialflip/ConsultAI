@@ -5,6 +5,13 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-09-03 — Grounding : récuration prose/STT très confiant, lab, base régénérée
 
+- **Composés multi-mots** : la TÊTE d'un composé déjà résolu est bloquée dans
+  les pistes phonétiques/suggestion (`Hamelot d'épine` → amlodipine, sans que
+  `Hamelot` seul repasse vers ADMELOG) ; une paire portant un mot de protocole
+  ou une ancre n'est jamais un médicament (`BID oméprazole`).
+- **`BAN_ORTH` étendu à la passe des paires** : « La vitamine » → `vitamin e`
+  (anglais) ne sort plus d'aucune voie.
+
 27 faux positifs constatés sur le corpus récent, traités en quatre axes :
 
 - **Garde « prose très confiante »** (`SUGGEST_HIGH_SIM = 0.85`) : un jeton

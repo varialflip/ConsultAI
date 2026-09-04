@@ -3,6 +3,20 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Suggestions médicaments : le LLM les applique (consigne + migration)
+
+- **Les blocs `MEDICAMENTS_SOUPCONNES` / `MEDICAMENTS_PHONETIQUES` sont désormais
+  à APPLIQUER, plus à « confirmer sans les recopier normalement ».** Un modèle
+  rapide SANS raisonnement (DeepSeek v4 flash, reasoning off) lisait les
+  candidats comme des « pistes à ne pas copier aveuglément » et les écartait
+  tous. La consigne générale (§ 4, FR + EN) dit maintenant : si le terme
+  déformé de la dictée est phonétiquement proche du candidat suggéré ET
+  cohérent avec posologie/contexte, écris le nom suggéré ; écarte-le seulement
+  s'il contredit manifestement le contexte. Migration
+  `migrate_general_prompt_meds_apply_hints` porte la consigne dans la version
+  personnalisée en base (idempotente, laisse intact un fragment retravaillé par
+  le médecin).
+
 ## 2026-09-04 — Transcription : persistance des info-bulles au rechargement
 
 - **Les tooltips du transcrit persistent désormais après refresh / réouverture

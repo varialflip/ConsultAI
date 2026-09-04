@@ -1986,6 +1986,79 @@ _MEDS_RESOLUTION_NEW_EN = (
     "(doubtful-items rule, section 1)."
 )
 
+#: Consigne « applique le candidat suggéré » — remplace celle d'« outils au
+#: LLM » (2026-09-04). Un modèle RAPIDE SANS raisonnement (DeepSeek v4 flash,
+#: reasoning off) lisait les blocs MEDICAMENTS_* comme des « pistes à ne pas
+#: copier aveuglément » et écartait le candidat plutôt que de l'appliquer.
+#: Nouveau ton : le candidat est le nom le plus PROBABLE à APPLIQUER quand il
+#: est phonétiquement proche + cohérent avec la posologie/contexte.
+_MEDS_APPLY_HINTS_OLD_FR = (
+    "Les « médicaments détectés » fournis dans le prompt sont des pistes à "
+    "confirmer avec la dictée, jamais des vérités à recopier aveuglément — un "
+    "candidat incohérent avec la pathologie ou la posologie est écarté (règle "
+    "des éléments douteux, § 1)."
+)
+_MEDS_APPLY_HINTS_NEW_FR = (
+    "Applique les blocs de candidats du prompt (`MEDICAMENTS_SOUPCONNES` / "
+    "`MEDICAMENTS_PHONETIQUES`) : ils donnent le nom de médicament le plus "
+    "PROBABLE d'un terme déformé de la dictée (« Cinémette » → Sinemet). Si "
+    "le terme déformé de la dictée est phonétiquement proche du candidat "
+    "suggéré ET que ce candidat est cohérent avec la posologie et le contexte "
+    "clinique, écris le nom suggéré dans la note ; écarte le candidat "
+    "seulement s'il contredit manifestement la posologie ou la pathologie."
+)
+_MEDS_APPLY_HINTS_OLD_EN = (
+    'The "detected medications" provided in the prompt are leads to be '
+    'confirmed against the dictation, never truths to copy blindly — a '
+    'candidate inconsistent with the pathology or dosage is set aside '
+    "(doubtful-items rule, section 1)."
+)
+_MEDS_APPLY_HINTS_NEW_EN = (
+    "Apply the candidate blocks in the prompt (`MEDICAMENTS_SOUPCONNES` / "
+    "`MEDICAMENTS_PHONETIQUES`): they give the most PROBABLE medication name "
+    "for a deformed term in the dictation (\"Cinémette\" → Sinemet). If the "
+    "deformed term in the dictation is phonetically close to the suggested "
+    "candidate AND that candidate is coherent with the dosage and the "
+    "clinical context, write the suggested name in the note; set the "
+    "candidate aside only if it plainly contradicts the dosage or the "
+    "condition."
+)
+
+
+def migrate_general_prompt_meds_apply_hints(db: Session) -> int:
+    """Porte dans la consigne générale EN BASE la consigne « applique le
+    candidat suggéré » (2026-09-04). Même mécanique que les migrations
+    précédentes : on remplace le fragment « pistes à confirmer... jamais des
+    vérités à recopier aveuglément » par la nouvelle consigne d'application.
+    Un fragment retravaillé par le médecin est laissé intact et signalé."""
+    touches = 0
+    for cle, ancienne, nouvelle in (
+        ("general_prompt_fr", _MEDS_APPLY_HINTS_OLD_FR, _MEDS_APPLY_HINTS_NEW_FR),
+        ("general_prompt_en", _MEDS_APPLY_HINTS_OLD_EN, _MEDS_APPLY_HINTS_NEW_EN),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if nouvelle in row.value:
+            continue  # déjà en place — idempotent
+        if ancienne not in row.value:
+            logger.info(
+                "Consigne « %s » : fragment « médicaments détectés » modifié, "
+                "consigne d'application des candidats laissée au panneau.",
+                cle,
+            )
+            continue
+        row.value = row.value.replace(ancienne, nouvelle)
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » : consigne d'application des candidats appliquée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
 
 def migrate_general_prompt_meds_resolution(db: Session) -> int:
     """Porte dans la consigne générale EN BASE la règle de résolution des
@@ -2668,6 +2741,7 @@ def init_db() -> None:
         migrate_general_prompt_plan_medicament_nu(db)
         migrate_general_prompt_antecedents_hospitalisation_placement(db)
         migrate_general_prompt_meds_resolution(db)
+        migrate_general_prompt_meds_apply_hints(db)
         migrate_general_prompt_phonetic_origin(db)
         migrate_general_prompt_localisation_corrections(db)
         migrate_template_med_grouping(db)

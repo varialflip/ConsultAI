@@ -974,8 +974,7 @@ des médicaments », défaut `false`). Une fois activé :
   s'affichent sous leur **nom canonique** (« la Six » → **Lasix**) ; les
   candidats phonétiques gardent le nom dicté + flèche vers la cible.
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
-  dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`) — des pistes pour le
-  modèle, jamais des vérités à recopier aveuglément. S'y ajoutent les
+  dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`). S'y ajoutent les
   **candidats phonétiques** (bloc `MEDICAMENTS_PHONETIQUES`, étiquetés
   « à confirmer ») : le G2P français du moteur (`phonetiques_texte`) remonte
   pour chaque jeton non résolu et « dosé » le meilleur voisin phonétique

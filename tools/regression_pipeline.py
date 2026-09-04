@@ -84,7 +84,7 @@ def _rendu_par_gabarit() -> List[dict]:
         extraction = {
             "en_tete": en_tete,
             "sections": sections,
-            "corrections": ["Xanax 0,5 → à confirmer"],
+            "corrections": ["[Médicaments] ...Xanax 0,5... → à confirmer"],
         }
         langue = gabarit["language"]
         rendu = note_renderer.render_note(layout, extraction, langue)
@@ -165,7 +165,7 @@ def _verifier(resultats: List[dict]) -> None:
              else "## Corrections et éléments à valider")
         if titre_corr not in texte:
             raise AssertionError(f"{nom} : rubrique de corrections absente")
-        if "Xanax 0,5 → à confirmer" not in texte:
+        if "Xanax 0,5" not in texte or "→ à confirmer" not in texte:
             raise AssertionError(f"{nom} : élément de correction perdu")
 
         # 7. Une rubrique entière vide → titre ET contenu supprimés, et la

@@ -2122,6 +2122,62 @@ def migrate_general_prompt_phonetic_origin(db: Session) -> int:
     return touches
 
 
+#: Empreintes des consignes générales LIVRÉES avant la localisation des
+#: corrections (rubrique + contexte). Même mécanique que les migrations
+#: précédentes : on ne remplace la valeur en base que si elle est encore
+#: EXACTEMENT le défaut livré, pour ne jamais écraser une consigne
+#: personnalisée. Empreintes calculées contre ``default_prompts`` avant
+#: l'édition § 6 (centre le format des lignes sur la rubrique et le contexte).
+_OLD_GENERAL_PROMPT_SHA_LOCALISATION = {
+    "general_prompt_fr": "b1eefb1ae52758b924737c0c851af9a0f0b26852b10d075971ca5348c64a1190",
+    "general_prompt_en": "cc310030f00c59eb30739b9ac8ff978ada81532047238b3837b93cd1aa55ebe1",
+}
+
+
+def migrate_general_prompt_localisation_corrections(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE la localisation des corrections :
+    chaque ligne de « Corrections et éléments à valider » commence par la
+    rubrique du gabarit (entre crochets) suivie d'un extrait de contexte,
+    pour que le clinicien retrouve aisément l'élément dans le document.
+
+    La consigne générale vit en base (elle surcharge le module
+    ``default_prompts``) : corriger le module seul laisserait l'installation
+    en service avec l'ancien texte. Comme pour les migrations précédentes, la
+    valeur n'est remplacée que si elle est encore EXACTEMENT le défaut livré
+    (comparaison par empreinte) ; une consigne personnalisée est laissée
+    intacte et signalée au journal.
+    """
+    import hashlib
+
+    touches = 0
+    for cle, ancienne in _OLD_GENERAL_PROMPT_SHA_LOCALISATION.items():
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if hashlib.sha256(row.value.encode()).hexdigest() != ancienne:
+            logger.info(
+                "Consigne « %s » personnalisée : migration « localisation des "
+                "corrections » ignorée (laissez-la telle quelle).",
+                cle,
+            )
+            continue
+        nouveau = default_prompts.PROMPTS.get("fr" if cle.endswith("_fr") else "en")
+        if row.value == nouveau:
+            continue
+        row.value = nouveau
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » mise à jour : corrections localisées par rubrique "
+            "+ contexte.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Ancienne phrase de regroupement des médicaments LIVRÉE dans les gabarits
 #: avant la reformulation « indication dictée ou cliniquement évidente ».
 #: Même mécanique que les migrations de la consigne générale : on ne remplace
@@ -2610,6 +2666,7 @@ def init_db() -> None:
         migrate_general_prompt_antecedents_hospitalisation_placement(db)
         migrate_general_prompt_meds_resolution(db)
         migrate_general_prompt_phonetic_origin(db)
+        migrate_general_prompt_localisation_corrections(db)
         migrate_template_med_grouping(db)
         migrate_template_suivi_resume_stays(db)
         migrate_template_suivi_resume_treatment_stays(db)

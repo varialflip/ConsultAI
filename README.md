@@ -666,9 +666,12 @@ termine toujours par la section des **éléments à valider**, sous l'intitulé
 exact prévu par le gabarit (`## ÉLÉMENTS À VALIDER` dans les gabarits français
 livrés). Liste télégraphique à deux mentions possibles seulement —
 « correction apportée : … » ou « … → à confirmer » —, « Aucun élément à
-signaler. » quand il n'y a rien à rapporter ; jamais « Confirmé ». Au-delà de
-8 éléments, ils sont regroupés par catégorie. La consigne générale l'exige
-(§ 6).
+signaler. » quand il n'y a rien à rapporter ; jamais « Confirmé ». Chaque ligne
+commence par la **rubrique** du gabarit où se trouve l'élément (titre exact,
+entre crochets) suivie d'un **contexte** (extrait de 5-10 mots autour de
+l'élément, entre points de suspension), pour le localiser aisément dans le
+document — « [Médicaments] ...Xanax 0,5... → à confirmer ». Au-delà de 8
+éléments, ils sont regroupés par catégorie. La consigne générale l'exige (§ 6).
 
 **Structure des rubriques.** La consigne générale impose deux règles de mise en
 forme (§ 1 et § 3), renforcées en 2026-08-17 pour les modèles plus sensibles :

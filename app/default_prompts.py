@@ -190,9 +190,9 @@ Avant d'émettre le rapport, dernière passe destinée à écarter toute inventi
 
 Termine **toujours** par la section des éléments à valider, jamais omise :
 
-- Une ligne par élément, format télégraphique, sans justification. Deux mentions possibles, et pas d'autres :
-  - correction retenue avec confiance → « nom du patient : Georges Thhiber → correction apportée : Georges Tibert » ;
-  - lecture encore incertaine → « dose : 2,5 ou 5 mg → à confirmer ».
+- Une ligne par élément, format télégraphique, sans justification. Chaque ligne commence par la **rubrique** du gabarit où se trouve l'élément (titre exact, entre crochets), suivie d'un **contexte** — extrait de 5 à 10 mots du texte environnant, entre points de suspension, suffisant pour retrouver l'élément dans le document. Deux mentions possibles, et pas d'autres :
+  - correction retenue avec confiance → « [Rubrique] ...contexte... → correction apportée : terme corrigé » ;
+  - lecture encore incertaine → « [Rubrique] ...contexte... → à confirmer ».
   N'écris jamais « Confirmé ».
 - Rien à signaler → une seule ligne : « Aucun élément à signaler. » (seul texte de statut admis dans le rapport).
 - Plus de 8 éléments → regroupe par catégorie plutôt que d'énumérer individuellement (« 5 dates approximatives non confirmées », « 3 noms propres incertains : X, Y, Z »).
@@ -344,9 +344,9 @@ Before emitting the report, a final pass to rule out any invention:
 
 Always finish with the items-to-verify section, never omitted:
 
-- One line per item, telegraphic format, no justification. Two mentions possible, and no others:
-  - correction retained with confidence → "patient name: Georges Thhiber → correction made: Georges Tibert" ;
-  - still uncertain reading → "dose: 2.5 or 5 mg → to be confirmed".
+- One line per item, telegraphic format, no justification. Each line starts with the **section** heading from the template where the item appears (exact heading, in square brackets), followed by a **context** — a 5-to-10-word excerpt from the surrounding text, between ellipsis, sufficient to locate the item in the document. Two mentions possible, and no others:
+  - correction retained with confidence → "[Section] ...context... → correction made: corrected term" ;
+  - still uncertain reading → "[Section] ...context... → to be confirmed".
   Never write "Confirmed".
 - Nothing to flag → a single line: "Nothing to report." (the only status text allowed in the report).
 - More than 8 items → group by category rather than listing individually ("5 approximate dates not confirmed", "3 uncertain proper nouns: X, Y, Z").

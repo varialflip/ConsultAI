@@ -354,7 +354,7 @@ _EXTRACTION_SCHEMA_FR = """\
   "sections": {
     "Rubrique 1": "paragraphe(s)" | ["item 1", "item 2"] | {"phrases": "...", "items": ["..."]} | {"Libellé étiqueté": "valeur"}
   },
-  "corrections": ["ligne télégraphique", ...]
+  "corrections": ["[Rubrique] ...contexte... → verdict", ...]
 }"""
 
 _EXTRACTION_SCHEMA_EN = """\
@@ -363,7 +363,7 @@ _EXTRACTION_SCHEMA_EN = """\
   "sections": {
     "Section 1": "paragraph(s)" | ["item 1", "item 2"] | {"phrases": "...", "items": ["..."]} | {"Label": "value"}
   },
-  "corrections": ["telegraphic line", ...]
+  "corrections": ["[Section] ...context... → verdict", ...]
 }"""
 
 
@@ -446,7 +446,7 @@ def build_extract_user_prompt(
         "\"Non servi\", \"À déterminer\", \"…\").\n"
         "- Élément réellement entendu mais douteux → la lecture la plus "
         "probable dans sa rubrique ET une ligne en « corrections », au format "
-        "télégraphique (« Xanax 0,5 → à confirmer »).\n"
+        "« [Rubrique] ...contexte... → à confirmer ».\n"
         "- Listes (médicaments, antécédents, examen) : une chaîne par élément. "
         "Impression et Plan : une entrée par problème / action.\n"
         "- N'inclus JAMAIS le nom ni le numéro de dossier du patient.\n"

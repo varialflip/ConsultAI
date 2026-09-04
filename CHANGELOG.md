@@ -5,6 +5,12 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-09-04 — Grounding : réutilisation de la liste live, dictée inline harmonisée 1/2 passes
 
+- **Corrections localisées par rubrique + contexte** : chaque ligne de
+  « Corrections et éléments à valider » commence désormais par la rubrique du
+  gabarit (entre crochets) suivie d'un extrait de contexte, pour retrouver
+  aisément l'élément dans le document (« [Médicaments] ...Xanax 0,5... →
+  à confirmer »). Consigne générale et schéma d'extraction mis à jour, avec
+  migration en base respectant les consignes personnalisées.
 - **Réutilisation de la liste pointée (latence au « Terminer »)** : la liste
   des médicaments est désormais calculée **une seule fois**, en continu pendant
   la dictée (`med_grounding_json`, accumulée par frontière à `maxi_phon=8`) et

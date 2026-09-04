@@ -2096,8 +2096,15 @@ def migrate_general_prompt_meds_apply_hints(db: Session) -> int:
 #: Sinemet). Nouvelle règle de DÉFAUT inversée : en cas d'incertitude, le
 #: candidat suggéré gagne d'office ; on ne l'écarte que sur contradiction
 #: manifeste, jamais sur un simple doute.
-_FAVOR_SUGGESTIONS_OLD_FR = _MEDS_APPLY_HINTS_NEW_FR
-_FAVOR_SUGGESTIONS_NEW_FR = (
+#:
+#: vTERRE (2026-09-04, soir) : sur la note régénérée le modèle appliquait la
+#: piste MAIS écrivait « Levodopa (Cinémette) » — il conservait le terme dicté
+#: entre parenthèses au lieu de le remplacer. v2 ajoute une prescription
+#: explicite : le nom suggéré REMPLACE ENTIÈREMENT le terme déformé, le mot
+#: dicté n'est jamais conservé dans la note (ni entre parenthèses, ni accolé).
+#: `_FAVOR_SUGGESTIONS_OLD_*` pointe sur la v1 (déjà en base) pour que la
+#: migration refile la base en v2.
+_FAVOR_SUGGESTIONS_V1_FR = (
     "Applique les blocs de candidats du prompt (`MEDICAMENTS_SOUPCONNES` / "
     "`MEDICAMENTS_PHONETIQUES`) : ils donnent le nom de médicament le plus "
     "PROBABLE d'un terme déformé de la dictée (« Cinémette » → Sinemet). En "
@@ -2108,8 +2115,21 @@ _FAVOR_SUGGESTIONS_NEW_FR = (
     "une orthographe inhabituelle ne justifie jamais de revenir au terme brut "
     "de la dictée."
 )
-_FAVOR_SUGGESTIONS_OLD_EN = _MEDS_APPLY_HINTS_NEW_EN
-_FAVOR_SUGGESTIONS_NEW_EN = (
+_FAVOR_SUGGESTIONS_OLD_FR = _FAVOR_SUGGESTIONS_V1_FR
+_FAVOR_SUGGESTIONS_NEW_FR = (
+    "Applique les blocs de candidats du prompt (`MEDICAMENTS_SOUPCONNES` / "
+    "`MEDICAMENTS_PHONETIQUES`) : ils donnent le nom de médicament le plus "
+    "PROBABLE d'un terme déformé de la dictée (« Cinémette » → Sinemet). En "
+    "cas d'incertitude sur un nom — terme déformé, douteux ou inconnu — écris "
+    "d'office le candidat suggéré : c'est la lecture la plus probable. "
+    "N'écarte un candidat QUE s'il contredit manifestement la posologie, le "
+    "principe attendu ou la pathologie ; un simple doute, une hésitation ou "
+    "une orthographe inhabituelle ne justifie jamais de revenir au terme brut "
+    "de la dictée. **Le nom suggéré REMPLACE entièrement le terme dicté : ne "
+    "conserve jamais le mot déformé dans la note — ni entre parenthèses, ni "
+    "accolé, ni comme alternative.**"
+)
+_FAVOR_SUGGESTIONS_V1_EN = (
     "Apply the candidate blocks in the prompt (`MEDICAMENTS_SOUPCONNES` / "
     "`MEDICAMENTS_PHONETIQUES`): they give the most PROBABLE medication name "
     "for a deformed term in the dictation (\"Cinémette\" → Sinemet). When "
@@ -2118,6 +2138,19 @@ _FAVOR_SUGGESTIONS_NEW_EN = (
     "candidate aside ONLY if it plainly contradicts the dosage, the expected "
     "drug, or the condition; mere doubt, hesitation, or unusual spelling "
     "never justifies falling back to the raw dictated term."
+)
+_FAVOR_SUGGESTIONS_OLD_EN = _FAVOR_SUGGESTIONS_V1_EN
+_FAVOR_SUGGESTIONS_NEW_EN = (
+    "Apply the candidate blocks in the prompt (`MEDICAMENTS_SOUPCONNES` / "
+    "`MEDICAMENTS_PHONETIQUES`): they give the most PROBABLE medication name "
+    "for a deformed term in the dictation (\"Cinémette\" → Sinemet). When "
+    "unsure about a name — deformed, doubtful, or unknown — write the "
+    "suggested candidate by default: it is the most probable reading. Set a "
+    "candidate aside ONLY if it plainly contradicts the dosage, the expected "
+    "drug, or the condition; mere doubt, hesitation, or unusual spelling "
+    "never justifies falling back to the raw dictated term. **The suggested "
+    "name FULLY replaces the dictated term: never keep the deformed word in "
+    "the note — neither in parentheses, nor adjacent, nor as an alternative.**"
 )
 
 

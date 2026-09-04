@@ -145,7 +145,9 @@ _USER_PROMPT_LABELS = {
             "candidat est le nom le plus PROBABLE du terme déformé — en cas "
             "d'incertitude (terme déformé, douteux ou inconnu), écris-le "
             "d'office dans la note ; ne l'écarte QUE s'il contredit "
-            "manifestement la posologie ou le contexte clinique :"
+            "manifestement la posologie ou le contexte clinique. Le nom suggéré "
+            "REMPLACE entièrement le terme dicté : ne conserve jamais le mot "
+            "déformé dans la note (ni entre parenthèses, ni accolé) :"
         ),
         "homophones": (
             "HOMOPHONIES PERTINENTES POUR CETTE TRANSCRIPTION — erreurs types "
@@ -186,7 +188,9 @@ _USER_PROMPT_LABELS = {
             "candidate is the most PROBABLE name of the deformed term — when in "
             "doubt (deformed, doubtful, or unknown term), write it by default "
             "in the note; set it aside ONLY if it plainly contradicts the "
-            "dosage or the clinical context:"
+            "dosage or the clinical context. The suggested name FULLY replaces "
+            "the dictated term: never keep the deformed word in the note "
+            "(neither in parentheses nor adjacent):"
         ),
         "homophones": (
             "MISHEARINGS RELEVANT TO THIS TRANSCRIPT — characteristic speech-"
@@ -212,6 +216,17 @@ def _bloc(libelle: str, balise: str, lignes: List[str]) -> str:
     return f"{libelle}\n<<<{balise}\n" + "\n".join(lignes) + f"\n{balise}>>>"
 
 
+def _marque(s: str) -> str:
+    """Forme d'affichage d'une cible de bloc : capitalise chaque mot, dé-ALLCAPS
+    les marques stockées en base (« SINEMET » → « Sinemet », « MOTILIUM » →
+    « Motilium »). Équivalent local de ``med_grounding.title_brand`` (évite
+    d'importer le moteur complet ici)."""
+    return " ".join(
+        w[:1].upper() + w[1:].lower() if w and w.isupper() else w
+        for w in (s or "").split()
+    )
+
+
 def _bloc_confiance(confiance: List[dict], libelle: str) -> Optional[str]:
     """Bloc ``CONFIANCE_MOTS`` : mots entendus avec incertitude, mêmes clés
     que ``build_user_prompt`` pour garder un seul libellé par langue."""
@@ -230,9 +245,11 @@ def _bloc_meds(med_hints: List[dict], libelles: dict) -> List[str]:
     Blocs ``MEDICAMENTS_SOUPCONNES`` et ``MEDICAMENTS_PHONETIQUES``.
 
     Les candidats SAINS du moteur de grounding sont des certitudes relatives ;
-    les candidats phonétiques (G2P) des PISTES à confirmer — on les isole dans
-    leur propre bloc étiqueté pour que le modèle ne les recopie jamais
-    aveuglément.
+    les candidats phonétiques (G2P) des pistes à appliquer par le modèle en cas
+    d'incertitude (consigne § 4, « favorise la suggestion »). La cible affichée
+    d'un candidat phonétique est ``canonical`` — CE QUI A MATCHÉ tel que le
+    moteur le canonise (marque si marque, générique sinon) — pour que le modèle
+    recopie exactement le nom attendu.
     """
     certains = []
     phonetiques = []
@@ -240,7 +257,14 @@ def _bloc_meds(med_hints: List[dict], libelles: dict) -> List[str]:
         nom = h.get("name") or ""
         poso = h.get("posology") or ""
         if h.get("source") == "phonetic":
-            ligne = f"- « {nom} » → {h.get('base') or h.get('brand')}"
+            # Cible affichée : CE QUI A MATCHÉ, tel que le moteur le canonise
+            # (``canonical`` — marque si la marque a matché, générique sinon,
+            # casse déjà correcte). Repli sur la marque/base pour un hint
+            # persisté antérieur (pas de clé ``canonical``).
+            cible = h.get("canonical") or _marque(h.get("brand") or "")
+            if not cible:
+                cible = h.get("base") or ""
+            ligne = f"- « {nom} » → {cible}"
             # ``conf`` = étiquette de confiance combinée (STT × similarité,
             # cf. ``Matcher.suggestions_texte``) : le modèle la pondère avec le
             # contexte clinique — plus elle est basse, plus la piste est forte

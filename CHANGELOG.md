@@ -29,6 +29,16 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   et Sinemet (lévodopa) devient le candidat phonétique UNIQUE (KINERET écarté,
   régression nulle sur les 4 transcripts de référence ; Eliquice→eliquis
   75→88 et Citagliptine→sitagliptine 92→100 par simulation assainie).
+- **La cible d'un hint phonétique est CE QUI A MATCHÉ.** Les items
+  `MEDICAMENTS_PHONETIQUES` portent désormais la clé `canonical` = le nom
+  canonisé par le moteur : une marque matchée affiche la marque
+  (« cinémète » → **Sinemet**, « motylium » → **Motilium**) ; un générique
+  matché affiche le générique (« Visoprolol » → bisoprolol). Le niveau de
+  correspondance réel (`level`) remplace le `BASE_GENERIC` codé en dur dans la
+  passe G2P. Rappel : sans lui, un modèle rapide voyait « Cinémette →
+  levodopa » et écrivait « Levodopa (Cinémette) » en conservant le garble —
+  la consigne § 4 interdit désormais explicitement de conserver le mot dicté
+  (ni entre parenthèses, ni accolé).
 
 ## 2026-09-04 — Transcription : persistance des info-bulles au rechargement
 

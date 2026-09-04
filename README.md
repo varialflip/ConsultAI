@@ -981,7 +981,10 @@ des médicaments », défaut `false`). Une fois activé :
   non cosmétique). « dilote » → Dilaudid, « kitsapine » → quetiapine,
   « Antoloque » → Pantoloc — et, depuis le fix « c » doux (2026-09-04),
   « cinémète » → **Sinemet** seul (l'ancienne règle « c »→/k/ le mettait à
-  égalité avec KINERET). **En cas d'incertitude sur un nom (terme déformé,
+  égalité avec KINERET). **La cible affichée est CE QUI A MATCHÉ** : marque
+  quand une marque a matché (« cinémète » → **Sinemet**, « motylium » →
+  **Motilium**), générique quand un générique a matché (« Visoprolol » →
+  bisoprolol). **En cas d'incertitude sur un nom (terme déformé,
   douteux ou inconnu), la consigne générale demande d'écrire d'office le
   candidat suggéré — la lecture la plus probable** — et de ne l'écarter que sur
   contradiction manifeste (posologie, principe attendu, pathologie) : un modèle

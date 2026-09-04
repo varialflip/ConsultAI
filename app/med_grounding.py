@@ -1568,7 +1568,7 @@ class Matcher:
                 cand = self._phonetic_candidats(jet)
             if not cand:
                 continue
-            can, base, brand, s = cand
+            can, base, brand, s, _lvl = cand
             poso = _dose_posology(texte, jet) or ""
             # Hors liste confirmée, la POSOLOGIE doit être crédible pour porter
             # la piste phonétique : un simple voisin numérique (valeur de lab
@@ -1621,9 +1621,12 @@ class Matcher:
                 "name": jet,              # le token déformé tel quel
                 "base": base or brand or can,
                 "brand": brand,
+                "canonical": can,         # CE QUI A MATCHÉ, tel que le moteur
+                                          # le canonise (marque → marque,
+                                          # générique → générique)
                 "posology": poso,
                 "score": int(round(s * 100)),
-                "level": "BASE_GENERIC",
+                "level": _lvl,
                 "source": "phonetic",
             })
             if len(result) >= maxi:
@@ -1702,7 +1705,7 @@ class Matcher:
                 cand2 = self._phonetic_candidats(paire)
                 if not cand2:
                     continue
-                can2, base2, brand2, s2 = cand2
+                can2, base2, brand2, s2, _lvl2 = cand2
                 # Sans dose crédible, une paire doit être douteuse ET très
                 # proche pour ne pas faire de la prose un médicament.
                 poso2 = _dose_posology(texte, paire) or ""
@@ -1722,9 +1725,10 @@ class Matcher:
                     "name": f"{a} {b}",
                     "base": base2 or brand2 or can2,
                     "brand": brand2,
+                    "canonical": can2,       # CE QUI A MATCHÉ (marque ↔ générique)
                     "posology": poso2,
                     "score": int(round(s2 * 100)),
-                    "level": "BASE_GENERIC",
+                    "level": _lvl2,
                     "source": "phonetic",
                 })
                 if len(result) >= maxi:
@@ -1898,6 +1902,9 @@ class Matcher:
                 "name": jet,                 # le token déformé tel quel
                 "base": base or brand or can,
                 "brand": brand,
+                "canonical": can,            # CE QUI A MATCHÉ, tel que le moteur
+                                             # le canonise (marque → marque,
+                                             # générique → générique)
                 "posology": _dose_posology(texte, jet) or "",
                 "score": int(round(sim * 100)),
                 "level": level,
@@ -1911,9 +1918,12 @@ class Matcher:
     def _phonetic_candidats(self, token):
         """Meilleur candidat phonétique d'un token, ou ``None``.
 
-        Retourne ``(canonical_display, base_generic, brand_name, sim)``. On
-        exclut les feuilles de marques et les cosmétiques/UV, dont la
-        phonétique rapproche souvent la prose.
+        Retourne ``(canonical_display, base_generic, brand_name, sim, level)``.
+        ``canonical_display`` est CE QUI A MATCHÉ tel que ``_canonicalize`` le
+        décide (marque → marque, générique → générique) ; ``level`` est le
+        niveau de correspondance réel de la ligne retenue (BRAND /
+        BASE_GENERIC…). On exclut les feuilles de marques et les
+        cosmétiques/UV, dont la phonétique rapproche souvent la prose.
         """
         q = phonetic_fr(token)
         if not q:
@@ -1950,10 +1960,10 @@ class Matcher:
             can = self._canonicalize(level, base, brand, bool(is_otc))
             if can is None:
                 continue
-            best = (sw, can, base or brand, brand)
+            best = (sw, can, base or brand, brand, level)
         if best is None:
             return None
-        return (best[1], best[2], best[3], best[0])
+        return (best[1], best[2], best[3], best[0], best[4])
 
     def normalize(self, text, conf=None, inline_safe=False):
         # ``inline_safe`` — mode « texte envoyé au LLM » : on ne réécrit que les

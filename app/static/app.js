@@ -606,27 +606,52 @@
     if (!el) return;
     el.textContent = text || '';               // pas d'HTML injecté : purge
     if (!(text || '').trim() || !transcriptCorrections.length) return;
-    let html = esc(text);
-    for (const c of transcriptCorrections) {
-      if (!c || !c.correct) continue;
-      // Ce que le transcrit affiche réellement : la forme DICTÉE (garble). Par
-      // défaut on marque le garble ; si le terme est déjà écrit correctement
-      // (médicament bien transcrit), on marque la forme canonique.
-      const tok = esc(c.garble || c.correct);
+    // Phase 1 — repérer toutes les cibles (casse insensible) sur le texte BRUT,
+    // du plus long au plus court, en évitant les chevauchements : une cible
+    // n'est jamais enchâssée dans une autre déjà marquée.
+    const marquees = [];
+    const occupe = (s, e) => marquees.some(([ms, me]) => s < me && ms < e);
+    const ordonnees = [...transcriptCorrections]
+      .filter((c) => c && c.correct)
+      .sort((a, b) => (b.garble || b.correct).length - (a.garble || a.correct).length);
+    for (const c of ordonnees) {
+      const tok = c.garble || c.correct;
+      if (!tok) continue;
+      const re = new RegExp(escapeRegExp(tok), 'gi');
+      for (const m of text.matchAll(re)) {
+        const s = m.index, e = m.index + m[0].length;
+        if (!occupe(s, e)) {
+          marquees.push([s, e, c]);
+        }
+      }
+    }
+    // Phase 2 — émission : echappe chaque tranche de texte et enveloppe les
+    // cibles dans un span portant l'info-bulle.
+    marquees.sort((a, b) => a[0] - b[0]);
+    let html = '';
+    let pos = 0;
+    for (const [s, e, c] of marquees) {
+      html += esc(text.slice(pos, s));
+      const matched = esc(text.slice(s, e));
       const garble = esc(c.garble || '');
       const correct = esc(c.correct);
       const conf = c.confidence !== undefined && c.confidence !== null ? esc(c.confidence) : '';
       const poso = c.posology ? esc(c.posology) : '';
       const src = c.source ? escAttr(c.source) : '';
-      const span = `<span class="term-corr" ` +
+      html += `<span class="term-corr" ` +
         `data-garble="${escAttr(garble)}" ` +
         `data-correct="${escAttr(correct)}" ` +
         `data-conf="${escAttr(conf)}" ` +
         `data-poso="${escAttr(poso)}" ` +
-        `data-source="${src}">${tok}</span>`;
-      html = html.split(tok).join(span);
+        `data-source="${src}">${matched}</span>`;
+      pos = e;
     }
+    html += esc(text.slice(pos));
     el.innerHTML = html;
+  }
+
+  function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   function escAttr(value) {

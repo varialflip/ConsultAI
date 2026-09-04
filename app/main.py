@@ -3157,12 +3157,6 @@ async def api_generate(
             )
             if lowercase and lowercase.strip():
                 n_transcript = lowercase
-            # Nettoyer les séparateurs de liste (virgules, ; , points de jeton
-            # protocolaire) DANS les régions de liste confirmées : sans cela le
-            # modèle distingue « Amatine, 7,5 mg, TID » retiré ensuite de son
-            # rendu et le signale à tort dans « Éléments à valider ». N'affecte
-            # que le texte inline — jamais l'extraction ni la posologie stockée.
-            n_transcript = med_grounding.nettoyer_separateurs_liste(n_transcript)
             inline_fixed = {
                 med_grounding.norm_phon(repl)
                 for _span, repl, _score, _sim in inline_changes

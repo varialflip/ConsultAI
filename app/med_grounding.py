@@ -2838,56 +2838,6 @@ def _region_medlist(fixed: str) -> set:
     return {i for i, v in enumerate(medlist) if v}
 
 
-def _one_est_jeton_protocole(mot: str) -> bool:
-    """Le jeton (sans ponctuation finale) est-il une dose/protocole plutôt
-    qu'un nom de médicament ? Sert à décider si un point final de jeton est un
-    artéfact de liste (« TID. ») ou un vrai point de fin de phrase après un
-    nom (« Apixaban. »)."""
-    aplat = mot.rstrip(".!?,;:").lower()
-    if aplat in PROTOCOL_WORDS or aplat in DOSE_FREQ_SINGLE:
-        return True
-    return bool(POSOLOGY_RE.fullmatch(aplat) or DOSE_RE.fullmatch(aplat))
-
-
-def nettoyer_separateurs_liste(texte: str) -> str:
-    """Retire les séparateurs de liste de médicaments du texte inline destiné
-    au modèle de langage.
-
-    Le STT (`enable_automatic_punctuation`) insère des virgules entre les
-    entrées de la liste (« Amatine, 7,5 mg, TID »). OR `normalize` conserve
-    cette ponctuation (jonction ``" ".join`` + report du ``trail``) : le modèle
-    la voit, la retire dans son rendu, et la consigne la fait reporter comme
-    « correction » dans « Éléments à valider » sans aucun sens clinique.
-
-    Cette fonction n'agit QUE sur les régions de liste confirmées
-    (``_region_medlist``) et seulement sur la ponctuation de SÉPARATION :
-      - virgule / point-virgule de fin de jeton (simples séparateurs) ;
-      - point de fin de jeton d'une dose/protocole (« TID. » → « TID »),
-        jamais le point de fin de phrase après un nom de médicament.
-
-    Les virgules décimales (7,5 / 1,25) — internes au jeton — et la ponctuation
-    de prose hors région restent intactes. N'affecte que le texte inline :
-    l'extraction et la posologie stockée ne passent pas ici.
-    """
-    if not texte:
-        return texte
-    region = _region_medlist(texte)
-    if not region:
-        return texte
-    parts = re.split(r"(\s+)", texte)
-    idx = 0
-    out = []
-    for part in parts:
-        if part and not part.isspace():
-            if idx in region:
-                part = part.rstrip(",;")
-                if part.endswith(".") and _one_est_jeton_protocole(part):
-                    part = part.rstrip(".")
-            idx += 1
-        out.append(part)
-    return "".join(out)
-
-
 def extract_med_items(text: str, conf=None) -> list:
     """Liste pointée des médicaments détectés dans ``text`` (texte corrigé).
 

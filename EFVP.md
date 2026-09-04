@@ -457,6 +457,10 @@ résidence ni à la dénominalisation** :
   (`med_grounding_json` par consultation, même rétention que le brouillon),
   affichées dans l'onglet Validation **à titre indicatif** — le clinicien reste
   la seule autorité sur le document final, et rien n'est imprimé hors la note.
+  La marque `grounding_finalized_at` (horodatage de la dernière liste complète,
+  scan plein texte au « Terminer ») est une **métadonnée technique interne**,
+  non identifiante, même rétention que `med_grounding_json` — aucune donnée de
+  santé supplémentaire collectée.
 - **Confiance mot-à-mot (STT custom)** : le serveur renvoie la confiance de
   chaque mot (`words[].confidence`) ; elle n'est utilisée que **en mémoire,
   au moment du grounding** (seuil 0,92), jamais persistée en dehors du

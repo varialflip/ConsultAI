@@ -44,9 +44,11 @@ dossier intact — « Terminer » fonctionne encore après.
 
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -1188,6 +1190,242 @@ def _norm_spaces(s: str) -> str:
     return " ".join((s or "").lower().split())
 
 
+def _contexte_tranche(session: DictationSession, caracteres: int = 1500) -> Optional[str]:
+    """Queue du transcript déjà stable, passée en contexte à la tranche suivante.
+
+    La dictée découpe l'audio en tranches sans chevauchement ; une tranche
+    transcrit la fin d'une phrase sans savoir son début. On renvoie la fin du
+    texte ASSEMBLÉ (``session.parts[-1]`` = tranche en cours de stabilisation,
+    sinon la dernière tranche stable) pour servir de ``prompt`` au modèle ASR —
+    il maintient la continuité au lieu de réinventer la phrase coupée.
+    """
+    texte = (session.parts[-1] if session.parts else "") or ""
+    if not texte:
+        return None
+    corps = texte[-(caracteres + 1):]
+    # Couper proprement : on ne reprend que le dernier début de phrase
+    # (~dernier point) pour éviter de donner au modèle un fragment.
+    idx = max(corps.rfind(". "), corps.rfind(".\n"), corps.rfind("! "), corps.rfind("? "))
+    if idx > 0:
+        corps = corps[idx + 1:]
+    retour = corps.strip()
+    return retour or None
+
+
+# ---------------------------------------------------------------------------
+# Doublons de phrases du transcript (artefact STT)
+# ---------------------------------------------------------------------------
+# La reconnaissance vocale ressort parfois la MÊME phrase deux fois de suite,
+# au second passage légèrement reformulée : « Donc, j'ai augmenté l'hyprexa à
+# 2 %. / Donc, j'ai augmenté l'hyper-exa à 2 %. » ou une subordonnée répétée
+# seule (« ...quoique ces atteintes cognitives me semblaient plus importantes
+# que cela. / Que ces atteintes cognitives me semblaient plus importantes que
+# cela. »). Ces redites polluent le transcript brut (observé en note 40,
+# dictée live). On les retire en FIN de dictée, prudemment : seulement les
+# paires ADJACENTES clairement redondantes, et la première occurrence est
+# toujours conservée.
+_PHRASE_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+|\n+")
+
+
+def _norm_propre(s: str) -> str:
+    """Clé de comparaison d'une phrase : minuscules, espaces aplanis."""
+    return re.sub(r"\s+", " ", s or "").strip().lower()
+
+
+def _mots_sans_punct(s: str) -> List[str]:
+    """Mots d'une phrase, ponctuation finale et attachée retirée."""
+    return [w.lower().strip(".,;:!?…()'’\"") for w in s.split()]
+
+
+#: Ratio de similarité minimal (séquence, caractères) d'une vraie redite.
+#: Calibré sur note 40 : la paire MMSE « Sur 30, puis a augmenté à 23 sur 30. »
+#: / « Et puis, il a augmenté à 23 sur 30. » ressort à ~0.82, la reformulée
+#: hyprexa/hyper-exa à ~0.89. AU-DESSOUS de 0.85, on exige en plus l'absence de
+#: mot CONTENU distinct d'un seul côté (cf. ``_uniques_contenu``) : l'anaphore
+#: légitime « Elle est suivie pour une HTA. » / « … pour un diabète. » (ratio
+#: ~0.82) porte « hta » / « diabète », deux données cliniques distinctes — elle
+#: est préservée.
+_DOUBLON_RATIO = 0.80
+
+
+def _mots_contenu(mots: List[str]) -> List[str]:
+    """Mots « porteurs de sens » : >= 5 lettres alpha, hors chiffres."""
+    return [m for m in mots
+            if len(re.sub(r"[^a-zà-ÿœ]", "", m)) >= 5 and not m.isdigit()]
+
+
+def _mots_proches(x: str, y: str) -> bool:
+    """Deux mots dénotent-ils la même réalité ? Égalité, préfixe long, ou
+    similarité de séquence élevée (une déformation STT, hyprexa/hyper-exa)."""
+    if not x or not y:
+        return False
+    if x == y:
+        return True
+    if (len(x) >= 4 and y.startswith(x)) or (len(y) >= 4 and x.startswith(y)):
+        return True
+    return difflib.SequenceMatcher(None, x, y).ratio() >= 0.70
+
+
+def _uniques_contenu(wa: List[str], wb: List[str]) -> List[str]:
+    """Mots CONTENUS présents d'un seul côté — la preuve d'une donnée clinique
+    distincte (HTA vs diabète), donc de deux phrases LÉGITIMES."""
+    ca, cb = _mots_contenu(wa), _mots_contenu(wb)
+    uniques = []
+    for x in ca:
+        if not any(_mots_proches(x, y) for y in cb):
+            uniques.append(x)
+    for x in cb:
+        if not any(_mots_proches(x, y) for y in ca):
+            uniques.append(x)
+    return uniques
+
+
+def _est_doublon(a: str, b: str) -> bool:
+    """Vrai si ``b`` re-répète ``a`` (paire ADJACENTE du transcript).
+
+    Un doublon de dictée réapporte le MÊME énoncé : à l'identique, tronqué,
+    ou reformulé (hyprexa / hyper-exa). On compare la séquence de caractères
+    normalisée ; le seuil haut (>= 0.85) suffit pour l'identique et la
+    reformulée. Dans la bande 0.80-0.85, on exige en plus qu'aucune DONNÉE
+    clinique ne soit d'un seul côté (``_uniques_contenu``) — c'est elle qui
+    sépare la vraie redite (même fait, amorce différente : la paire MMSE de
+    note 40) de l'anaphore légitime (HTA / diabète). Un énoncé de moins de
+    3 mots n'est jamais traité.
+    """
+    na, nb = _norm_propre(a), _norm_propre(b)
+    if not na or not nb:
+        return False
+    wa, wb = _mots_sans_punct(na), _mots_sans_punct(nb)
+    if min(len(wa), len(wb)) < 3:
+        return False
+    ratio = difflib.SequenceMatcher(None, na, nb).ratio()
+    if ratio >= 0.85:
+        return True
+    if ratio >= _DOUBLON_RATIO:
+        return not _uniques_contenu(wa, wb)
+    return False
+
+
+def _dedupe_adjacent(texte: str) -> str:
+    """Retire les redites du transcript, première occurrence la plus complète
+    conservée.
+
+    Quatre formes de redites, toutes observées quand deux tranches se
+    succèdent sans contexte (découpage du live, note 40) :
+
+      * **Écho tronqué** : ``b`` n'est que le DÉBUT de ``a`` (le modèle ASR a
+        « commis » la phrase entière en N puis la re-récite tronquée en N+1)
+        → on écarte ``b`` ;
+      * **Extension** : ``b`` commence par ``a`` et la PROLONGE (la même
+        phrase, plus complète, au second passage) → on garde ``b`` ;
+      * **Redite pure / reformulée** : ``b`` répète ``a`` (identique ou
+        réécrite, hyprexa/hyper-exa) → on écarte ``b`` ;
+      * **Reprise de frontière** : la QUEUE de ``a`` est redite en TÊTE de
+        ``b`` par le chevauchement mot à mot → on replie les deux.
+
+    Aucun autre nettoyage : la ponctuation, les fragments courts et les
+    retours à la ligne sont laissés tels quels ; les phrases sont re-joignées
+    par un espace.
+    """
+    phrases = [p.strip() for p in re.split(_PHRASE_SPLIT_RE, texte or "") if p and p.strip()]
+    out: List[str] = []
+    for ph in phrases:
+        if not out:
+            out.append(ph)
+            continue
+        n_out = _mots_sans_punct(_norm_propre(out[-1]))
+        n_ph = _mots_sans_punct(_norm_propre(ph))
+        if min(len(n_out), len(n_ph)) >= 3:
+            # Écho tronqué : ph = début strict de la phrase précédente.
+            if len(n_ph) < len(n_out) and n_ph == n_out[:len(n_ph)]:
+                continue
+            # Extension : ph commence par la précédente et la prolonge.
+            if len(n_out) < len(n_ph) and n_out == n_ph[:len(n_out)]:
+                out[-1] = ph
+                continue
+        # Redite pure / reformulée.
+        if _est_doublon(out[-1], ph):
+            continue
+        # Reprise de frontière (queue/tête).
+        fusion = _dedupe_frontiere(out[-1], ph)
+        if fusion is not None:
+            out[-1] = fusion
+            continue
+        out.append(ph)
+    return " ".join(out)
+
+
+def _dedupe_frontiere(a: str, b: str) -> Optional[str]:
+    """Replie ``b`` sur ``a`` quand ``b`` re-dit la FIN de ``a`` (frontière).
+
+    On cherche le plus long chevauchement ENTRE la fin de ``a`` et le début de
+    ``b`` (alignement de mots). Si la queue de ``a`` et la tête de ``b``
+    partagent un suffixe/préfixe commun (>= 5 mots), ``b`` est un rappel de
+    la frontière : on les fusionne en ``a + (b sans le chevauchement)``.
+    Retourne la phrase fusionnée, ou ``None`` si rien à replier.
+
+    Exemple (note 40) : ``a`` = « ...on a cessé les traitements. » et ``b`` =
+    « on a cessé les traitements et on a introduit un nouveau. » → on replie
+    en « ...on a cessé les traitements et on a introduit un nouveau. ».
+    """
+    # Mots normalisés de chaque phrase (la ponctuation est gardée séparément).
+    ma = re.findall(r"[\wÀ-ÿ'’0-9-]+", a.lower())
+    mb = re.findall(r"[\wÀ-ÿ'’0-9-]+", b.lower())
+    if min(len(ma), len(mb)) < 5:
+        return None
+    # Plus long préfixe de ``b`` qui est aussi un suffixe de ``a``.
+    chevauchement = 0
+    for k in range(min(len(ma), len(mb)), 4, -1):
+        if ma[-k:] == mb[:k]:
+            chevauchement = k
+            break
+    if not chevauchement:
+        return None
+    # ``b`` commence par le rappel ; on en retire le préfixe redondant.
+    mots_b = b.split()
+    if len(mots_b) <= chevauchement:
+        return a       # ``b`` n'est QUE le rappel → on ne garde qu'``a``
+    reste = " ".join(mots_b[chevauchement:])
+    return (a.rstrip() + " " + reste.lstrip()).strip()
+
+
+def _assainir_doublons(session: DictationSession) -> None:
+    """Nettoie les redites du transcript complet en fin de dictée.
+
+    Déduplique le texte final, replie la session sur UNE part propre (les
+    confiances mot-à-mot sont fusionnées), impose le texte nettoyé dans la
+    consultation (``raw_transcript``) et le re-diffuse aux onglets ouverts.
+    Appelé APRÈS le filet de fin, juste avant la finalisation du grounding.
+    """
+    texte = " ".join(session.parts).strip()
+    if not texte:
+        return
+    propre = _dedupe_adjacent(texte)
+    if propre == texte:
+        return
+    conflits: dict = {}
+    for cmap in session.parts_conf:
+        if isinstance(cmap, dict):
+            conflits.update(cmap)
+    session.parts = [propre]
+    session.parts_conf = [conflits]
+    session.save()
+    with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
+        consultation = db.get(Consultation, session.consultation_id)
+        if consultation is not None:
+            consultation.raw_transcript = propre
+            consultation.updated_at = utcnow()
+            db.commit()
+    try:
+        live.publish(_session_owner(session), "transcript_correct", {
+            "consultation_id": session.consultation_id,
+            "session_id": session.id,
+            "parts": list(session.parts),
+        })
+    except Exception:
+        logger.exception("Re-diffusion du transcript nettoyé impossible")
+
+
 def maybe_schedule_grounding(session_id: str, username: str) -> None:
     """Arme (si besoin) la stabilisation d'une frontière de la dictée.
 
@@ -1283,7 +1521,9 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
             break
         curseur += payload.duration_seconds
         try:
-            result = transcribe_payload(payload, hints)
+            result = transcribe_payload(
+                payload, hints, contexte_precedent=_contexte_tranche(session),
+            )
         except TranscriptionError:
             continue
         texte = (result.get("transcript") or "").strip()
@@ -1303,8 +1543,24 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
     if not nouveaux:
         return None
 
+    # Redites dans la tranche réécrite : le STT ressort parfois la même phrase
+    # deux fois à la suite (reformulée au second passage). On déduplique le
+    # bloc réécrit sur le texte ORIGINAL (casse conservée) et on replie sur
+    # une part propre — la couverture audio du bloc est de toute façon
+    # remplacée par un seul intervalle ci-dessous.
+    texte_bloc = " ".join(nouveaux)
+    nouveau = _norm_spaces(texte_bloc)
+    dedup = _dedupe_adjacent(texte_bloc)
+    if _norm_spaces(dedup) != nouveau:
+        conflits: dict = {}
+        for c in nouveaux_conf:
+            if isinstance(c, dict):
+                conflits.update(c)
+        nouveaux = [dedup]
+        nouveaux_conf = [conflits]
+        nouveau = _norm_spaces(" ".join(nouveaux))
+
     ancien = _norm_spaces(" ".join(session.parts[a:b + 1]))
-    nouveau = _norm_spaces(" ".join(nouveaux))
     if ancien and ancien == nouveau:
         return session                     # déjà stable, rien à faire
 
@@ -1568,7 +1824,14 @@ def _transcribe_one(session: DictationSession, hints: str, final: bool,
     if realtime_mode() == "sse" and flush:
         result = _transcribe_one_sse(session, payload, hints)
     else:
-        result = transcribe_payload(payload, hints)
+        # Contexte de la tranche précédente : la queue du transcript déjà
+        # stable. Sans lui, chaque tranche ~10-11 s est transcrite isolément
+        # et le modèle réinvente la fin de la phrase coupée (doublons de
+        # frontière, note 40) — le rappel le garde sur la continuité.
+        contexte = _contexte_tranche(session)
+        result = transcribe_payload(
+            payload, hints, contexte_precedent=contexte,
+        )
     session.offset_seconds += payload.duration_seconds
 
     text = (result.get("transcript") or "").strip()
@@ -1640,7 +1903,9 @@ def _transcribe_one_sse(session: DictationSession, payload, hints: str) -> dict:
                        session.id, exc)
         _forget_realtime(session.id)
         try:
-            resultat = transcribe_payload(payload, hints)
+            resultat = transcribe_payload(
+                payload, hints, contexte_precedent=_contexte_tranche(session),
+            )
         except TranscriptionError:
             raise
         texte = (resultat.get("transcript") or "").strip()
@@ -1738,7 +2003,9 @@ def _transcribe_region(session: DictationSession, start: float, end: float, hint
             break
         curseur += payload.duration_seconds
         try:
-            result = transcribe_payload(payload, hints)
+            result = transcribe_payload(
+                payload, hints, contexte_precedent=_contexte_tranche(session),
+            )
         except TranscriptionError as exc:
             logger.warning(
                 "Dictée %s : trou [%.1f-%.1f s] écarté — %s",
@@ -1835,6 +2102,10 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
         if final:
             if runtime_config.value("stt_vad_finish_sweep") != "false":
                 _sweep_uncovered(session, hints)
+            # Redites de la reconnaissance vocale retirées du transcript final
+            # avant persistance du grounding (artefact STT : même phrase
+            # entendue deux fois à la suite, cf. ``_dedupe_adjacent``).
+            _assainir_doublons(session)
             _finalise(session)
             schedule_final_grounding(session.id, session.username)
         return session

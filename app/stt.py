@@ -512,6 +512,7 @@ def transcribe_payload(
     extra_phrase_hints: Optional[str] = None,
     boost: float = 15.0,
     on_progress: Optional[Callable[[float, float], None]] = None,
+    contexte_precedent: Optional[str] = None,
 ) -> dict:
     """
     Envoie un audio déjà normalisé au service configuré.
@@ -520,6 +521,14 @@ def transcribe_payload(
     précède — transcodage, découpage en tranches, lexique — est commun, et
     tout ce qui suit reçoit le même dictionnaire de résultat. ``on_progress``
     est relayé au fournisseur qui sait le renseigner (endpoint personnalisé).
+
+    ``contexte_precedent`` : la queue du transcript de la tranche PRÉCÉDENTE,
+    transmise à l'endpoint custom sous la clé ``prompt`` (contrat OpenAI). La
+    dictée découpe l'audio en tranches sans chevauchement ; sans ce retour, un
+    modèle ASR isolé réinvente la fin de la phrase coupée et la re-dit en tête
+    de tranche suivante (doublons « Et puis, il a augmenté… » / « Donc, j'ai
+    augmenté l'hyprexa… », note 40). Le rappel fourni au modèle le garde sur
+    la continuité. Ignoré par les autres fournisseurs (champ non standard).
     """
     # Après retrait des silences, une tranche peut ne plus contenir que la
     # pause conservée : il n'y a rien à reconnaître, et l'appel serait
@@ -555,7 +564,9 @@ def transcribe_payload(
     if provider == "modulate":
         return _transcribe_modulate(payload, extra_phrase_hints)
     if provider == "custom":
-        return _transcribe_custom(payload, extra_phrase_hints, on_progress)
+        return _transcribe_custom(
+            payload, extra_phrase_hints, on_progress, contexte_precedent=contexte_precedent,
+        )
     if provider == "openrouter":
         return _transcribe_openrouter(payload, extra_phrase_hints)
     return _transcribe_google(payload, extra_phrase_hints, boost)
@@ -2682,6 +2693,7 @@ def _post_openai_compatible(
     timeout: int = 240,
     libelle: str = "du point de terminaison personnalisé",
     confiance_mots: bool = False,
+    prompt: Optional[str] = None,
 ) -> dict:
     """
     POST multipart vers ``{base_url}/audio/transcriptions`` (compatible OpenAI).
@@ -2690,7 +2702,9 @@ def _post_openai_compatible(
     que le serveur renvoie la confiance (``confidence`` + ``words[].confidence``)
     — le gate mot-à-mot de la correction des médicaments en a besoin (rejet des
     substitutions floues très confiantes hors contexte). L'absence de réponse
-    structurée est tolérée en silence.
+    structurée est tolérée en silence. ``prompt`` (facultatif) est le contexte
+    du transcript précédent, au contrat OpenAI ``prompt`` (rappel de l'audio) —
+    voir ``transcribe_payload``.
 
     Lève ``_EndpointHttpError`` si le serveur répond en erreur HTTP, ou
     ``TranscriptionError`` (message affichable) en cas d'échec de transport.
@@ -2704,6 +2718,8 @@ def _post_openai_compatible(
         champs["language"] = langue
     if confiance_mots:
         champs["response_format"] = "json"
+    if prompt:
+        champs["prompt"] = prompt
     corps, ctype = _multipart_body_fields(champs, "file", "dictee.ogg", payload.content)
 
     headers = {"Content-Type": ctype}
@@ -2773,6 +2789,7 @@ def _post_custom_avec_repli(
     langue: str,
     payload: AudioPayload,
     confiance_mots: bool = False,
+    contexte_precedent: Optional[str] = None,
 ) -> Tuple[dict, str]:
     """
     POST une tranche à l'endpoint personnalisé, avec repli sur erreur 5xx.
@@ -2781,11 +2798,12 @@ def _post_custom_avec_repli(
     principal, on retente une fois avec le modèle de secours. Lève
     ``TranscriptionError`` si l'endpoint refuse définitivement (401/403, ou 5xx
     sans repli disponible) — l'appelant décide alors d'abandonner ou de sauter
-    la tranche.
+    la tranche. ``contexte_precedent`` est transmis comme ``prompt`` (OpenAI).
     """
     try:
         data = _post_openai_compatible(
             base_url, api_key, model, langue, payload, confiance_mots=confiance_mots,
+            prompt=contexte_precedent,
         )
         return data, model
     except _EndpointHttpError as exc:
@@ -2797,7 +2815,7 @@ def _post_custom_avec_repli(
             try:
                 data = _post_openai_compatible(
                     fb_url, api_key, fb_model, langue, payload,
-                    confiance_mots=confiance_mots,
+                    confiance_mots=confiance_mots, prompt=contexte_precedent,
                 )
                 return data, fb_model
             except _EndpointHttpError as exc2:
@@ -2829,6 +2847,7 @@ def _transcribe_custom_chunked(
     payload: AudioPayload,
     chunk_seconds: float,
     on_progress: Optional[Callable[[float, float], None]] = None,
+    contexte_precedent: Optional[str] = None,
 ) -> dict:
     """
     Découpe ``payload`` en tranches d'au plus ``chunk_seconds`` et transcrit
@@ -2892,7 +2911,7 @@ def _transcribe_custom_chunked(
             try:
                 data, modele_utilise = _post_custom_avec_repli(
                     base_url, api_key, model, fb_model, fb_url, langue, seg,
-                    confiance_mots=True,
+                    confiance_mots=True, contexte_precedent=contexte_precedent,
                 )
             except TranscriptionError as exc:
                 dernier_refus = str(exc)
@@ -2937,7 +2956,8 @@ def _transcribe_custom_chunked(
 
 
 def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] = None,
-                       on_progress: Optional[Callable[[float, float], None]] = None) -> dict:
+                       on_progress: Optional[Callable[[float, float], None]] = None,
+                       contexte_precedent: Optional[str] = None) -> dict:
     """
     Transcription par un point de terminaison personnalisé, compatible OpenAI.
 
@@ -2948,7 +2968,9 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
     par durée. Sans découpage, un routage optionnel par durée
     (``custom_stt_max_seconds``) envoie directement au modèle de repli les
     dictées trop longues. En cas d'erreur HTTP 5xx, on retente une fois avec le
-    modèle de repli.
+    modèle de repli. ``contexte_precedent`` : queue du transcript de la tranche
+    précédente, passée sous la clé ``prompt`` (contrat OpenAI) pour éviter que
+    le modèle réinvente la fin de la phrase coupée (doublons de frontière).
     """
     base_url = runtime_config.value("custom_stt_base_url").strip().rstrip("/")
     if not base_url:
@@ -2973,7 +2995,7 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
     ):
         return _transcribe_custom_chunked(
             base_url, api_key, model, langue, fb_model, fb_url, payload,
-            chunk_seconds, on_progress,
+            chunk_seconds, on_progress, contexte_precedent,
         )
 
     # --- Routage optionnel par durée (repli direct sur fichier long) -----
@@ -2996,7 +3018,7 @@ def _transcribe_custom(payload: AudioPayload, extra_phrase_hints: Optional[str] 
 
     data, model = _post_custom_avec_repli(
         base_url, api_key, model, fb_model, fb_url, langue, payload,
-        confiance_mots=True,
+        confiance_mots=True, contexte_precedent=contexte_precedent,
     )
 
     transcript = str(data.get("text") or "").strip()

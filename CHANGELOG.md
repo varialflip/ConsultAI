@@ -3,6 +3,29 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Dictée live : fin des phrases répétées (contexte cross-tranche + dédup des redites)
+
+- **Cause** : la dictée découpe l'audio en tranches de ~10-11 s transcrites
+  ISOLÉMENT (aucun retour du transcript précédent). Un modèle ASR qui reçoit
+  le début d'une phrase sans son contexte la « répare » en réinventant la fin
+  → la même phrase ressort en queue de tranche N puis en tête de tranche N+1
+  (« Sur 30, puis a augmenté à 23 sur 30. » / « **Et puis, il** a augmenté à
+  23 sur 30. », « l'**hyprexa** » / « l'**hyper-exa** »), souvent avec un
+  sujet inventé. Vérifié par re-transcription du webm entier en UNE passe sur
+  le même modèle : 0 doublon → c'est bien le découpage sans contexte.
+- **Contexte cross-tranche** (`stt.transcribe_payload(..., contexte_precedent)`) :
+  chaque tranche envoie la QUEUE du transcript stable (`_contexte_tranche`) au
+  fournisseur via la clé `prompt` (contrat OpenAI, accepté par l'endpoint Cohere
+  testé). Le modèle ASR garde la continuité au lieu de réinventer la phrase
+  coupée. Appliqué au chemin live (`_transcribe_one`), à la stabilisation
+  (`_rewrite_boundary`) et au filet de fin (`_transcribe_region`).
+- **Dédup des redites** (`_dedupe_adjacent`, appliqué en fin de dictée par
+  `_assainir_doublons` et à chaque bloc réécrit) : retire les échos adjacents
+  (phrase tronquée reprise, phrase identique/reformulée, reprise de frontière
+  queue/tête) tout en PRÉSERVANT les anaphores légitimes (« suivie pour une
+  HTA » / « suivie pour un diabète » — une donnée clinique distincte d'un seul
+  côté bloque la fusion). Le transcript propre n'est jamais modifié (NO-OP).
+
 ## 2026-09-04 — Suggestions médicaments : le LLM les applique (consigne + migration)
 
 - **Les blocs `MEDICAMENTS_SOUPCONNES` / `MEDICAMENTS_PHONETIQUES` sont désormais

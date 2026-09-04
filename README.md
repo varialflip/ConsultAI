@@ -910,6 +910,17 @@ transcrire pour rassembler du contexte (1000 ms par défaut). Si la session
 meurt (réseau, pause très longue), le repli batch du même énoncé prend le
 relais — rien n'est perdu, seul le contexte recommence.
 
+**Contexte cross-tranche (tous modes, fournisseur custom).** Le découpage en
+tranches ~10 s transcrit chaque segment isolément : sans rappel, le modèle ASR
+réinvente la fin de la phrase coupée et la re-dit en tête de tranche suivante
+(phrases répétées, note 40). Depuis 2026-09-04, chaque tranche envoie la **queue
+du transcript déjà stable** au point de terminaison personnalisé sous la clé
+`prompt` (contrat OpenAI) : l'ASR garde la continuité au lieu de réinventer. En
+supplément, un **dédup des redites adjacentes** (`_dedupe_adjacent`) est appliqué
+en fin de dictée : écho tronqué, phrase identique/reformulée, reprise de
+frontière — tout en préservant les anaphores légitimes (« suivie pour une HTA »
+/ « suivie pour un diabète »).
+
 Précisions importantes :
 
 - **Le VAD ne filtre jamais l'enregistrement.** Le fichier brut reste complet

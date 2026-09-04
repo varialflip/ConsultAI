@@ -18,7 +18,8 @@ numéro.*
     colonnes Médicaments) — elle survit à un champ riche qui aplatit les
     espaces ordinaires.
   - **Repli avec retrait suspendu** : les items trop longs sont repliés à
-    ~80 colonnes ; les lignes de continuation s'alignent sous le texte après la
+    ~89 colonnes (marge du DME : il restait ~10 caractères de marge) ; les
+    lignes de continuation s'alignent sous le texte après la
     puce/le numéro, jamais sous la puce ni à la marge.
   - **Numérotées alignées verticalement** : les étiquettes « N. » sont élargies
     à la largeur du plus grand numéro (1., 10., 100.) pour que le texte des

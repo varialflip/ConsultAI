@@ -738,6 +738,15 @@ inline (médicaments et termes gériatriques) sont **retirées** du bloc
 faite et auditable. Le `<<<DICTEE` porte la version corrigée ; seules les
 présomptions persistantes atteignent le modèle.
 
+**Surlignage de la transcription (onglet Transcription).** Pendant et après la
+dictée, la transcription affiche le texte **brut** (tel que reconnu) ; chaque
+cible détectée — termes gériatriques **et** médicaments — est **soulignée et
+en italique**, et un rollover (info-bulle) révèle la correction : `[garble] →
+[lecture/forme canonique]` avec la confiance (score `%` + posologie pour les
+médicaments, `(à confirmer)` pour les pistes phonétiques, valeur combinée pour
+les hints gériatriques). Le texte brut reste la source : l'info-bulle montre ce
+que la correction changera, sans réécrire ce que le médecin a dicté.
+
 **Ajouter un terme — procédure rapide.** Toute entrée va dans
 `app/geriatric_terms.json` (`langue: "fr"`), jamais dans la consigne générale.
 Décider du canal selon la NATURE du terme, pas selon sa simple présence :

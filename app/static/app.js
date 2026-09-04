@@ -609,14 +609,22 @@
     let html = esc(text);
     for (const c of transcriptCorrections) {
       if (!c || !c.correct) continue;
-      const cible = esc(c.correct);
+      // Ce que le transcrit affiche réellement : la forme DICTÉE (garble). Par
+      // défaut on marque le garble ; si le terme est déjà écrit correctement
+      // (médicament bien transcrit), on marque la forme canonique.
+      const tok = esc(c.garble || c.correct);
       const garble = esc(c.garble || '');
-      const conf = c.confidence ? esc(c.confidence) : '';
+      const correct = esc(c.correct);
+      const conf = c.confidence !== undefined && c.confidence !== null ? esc(c.confidence) : '';
+      const poso = c.posology ? esc(c.posology) : '';
+      const src = c.source ? escAttr(c.source) : '';
       const span = `<span class="term-corr" ` +
         `data-garble="${escAttr(garble)}" ` +
-        `data-correct="${escAttr(cible)}" ` +
-        `data-conf="${escAttr(conf)}">${cible}</span>`;
-      html = html.split(cible).join(span);
+        `data-correct="${escAttr(correct)}" ` +
+        `data-conf="${escAttr(conf)}" ` +
+        `data-poso="${escAttr(poso)}" ` +
+        `data-source="${src}">${tok}</span>`;
+      html = html.split(tok).join(span);
     }
     el.innerHTML = html;
   }
@@ -639,8 +647,22 @@
     const garble = el.dataset.garble || '';
     const correct = el.dataset.correct || '';
     const conf = el.dataset.conf || '';
+    const poso = el.dataset.poso || '';
+    const source = el.dataset.source || '';
     let s = `<i>${garble}</i> → <b>${correct}</b>`;
-    if (conf) s += ` <span class="text-slate-400">(${conf})</span>`;
+    // Médicament : posologie et « à confirmer » pour les pistes phonétiques.
+    if (source === 'phonetic') {
+      s += ` <span class="text-slate-500">${poso}</span>`;
+      s += ` <span class="text-slate-400">(à confirmer)</span>`;
+    } else if (poso) {
+      s += ` <span class="text-slate-500">${poso}</span>`;
+    }
+    // Confiance : score (%) pour les médicaments, valeur combinée pour les
+    // hints gériatriques.
+    if (conf) {
+      const suffixe = source === 'geriatric' ? '' : ' %';
+      s += ` <span class="text-slate-400">(${conf}${suffixe})</span>`;
+    }
     tip.innerHTML = s;
     tip.classList.remove('hidden');
     const r = el.getBoundingClientRect();
@@ -651,6 +673,43 @@
   function hideTranscriptTooltip() {
     const tip = $('transcriptTooltip');
     if (tip) tip.classList.add('hidden');
+  }
+
+  /**
+   * Registre unifié des cibles à surligner dans le transcrit : termes
+   * gériatriques (``geriatric``) + MÉDICAMENTS (``items``, tous, que leur nom
+   * soit déjà bien transcrit ou non). Chaque entrée porte ``garble`` (ce qui
+   * figure réellement dans le texte), ``correct`` (forme canonique) et la
+   * confiance/posologie pour l'info-bulle.
+   */
+  function buildTranscriptCorrections(geriatric, items) {
+    const out = [];
+    if (Array.isArray(geriatric)) {
+      for (const g of geriatric) {
+        if (g && g.correct) {
+          out.push({
+            garble: g.garble || g.correct,
+            correct: g.correct,
+            confidence: g.confidence,
+            source: 'geriatric',
+          });
+        }
+      }
+    }
+    if (Array.isArray(items)) {
+      for (const it of items) {
+        if (!it) continue;
+        const name = it.name || it.base || '';
+        if (!name) continue;
+        const garble = it.garble || name;
+        const score = typeof it.score === 'number' ? `${it.score}` : '';
+        out.push({
+          garble, correct: name, confidence: score,
+          posology: it.posology || '', source: it.source || '',
+        });
+      }
+    }
+    return out;
   }
 
   /**
@@ -1058,8 +1117,8 @@
       if (data.superseded) return;
       $('transcript').value = formatSentences(data.transcript);
       resetTranscriptReveal();
-      if (Array.isArray(data.geriatric)) {
-        transcriptCorrections = data.geriatric.slice();
+      if (data.geriatric || data.med_items) {
+        transcriptCorrections = buildTranscriptCorrections(data.geriatric, data.med_items);
         renderTranscriptHtml($('transcript').value);
       }
       if (data.med_items) {
@@ -2353,8 +2412,8 @@
       );
       resetTranscriptReveal();
 
-      if (Array.isArray(result.geriatric)) {
-        transcriptCorrections = result.geriatric.slice();
+      if (result.geriatric || result.med_items) {
+        transcriptCorrections = buildTranscriptCorrections(result.geriatric, result.med_items);
         renderTranscriptHtml($('transcript').value);
       }
 
@@ -6688,8 +6747,8 @@
   function onMedGrounding(evt) {
     const payload = JSON.parse(evt.data || '{}');
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
-    if (Array.isArray(payload.geriatric)) {
-      transcriptCorrections = payload.geriatric.slice();
+    if (payload.geriatric || payload.items) {
+      transcriptCorrections = buildTranscriptCorrections(payload.geriatric, payload.items);
       renderTranscriptHtml($('transcript').value);
     }
     if (payload.items) {
@@ -6704,8 +6763,8 @@
     // L'onglet qui a émis ignore son propre résultat (il le pose par la
     // réponse HTTP) ; les suiveurs l'appliquent.
     if (payload.origin_tab && payload.origin_tab === state.tabId) return;
-    if (Array.isArray(payload.geriatric)) {
-      transcriptCorrections = payload.geriatric.slice();
+    if (payload.geriatric || payload.items) {
+      transcriptCorrections = buildTranscriptCorrections(payload.geriatric, payload.items);
       renderTranscriptHtml($('transcript').value);
     }
     if (payload.items) {

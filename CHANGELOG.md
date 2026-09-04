@@ -3,6 +3,23 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Transcription : surlignage + info-bulles (termes gériatriques ET médicaments)
+
+- **L'onglet Transcription surligne désormais les cibles au rollover.** La
+  transcription affiche le texte **brut** ; chaque terme gériatrique **et**
+  chaque médicament détecté est **souligné et en italique**, et l'info-bulle au
+  survol montre `[garble] → [lecture]` avec la confiance (score `%` + posologie
+  des médicaments, `(à confirmer)` pour les pistes phonétiques, valeur combinée
+  des hints gériatriques). Le texte brut reste la source — l'info-bulle révèle
+  la correction sans réécrire ce qui a été dicté.
+- **Correctifs du surlignage** : `renderTranscriptHtml` marque désormais la
+  forme **garble** effectivement présente dans le texte (au lieu de chercher la
+  forme corrigée, introuvable → aucun span → pas d'info-bulle), les
+  `med_grounding` / `med_grounding_result` (SSE + HTTP) alimentent un registre
+  **unifié** termes gériatriques + médicaments, et les spans `.term-corr` ont
+  `pointer-events: auto` pour que le survol fonctionne malgré le conteneur
+  `pointer-events: none` (le textarea reste scrollable).
+
 ## 2026-09-04 — Termes gériatriques : enrichissement du vocabulaire
 
 - **Nouvelles entrées curatées** dans `geriatric_terms.json` :

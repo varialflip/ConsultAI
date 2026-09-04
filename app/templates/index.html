@@ -347,8 +347,11 @@
     #transcript, #transcriptHtml { font-family: inherit; font-size: 13px; line-height: 1.7142857; height: 100%; }
     #transcriptHtml { background: transparent; border: none; resize: none; outline: none; }
     /* Terme corrigé/suggéré : italique + souligné + filet pointillé, souligne
-       la correction sans alourdir — un rollover montre le garble d'origine. */
-    .term-corr { font-style: italic; text-decoration: underline dotted; color: #0f766e; cursor: help; }
+       la correction sans alourdir — un rollover montre le garble d'origine.
+       ``pointer-events: auto`` : le conteneur (#transcriptHtml) est
+       ``pointer-events: none`` pour laisser le textarea scrollable/interactif,
+       mais chaque span reprend les événements pour déclencher l'info-bulle. */
+    .term-corr { font-style: italic; text-decoration: underline dotted; color: #0f766e; cursor: help; pointer-events: auto; }
   </style>
 </head>
 

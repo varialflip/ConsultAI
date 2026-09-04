@@ -738,6 +738,35 @@ inline (médicaments et termes gériatriques) sont **retirées** du bloc
 faite et auditable. Le `<<<DICTEE` porte la version corrigée ; seules les
 présomptions persistantes atteignent le modèle.
 
+**Ajouter un terme — procédure rapide.** Toute entrée va dans
+`app/geriatric_terms.json` (`langue: "fr"`), jamais dans la consigne générale.
+Décider du canal selon la NATURE du terme, pas selon sa simple présence :
+
+1. **Lecture univoque, mot courant, le STT l'entend bien** (ex. « mini mental » →
+   `MMSE`, « ISO-SMAF », « Maison Aloïs ») → **`deterministic_replacements`**
+   (`garble` + `correct`, écrivant la forme dictée déformée ; plusieurs
+   désignations = plusieurs entrées vers la même `correct`). Ce canal réécrit
+   le texte AVANT le modèle (zéro attention LLM) et alimente le surlignage
+   dictée.
+2. **Terme « dur » que le STT va déformer, ou homophonie à jugement clinique**
+   (ex. « tep scan » → `TEP-Scan`, « chellesled » → `CHSLD`, « outéréf » →
+   `UTRF`, « rezzber » → `Reisberg`) → **`prompt_hints`** avec
+   `"phonetic": true`. Le fragment porte une **confiance combinée** envoyée au
+   modèle (`<<<HOMOPHONIES_CE_CALL>>>`) et affichée en rollover.
+3. **Équivalence pré-orthographiée** (ne change pas l'orthographe, sert de
+   consigne contextuelle — ex. « leucoaraïose », « leucopatie ») →
+   `prompt_hints` **sans** `phonetic` : aucune confiance, le modèle reçoit la
+   lecture correcte.
+
+Pour un `garble` multi-mots, mettre la forme dictée DÉFORMÉE dans le champ
+`garble`/**`fragment`** et l'orthographe CANONIQUE dans `correct`/`lecture`.
+Rajouter le drapeau `phonetic: true` uniquement à l'étape 2. Ne jamais y mettre
+un nom de médicament (géré par `med_grounding`). Après édition du JSON :
+`python3 -c "import json;json.load(open('app/geriatric_terms.json'))"` pour
+valider la syntaxe, puis `git commit`, `git push origin selfhosted` et
+`cd /opt/dictai && sudo docker compose up -d --force-recreate consultai-test`
+(le fichier est relu à chaque appel — aucun rebuild d'image requis).
+
 **Fidélité au contenu dicté.** La consigne générale interdit autant l'omission
 que l'invention (§ 1) : toute donnée clinique dictée figure dans la note —
 condenser raccourcit la formulation d'un fait, jamais sa suppression ni sa

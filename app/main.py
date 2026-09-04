@@ -61,7 +61,7 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -356,6 +356,11 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
         logger.exception("Grounding méds impossible (consultation %s)", consultation.id)
         return []
     consultation.med_grounding_json = json.dumps(items, ensure_ascii=False)
+    # Scan PLEIN TEXTE = liste autoritaire : on pose la marque de finalisation.
+    # La génération ne doit proposer au LLM que cette version (jamais une liste
+    # live partielle — course « Terminer » → Générer), et sans cette marque la
+    # liste persistée est réputée non finalisée.
+    consultation.grounding_finalized_at = datetime.now(timezone.utc)
     db.commit()
     # Termes gériatriques (module À PART) : paires {garble, correct} pour le
     # surlignage du transcrit, calculées sur le texte complet.
@@ -3159,9 +3164,16 @@ async def api_generate(
 
     # Hints structurés pour le LLM : items déterministes du moteur + candidats
     # PHONÉTIQUES (G2P français, « dilote » → Dilaudid). Source : la liste
-    # POINTÉE déjà calculée en continu pendant la dictée (``med_grounding_json``)
-    # — la même que l'onglet Validation — réutilisée telle quelle au lieu d'un
-    # scan phonétique complet (~17 s) relancé ici à la génération. On y RETIRE
+    # POINTÉE DÉFINITIVE (``med_grounding_json``, scan plein texte au
+    # « Terminer » / retranscription) — la même que l'onglet Validation —
+    # réutilisée telle quelle au lieu d'un scan phonétique complet (~17 s)
+    # relancé ici à la génération. GARDE DE FRAÎCHEUR : un
+    # ``med_grounding_json`` sans ``grounding_finalized_at`` est une liste
+    # LIVE PARTIELLE (accumulation par fenêtre de queue pendant la dictée, qui
+    # laisse échapper les garbles dictés hors de la fenêtre — « sérocoïl » →
+    # Seroquel, n° 42). Si une génération part avant la fin du scan de fond du
+    # « Terminer », on RECALCULE ici en synchrone (``_apply_grounding`` pose la
+    # marque) : le LLM ne reçoit jamais une liste partielle. On y RETIRE ensuite
     # les items déjà correctement écrits dans la DICTÉE (``inline_fixed``) :
     # leurs corrections inline sont déjà dans le texte, les re-suggérer serait
     # redondant. Leurs garble restent au contraire dans l'onglet Validation
@@ -3169,6 +3181,17 @@ async def api_generate(
     med_hints: list = []
     if _med_grounding_on() and payload.transcript and consultation is not None:
         try:
+            if not consultation.med_grounding_json or \
+                    consultation.grounding_finalized_at is None:
+                # Course « Terminer » → « Générer » : la liste persistée n'est
+                # pas (encore) la version complète. La recalculer en synchrone
+                # garantit des hints complets ; rare (le scan de fond ~10-17 s
+                # finit normalement avant), une seule fois par brouillon (la
+                # marque posée court-circuite les appels suivants).
+                _apply_grounding(
+                    db, consultation,
+                    origin_tab=request.headers.get("x-consultai-tab", ""),
+                )
             persisted = consultation.med_grounding_json
             if persisted:
                 parsed = json.loads(persisted)

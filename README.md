@@ -980,8 +980,15 @@ des médicaments », défaut `false`). Une fois activé :
   « Validation »**, mise à jour en direct (`med_grounding`) puis définitive
   (`med_grounding_result`, persistée dans `med_grounding_json`). L'accumulation
   **en cours de dictée est elle aussi persistée** dans `med_grounding_json` au
-  même rythme que le transcrit — un `Refresh` ne vide plus l'onglet — puis
-  écrasée par version définitive du « Terminer ». Les hits **déterministes**
+  même rythme que le transcrit — un `Refresh` ne vide plus l'onglet. La
+  **liste définitive du « Terminer » est un scan PLEIN TEXTE** (tâche de fond,
+  ~10-17 s, la même source que les hints LLM) : l'accumulation par fenêtre de
+  queue laissait échapper les garbles dictés en début de note (« sérocoïl » →
+  Seroquel, n° 42) ; le scan complet les retrouve tous et écrase le brouillon,
+  avec une **marque de fraîcheur** (`grounding_finalized_at`) sur laquelle la
+  génération s'appuie pour ne **jamais** proposer au modèle une liste partielle
+  (course « Terminer » → « Générer » : recalcul synchrone garanti). Les hits
+  **déterministes**
   s'affichent sous leur **nom canonique** (« la Six » → **Lasix**) ; les
   candidats phonétiques gardent le nom dicté + flèche vers la cible.
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
@@ -1016,9 +1023,12 @@ des médicaments », défaut `false`). Une fois activé :
   (« très bas » → Tresiba, contexte de dose obligatoire — chaque token séparé
   < 5 lettres est filtré par la passe unigramme). **Une paire de mots plus
   longs, dont les DEUX membres sont douteux (< 0.95), est ré-admise même en
-  prose sans dose** (≥ `CONF_PHON_PAIRE_PROSE_DOUTEUSE` = 0.80 — le doute sur
+  prose sans dose** (≥ `CONF_PHON_PAIRE_PROSE_DOUTEUSE` = 0.78 depuis
+  2026-09-04 — le doute sur
   les deux mots est un signal fort, corpus : « Donné Pézil » → donepezil seul
-  couple du genre) : le nom scindé par le STT est reconnu.
+  couple du genre ; la variante « donné pésil » → donepezil, score 0.79,
+  passait sous l'ancien seuil 0.80 et réclamait le bas à 0.78) : le nom scindé
+  par le STT est reconnu.
   **La règle G2P « gu+voyelle »
   répare les noms éclatés à « gue »** : « admelogue » et « admelog » codent
   désormais le même phonème /admelɔg/ (le « u » de « gu » est muet devant

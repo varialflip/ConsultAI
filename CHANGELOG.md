@@ -3,6 +3,12 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Grounding : liste définitive = scan plein texte au « Terminer » + seuil de paire 0.78
+
+- **Les hints médicaments du LLM partent désormais toujours d'une liste COMPLÈTE.** La liste persistée au « Terminer » était l'ACCUMULATION live par fenêtre de queue (~600 derniers mots, `maxi_phon=8`) : les garbles dictés en début de note n'atteignaient jamais les hints — n° 42 : « sérocoïl » → Seroquel absent, le modèle inventait « sertraline ». `_finalize_grounding` exécute maintenant un **scan plein texte** (`extract_validation_items` sur le transcript complet, avec la confiance STT complète), persisté dans `med_grounding_json` avec la marque `grounding_finalized_at`.
+- **Garde de fraîcheur à la génération.** Sans `grounding_finalized_at`, le `med_grounding_json` ne provient que de l'accumulation live (brouillon) : la génération recalcule alors en synchrone (`_apply_grounding`) avant de bâtir `MEDICAMENTS_SOUPCONNES`/`MEDICAMENTS_PHONETIQUES`. Le LLM ne reçoit plus jamais une liste partielle, même dans la course « Terminer » → « Générer » (coût ~10-17 s, une seule fois par brouillon). Colonne ajoutée automatiquement (migration `_ADDED_COLUMNS`).
+- **Seuil de paire abaissé à 0.78** (`CONF_PHON_PAIRE_PROSE_DOUTEUSE` 0.80→0.78) : « donné pésil » → donepezil (score 0.79, le « s » sourd final de « pésil ») rejoint « Donné Pézil » dans les candidats phonétiques. Revalidé : un seul couple ajouté en pire cas (tout-douteux) sur 5 transcripts, zéro régression sur les 4 transcripts de référence (pas de `transcript_conf` → chemin paire inerte).
+
 ## 2026-09-04 — Dictée live : fin des phrases répétées (contexte cross-tranche + dédup des redites)
 
 - **Cause** : la dictée découpe l'audio en tranches de ~10-11 s transcrites

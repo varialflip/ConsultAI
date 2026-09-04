@@ -243,7 +243,12 @@ CONF_PHON_PROSE_DOUTEUSE = 0.85
 #: dont la concaténation colle phonétiquement à un vrai médicament est très
 #: rarement de la prose. Balayage du corpus : « Donné Pézil » est le seul
 #: couple de ce type (cf. phonetiques_texte, passe des paires).
-CONF_PHON_PAIRE_PROSE_DOUTEUSE = 0.80
+#: 0.78 depuis 2026-09-04 (n° 42) : la variante « donné pésil » → donepezil
+#: score 0.79 (s/z sourd à la fin de « pésil ») passait sous les 0.80 ; le
+#: resserrer à 0.78 l'admet dans les hints phonétiques sans toucher aux vrais
+#: couples de prose douteux (Lontin→Celontin 0.75, continent→Cortiment 0.78 —
+#: qui restent sous ce plancher ou sans les DEUX mots douteux).
+CONF_PHON_PAIRE_PROSE_DOUTEUSE = 0.78
 
 #: Prose structurante à ne JAMAIS proposer comme candidat phonétique, NI
 #: réécrire inline, NI admettre comme item (« symptom words » + mots

@@ -284,6 +284,15 @@ class Consultation(Base):
     # Alimente la liste pointée de l'onglet « Validation » au rechargement et
     # sert de trace d'audit (corrections déterministes, non-PHI).
     med_grounding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Marque de FRAÎCHEUR du grounding : date de la DERNIÈRE liste complète
+    #: persistée dans ``med_grounding_json`` (scan plein texte, la même source
+    #: que les hints LLM). Nullable : jamais finalisé (liste d'un accumulateur
+    #: live, voire absente). La génération s'y appuie pour savoir si la liste
+    #: persistée est la version autoritaire (finalisée) ou une liste partielle
+    #: (course « Terminer » → Générer) à recalculer avant de l'envoyer au LLM.
+    grounding_finalized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -2799,6 +2808,7 @@ _ADDED_COLUMNS = {
         ("corrections_markdown", "TEXT"),
         ("med_grounding_json", "TEXT"),
         ("transcript_conf", "TEXT"),
+        ("grounding_finalized_at", "DATETIME"),
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),

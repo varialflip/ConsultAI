@@ -1705,22 +1705,51 @@ def _finalize_grounding(session_id: str, username: str) -> None:
             text = " ".join(session.parts).strip()
             if not text:
                 return
-            # La liste DÉFINITIVE est celle déjà accumulée en continu pendant la
-            # dictée (``_merge_and_publish_meds``) — le med matcher a roulé sur
-            # chaque frontière (maxi_phon=8, fusion par clé) et couvre tout le
-            # transcript. On ne relance PAS ici un scan phonétique complet
-            # (``extract_validation_items`` plein texte, ~10-17 s) : la liste
-            # accumulée en cours de dictée retrouve TOUS les candidats (rétrotest
-            # sur les transcriptions de référence) et est celle que le médecin a
-            # vue vivre dans l'onglet Validation. On la persiste et on la diffuse
-            # telle quelle — cohérent, et ~0 s au « Terminer ».
-            items = _grounding_meds.get(session_id) or []
-            _grounding_meds[session_id] = items
+            # Liste DÉFINITIVE = scan PLEIN TEXTE, la même source que les
+            # hints LLM (main.py ``_apply_grounding``). La liste accumulée
+            # en continu (``_merge_and_publish_meds``, fenêtre de queue
+            # ~600 mots, maxi_phon=8) laisse échapper les garbles dictés en
+            # début de note — « sérocoïl » → Seroquel n° 42 — hors de la
+            # fenêtre au « Terminer ». Le scan complet (~10-17 s en tâche
+            # de fond) retrouve TOUS les candidats ; on le persiste avec la
+            # marque de finalisation (``grounding_finalized_at``), et la
+            # génération ne lit QUE cette version. La confiance mot-à-mot
+            # complète vient de ``transcript_conf``, accumulée tranche par
+            # tranche par ``_merge_conf_into``.
+            # 1) Lecture courte (confiance + marque éventuelle) SANS tenir la
+            #    session pendant le scan.
+            conf_map: dict = {}
             with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
                 consultation = db.get(Consultation, session.consultation_id)
-                if consultation is not None:
-                    consultation.med_grounding_json = json.dumps(items, ensure_ascii=False)
-                    db.commit()
+                if consultation is None:
+                    return
+                if consultation.grounding_finalized_at is not None:
+                    # La génération (garde synchrone) a déjà recalculé pendant
+                    # la course « Terminer » → « Générer » : liste autoritaire
+                    # en place, on ne refait pas le travail.
+                    items = json.loads(consultation.med_grounding_json or "[]")
+                else:
+                    try:
+                        conf_map = (json.loads(consultation.transcript_conf)
+                                    if consultation.transcript_conf else {})
+                    except (ValueError, TypeError):
+                        conf_map = {}
+                    items = None
+            if items is None:
+                items = med_grounding.extract_validation_items(
+                    text, conf=conf_map or None)
+                # 2) Persistance (court verrou de nouveau ; reverrouillage au
+                #    commit au cas où la garde synchrone aurait gagné entre-
+                #    temps — le calcul est idempotent et déterministe).
+                with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
+                    consultation = db.get(Consultation, session.consultation_id)
+                    if consultation is None:
+                        return
+                    if consultation.grounding_finalized_at is None:
+                        consultation.med_grounding_json = (
+                            json.dumps(items, ensure_ascii=False))
+                        consultation.grounding_finalized_at = utcnow()
+                        db.commit()
             live.publish(owner, "med_grounding_result", {
                 "consultation_id": session.consultation_id,
                 "session_id": session.id,

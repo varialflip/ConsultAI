@@ -735,22 +735,42 @@
         if (!it) continue;
         const name = it.name || it.base || '';
         if (!name) continue;
-        const garble = it.garble || name;
+        // Forme dictée d'origine : le garble (ou le nom, s'il n'y en a pas).
+        const garble = it.garble || it.name || name;
+        // Forme CANONIQUE — MÊME logique que l'onglet Validation
+        // (renderMedItems) : une piste phonétique est montrée sous sa MARQUE
+        // (« cinémette » → SINEMET via le brand), un item déterministe sous
+        // son nom.
+        const correct = medCible(it) || name;
         const score = typeof it.score === 'number' ? `${it.score}` : '';
-        const base = { correct: name, confidence: score,
+        const base = { correct, confidence: score,
           posology: it.posology || '', source: it.source || '' };
-        // Le médicament a été DÉFORMÉ par le STT : on marque aussi bien la
-        // forme fautive (garble) que la forme correcte si le texte la contient
-        // (ex. « rispiridone » ET « risperidone » dans la même dictée).
-        if (garble && garble.toLowerCase() !== name.toLowerCase()) {
+        // Le médicament a été DÉFORMÉ : on marque la forme fautive (garble) ET
+        // la forme canonique si le texte la contient (ex. « rispiridone » ET
+        // « risperidone »). Sinon un seul marquage de la forme canonique.
+        if (garble && garble.toLowerCase() !== correct.toLowerCase()) {
           out.push({ ...base, garble });
-          out.push({ ...base, garble: name });
+          if (correct.toLowerCase() !== name.toLowerCase()) {
+            out.push({ ...base, garble: correct });
+          }
         } else {
-          out.push({ ...base, garble: name });
+          out.push({ ...base, garble: correct });
         }
       }
     }
     return out;
+  }
+
+  /**
+   * Nom canonique affichable d'un item médicament — MÊME règle que
+   * ``renderMedItems`` (Validation) : piste phonétique → marque
+   * (``titleBrand``) ; sinon le nom (ou la base).
+   */
+  function medCible(it) {
+    if (!it) return '';
+    if (!it.source) return it.name || it.base || '';
+    return it.brand ? titleBrand(it.brand)
+      : (it.base || it.name || '').toLowerCase();
   }
 
   /**

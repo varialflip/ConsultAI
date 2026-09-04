@@ -382,7 +382,16 @@ def render_note(
     )
     bloc_corr = "## " + titre
     if items:
-        bloc_corr += "\n" + "\n".join(items)
+        # Liste pointée : un tiret par élément de correction. Le modèle groupe
+        # parfois plusieurs rubriques sur une seule entrée, séparées par « ; » ;
+        # on refend chaque entrée au point-virgule qui précède une nouvelle
+        # rubrique « […] » pour obtenir une puce par correction, sans jamais
+        # casser un « ; » présent dans un contexte d'extrait.
+        puces: List[str] = []
+        for x in items:
+            morceaux = re.split(r";\s*(?=\[)", x)
+            puces.extend(m.strip() for m in morceaux if m.strip())
+        bloc_corr += "\n" + "\n".join("- " + p for p in puces)
     else:
         bloc_corr += "\n" + _defaut_corrections(langue)
     sortie.append(bloc_corr)

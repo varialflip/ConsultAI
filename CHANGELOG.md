@@ -27,6 +27,12 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   liste (virgule, point-virgule, point, normalisation d'abréviation/unité
   **sans changement de sens clinique**) — seuls comptent les éléments à sens
   clinique (nom, dose, voie, fréquence à confirmer).
+- **Corrections : liste pointée** : la section « Corrections et éléments à
+  valider » est désormais rendue en **puces** (`- …`), une par correction, au
+  lieu d'un pavé continu. Le rendu refend chaque entrée quand le modèle groupe
+  plusieurs rubriques sur une ligne (« …→ à confirmer ; [Plan] … »), au
+  point-virgule qui précède une nouvelle rubrique « […] », sans jamais casser
+  un « ; » de contexte.
 - **Réutilisation de la liste pointée (latence au « Terminer »)** : la liste
   des médicaments est désormais calculée **une seule fois**, en continu pendant
   la dictée (`med_grounding_json`, accumulée par frontière à `maxi_phon=8`) et

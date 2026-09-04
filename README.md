@@ -899,17 +899,19 @@ des médicaments », défaut `false`). Une fois activé :
   secondes après la dictée (SSE `transcript_correct`). Conçu pour un **point
   de terminaison STT custom auto-hébergé** (aucune limite de taux) ; coûte des
   appels STT en arrière-plan.
-- **Transcrit brut au modèle — le modèle résout les noms déformés
-  (approche « suggestions-only »)** : le texte envoyé à la génération est la
-  transcription **brute** (la normalisation inline n'est plus appliquée au
-  LLM). Le moteur fournit au modèle, en plus du texte, les deux strates de
-  sa résolution : la liste pointée sûre et les candidats phonétiques (voir
-  plus bas) — des **pistes** qu'il recoupe avec la posologie et le contexte
-  clinique, « à confirmer » dans « Corrections et éléments à valider » en cas
-  de doute. Le transcrit reste donc le reflet exact de ce qui fut dicté
-  (noms déformés inclus), et la correction est surfaçable et traçable plutôt
-  que silencieuse. Même logique en dictée et en retranscription : le texte
-  affiché est brut, la liste pointée portant la correction.
+- **Dictée corrigée en inline dans les DEUX pipelines — harmonisée.** Le texte
+  envoyé au modèle est la transcription **corrigée par l'inline sûr**
+  (`normalize(inline_safe=True)`), et ce désormais dans la **passe unique
+  comme dans les deux passes** (le pipeline deux passes le faisait déjà, la
+  passe unique envoyait du brut). Les réécritures sûres et déterministes
+  (« ketapine » → quétiapine) sont donc écrites **dans le texte même de la
+  DICTÉE**. Les items ainsi corrigés ne sont **plus re-suggérés au modèle**
+  (redondants — leur correction est déjà littérale dans le texte), mais ils
+  restent **affichés dans l'onglet Validation avec leur garble** (*ketapine_ →
+  **quétiapine**). Les candidats phonétiques des garbles NON corrigés en inline
+  continuent, eux, d'être proposés au modèle. Les deux strates restent la
+  source unique (`extract_validation_items` → liste live / « Terminer » /
+  retranscription), réutilisée à la génération plutôt que recalculée.
 - **Liste pointée des médicaments.** Les noms déformés par la reconnaissance
   vocale sont normalisés contre la **base canadienne de produits
   pharmaceutiques (BDP)** livrée dans l'image (`app/meds.sqlite`, moteur

@@ -3,6 +3,32 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Grounding : réutilisation de la liste live, dictée inline harmonisée 1/2 passes
+
+- **Réutilisation de la liste pointée (latence au « Terminer »)** : la liste
+  des médicaments est désormais calculée **une seule fois**, en continu pendant
+  la dictée (`med_grounding_json`, accumulée par frontière à `maxi_phon=8`) et
+  **réutilisée telle quelle** au lieu de relancer des scans phonétiques pleins
+  texte (~17 s × 2) à la génération et au « Terminer ». Le grounding final
+  (``_finalize_grounding``) publie l'accumulé sans re-scan — ~0 s au lieu de
+  ~17 s — et la génération lit les hints dans la liste persistée au lieu de la
+  recalculer. La retranscription et l'import gardent la passe exhaustive
+  (``_apply_grounding``), qui est leur seule source. La liste live retrouve
+  tous les candidats des scans pleins (rétrotest sur les transcriptions de
+  référence) ; les items concordent donc entre l'onglet Validation, la dictée,
+  le « Terminer » et la note.
+- **Dictée corrigée en inline dans les DEUX pipelines (harmonisation)** : en
+  **passe unique comme en deux passes**, le texte envoyé au modèle est la
+  transcription corrigée par l'inline sûr (`normalize(inline_safe=True)`) — la
+  passe unique envoyait du brut. Le **coût de ~5-14 s de ce `normalize`
+  déterministe est conservé** à la génération (résolution mot-à-mot), les scans
+  phonétiques ayant, eux, été remplacés par la réutilisation.
+- **Hints mutés pour l'inline** : un item déjà écrit littéralement dans la
+  DICTÉE (corrigé en inline) n'est **plus re-suggéré au modèle** (redondant /
+  confusant) — son `garble` et sa correction restent affichés dans l'onglet
+  Validation. Les candidats phonétiques des garbles non corrigés en inline
+  continuent d'être proposés.
+
 ## 2026-09-03 — Grounding : récuration prose/STT très confiant, lab, base régénérée
 
 - **Composés multi-mots** : la TÊTE d'un composé déjà résolu est bloquée dans

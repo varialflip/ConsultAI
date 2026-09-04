@@ -1431,8 +1431,16 @@ def _finalize_grounding(session_id: str, username: str) -> None:
             text = " ".join(session.parts).strip()
             if not text:
                 return
-            conf_all = _conf_tail(session, text) if session.parts_conf else None
-            items = med_grounding.extract_validation_items(text, conf=conf_all)
+            # La liste DÉFINITIVE est celle déjà accumulée en continu pendant la
+            # dictée (``_merge_and_publish_meds``) — le med matcher a roulé sur
+            # chaque frontière (maxi_phon=8, fusion par clé) et couvre tout le
+            # transcript. On ne relance PAS ici un scan phonétique complet
+            # (``extract_validation_items`` plein texte, ~10-17 s) : la liste
+            # accumulée en cours de dictée retrouve TOUS les candidats (rétrotest
+            # sur les transcriptions de référence) et est celle que le médecin a
+            # vue vivre dans l'onglet Validation. On la persiste et on la diffuse
+            # telle quelle — cohérent, et ~0 s au « Terminer ».
+            items = _grounding_meds.get(session_id) or []
             _grounding_meds[session_id] = items
             with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
                 consultation = db.get(Consultation, session.consultation_id)

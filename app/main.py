@@ -2731,6 +2731,7 @@ def _generate_and_publish(
     system_prompt: str,
     confiance_mots: Optional[List[dict]] = None,
     med_hints: Optional[List[dict]] = None,
+    n_transcript: Optional[str] = None,
 ) -> dict:
     """
     Génère la note en continu et diffuse les morceaux en direct (SSE).
@@ -2798,45 +2799,19 @@ def _generate_and_publish(
     # circonstance où la passe 1 échoue ou le gabarit n'est pas compatible
     # retombe sur la passe unique classique — la dictée n'est jamais perdue.
     #
-    # La passe 1 reçoit le transcript PRÉ-CORRIGÉ inline (mêmes substitutions
-    # déterministes et auditées que la passe unique : garbles seedés, exacts —
-    # plus la réécriture agressive des MÉDICAMENTS COURANTS gagnée par
-    # similarité + confiance STT, voir COMMON_INLINE_*). Le LLM n'a plus à
-    # deviner les noms de médicaments déformés connus (« Restore 5 » →
-    # « Crestor 5 », « la Six » → « Lasix », « ketapine » → « quetiapine ») :
-    # charge cognitive en moins, et l'obéissance aux hints n'est plus le seul
-    # recours. « payload.transcript » (brut) reste la source pour la
-    # persistance, les hints et la confiance mot-à-mot.
-    #
-    # La confiance STT mot-à-mot (transcript_conf) est nécessaire à la
-    # réécriture agressive des courants (le plafond COMMON_INLINE_STT écarte la
-    # prose) : on la recharge ici à partir de la consultation, indépendamment
-    # du charger du corridor de génération (conf_map n'est pas passée dans
-    # cette fonction).
-    conf_for_inline: dict = {}
-    if payload.consultation_id:
-        try:
-            with SessionLocal() as _db_inline:
-                _consult_inline = _get_owned_consultation(
-                    _db_inline, payload.consultation_id, user)
-                conf_for_inline = (json.loads(_consult_inline.transcript_conf)
-                                   if _consult_inline.transcript_conf else {})
-        except Exception:
-            conf_for_inline = {}
+    # La DICTÉE (passe 1 comme passe unique) est celle déjà PRÉ-CORRIGÉE inline
+    # par ``api_generate`` (``n_transcript``, substitutions déterministes et
+    # auditées : garbles seedés, exacts — plus la réécriture agressive des
+    # MÉDICAMENTS COURANTS gagnée par similarité + confiance STT, voir
+    # COMMON_INLINE_*). Le LLM n'a plus à deviner les noms de médicaments
+    # déformés connus (« Restore 5 » → « Crestor 5 », « la Six » → « Lasix »,
+    # « ketapine » → « quetiapine ») : charge cognitive en moins, et l'obéissance
+    # aux hints n'est plus le seul recours. « payload.transcript » (brut) reste
+    # la source de la persistance et de la confiance mot-à-mot ; les hints, eux,
+    # viennent de la liste live persistée (voir api_generate).
     if runtime_config.value("note_pipeline") == "two_pass":
-        deux_pass_transcript = payload.transcript
-        if _med_grounding_on() and payload.transcript:
-            try:
-                corrige, _ = med_grounding.normalize(
-                    payload.transcript, inline_safe=True,
-                    conf=conf_for_inline or None,
-                )
-                if corrige and corrige.strip():
-                    deux_pass_transcript = corrige
-            except Exception:
-                logger.exception("Pré-correction inline indisponible — passe 1 sur transcript brut")
         deux_pass = llm.generate_note_two_pass(
-            deux_pass_transcript,
+            n_transcript or payload.transcript,
             template_row.system_instructions,
             template_row.layout_format,
             _build_context_lines(payload),
@@ -2867,7 +2842,7 @@ def _generate_and_publish(
             return deux_pass
 
     generator = llm.generate_note_stream(
-        payload.transcript,
+        n_transcript or payload.transcript,
         template_row.system_instructions,
         template_row.layout_format,
         _build_context_lines(payload),
@@ -3148,34 +3123,69 @@ async def api_generate(
     # sur-correction du reste.
     conf_map: dict = {}
     confiance_mots: Optional[List[dict]] = None
-    if (
-        audio_payload is None
-        and payload.consultation_id
-        and payload.transcript
-    ):
+    consultation = None
+    if payload.consultation_id:
         try:
             consultation = _get_owned_consultation(db, payload.consultation_id, user)
             conf_map = json.loads(consultation.transcript_conf) if consultation.transcript_conf else {}
-            if conf_map:
-                confiance_mots = med_grounding.doutes_pour_texte(
-                    payload.transcript, conf_map
-                )
+        except Exception:
+            logger.exception("Contexte consult. indisponible — génération sans signal")
+    if audio_payload is None and payload.transcript and conf_map:
+        try:
+            confiance_mots = med_grounding.doutes_pour_texte(
+                payload.transcript, conf_map
+            )
         except Exception:
             logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
 
-    # Hints structurés pour le LLM : items déterministes du moteur
-    # (extraction inline_safe, candidates SAINS) + candidats PHONÉTIQUES
-    # (G2P français, « dilote » → Dilaudid) — la même liste que l'onglet
-    # Validation, source unique. Les phonétiques sont des PISTES à confirmer,
-    # jamais des réécritures : le modèle les recoupe avec le contexte clinique.
-    # ``conf_map`` est relayé aux hints : un nom sans dose mais entendu avec
-    # incertitude se voit proposer sa piste phonétique (cf. phonetiques_texte).
-    med_hints: list = []
+    # DICTÉE harmonisée 1 passe / 2 passes : le texte corrigé par l'inline sûr
+    # (``inline_safe=True``) est envoyé au modèle dans les DEUX pipelines — le
+    # pipeline deux passes le faisait déjà, le pipeline unique envoyait du brut.
+    # Corriger la dictée rend les étapes cohérentes ; la liste des corrections
+    # ``inline_fixed`` sert ci-dessous à MUSCLER les hints (un item déjà écrit
+    # littéralement dans la DICTÉE ne doit plus être re-suggéré : redondant et
+    # confusant pour le modèle). Ce ``normalize`` déterministe coûte ~5-14 s sur
+    # les longues dictées (résolution mot-à-mot) — c'est le coût seul conservé
+    # ici, les scans phonétiques (~17 s) ayant été remplacés par la réutilisation
+    # de la liste live persistée.
+    n_transcript = payload.transcript
+    inline_fixed: set = set()
     if _med_grounding_on() and payload.transcript:
         try:
-            med_hints = med_grounding.extract_validation_items(
-                payload.transcript, conf=conf_map or None,
+            lowercase, inline_changes = med_grounding.normalize(
+                payload.transcript, conf=conf_map or None, inline_safe=True,
             )
+            if lowercase and lowercase.strip():
+                n_transcript = lowercase
+            inline_fixed = {
+                med_grounding.norm_phon(repl)
+                for _span, repl, _score, _sim in inline_changes
+                if repl
+            }
+        except Exception:
+            logger.exception("Pré-correction inline indisponible — DICTÉE brute")
+
+    # Hints structurés pour le LLM : items déterministes du moteur + candidats
+    # PHONÉTIQUES (G2P français, « dilote » → Dilaudid). Source : la liste
+    # POINTÉE déjà calculée en continu pendant la dictée (``med_grounding_json``)
+    # — la même que l'onglet Validation — réutilisée telle quelle au lieu d'un
+    # scan phonétique complet (~17 s) relancé ici à la génération. On y RETIRE
+    # les items déjà correctement écrits dans la DICTÉE (``inline_fixed``) :
+    # leurs corrections inline sont déjà dans le texte, les re-suggérer serait
+    # redondant. Leurs garble restent au contraire dans l'onglet Validation
+    # (liste complète).
+    med_hints: list = []
+    if _med_grounding_on() and payload.transcript and consultation is not None:
+        try:
+            persisted = consultation.med_grounding_json
+            if persisted:
+                parsed = json.loads(persisted)
+                med_hints = [
+                    item for item in parsed
+                    if med_grounding.norm_phon(item.get("base")
+                                               or item.get("name")
+                                               or "") not in inline_fixed
+                ]
         except Exception:
             med_hints = []
             logger.exception("Hints méds indisponibles — génération sans candidats")
@@ -3193,6 +3203,7 @@ async def api_generate(
             system_prompt,
             confiance_mots,
             med_hints,
+            n_transcript,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -3252,15 +3263,31 @@ async def api_generate(
     # silencieusement, exactement le bogue que ce choix corrige.
     consultation.edited_markdown = result["markdown"]
 
-    # Liste pointée des médicaments, recalculée sur le transcript (par défaut
-    # brut, la normalisation inline n'étant plus appliquée à la génération) :
-    # la liste et la note concordent, et le JSON d'audit suit la régénération.
+    # Liste pointée des médicaments, pour que l'onglet Validation concorde avec
+    # la note et que le JSON d'audit suive la régénération. La liste DÉFINITIVE
+    # a déjà été calculée en continu pendant la dictée (``med_grounding_json``,
+    # persisté au « Terminer ») ou par la retranscription / l'import
+    # (``_apply_grounding`` à ces points) : on la RÉUTILISE telle quelle et on
+    # la re-diffuse (SSE) sans relancer un scan phonétique complet (~10-17 s)
+    # à la génération — la même liste que celle des hints (Change hints), la
+    # même que celle qu'a vue le médecin en direct. On ne recalcule que si elle
+    # n'existe pas encore (consultation sans dictée ni retranscription préalable
+    # — cas rare : une note générée sur un transcript brut).
     if _med_grounding_on():
         try:
-            _apply_grounding(
-                db, consultation,
-                origin_tab=request.headers.get("x-consultai-tab", ""),
-            )
+            _persisted_grounding = consultation.med_grounding_json
+            if _persisted_grounding:
+                items = json.loads(_persisted_grounding)
+                live.publish(consultation.owner, "med_grounding_result", {
+                    "consultation_id": consultation.id,
+                    "origin_tab": request.headers.get("x-consultai-tab", ""),
+                    "items": items,
+                })
+            else:
+                _apply_grounding(
+                    db, consultation,
+                    origin_tab=request.headers.get("x-consultai-tab", ""),
+                )
         except Exception:
             logger.exception("Grounding liste incomplète (génération %s)", consultation.id)
 

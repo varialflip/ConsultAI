@@ -2122,15 +2122,17 @@ def migrate_general_prompt_phonetic_origin(db: Session) -> int:
     return touches
 
 
-#: Empreintes des consignes générales LIVRÉES avant la localisation des
-#: corrections (rubrique + contexte). Même mécanique que les migrations
-#: précédentes : on ne remplace la valeur en base que si elle est encore
-#: EXACTEMENT le défaut livré, pour ne jamais écraser une consigne
-#: personnalisée. Empreintes calculées contre ``default_prompts`` avant
-#: l'édition § 6 (centre le format des lignes sur la rubrique et le contexte).
+#: Empreintes des consignes générales EN BASE (instance de test) avant la
+#: localisation des corrections (rubrique + contexte). Même mécanique que les
+#: migrations précédentes : on ne remplace la valeur en base que si elle est
+#: encore EXACTEMENT le défaut livré (l'ancien format télégraphique § 6, sans
+#: rubrique ni contexte), pour ne jamais écraser une consigne personnalisée.
+#: Empreintes relevées sur la base ``consultai-test`` le 2026-09-04, dont la
+#: copie du prompt était l'ancien défaut pré-édition (vérifié : section § 6
+#: télégraphique avec « à confirmer », sans « [Rubrique] »).
 _OLD_GENERAL_PROMPT_SHA_LOCALISATION = {
-    "general_prompt_fr": "b1eefb1ae52758b924737c0c851af9a0f0b26852b10d075971ca5348c64a1190",
-    "general_prompt_en": "cc310030f00c59eb30739b9ac8ff978ada81532047238b3837b93cd1aa55ebe1",
+    "general_prompt_fr": "eafbb04c5b922821947667bb759aa151021b01291641a309fcdaa61e273933f1",
+    "general_prompt_en": "c87b0a1c1d67be2a8e4a07d9c286387418b026ff18e1963d46acb65f2fd22a2b",
 }
 
 

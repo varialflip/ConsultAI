@@ -2087,6 +2087,100 @@ def migrate_general_prompt_meds_apply_hints(db: Session) -> int:
     return touches
 
 
+#: Consigne « favorise la suggestion en cas d'incertitude » — remplace celle
+#: d'« applique le candidat » (migration 2026-09-04). Un modèle RAPIDE SANS
+#: raisonnement (DeepSeek v4 flash, reasoning off) lisait la double condition
+#: « le terme est phonétiquement proche ET cohérent avec posologie/contexte »
+#: comme une invitation à VÉRIFIER — et faute de pouvoir trancher, recopiait la
+#: dictée brute (« cinémète » restait « cinémète » alors que le bloc suggérait
+#: Sinemet). Nouvelle règle de DÉFAUT inversée : en cas d'incertitude, le
+#: candidat suggéré gagne d'office ; on ne l'écarte que sur contradiction
+#: manifeste, jamais sur un simple doute.
+_FAVOR_SUGGESTIONS_OLD_FR = _MEDS_APPLY_HINTS_NEW_FR
+_FAVOR_SUGGESTIONS_NEW_FR = (
+    "Applique les blocs de candidats du prompt (`MEDICAMENTS_SOUPCONNES` / "
+    "`MEDICAMENTS_PHONETIQUES`) : ils donnent le nom de médicament le plus "
+    "PROBABLE d'un terme déformé de la dictée (« Cinémette » → Sinemet). En "
+    "cas d'incertitude sur un nom — terme déformé, douteux ou inconnu — écris "
+    "d'office le candidat suggéré : c'est la lecture la plus probable. "
+    "N'écarte un candidat QUE s'il contredit manifestement la posologie, le "
+    "principe attendu ou la pathologie ; un simple doute, une hésitation ou "
+    "une orthographe inhabituelle ne justifie jamais de revenir au terme brut "
+    "de la dictée."
+)
+_FAVOR_SUGGESTIONS_OLD_EN = _MEDS_APPLY_HINTS_NEW_EN
+_FAVOR_SUGGESTIONS_NEW_EN = (
+    "Apply the candidate blocks in the prompt (`MEDICAMENTS_SOUPCONNES` / "
+    "`MEDICAMENTS_PHONETIQUES`): they give the most PROBABLE medication name "
+    "for a deformed term in the dictation (\"Cinémette\" → Sinemet). When "
+    "unsure about a name — deformed, doubtful, or unknown — write the "
+    "suggested candidate by default: it is the most probable reading. Set a "
+    "candidate aside ONLY if it plainly contradicts the dosage, the expected "
+    "drug, or the condition; mere doubt, hesitation, or unusual spelling "
+    "never justifies falling back to the raw dictated term."
+)
+
+
+def migrate_general_prompt_meds_favor_suggestions(db: Session) -> int:
+    """Porte dans la consigne générale EN BASE la règle « favorise la
+    suggestion en cas d'incertitude » (2026-09-04). Même mécanique que
+    ``migrate_general_prompt_meds_apply_hints`` : on remplace le fragment
+    « applique le candidat » par la nouvelle règle de défaut, puis on élimine
+    les tirets « noms déformés » devenus en double. Un fragment retravaillé
+    par le médecin est laissé intact et signalé."""
+    touches = 0
+    for cle, ancienne, nouvelle, prefixe_ligne in (
+        (
+            "general_prompt_fr",
+            _FAVOR_SUGGESTIONS_OLD_FR,
+            _FAVOR_SUGGESTIONS_NEW_FR,
+            "- **Les noms déformés",
+        ),
+        (
+            "general_prompt_en",
+            _FAVOR_SUGGESTIONS_OLD_EN,
+            _FAVOR_SUGGESTIONS_NEW_EN,
+            "- **Drug names deformed",
+        ),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        mod = False
+        if nouvelle in row.value:
+            continue  # déjà en place — idempotent
+        if ancienne in row.value:
+            row.value = row.value.replace(ancienne, nouvelle)
+            mod = True
+        lignes = row.value.split("\n")
+        vus: set[str] = set()
+        sortie = []
+        for lg in lignes:
+            if lg.startswith(prefixe_ligne):
+                if lg in vus:
+                    mod = True
+                    continue  # tiret « noms déformés » en double — on l'écarte
+                vus.add(lg)
+            sortie.append(lg)
+        row.value = "\n".join(sortie)
+        if not mod:
+            logger.info(
+                "Consigne « %s » : fragment « applique le candidat » modifié, "
+                "règle « favorise la suggestion » laissée au panneau.",
+                cle,
+            )
+            continue
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » : règle « favorise la suggestion » appliquée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
 def migrate_general_prompt_meds_resolution(db: Session) -> int:
     """Porte dans la consigne générale EN BASE la règle de résolution des
     noms de médicaments déformés par le modèle (2026-08-31, approche « donner
@@ -2769,6 +2863,7 @@ def init_db() -> None:
         migrate_general_prompt_antecedents_hospitalisation_placement(db)
         migrate_general_prompt_meds_resolution(db)
         migrate_general_prompt_meds_apply_hints(db)
+        migrate_general_prompt_meds_favor_suggestions(db)
         migrate_general_prompt_phonetic_origin(db)
         migrate_general_prompt_localisation_corrections(db)
         migrate_template_med_grouping(db)

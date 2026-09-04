@@ -9,15 +9,26 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   à APPLIQUER, plus à « confirmer sans les recopier normalement ».** Un modèle
   rapide SANS raisonnement (DeepSeek v4 flash, reasoning off) lisait les
   candidats comme des « pistes à ne pas copier aveuglément » et les écartait
-  tous. La consigne générale (§ 4, FR + EN) dit maintenant : si le terme
-  déformé de la dictée est phonétiquement proche du candidat suggéré ET
-  cohérent avec posologie/contexte, écris le nom suggéré ; écarte-le seulement
-  s'il contredit manifestement le contexte. Migration
-  `migrate_general_prompt_meds_apply_hints` porte la consigne dans la version
-  personnalisée en base (idempotente, déduplique le tiret « noms déformés »,
-  laisse intact un fragment retravaillé par le médecin) ; la migration
-  `migrate_general_prompt_meds_resolution` évite de ré-insérer l'ancien bloc
-  quand la nouvelle consigne est déjà présente.
+  tous. La consigne générale (§ 4, FR + EN) dit maintenant : en cas
+  d'**incertitude sur un nom** — terme déformé, douteux ou inconnu — **écris
+  d'office le candidat suggéré** (lecture la plus probable) ; n'écarte un
+  candidat QUE s'il contredit manifestement la posologie, le principe attendu
+  ou la pathologie — un simple doute, une hésitation ou une orthographe
+  inhabituelle ne justifie jamais de revenir au terme brut de la dictée.
+  Migrations `migrate_general_prompt_meds_apply_hints` puis
+  `migrate_general_prompt_meds_favor_suggestions` portent la consigne dans la
+  version personnalisée en base (idempotentes, dédupliquent le tiret « noms
+  déformés », laissent intact un fragment retravaillé par le médecin) ; la
+  migration `migrate_general_prompt_meds_resolution` évite de ré-insérer
+  l'ancien bloc quand la nouvelle consigne est déjà présente. Les libellés des
+  blocs (`MEDICAMENTS_PHONETIQUES`, FR + EN) portent la même règle de défaut.
+- **G2P français : le « c » doux devant e/i/y se prononce /s/.** La règle naïve
+  « c »→/k/ codait « cinémète » comme /kinemete/ — à égalité phonétique avec
+  KINERET (anakinra), dont le hint contredisait Sinemet dans le prompt
+  (note 39). Avec les règles `ce/ci/cy/cé/cè/cê`→/s/, « cinémète » → /sinemete/
+  et Sinemet (lévodopa) devient le candidat phonétique UNIQUE (KINERET écarté,
+  régression nulle sur les 4 transcripts de référence ; Eliquice→eliquis
+  75→88 et Citagliptine→sitagliptine 92→100 par simulation assainie).
 
 ## 2026-09-04 — Transcription : persistance des info-bulles au rechargement
 

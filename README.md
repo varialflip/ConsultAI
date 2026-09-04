@@ -975,12 +975,18 @@ des médicaments », défaut `false`). Une fois activé :
   candidats phonétiques gardent le nom dicté + flèche vers la cible.
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`). S'y ajoutent les
-  **candidats phonétiques** (bloc `MEDICAMENTS_PHONETIQUES`, étiquetés
-  « à confirmer ») : le G2P français du moteur (`phonetiques_texte`) remonte
-  pour chaque jeton non résolu et « dosé » le meilleur voisin phonétique
-  (dist ≤ 3, sim ≥ 0,72, non feuille, non cosmétique). « dilote » → Dilaudid,
-  « kitsapine » → quetiapine, « Antoloque » → Pantoloc — le modèle les
-  accepte ou les écarte selon la posologie et le contexte clinique. **Un jeton
+  **candidats phonétiques** (bloc `MEDICAMENTS_PHONETIQUES`) : le G2P français
+  du moteur (`phonetiques_texte`) remonte pour chaque jeton non résolu et
+  « dosé » le meilleur voisin phonétique (dist ≤ 3, sim ≥ 0,72, non feuille,
+  non cosmétique). « dilote » → Dilaudid, « kitsapine » → quetiapine,
+  « Antoloque » → Pantoloc — et, depuis le fix « c » doux (2026-09-04),
+  « cinémète » → **Sinemet** seul (l'ancienne règle « c »→/k/ le mettait à
+  égalité avec KINERET). **En cas d'incertitude sur un nom (terme déformé,
+  douteux ou inconnu), la consigne générale demande d'écrire d'office le
+  candidat suggéré — la lecture la plus probable** — et de ne l'écarter que sur
+  contradiction manifeste (posologie, principe attendu, pathologie) : un modèle
+  rapide SANS raisonnement n'a pas à retrancher lui-même la confiance d'une
+  piste. **Un jeton
   entendu avec incertitude (confiance STT < 0,95) obtient sa piste même sans
   dose à portée** (seuil 0,80 — le doute est la preuve d'un nom possiblement
   déformé) : « ricepte » → Aricept, « ziprexa » → Zyprexa, « maxérant » →

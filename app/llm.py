@@ -142,10 +142,10 @@ _USER_PROMPT_LABELS = {
         "meds_phon": (
             "CANDIDATS PHONÉTIQUES (le moteur rapproche un mot non résolu de la "
             "dictée d'un nom de médicament par la prononciation française). Le "
-            "candidat est le nom le plus PROBABLE du terme déformé — écris-le "
-            "dans la note s'il est phonétiquement proche du terme dicté ET "
-            "cohérent avec la posologie et le contexte clinique ; écarte-le "
-            "seulement s'il contredit manifestement l'un des deux :"
+            "candidat est le nom le plus PROBABLE du terme déformé — en cas "
+            "d'incertitude (terme déformé, douteux ou inconnu), écris-le "
+            "d'office dans la note ; ne l'écarte QUE s'il contredit "
+            "manifestement la posologie ou le contexte clinique :"
         ),
         "homophones": (
             "HOMOPHONIES PERTINENTES POUR CETTE TRANSCRIPTION — erreurs types "
@@ -183,10 +183,10 @@ _USER_PROMPT_LABELS = {
         "meds_phon": (
             "PHONETIC CANDIDATES (the engine maps an unresolved word of the "
             "dictation to a medication name by French pronunciation). The "
-            "candidate is the most PROBABLE name of the deformed term — write "
-            "it in the note if it is phonetically close to the dictated term "
-            "AND coherent with the dosage and the clinical context; set it "
-            "aside only if it plainly contradicts either one:"
+            "candidate is the most PROBABLE name of the deformed term — when in "
+            "doubt (deformed, doubtful, or unknown term), write it by default "
+            "in the note; set it aside ONLY if it plainly contradicts the "
+            "dosage or the clinical context:"
         ),
         "homophones": (
             "MISHEARINGS RELEVANT TO THIS TRANSCRIPT — characteristic speech-"

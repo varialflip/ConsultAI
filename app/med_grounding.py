@@ -431,6 +431,17 @@ G2P_RULES = [
     # standard (indépendante de l'accent régional).
     ("gué", "g"), ("gue", "g"), ("gui", "g"), ("gü", "g"),
     ("gua", "gwa"), ("guo", "gwɔ"),
+    # c DOUX devant e/i/y : la règle naïve « c »→/k/ force « cinémète » →
+    # /kinemete/, collision à égalité avec KINERET (anakinra) — un candidat
+    # absurde pour une maladie de Parkinson. En français le « c » devant
+    # e/i/y se prononce /s/ : « cinémète » → /sinemete/ remonte alors
+    # Sinemet (lévodopa) comme candidat UNIQUE (mesure 2026-09-04 : sim_phon_w
+    # 0.875 vs Sinemet, 0.625 vs KINERET). La tri par longueur place d'office
+    # ces règles 2-caractères avant le « c » dur — un « c » devant a/o/u
+    # (ka, ko, ku) reste /k/.
+    ("cia", "sja"), ("cie", "sje"), ("cio", "sjo"), ("ceu", "so"),
+    ("ce", "se"), ("ci", "si"), ("cy", "si"),
+    ("cé", "se"), ("cè", "sɛ"), ("cê", "sɛ"), ("cë", "se"),
     ("ç", "s"), ("c", "k"), ("g", "g"), ("j", "ʒ"), ("h", ""),
     ("q", "k"), ("x", "ks"), ("y", "i"), ("w", "w"), ("z", "z"), ("s", "s"),
     ("f", "f"), ("v", "v"), ("p", "p"), ("b", "b"), ("t", "t"), ("d", "d"),

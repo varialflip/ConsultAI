@@ -50,6 +50,51 @@
       "garble": "clinique d'évaluation des capacités cognitives",
       "correct": "CLSC",
       "langue": "fr"
+    },
+    {
+      "garble": "iso-smaf",
+      "correct": "ISO-SMAF",
+      "langue": "fr"
+    },
+    {
+      "garble": "izo-smaf",
+      "correct": "ISO-SMAF",
+      "langue": "fr"
+    },
+    {
+      "garble": "izo-smaff",
+      "correct": "ISO-SMAF",
+      "langue": "fr"
+    },
+    {
+      "garble": "iso smaf",
+      "correct": "ISO-SMAF",
+      "langue": "fr"
+    },
+    {
+      "garble": "maison aloi",
+      "correct": "Maison Aloïs",
+      "langue": "fr"
+    },
+    {
+      "garble": "maison aloïs",
+      "correct": "Maison Aloïs",
+      "langue": "fr"
+    },
+    {
+      "garble": "maison à lois",
+      "correct": "Maison Aloïs",
+      "langue": "fr"
+    },
+    {
+      "garble": "pet scan",
+      "correct": "TEP-Scan",
+      "langue": "fr"
+    },
+    {
+      "garble": "pet-scan",
+      "correct": "TEP-Scan",
+      "langue": "fr"
     }
   ],
   "prompt_hints": [
@@ -90,9 +135,119 @@
       "langue": "fr"
     },
     {
+      "fragment": "té dé emme",
+      "lecture": "TDM",
+      "contexte": "imagerie — tomodensitométrie",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "té de em",
+      "lecture": "TDM",
+      "contexte": "imagerie — tomodensitométrie",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "chellesled",
+      "lecture": "CHSLD",
+      "contexte": "hébergement de longue durée",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "chésled",
+      "lecture": "CHSLD",
+      "contexte": "hébergement de longue durée",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "tug test",
+      "lecture": "TUG",
+      "contexte": "test Timed Up and Go",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "rezzber",
+      "lecture": "Reisberg",
+      "contexte": "échelle de détérioration globale (GDS)",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "leucopencéphalopathie",
+      "lecture": "leuco-encéphalopathie",
+      "contexte": "imagerie cérébrale",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "leuco encéphalopathie",
+      "lecture": "leuco-encéphalopathie",
+      "contexte": "imagerie cérébrale",
+      "langue": "fr"
+    },
+    {
+      "fragment": "leuco araïose",
+      "lecture": "leucoaraïose",
+      "contexte": "atteinte de la substance blanche périventriculaire",
+      "langue": "fr"
+    },
+    {
+      "fragment": "leucopatie",
+      "lecture": "leucopathie",
+      "contexte": "atteinte dégénérative de la substance blanche",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
       "fragment": "tep scan",
       "lecture": "TEP-Scan",
       "contexte": "imagerie — tomographie par émission de positons",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "outéréf",
+      "lecture": "UTRF",
+      "contexte": "unité transitoire de rétablissement fonctionnel",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "outéref",
+      "lecture": "UTRF",
+      "contexte": "unité transitoire de rétablissement fonctionnel",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "ourefi",
+      "lecture": "URFI",
+      "contexte": "unité de rétablissement fonctionnel intensif",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "erre i",
+      "lecture": "RI",
+      "contexte": "ressource intermédiaire",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "èrepéa",
+      "lecture": "LSPA",
+      "contexte": "Loi sur la santé publique",
+      "langue": "fr",
+      "phonetic": true
+    },
+    {
+      "fragment": "èl espéa",
+      "lecture": "LSPA",
+      "contexte": "Loi sur la santé publique",
       "langue": "fr",
       "phonetic": true
     }

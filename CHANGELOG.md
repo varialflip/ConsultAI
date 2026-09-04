@@ -3,6 +3,17 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Termes gériatriques : enrichissement du vocabulaire
+
+- **Nouvelles entrées curatées** dans `geriatric_terms.json` :
+  - **Réécrits inline** (déterministe) : ISO-SMAF (multi-désignations
+    « izo-smaff » / « iso smaf »…), Maison Aloïs, TEP-Scan (dicté « pet scan »
+    ou « TEP-Scan »), et le CLSC déjà présent.
+  - **Suggestions phonétiques** (`phonetic: true`, avec confiance combinée) :
+    TDM, CHSLD, TUG, Reisberg, leucopencéphalopathie → leuco-encéphalopathie,
+    leucopatie → leucopathie, UTRF, URFI, RI, LSPA.
+  - **Équivalences pré-orthographiées** : leucoaraïose, leucopathie.
+
 ## 2026-09-04 — Termes gériatriques : confiance des hints + LLM aveugle aux corrections inline
 
 - **Confiance combinée sur les hints gériatriques de type « garble ».** Les

@@ -716,13 +716,27 @@ Québec), abréviations cliniques (HTO, CLSC), tests cognitifs (MMSE, y compris
 les multi-désignations « mini mental » / « MMS » / « mini mental status ») —
 sont **réécrits déterministiquement dans le texte** AVANT le modèle
 (`apply_inline_replacements`), zéro attention de l'LLM. Le fichier
-`app/geriatric_terms.json` (module à part de `med_grounding`) ne porte aucun
-nom de médicament ; un mot déjà corrigé par la correction des médicaments n'est
-jamais retouché (le médicament gagne sur la collision). À la génération, une
-réécriture n'est appliquée que si la reconnaissance vocale était incertaine
-(confiance < 0.98). Pendant la dictée, les termes corrigés apparaissent
-**surlignés en italique-souligné** dans la transcription, avec un rollover
-`[garble] → [correction]`.
+`app/geriatric_terms.json` (module à part de `med_grounding`) ne porte aucun nom de médicament ; un mot déjà corrigé par la correction des médicaments n'est jamais retouché (le médicament gagne sur la collision). À la génération, une réécriture n'est appliquée que si la reconnaissance vocale était incertaine (confiance < 0.98). Pendant la dictée, les termes corrigés apparaissent **surlignés en italique-souligné** dans la transcription, avec un rollover `[garble] → [correction]`.
+
+Les entrées du JSON sont de deux natures, distinguées par un drapeau
+`phonetic` :
+- **Équivalences autoritaires** (sans `phonetic`) — p. ex. « mini mental » →
+  MMSE : lecture univoque, réécrivées inline, **aucune confiance** n'est
+  affichée ni envoyée (le mapping est de référence, pas un doute).
+- **Garbles phonétiques** (`phonetic: true`) — p. ex. « tep scan » → TEP-Scan :
+  le STT déformera ce terme « dur ». Ils sont suggérés au modèle avec une
+  **confiance combinée `sqrt(min_stt × sim)`** (minimale `min_stt` sur les
+  jetons du fragment, `sim` = similarité phonémique G2P), la MÊME convention
+  que les suggestions phonétiques des médicaments : **plus elle est basse,
+  plus la piste est forte** (STT incertain + phonétique proche → garble
+  probable). Le fichier reste sans nom de médicament.
+
+**Le LLM reste aveugle aux corrections inline.** Les formes déjà corrigées en
+inline (médicaments et termes gériatriques) sont **retirées** du bloc
+`<CONFIANCE_MOTS>` (`ignores=inline_fixed`) et des hints
+(`MEDICAMENTS_*`) : le modèle ne re-­seconde-guess pas une correction déjà
+faite et auditable. Le `<<<DICTEE` porte la version corrigée ; seules les
+présomptions persistantes atteignent le modèle.
 
 **Fidélité au contenu dicté.** La consigne générale interdit autant l'omission
 que l'invention (§ 1) : toute donnée clinique dictée figure dans la note —

@@ -2744,6 +2744,7 @@ def _generate_and_publish(
     confiance_mots: Optional[List[dict]] = None,
     med_hints: Optional[List[dict]] = None,
     n_transcript: Optional[str] = None,
+    conf_map: Optional[dict] = None,
 ) -> dict:
     """
     Génère la note en continu et diffuse les morceaux en direct (SSE).
@@ -2819,6 +2820,7 @@ def _generate_and_publish(
         system_override=system_prompt,
         confiance=confiance_mots,
         med_hints=med_hints,
+        conf_map=conf_map,
     )
 
     raw = ""
@@ -3094,14 +3096,6 @@ async def api_generate(
             conf_map = json.loads(consultation.transcript_conf) if consultation.transcript_conf else {}
         except Exception:
             logger.exception("Contexte consult. indisponible — génération sans signal")
-    if audio_payload is None and payload.transcript and conf_map:
-        try:
-            confiance_mots = med_grounding.doutes_pour_texte(
-                payload.transcript, conf_map
-            )
-        except Exception:
-            logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
-
     # DICTÉE harmonisée : le texte corrigé par l'inline sûr
     # (``inline_safe=True``) est envoyé au modèle. Corriger la dictée rend la
     # génération cohérente avec les hints ; la liste des corrections
@@ -3134,17 +3128,34 @@ async def api_generate(
     # (collision : le médicament gagne, on n'écrase pas ses corrections).
     # ``conf`` (norm_phon → confiance) limite aux garbles probables : un jeton
     # entendu >= 0.98 n'est pas réécrit — on ne « corrige » pas un terme
-    # parfaitement dicté.
+    # parfaitement dicté. Les formes corrigées ici rejoignent ``inline_fixed``
+    # (le LLM est AVEUGLE aux deux types de corrections inline).
     if payload.transcript:
         try:
-            n_transcript, _gch = geriatric_terms.apply_inline_replacements(
+            n_transcript, geriatric_changes = geriatric_terms.apply_inline_replacements(
                 n_transcript or payload.transcript,
                 langue=template_row.language,
                 protect=inline_fixed,
                 conf=conf_map or None,
             )
+            for _change in geriatric_changes:
+                if _change.get("correct"):
+                    inline_fixed.add(med_grounding.norm_phon(_change["correct"]))
         except Exception:
             logger.exception("Termes gériatriques indisponibles — DICTÉE brute")
+
+    # Mots que le STT a entendus avec doute, pour le bloc <CONFIANCE_MOTS>.
+    # ``ignores=inline_fixed`` : les formes déjà corrigées inline (médicaments
+    # ET termes gériatriques) sont retirées de la liste — le LLM ne doit pas
+    # deuxième-chance une correction déjà faite et auditable (voir
+    # ``med_grounding.doutes_pour_texte``). Calculé APRÈS ``inline_fixed``.
+    if audio_payload is None and payload.transcript and conf_map:
+        try:
+            confiance_mots = med_grounding.doutes_pour_texte(
+                payload.transcript, conf_map, ignores=inline_fixed,
+            )
+        except Exception:
+            logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
 
     # Hints structurés pour le LLM : items déterministes du moteur + candidats
     # PHONÉTIQUES (G2P français, « dilote » → Dilaudid). Source : la liste
@@ -3185,6 +3196,7 @@ async def api_generate(
             confiance_mots,
             med_hints,
             n_transcript,
+            conf_map,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)

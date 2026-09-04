@@ -261,11 +261,17 @@ def _bloc_homophones(candidats: List[dict], libelle: str) -> Optional[str]:
     """Bloc ``HOMOPHONIES_CE_CALL`` : lignes pertinentes pour CETTE dictée."""
     if not candidats:
         return None
-    lignes = [
-        f"- « {c.get('erreur')} » → {c.get('lecture')}"
-        + (f" (contexte : {c.get('contexte')})" if c.get("contexte") else "")
-        for c in candidats
-    ]
+    lignes = []
+    for c in candidats:
+        ligne = f"- « {c.get('erreur')} » → {c.get('lecture')}"
+        # ``conf`` = étiquette de confiance combinée (STT × similarité) d'un
+        # fragment GARBLE — même convention que les suggestions phonétiques
+        # des médicaments : plus elle est BASSE, plus la piste est forte.
+        if isinstance(c.get("conf"), (int, float)):
+            ligne += f" — confiance {c['conf']:.3f}"
+        if c.get("contexte"):
+            ligne += f" (contexte : {c.get('contexte')})"
+        lignes.append(ligne)
     return _bloc(libelle, "HOMOPHONIES_CE_CALL", lignes)
 
 
@@ -2384,6 +2390,7 @@ def generate_note_stream(
     system_override: Optional[str] = None,
     confiance: Optional[List[dict]] = None,
     med_hints: Optional[List[dict]] = None,
+    conf_map: Optional[dict] = None,
 ):
     """
     Version en continu de ``generate_note``.
@@ -2446,6 +2453,7 @@ def generate_note_stream(
         geriatric_hints=geriatric_terms.pertinent_hints(
             transcript if (not audio_only or transcript_guide) else "",
             langue,
+            conf_map=conf_map,
         ),
     )
     if audio_to_send is not None:

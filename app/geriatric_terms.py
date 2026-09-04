@@ -224,15 +224,58 @@ def _est_accent(car: str) -> bool:
 # ---------------------------------------------------------------------------
 # Canal 2 — candidats ambigus pour le LLM (bloc HOMOPHONIES_CE_CALL)
 # ---------------------------------------------------------------------------
+def _confiance_combinée(fragment: str, lecture: str, conf_map: Optional[dict]) -> Optional[float]:
+    """Confiance combinée d'un fragment GARBLE : ``sqrt(min_stt × sim)``.
+
+    Même convention que les suggestions phonétiques des médicaments
+    (``med_grounding.suggestions_texte``) : PLUS BASSE = piste plus forte
+    (le STT hésitait ET la correspondance phonétique est proche → garble
+    probable). ``conf_map`` : mapping ``norm_phon → confiance`` ; ``min_stt``
+    = minima sur les jetons du fragment présents dans le mapping (1.0 si
+    aucun jeton y figure). ``sim`` = similarité phonémique G2P entre la forme
+    fautive et la lecture correcte (via ``med_grounding``). Retourne ``None``
+    si la similarité n'est pas calculable.
+    """
+    if not fragment or not lecture:
+        return None
+    try:
+        from app import med_grounding
+    except Exception:
+        return None
+    try:
+        sim = med_grounding.sim_phon_w(
+            med_grounding.phonetic_fr(fragment),
+            med_grounding.phonetic_fr(lecture),
+        )
+    except Exception:
+        return None
+    if not sim or sim <= 0:
+        return None
+    stt_min = 1.0
+    if conf_map:
+        vals = [
+            float(conf_map[t])
+            for m in fragment.split()
+            if isinstance(conf_map.get(t := med_grounding.norm_phon(m)), (int, float))
+        ]
+        if vals:
+            stt_min = min(vals)
+    return round((stt_min * sim) ** 0.5, 3)
+
+
 def pertinent_hints(
     texte: str,
     langue: str = "fr",
     maxi: int = 6,
+    conf_map: Optional[dict] = None,
 ) -> List[dict]:
     """Lignes du canal hints dont le fragment fautif figure dans ``texte``.
 
     Seules ces lignes voyagent dans le prompt ; la liste complète ne sort
-    jamais. ``maxi`` borne le message utilisateur.
+    jamais. ``maxi`` borne le message utilisateur. ``conf_map`` (STT) alimente
+    la confiance combinée des fragments flaggés ``phonetic`` (garble-type) :
+    plus elle est BASSE, plus la piste est forte. Les entrées sans drapeau
+    ``phonetic`` (équivalences autoritaires) ne portent AUCUNE confiance.
     """
     if not texte:
         return []
@@ -241,11 +284,18 @@ def pertinent_hints(
     for entree in liste_hints(langue):
         fragment = _normaliser(entree.get("fragment") or "")
         if fragment and fragment in texte_norm:
-            resultats.append({
+            item = {
                 "erreur": entree.get("fragment"),
                 "lecture": entree.get("lecture"),
                 "contexte": entree.get("contexte"),
-            })
+            }
+            if entree.get("phonetic"):
+                conf = _confiance_combinée(
+                    entree.get("fragment") or "", entree.get("lecture") or "", conf_map,
+                )
+                if conf is not None:
+                    item["conf"] = conf
+            resultats.append(item)
             if len(resultats) >= maxi:
                 break
     return resultats

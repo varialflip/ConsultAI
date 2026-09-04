@@ -88,6 +88,13 @@
       "lecture": "hémiparésie droite",
       "contexte": "latéralité + neurologie",
       "langue": "fr"
+    },
+    {
+      "fragment": "tep scan",
+      "lecture": "TEP-Scan",
+      "contexte": "imagerie — tomographie par émission de positons",
+      "langue": "fr",
+      "phonetic": true
     }
   ]
 }

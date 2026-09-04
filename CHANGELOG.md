@@ -3,6 +3,25 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-04 — Termes gériatriques : confiance des hints + LLM aveugle aux corrections inline
+
+- **Confiance combinée sur les hints gériatriques de type « garble ».** Les
+  entrées marquées `phonetic: true` (ex. « tep scan » → TEP-Scan) portent
+  désormais une **confiance `sqrt(min_stt × sim)`** — même convention que les
+  suggestions phonétiques des médicaments : **plus basse = piste plus forte**
+  (STT incertain + phonétique proche → garble probable). Le bloc
+  `<<<HOMOPHONIES_CE_CALL>>>` l'affiche (`— confiance X.XXX`) quand elle est
+  présente. Les **équivalences autoritaires** (sans `phonetic`, ex. « mini
+  mental » → MMSE) restent **sans confiance** : le mapping est de référence,
+  pas un doute.
+- **Le LLM est aveugle aux corrections inline.** Les formes déjà corrigées en
+  inline — médications et termes gériatriques — sont retirées du bloc
+  `<CONFIANCE_MOTS>` (`doutes_pour_texte(..., ignores=inline_fixed)`) : le
+  modèle ne re-seconde-guess pas une correction déjà faite et auditable, et les
+  hints gériatriques GARBLE sont calculés sur le même texte corrigé que le
+  `<<<DICTEE`. Le calcul de `CONFIANCE_MOTS` est déplacé après la construction
+  de `inline_fixed` (médicaments **et** termes gériatriques).
+
 ## 2026-09-04 — Termes gériatriques : module à part, réécriture déterministe + surlignage
 
 - **Nouveau module `geriatric_terms`** (`app/geriatric_terms.py` + `geriatric_terms.json`),

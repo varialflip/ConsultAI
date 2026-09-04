@@ -2133,7 +2133,7 @@ def migrate_general_prompt_phonetic_origin(db: Session) -> int:
 #: / ``[Section]``), plus fiable qu'un hash tiré du module.
 _OLD_GENERAL_PROMPT_SHA_LOCALISATION = {
     "general_prompt_fr": "010c4361380d0ebcfd7d4bde0bb5623e835e15b29da9f5f93dcb05a721b42340",
-    "general_prompt_en": "7ca64e9fe171abc0f8b87c630903786d5c70366e1358414f917701ecc4e25012",
+    "general_prompt_en": "27150081281a26689611578252bf3a9c128ee34102550550ac687d87dcaae138",
 }
 
 

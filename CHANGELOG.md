@@ -14,8 +14,10 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   cohérent avec posologie/contexte, écris le nom suggéré ; écarte-le seulement
   s'il contredit manifestement le contexte. Migration
   `migrate_general_prompt_meds_apply_hints` porte la consigne dans la version
-  personnalisée en base (idempotente, laisse intact un fragment retravaillé par
-  le médecin).
+  personnalisée en base (idempotente, déduplique le tiret « noms déformés »,
+  laisse intact un fragment retravaillé par le médecin) ; la migration
+  `migrate_general_prompt_meds_resolution` évite de ré-insérer l'ancien bloc
+  quand la nouvelle consigne est déjà présente.
 
 ## 2026-09-04 — Transcription : persistance des info-bulles au rechargement
 

@@ -1986,6 +1986,7 @@ _MEDS_RESOLUTION_NEW_EN = (
     "(doubtful-items rule, section 1)."
 )
 
+
 #: Consigne « applique le candidat suggéré » — remplace celle d'« outils au
 #: LLM » (2026-09-04). Un modèle RAPIDE SANS raisonnement (DeepSeek v4 flash,
 #: reasoning off) lisait les blocs MEDICAMENTS_* comme des « pistes à ne pas
@@ -2029,26 +2030,52 @@ def migrate_general_prompt_meds_apply_hints(db: Session) -> int:
     """Porte dans la consigne générale EN BASE la consigne « applique le
     candidat suggéré » (2026-09-04). Même mécanique que les migrations
     précédentes : on remplace le fragment « pistes à confirmer... jamais des
-    vérités à recopier aveuglément » par la nouvelle consigne d'application.
-    Un fragment retravaillé par le médecin est laissé intact et signalé."""
+    vérités à recopier aveuglément » par la nouvelle consigne d'application,
+    puis on élimine les tirets « noms déformés » devenus en double (ré-inserts
+    par ``migrate_general_prompt_meds_resolution`` ou résidu d'un passage
+    précédent). Un fragment retravaillé par le médecin est laissé intact et
+    signalé."""
     touches = 0
-    for cle, ancienne, nouvelle in (
-        ("general_prompt_fr", _MEDS_APPLY_HINTS_OLD_FR, _MEDS_APPLY_HINTS_NEW_FR),
-        ("general_prompt_en", _MEDS_APPLY_HINTS_OLD_EN, _MEDS_APPLY_HINTS_NEW_EN),
+    for cle, ancienne, nouvelle, prefixe_ligne in (
+        (
+            "general_prompt_fr",
+            _MEDS_APPLY_HINTS_OLD_FR,
+            _MEDS_APPLY_HINTS_NEW_FR,
+            "- **Les noms déformés",
+        ),
+        (
+            "general_prompt_en",
+            _MEDS_APPLY_HINTS_OLD_EN,
+            _MEDS_APPLY_HINTS_NEW_EN,
+            "- **Drug names deformed",
+        ),
     ):
         row = db.get(AppSetting, cle)
         if row is None or not row.value.strip():
             continue
-        if nouvelle in row.value:
-            continue  # déjà en place — idempotent
-        if ancienne not in row.value:
-            logger.info(
-                "Consigne « %s » : fragment « médicaments détectés » modifié, "
-                "consigne d'application des candidats laissée au panneau.",
-                cle,
-            )
+        mod = False
+        if ancienne in row.value:
+            row.value = row.value.replace(ancienne, nouvelle)
+            mod = True
+        lignes = row.value.split("\n")
+        vus: set[str] = set()
+        sortie = []
+        for lg in lignes:
+            if lg.startswith(prefixe_ligne):
+                if lg in vus:
+                    mod = True
+                    continue  # tiret « noms déformés » en double — on l'écarte
+                vus.add(lg)
+            sortie.append(lg)
+        row.value = "\n".join(sortie)
+        if not mod:
+            if nouvelle not in row.value:
+                logger.info(
+                    "Consigne « %s » : fragment « médicaments détectés » modifié, "
+                    "consigne d'application des candidats laissée au panneau.",
+                    cle,
+                )
             continue
-        row.value = row.value.replace(ancienne, nouvelle)
         row.updated_by = "migration"
         touches += 1
         logger.info(
@@ -2068,14 +2095,14 @@ def migrate_general_prompt_meds_resolution(db: Session) -> int:
     sert d'ancrage et doit y figurer EXACTEMENT ; une ligne retravaillée est
     laissée intacte et signalée au journal."""
     touches = 0
-    for cle, ancienne, nouvelle in (
-        ("general_prompt_fr", _MEDS_RESOLUTION_OLD_FR, _MEDS_RESOLUTION_NEW_FR),
-        ("general_prompt_en", _MEDS_RESOLUTION_OLD_EN, _MEDS_RESOLUTION_NEW_EN),
+    for cle, ancienne, nouvelle, appliquee in (
+        ("general_prompt_fr", _MEDS_RESOLUTION_OLD_FR, _MEDS_RESOLUTION_NEW_FR, _MEDS_APPLY_HINTS_NEW_FR),
+        ("general_prompt_en", _MEDS_RESOLUTION_OLD_EN, _MEDS_RESOLUTION_NEW_EN, _MEDS_APPLY_HINTS_NEW_EN),
     ):
         row = db.get(AppSetting, cle)
         if row is None or not row.value.strip():
             continue
-        if nouvelle in row.value:
+        if nouvelle in row.value or appliquee in row.value:
             continue  # déjà en place — idempotent
         if ancienne not in row.value:
             logger.info(

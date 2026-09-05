@@ -475,6 +475,22 @@ résidence ni à la dénominalisation** :
   aucun renseignement de santé ni identité supplémentaire. Le bonus de score et
   les seuils abaissés (`COMMON_*` dans `app/med_grounding.py`) ne concernent
   que cette liste ; les garde-fous de prose restent en place.
+- **Texte normalisé pré-calculé (2026-09-05)** : `normalized_transcript` +
+  `inline_fixed_json` (par consultation, même rétention que le brouillon)
+  contiennent une copie de la transcription DÉJÀ corrigée par l'inline sûr, et
+  la liste des formes corrigées. C'est **un dérivé dénominalisé de la dictée**
+  (aucune identité, aucun n° de dossier — mêmes règles que `{{PATIENT}}` /
+  `{{DOSSIER}}`) ; la « copie corrigée » subit exactement la même rétention, la
+  même purge et les mêmes sauvegardes **sanitisées** que `raw_transcript`.
+  Aucun envoi supplémentaire hors machine : ce cache ne sert qu'à la génération
+  locale, qui re-persiste une version fraîche à chaque génération.
+- **Statistiques de calcul (2026-09-05)** : `compute_stats_json` (par
+  consultation, même rétention que le brouillon) porte uniquement des **durées
+  et compteurs non identifiants** (pré-traitement déterministe, scan de
+  grounding, télémétrie LLM — TTFT, compteurs de hints/mots douteux) ; aucune
+  donnée clinique, aucune parole, aucun texte. Elle alimente le panneau
+  « Informations techniques » du brouillon et le journal de l'onglet admin
+  « Statistiques », et meurt avec le brouillon comme ses congénères internes.
 
 ---
 

@@ -13,6 +13,7 @@ persistant (/data/consultai.db) trivial à sauvegarder avec Hyper Backup.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Iterator, List, Optional
@@ -63,6 +64,28 @@ def _iso(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         return value.isoformat() + "Z"
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def merge_compute_stats(existing: str | None, updates: dict | None) -> str:
+    """Fusionne les statistiques de calcul dans ``compute_stats_json``.
+
+    Deux producteurs écrivent ce blob à des moments différents : le « Terminer »
+    (``compute_stats_json`` : durées du scan plein texte et du pré-calcul de
+    normalisation) puis la génération (durées des passes déterministes, du LLM).
+    Les valeurs du pré-calcul déjà persistées survivent à la fusion (régénération
+    comprise) et sont écrasées par une valeur plus fraîche le cas échéant.
+    """
+    merged: dict = {}
+    if existing:
+        try:
+            parsed = json.loads(existing)
+            if isinstance(parsed, dict):
+                merged.update(parsed)
+        except (ValueError, TypeError):
+            pass
+    if updates:
+        merged.update(updates)
+    return json.dumps(merged, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +316,24 @@ class Consultation(Base):
     grounding_finalized_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: Statistiques de CALCUL de la dernière génération (``api_generate`` /
+    #: ``_finalize_grounding``), sérialisées JSON : durées par étape
+    #: (normalisation, scan de grounding, audio, TTFT du LLM…) et compteurs
+    #: diagnostiques (jetons, hints). Timings et compteurs uniquement — aucune
+    #: donnée clinique. Nullable : jamais mesuré.
+    compute_stats_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Transcription DÉJÀ normalisée par le grounding déterministe (inline sûr
+    #: médicamenteux + termes gériatriques), calculée en tâche de fond au
+    #: « Terminer » avec ``transcript_conf`` d'alors : ``api_generate`` la
+    #: réutilise quand ``raw_transcript`` n'a pas changé, au lieu de la
+    #: recalculer (~5-14 s) dans la fenêtre d'attente de l'usager. Nullable :
+    #: jamais pré-calculé (consultation sans dictée, texte édité depuis).
+    normalized_transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Formes déjà corrigées inline (``norm_phon``), miroir de la liste des
+    #: corrections réellement appliquées dans ``normalized_transcript``. Sert
+    #: à ``api_generate`` à éviter toute re-suggestion au LLM et à construire
+    #: ``inline_fixed`` sans re-résoudre. JSON. Nullable : voir ci-dessus.
+    inline_fixed_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -346,6 +387,7 @@ class Consultation(Base):
                     "verification_json": self.verification_json,
                     "corrections_markdown": self.corrections_markdown,
                     "med_grounding_json": self.med_grounding_json,
+                    "compute_stats_json": self.compute_stats_json,
                 }
             )
         return data
@@ -2809,6 +2851,9 @@ _ADDED_COLUMNS = {
         ("med_grounding_json", "TEXT"),
         ("transcript_conf", "TEXT"),
         ("grounding_finalized_at", "DATETIME"),
+        ("compute_stats_json", "TEXT"),
+        ("normalized_transcript", "TEXT"),
+        ("inline_fixed_json", "TEXT"),
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),

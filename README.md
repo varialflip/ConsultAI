@@ -984,13 +984,28 @@ des médicaments », défaut `false`). Une fois activé :
   **liste définitive du « Terminer » est un scan PLEIN TEXTE** (tâche de fond,
   ~10-17 s, la même source que les hints LLM) : l'accumulation par fenêtre de
   queue laissait échapper les garbles dictés en début de note (« sérocoïl » →
-  Seroquel, n° 42) ; le scan complet les retrouve tous et écrase le brouillon,
-  avec une **marque de fraîcheur** (`grounding_finalized_at`) sur laquelle la
-  génération s'appuie pour ne **jamais** proposer au modèle une liste partielle
-  (course « Terminer » → « Générer » : recalcul synchrone garanti). Les hits
-  **déterministes**
-  s'affichent sous leur **nom canonique** (« la Six » → **Lasix**) ; les
-  candidats phonétiques gardent le nom dicté + flèche vers la cible.
+Seroquel, n° 42) ; le scan complet les retrouve tous et écrase le brouillon,
+   avec une **marque de fraîcheur** (`grounding_finalized_at`) sur laquelle la
+   génération s'appuie pour ne **jamais** proposer au modèle une liste partielle.
+   **Course « Terminer » → « Générer »** : la génération **attend le scan de
+   fond déjà en cours** (événement `_grounding_events`, borne ~30 s) — la
+   ~10-17 s de phonétique n'est payée qu'UNE fois ; le recalcul synchrone ne
+   sert plus que de filet (aucun scan armé). Le **texte normalisé lui-même** est
+   lui aussi **pré-calculé au « Terminer »** (`normalized_transcript` +
+   `inline_fixed_json`) : la génération réutilise la dictée déjà corrigée au
+   lieu de re-résoudre ~5-14 s au clic, et re-persiste le cache à chaque
+   génération (invalide sur édition/retranscription/import). Les hits
+   **déterministes**
+   s'affichent sous leur **nom canonique** (« la Six » → **Lasix**) ; les
+   candidats phonétiques gardent le nom dicté + flèche vers la cible.
+- **Statistiques de calcul dans les métadonnées** (`compute_stats_json`, toutes
+  consultations) : durées déterministes de la génération (normalisation avec
+  source `precomputed`/`compute`, gériatrique, mots douteux, préparation audio),
+  du scan de fond du « Terminer » (`grounding_scan_ms`), et du modèle
+  (`llm_ttft_ms` — latence au premier jeton —, `llm_total_ms`). Timings et
+  compteurs uniquement, aucune donnée clinique. Visibles dans le panneau
+  « Informations techniques » du brouillon et, par ligne, dans l'onglet admin
+  « Statistiques » (journal de génération).
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`). S'y ajoutent les
   **candidats phonétiques** (bloc `MEDICAMENTS_PHONETIQUES`) : le G2P français

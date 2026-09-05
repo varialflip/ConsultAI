@@ -58,7 +58,7 @@ from typing import Dict, List, Optional
 
 from app import audio_cache, geriatric_terms, live, llm, med_grounding, recordings, runtime_config, stt, usage
 from app.config import settings
-from app.database import Consultation, SessionLocal, utcnow
+from app.database import Consultation, SessionLocal, merge_compute_stats, utcnow
 from sqlalchemy.orm import Session
 from app.stt import (
     _MISTRAL_REALTIME_MODEL_DEFAUT,
@@ -1174,6 +1174,24 @@ _grounding_meds: Dict[str, list] = {}
 #: stabilisées, on court-circuite la phonétique (coûteuse) tant qu'elle n'a
 #: pas bougé.
 _grounding_tail: Dict[str, str] = {}
+#: Événements de FIN du scan final plein texte, par consultation : armés par
+#: ``schedule_final_grounding`` au « Terminer », posés par ``_finalize_grounding``
+#: en fin de job (qu'il aboutisse ou non). ``api_generate`` s'y appuie pour
+#: ATTENDRE le scan de fond (borné) plutôt que d'en lancer un second dans la
+#: fenêtre « Terminer → Générer » — le LLM n'a jamais une liste partielle et
+#: on n'exécute pas deux fois ~10-17 s de phonétique au pire moment.
+_grounding_events: Dict[int, threading.Event] = {}
+_grounding_events_lock = threading.Lock()
+
+
+def grounding_event(consultation_id: int) -> Optional[threading.Event]:
+    """Événement de fin du scan final EN COURS pour ``consultation_id``.
+
+    ``None`` si aucun scan de fond n'est armé (pas de dictée récente, ou job
+    déjà terminé) : l'appelant retombe alors sur son propre calcul synchrone.
+    """
+    with _grounding_events_lock:
+        return _grounding_events.get(consultation_id)
 
 
 def _grounding_enabled() -> bool:
@@ -1678,15 +1696,21 @@ def _geriatric_corrections(texte: str) -> list:
         return []
 
 
-def schedule_final_grounding(session_id: str, username: str) -> None:
+def schedule_final_grounding(session_id: str, username: str, consultation_id: int) -> None:
     """Lance (tâche de fond) la liste de médicaments DÉFINITIVE d'une dictée.
 
     Exécutée au « Terminer », une seule fois, sur le transcript complet : le
     résultat est persisté dans ``consultation.med_grounding_json`` et diffusé
     via ``med_grounding_result``. Ne bloque pas la clôture de la dictée.
+
+    Arme aussi (``_grounding_events``) l'événement de fin que ``api_generate``
+    attend en cas de course « Terminer → Générer » : la génération n'exécute
+    jamais un second scan plein texte (voir ``dictation.grounding_event``).
     """
     if not _grounding_enabled():
         return
+    with _grounding_events_lock:
+        _grounding_events[consultation_id] = threading.Event()
     threading.Thread(
         target=_finalize_grounding,
         args=(session_id, username),
@@ -1696,9 +1720,11 @@ def schedule_final_grounding(session_id: str, username: str) -> None:
 
 
 def _finalize_grounding(session_id: str, username: str) -> None:
+    consultation_id: Optional[int] = None
     try:
         with _lock_for(session_id):
             session = load_session(session_id, username)
+            consultation_id = session.consultation_id
             owner = _session_owner(session)
             if session.status not in ("recording", "finished"):
                 return
@@ -1736,8 +1762,24 @@ def _finalize_grounding(session_id: str, username: str) -> None:
                         conf_map = {}
                     items = None
             if items is None:
+                # Scan plein texte — chronométré pour les statistiques de la
+                # consultation (``compute_stats_json``) : c'est la mesure de la
+                # fenêtre « Terminer → Générer » qui disparaît de l'attente.
+                t_scan = time.monotonic()
                 items = med_grounding.extract_validation_items(
                     text, conf=conf_map or None)
+                grounding_scan_ms = round((time.monotonic() - t_scan) * 1000, 1)
+                # Pré-calcul du texte DÉJÀ normalisé (inline sûr médicamenteux +
+                # termes gériatriques) : la génération le réutilisera au lieu de
+                # re-résoudre ~5-14 s dans la fenêtre d'attente de l'usager. La
+                # langue du gabarit est celle de la dictée (document).
+                t_norm = time.monotonic()
+                from app import preferences
+                n_transcript, inline_fixed = geriatric_terms.precompute_normalization(
+                    text, conf=conf_map or None,
+                    langue=preferences.document_language(),
+                )
+                precompute_ms = round((time.monotonic() - t_norm) * 1000, 1)
                 # 2) Persistance (court verrou de nouveau ; reverrouillage au
                 #    commit au cas où la garde synchrone aurait gagné entre-
                 #    temps — le calcul est idempotent et déterministe).
@@ -1749,6 +1791,15 @@ def _finalize_grounding(session_id: str, username: str) -> None:
                         consultation.med_grounding_json = (
                             json.dumps(items, ensure_ascii=False))
                         consultation.grounding_finalized_at = utcnow()
+                        consultation.normalized_transcript = n_transcript
+                        consultation.inline_fixed_json = (
+                            json.dumps(sorted(inline_fixed), ensure_ascii=False))
+                        consultation.compute_stats_json = merge_compute_stats(
+                            consultation.compute_stats_json,
+                            {"grounding_scan_ms": grounding_scan_ms,
+                             "precompute_normalize_ms": precompute_ms,
+                             "precompute_lang": preferences.document_language()},
+                        )
                         db.commit()
             live.publish(owner, "med_grounding_result", {
                 "consultation_id": session.consultation_id,
@@ -1759,6 +1810,14 @@ def _finalize_grounding(session_id: str, username: str) -> None:
     except Exception:
         logger.exception("Grounding final impossible (dictée %s)", session_id)
     finally:
+        # Fin du job de fond (abouti ou non) : libère la course « Terminer →
+        # Générer ». Une génération en attente sur ``grounding_event`` repart
+        # aussitôt — la liste (ou le filet synchrone, si rien n'a été produit)
+        # décidera de la suite.
+        with _grounding_events_lock:
+            event = _grounding_events.pop(consultation_id, None) if consultation_id else None
+        if event is not None:
+            event.set()
         with _grounding_lock:
             _grounding_course.discard(session_id)
             _grounding_upto.pop(session_id, None)
@@ -2136,7 +2195,8 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
             # entendue deux fois à la suite, cf. ``_dedupe_adjacent``).
             _assainir_doublons(session)
             _finalise(session)
-            schedule_final_grounding(session.id, session.username)
+            schedule_final_grounding(session.id, session.username,
+                                     session.consultation_id)
         return session
 
 

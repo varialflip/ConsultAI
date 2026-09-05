@@ -3174,6 +3174,7 @@
         promptTokens: result.usage && result.usage.prompt_tokens,
         outputTokens: result.usage && result.usage.output_tokens,
         elapsedSeconds: result.elapsed_seconds,
+        computeStats: result.compute_stats || null,
         truncated: result.truncated,
       });
       flashElement('noteFooter');
@@ -3427,6 +3428,21 @@
   }
 
   /**
+   * Statistiques de calcul d'un brouillon (``compute_stats_json``, JSON) :
+   * timings et compteurs non cliniques. Parse de façon défensive (invalide →
+   * null, la ligne de détail est simplement omise).
+   */
+  function parseComputeStats(raw) {
+    if (!raw) return null;
+    try {
+      const data = JSON.parse(raw);
+      return data && typeof data === 'object' ? data : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /**
    * Informations RÉELLES sur la dernière génération — jamais celles que le
    * modèle prétendrait fournir dans le corps de la note (voir la consigne
    * générale : un modèle n'a aucun accès à son propre décompte de jetons, et
@@ -3455,6 +3471,17 @@
     }
     if (info.elapsedSeconds != null) {
       lines.push(T('debug.duration', { seconds: info.elapsedSeconds.toFixed(1) }));
+    }
+    if (info.computeStats && info.computeStats.llm_total_ms != null) {
+      const deterministic = (info.computeStats.total_deterministic_ms || 0) / 1000;
+      const ttft = (info.computeStats.llm_ttft_ms != null)
+        ? (info.computeStats.llm_ttft_ms / 1000)
+        : null;
+      lines.push(T('debug.compute', {
+        deterministic: deterministic.toFixed(1),
+        ttft: ttft != null ? ttft.toFixed(1) : '?',
+        total: (info.computeStats.llm_total_ms / 1000).toFixed(1),
+      }));
     }
     if (info.truncated) lines.push(T('debug.truncated'));
     list.innerHTML = lines.map((line) => `<li>${esc(line)}</li>`).join('');
@@ -4527,6 +4554,7 @@
         promptTokens: draft.usage_prompt_tokens,
         outputTokens: draft.usage_output_tokens,
         elapsedSeconds: draft.generation_seconds,
+        computeStats: parseComputeStats(draft.compute_stats_json),
       });
       state.transcriptLanguage = draft.stt_language || '';
       setSaveStatus(T('save.loaded_at', { date: formatDateTime(draft.updated_at) }));
@@ -6074,6 +6102,12 @@
       return `#${e.consultation_id}${nom}`;
     };
     const cout = (e) => (e.cost != null ? `${e.cost.toFixed(4)} $` : '—');
+    const computeText = (e) => {
+      if (e.kind !== 'llm' || (e.deterministic_seconds == null && e.ttft_seconds == null)) return '—';
+      const det = e.deterministic_seconds != null ? `${e.deterministic_seconds.toFixed(1)} s` : '?';
+      const ttft = e.ttft_seconds != null ? `${e.ttft_seconds.toFixed(1)} s` : '?';
+      return `${det} · ${ttft}`;
+    };
 
     const lignesTable = entries.map((e) => `
       <tr class="border-b border-slate-100">
@@ -6083,6 +6117,7 @@
         <td class="px-2 py-1.5 text-slate-500">${consultation(e)}</td>
         <td class="px-2 py-1.5">${esc(e.provider)}${e.model ? ` <span class="text-slate-500">/ ${esc(e.model)}</span>` : ''}</td>
         <td class="px-2 py-1.5 tabular-nums">${usageText(e)}</td>
+        <td class="px-2 py-1.5 tabular-nums text-right">${computeText(e)}</td>
         <td class="px-2 py-1.5 tabular-nums text-right">${cout(e)}</td>
       </tr>`).join('');
     const cartesMobile = entries.map((e) => `
@@ -6095,9 +6130,11 @@
         <p class="text-xs text-slate-500">${consultation(e)}</p>
         <p class="text-xs text-slate-600">${esc(e.provider)}${e.model ? ` / ${esc(e.model)}` : ''}</p>
         <p class="text-xs text-slate-600 tabular-nums">${usageText(e)}</p>
+        ${e.kind === 'llm' && computeText(e) !== '—'
+          ? `<p class="text-xs text-slate-500 tabular-nums">${esc(T('admin.stats.col_compute'))} : ${computeText(e)}</p>` : ''}
       </div>`).join('');
 
-    const vide = `<tr><td colspan="7" class="px-2 py-6 text-center text-slate-400">${esc(T('admin.stats.empty'))}</td></tr>`;
+    const vide = `<tr><td colspan="8" class="px-2 py-6 text-center text-slate-400">${esc(T('admin.stats.empty'))}</td></tr>`;
 
     return `
       <section class="space-y-2">
@@ -6113,6 +6150,7 @@
                   <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_consultation'))}</th>
                   <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_model'))}</th>
                   <th class="px-2 py-1.5 text-left">${esc(T('admin.stats.col_usage'))}</th>
+                  <th class="px-2 py-1.5 text-right">${esc(T('admin.stats.col_compute'))}</th>
                   <th class="px-2 py-1.5 text-right">${esc(T('admin.stats.col_cost'))}</th>
                 </tr>
               </thead>

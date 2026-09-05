@@ -120,6 +120,16 @@ même commit** :
   `app/med_grounding.py`
   doit être re-validée sur les transcripts de référence (faux positifs de
   prose vs garbles réels) avant redéploiement.
+- Le texte normalisé envoyé au LLM est **pré-calculé au « Terminer »** et mis
+  en cache par consultation (`normalized_transcript` + `inline_fixed_json`).
+  Toute modification de la chaîne inline (médicaments **ou** gériatrique) doit
+  être vérifiée contre ce cache : invalidable (édition/retranscription/import)
+  et re-persisté à chaque génération. La course « Terminer » → « Générer » est
+  coordonnée par `dictation._grounding_events` (la génération attend le scan de
+  fond au lieu d'en lancer un second) — ne pas contourner ce garde-fou sans
+  rétablir l'équivalent. Les durées réelles se mesurent dans
+  `compute_stats_json` (scan plein texte, pré-calcul, passes déterministes,
+  TTFT) : y revenir avant de régler les seuils de performance.
 
 Le déploiement de référence tourne sur la machine `/opt/dictai` : tout réglage
 de production y est vérifiable par `sudo docker exec consultai python3 -c …`

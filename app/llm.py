@@ -2548,6 +2548,7 @@ def generate_note_stream(
         # fournisseur.
         raw = ""
         result = None
+        first_fragment_at = None
         try:
             while True:
                 try:
@@ -2556,6 +2557,8 @@ def generate_note_stream(
                     result = stop.value
                     break
                 if fragment:
+                    if first_fragment_at is None:
+                        first_fragment_at = time.monotonic()
                     raw += fragment
                     yield raw
         finally:
@@ -2577,8 +2580,12 @@ def generate_note_stream(
             )
         else:
             break
-    elapsed_seconds = time.monotonic() - t0
 
+    elapsed_seconds = time.monotonic() - t0
+    ttft_ms = (
+        round((first_fragment_at - t0) * 1000, 1)
+        if first_fragment_at is not None else None
+    )
     if not result.text.strip():
         if result.blocked:
             raise GenerationError(
@@ -2602,6 +2609,7 @@ def generate_note_stream(
         "provider": provider,
         "truncated": result.truncated,
         "usage": result.usage,
+        "ttft_ms": ttft_ms,
         "audio_used": audio_to_send is not None,
         "transcript_used": not audio_only or transcript_guide,
         "elapsed_seconds": round(elapsed_seconds, 2),

@@ -184,6 +184,55 @@ def apply_inline_replacements(
     return texte_courant, changements
 
 
+def precompute_normalization(
+    texte: str,
+    conf: Optional[dict] = None,
+    langue: str = "fr",
+) -> Tuple[str, set]:
+    """Normalisation déterministe COMPLÈTE d'un transcrit → ``(texte, inline_fixed)``.
+
+    Chaîne exacte des deux passes inline appliquées avant le LLM (le module
+    ``geriatric_terms`` est importable des deux côtés — ``med_grounding`` en
+    dépend déjà — , d'où son atterrissage ici) :
+    1. ``med_grounding.normalize(..., inline_safe=True)`` — substitutions
+       déterministes/auditées (exact + garbles seedés) des médicaments ;
+    2. ``apply_inline_replacements`` — termes gériatriques québécois, avec
+       ``protect`` = formes déjà corrigées par la passe 1 (le médicament gagne).
+
+    ``inline_fixed`` : clés ``norm_phon`` des formes corrigées (médicaments ET
+    termes gériatriques) — le LLM doit rester aveugle à ces corrections, et les
+    hints ne doivent pas les re-suggérer.
+
+    Utilisée par le « Terminer » (``dictation._finalize_grounding``) pour
+    PRÉ-CALCULER le cache ``normalized_transcript`` hors fenêtre d'attente de
+    l'usager, et par ``main.api_generate`` quand le cache est manquant (texte
+    édité, import, retranscription).
+    """
+    from app import med_grounding
+    fixed = texte or ""
+    inline_fixed: set = set()
+    try:
+        lowercase, changes = med_grounding.normalize(fixed, conf=conf, inline_safe=True)
+        if lowercase and lowercase.strip():
+            fixed = lowercase
+        inline_fixed = {
+            med_grounding.norm_phon(repl)
+            for _span, repl, _score, _sim in changes if repl
+        }
+    except Exception:
+        inline_fixed = set()
+    try:
+        fixed, changements = apply_inline_replacements(
+            fixed, langue=langue, protect=inline_fixed, conf=conf,
+        )
+        for changement in changements:
+            if changement.get("correct"):
+                inline_fixed.add(med_grounding.norm_phon(changement["correct"]))
+    except Exception:
+        pass
+    return fixed, inline_fixed
+
+
 def _remplacer_phrase(texte: str, garble: str, correct: str) -> Tuple[str, int]:
     """Remplace toutes les occurrences de ``garble`` (casse + accents insensibles).
 

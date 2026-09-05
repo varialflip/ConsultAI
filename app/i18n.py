@@ -254,6 +254,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Durée de la mise en forme : {seconds} s",
         "Formatting duration: {seconds} s",
     ),
+    "debug.compute": (
+        "Pré-traitement déterministe : {deterministic} s · modèle (1er jeton) : "
+        "{ttft} s · total : {total} s",
+        "Deterministic pre-processing: {deterministic} s · model (first token): "
+        "{ttft} s · total: {total} s",
+    ),
     "debug.tokens_unavailable": (
         "Jetons : non disponibles après réouverture (valables seulement "
         "juste après la génération).",
@@ -1351,6 +1357,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "admin.stats.cached": ("en cache", "cached"),
     "admin.stats.col_audio": ("Audio", "Audio"),
     "admin.stats.col_cost": ("Coût", "Cost"),
+    "admin.stats.col_compute": ("Pré-traitement · 1er jeton", "Pre-processing · first token"),
     "admin.stats.kind.llm": ("Modèle de langage", "Language model"),
     "admin.stats.kind.stt": ("Reconnaissance vocale", "Speech recognition"),
     "admin.stats.pricing_title": ("Tarifs", "Rates"),

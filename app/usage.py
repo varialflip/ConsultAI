@@ -11,6 +11,7 @@ statistiques à long terme de l'onglet admin.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -396,10 +397,37 @@ def admin_log(
     # Titres des consultations, pour afficher un libellé lisible à côté de
     # l'identifiant sans charger les corps de documents.
     titres = {row.id: row.title for row in db.scalars(select(Consultation))}
+    # Statistiques de calcul par consultation (``compute_stats_json``) : on les
+    # joint aux lignes de génération pour afficher la part déterministe
+    # (« pré-traitement ») et la latence au premier jeton, sans charger les
+    # corps de documents. Timings uniquement, aucune donnée clinique.
+    compute_stats = {
+        row.id: row.compute_stats_json for row in db.scalars(select(Consultation))
+    }
+
+    def _parsed_compute(consultation_id):
+        raw = compute_stats.get(consultation_id)
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else None
+        except (ValueError, TypeError):
+            return None
 
     def rend(created_at, kind, owner_key, consultation_id, provider, model,
              prompt_tokens, output_tokens, audio_prompt_tokens, cached_tokens,
              audio_seconds, cost, currency, segments):
+        extra = {}
+        if kind == "llm":
+            stats = _parsed_compute(consultation_id)
+            if stats:
+                extra = {
+                    "deterministic_seconds": round(
+                        float(stats.get("total_deterministic_ms") or 0) / 1000, 2),
+                    "ttft_seconds": round(
+                        float(stats.get("llm_ttft_ms") or 0) / 1000, 2),
+                }
         return {
             "created_at": _iso(created_at),
             "kind": kind, "owner": owner_key,
@@ -412,6 +440,7 @@ def admin_log(
             "audio_seconds": audio_seconds,
             "cost": cost, "currency": currency or "USD",
             "segments": segments,
+            **extra,
         }
 
     stt_buckets: dict[tuple, dict] = defaultdict(lambda: {

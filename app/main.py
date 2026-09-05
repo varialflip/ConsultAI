@@ -101,6 +101,7 @@ from app.database import (
     _iso,
     get_db,
     init_db,
+    merge_compute_stats,
     utcnow,
 )
 from app.dictation import DictationError, SequenceMismatch, SessionNotFound, _merge_conf_into
@@ -351,7 +352,9 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     except (ValueError, TypeError):
         conf_map = {}
     try:
+        t_scan = time.monotonic()
         items = med_grounding.extract_validation_items(text, conf=conf_map or None)
+        grounding_scan_ms = round((time.monotonic() - t_scan) * 1000, 1)
     except Exception:
         logger.exception("Grounding méds impossible (consultation %s)", consultation.id)
         return []
@@ -361,6 +364,10 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     # live partielle — course « Terminer » → Générer), et sans cette marque la
     # liste persistée est réputée non finalisée.
     consultation.grounding_finalized_at = datetime.now(timezone.utc)
+    # Durée du scan, pour les statistiques de calcul de la consultation (les
+    # autres champs de ``compute_stats_json`` survivent au merge).
+    consultation.compute_stats_json = merge_compute_stats(
+        consultation.compute_stats_json, {"grounding_scan_ms": grounding_scan_ms})
     db.commit()
     # Termes gériatriques (module À PART) : paires {garble, correct} pour le
     # surlignage du transcrit, calculées sur le texte complet.
@@ -389,6 +396,12 @@ def _med_grounding_on() -> bool:
         return runtime_config.value("dictation_grounding") != "false"
     except Exception:
         return False
+
+
+#: Marge d'attente du scan plein texte de fond au cours « Terminer → Générer ».
+#: Le scan final prend ~10-17 s ; cette borne le laisse aboutir sans bloquer la
+#: génération au-delà du raisonnable (au-delà, on retombe sur le scan synchrone).
+_GROUNDING_WAIT_SECONDS = 30.0
 
 
 # ---------------------------------------------------------------------------
@@ -3059,11 +3072,22 @@ async def api_generate(
     need_audio = audio_opts["send_audio"] or audio_opts["bypass_stt"]
 
     audio_payload = None
+    # Statistiques de calcul de CETTE génération (``compute_stats_json``) : les
+    # durées qui restent dans la fenêtre d'attente de l'usager, en regard des
+    # durées du pré-calcul déjà persistées au « Terminer » (merge à l'écriture).
+    compute: dict = {
+        "audio_prep_ms": 0.0, "normalize_ms": 0.0, "geriatric_ms": 0.0,
+        "doutes_ms": 0.0, "confiance_words": 0, "med_hints": 0,
+        "grounding_source": "none", "grounding_wait_ms": 0.0,
+        "normalize_source": "none",
+    }
     if need_audio and payload.consultation_id:
+        t_audio = time.monotonic()
         audio_payload = await run_in_threadpool(
             _prepare_audio_for_generation, db, payload.consultation_id,
             audio_opts["max_minutes"], audio_opts["send_audio_format"],
         )
+        compute["audio_prep_ms"] = round((time.monotonic() - t_audio) * 1000, 1)
     elif need_audio:
         logger.info(
             "Audio non tenté (consultation %s) : fournisseur « %s » ou aucune "
@@ -3101,6 +3125,29 @@ async def api_generate(
             conf_map = json.loads(consultation.transcript_conf) if consultation.transcript_conf else {}
         except Exception:
             logger.exception("Contexte consult. indisponible — génération sans signal")
+
+    n_transcript = payload.transcript
+    inline_fixed: set = set()
+    # Course « Terminer » → « Générer » : avant de décider quoi que ce soit
+    # (cache de normalisation, hints), on donne au scan de fond du « Terminer »
+    # une chance finie d'aboutir. Même principe que le garde de fraîcheur :
+    # la ~10-17 s de phonétique n'est payée qu'UNE fois, et le texte normalisé
+    # pré-calculé (même tâche) devient alors disponible pour le cache ci-après.
+    if (_med_grounding_on() and payload.transcript
+            and consultation is not None
+            and (not consultation.med_grounding_json
+                 or consultation.grounding_finalized_at is None)):
+        try:
+            event = dictation.grounding_event(consultation.id)
+            if event is not None:
+                t_wait = time.monotonic()
+                await run_in_threadpool(event.wait, _GROUNDING_WAIT_SECONDS)
+                db.refresh(consultation)
+                compute["grounding_wait_ms"] = round(
+                    (time.monotonic() - t_wait) * 1000, 1)
+        except Exception:
+            logger.exception("Attente du scan de fond indisponible — chemin synchrone")
+
     # DICTÉE harmonisée : le texte corrigé par l'inline sûr
     # (``inline_safe=True``) est envoyé au modèle. Corriger la dictée rend la
     # génération cohérente avec les hints ; la liste des corrections
@@ -3110,44 +3157,87 @@ async def api_generate(
     # les longues dictées (résolution mot-à-mot) — c'est le coût seul conservé
     # ici, les scans phonétiques (~17 s) ayant été remplacés par la réutilisation
     # de la liste live persistée.
-    n_transcript = payload.transcript
-    inline_fixed: set = set()
-    if _med_grounding_on() and payload.transcript:
+    #
+    # Le coût est évité quand le « Terminer » a déjà PRÉ-CALCULÉ le texte
+    # normalisé (``normalized_transcript`` + ``inline_fixed_json``, persistés en
+    # tâche de fond avec la liste définitive — ``_finalize_grounding``) : on ne
+    # le re-résout que si le transcript source ne correspond plus (édition,
+    # retranscription, import, brouillon sans dictée). Le cache redevient alors
+    # valide pour la génération suivante, posé à l'écriture. ``normalize_source``
+    # décrit ce qui s'est réellement passé (precomputed | compute | none).
+    source_key = " ".join((payload.transcript or "").split())
+    # La langue du pré-calcul doit égaler celle du gabarit courant : les
+    # réécritures gériatriques diffèrent d'une langue à l'autre, un gabarit
+    # changé après « Terminer » doit donc re-résoudre (``precompute_lang``
+    # persisté avec le pré-calcul ; absent = cache ancien → on re-résout aussi).
+    _precompute_lang = None
+    if consultation is not None and consultation.compute_stats_json:
         try:
-            lowercase, inline_changes = med_grounding.normalize(
-                payload.transcript, conf=conf_map or None, inline_safe=True,
-            )
-            if lowercase and lowercase.strip():
-                n_transcript = lowercase
-            inline_fixed = {
-                med_grounding.norm_phon(repl)
-                for _span, repl, _score, _sim in inline_changes
-                if repl
-            }
-        except Exception:
-            logger.exception("Pré-correction inline indisponible — DICTÉE brute")
+            _precompute_lang = (
+                json.loads(consultation.compute_stats_json).get("precompute_lang")
+                or None)
+        except (ValueError, TypeError):
+            _precompute_lang = None
+    cache_valid = (
+        consultation is not None
+        and _med_grounding_on()
+        and consultation.normalized_transcript is not None
+        and (_precompute_lang is None
+             or _precompute_lang == (template_row.language or "fr"))
+        and " ".join((consultation.raw_transcript or "").split()) == source_key
+    )
+    if cache_valid:
+        t_norm = time.monotonic()
+        n_transcript = consultation.normalized_transcript
+        try:
+            inline_fixed = set(json.loads(consultation.inline_fixed_json or "[]"))
+        except (ValueError, TypeError):
+            inline_fixed = set()
+        compute["normalize_ms"] = round((time.monotonic() - t_norm) * 1000, 1)
+        compute["normalize_source"] = "precomputed"
+    else:
+        compute["normalize_lang"] = template_row.language or "fr"
+        if _med_grounding_on() and payload.transcript:
+            t_norm = time.monotonic()
+            try:
+                lowercase, inline_changes = med_grounding.normalize(
+                    payload.transcript, conf=conf_map or None, inline_safe=True,
+                )
+                if lowercase and lowercase.strip():
+                    n_transcript = lowercase
+                inline_fixed = {
+                    med_grounding.norm_phon(repl)
+                    for _span, repl, _score, _sim in inline_changes
+                    if repl
+                }
+            except Exception:
+                logger.exception("Pré-correction inline indisponible — DICTÉE brute")
+            compute["normalize_ms"] = round((time.monotonic() - t_norm) * 1000, 1)
+            compute["normalize_source"] = "compute"
 
-    # Termes gériatriques québécois (module À PART, cf. geriatric_terms.py) :
-    # réécriture déterministe dans le texte AVANT le LLM, zéro attention du
-    # modèle. ``protect`` = les jetons déjà corrigés par med_grounding ci-dessus
-    # (collision : le médicament gagne, on n'écrase pas ses corrections).
-    # ``conf`` (norm_phon → confiance) limite aux garbles probables : un jeton
-    # entendu >= 0.98 n'est pas réécrit — on ne « corrige » pas un terme
-    # parfaitement dicté. Les formes corrigées ici rejoignent ``inline_fixed``
-    # (le LLM est AVEUGLE aux deux types de corrections inline).
-    if payload.transcript:
-        try:
-            n_transcript, geriatric_changes = geriatric_terms.apply_inline_replacements(
-                n_transcript or payload.transcript,
-                langue=template_row.language,
-                protect=inline_fixed,
-                conf=conf_map or None,
-            )
-            for _change in geriatric_changes:
-                if _change.get("correct"):
-                    inline_fixed.add(med_grounding.norm_phon(_change["correct"]))
-        except Exception:
-            logger.exception("Termes gériatriques indisponibles — DICTÉE brute")
+        # Termes gériatriques québécois (module À PART, cf. geriatric_terms.py) :
+        # réécriture déterministe dans le texte AVANT le LLM, zéro attention du
+        # modèle. ``protect`` = les jetons déjà corrigés par med_grounding ci-dessus
+        # (collision : le médicament gagne, on n'écrase pas ses corrections).
+        # ``conf`` (norm_phon → confiance) limite aux garbles probables : un jeton
+        # entendu >= 0.98 n'est pas réécrit — on ne « corrige » pas un terme
+        # parfaitement dicté. Les formes corrigées ici rejoignent ``inline_fixed``
+        # (le LLM est AVEUGLE aux deux types de corrections inline).
+        if payload.transcript:
+            t_ge = time.monotonic()
+            try:
+                n_transcript, geriatric_changes = geriatric_terms.apply_inline_replacements(
+                    n_transcript or payload.transcript,
+                    langue=template_row.language,
+                    protect=inline_fixed,
+                    conf=conf_map or None,
+                )
+                for _change in geriatric_changes:
+                    if _change.get("correct"):
+                        inline_fixed.add(med_grounding.norm_phon(_change["correct"]))
+            except Exception:
+                logger.exception("Termes gériatriques indisponibles — DICTÉE brute")
+            compute["geriatric_ms"] = round((time.monotonic() - t_ge) * 1000, 1)
 
     # Mots que le STT a entendus avec doute, pour le bloc <CONFIANCE_MOTS>.
     # ``ignores=inline_fixed`` : les formes déjà corrigées inline (médicaments
@@ -3155,12 +3245,15 @@ async def api_generate(
     # deuxième-chance une correction déjà faite et auditable (voir
     # ``med_grounding.doutes_pour_texte``). Calculé APRÈS ``inline_fixed``.
     if audio_payload is None and payload.transcript and conf_map:
+        t_doutes = time.monotonic()
         try:
             confiance_mots = med_grounding.doutes_pour_texte(
                 payload.transcript, conf_map, ignores=inline_fixed,
             )
+            compute["confiance_words"] = len(confiance_mots or [])
         except Exception:
             logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
+        compute["doutes_ms"] = round((time.monotonic() - t_doutes) * 1000, 1)
 
     # Hints structurés pour le LLM : items déterministes du moteur + candidats
     # PHONÉTIQUES (G2P français, « dilote » → Dilaudid). Source : la liste
@@ -3181,17 +3274,20 @@ async def api_generate(
     med_hints: list = []
     if _med_grounding_on() and payload.transcript and consultation is not None:
         try:
+            compute["grounding_source"] = (
+                "background" if compute.get("grounding_wait_ms")
+                else "cached")
             if not consultation.med_grounding_json or \
                     consultation.grounding_finalized_at is None:
-                # Course « Terminer » → « Générer » : la liste persistée n'est
-                # pas (encore) la version complète. La recalculer en synchrone
-                # garantit des hints complets ; rare (le scan de fond ~10-17 s
-                # finit normalement avant), une seule fois par brouillon (la
-                # marque posée court-circuite les appels suivants).
+                # Filet : aucun scan de fond armé (dictée sans grounding,
+                # import, délai d'attente dépassé) — la liste est requise, on
+                # la calcule en synchrone une seule fois (``_apply_grounding``
+                # pose la marque). Le LLM ne reçoit jamais une liste partielle.
                 _apply_grounding(
                     db, consultation,
                     origin_tab=request.headers.get("x-consultai-tab", ""),
                 )
+                compute["grounding_source"] = "sync"
             persisted = consultation.med_grounding_json
             if persisted:
                 parsed = json.loads(persisted)
@@ -3201,6 +3297,7 @@ async def api_generate(
                                                or item.get("name")
                                                or "") not in inline_fixed
                 ]
+                compute["med_hints"] = len(med_hints)
         except Exception:
             med_hints = []
             logger.exception("Hints méds indisponibles — génération sans candidats")
@@ -3334,6 +3431,31 @@ async def api_generate(
     consultation.usage_prompt_tokens = result["usage"].get("prompt_tokens")
     consultation.usage_output_tokens = result["usage"].get("output_tokens")
     consultation.generation_seconds = result["elapsed_seconds"]
+    # Statistiques de calcul : les durées du pré-calcul (« Terminer ») déjà
+    # persistées survivent au merge ; celles de CETTE génération sont posées
+    # ici, à côté de ``generation_seconds``.
+    compute["llm_ttft_ms"] = result.get("ttft_ms")
+    compute["llm_total_ms"] = round(
+        (result.get("elapsed_seconds") or 0.0) * 1000, 1)
+    compute["total_deterministic_ms"] = round(
+        (compute.get("audio_prep_ms") or 0.0)
+        + (compute.get("normalize_ms") or 0.0)
+        + (compute.get("geriatric_ms") or 0.0)
+        + (compute.get("doutes_ms") or 0.0)
+        + (compute.get("grounding_wait_ms") or 0.0), 1)
+    consultation.compute_stats_json = merge_compute_stats(
+        consultation.compute_stats_json, compute)
+
+    # Cache de normalisation : on re-persiste la version RÉELLEMENT envoyée au
+    # modèle (l'égalité ``raw_transcript`` = ``payload.transcript`` est posée
+    # plus haut) — la prochaine génération du même brouillon ne re-résout rien
+    # (~5-14 s de moins dans sa fenêtre d'attente).
+    if " ".join((payload.transcript or "").split()) == \
+            " ".join((consultation.raw_transcript or "").split()):
+        consultation.normalized_transcript = n_transcript
+        consultation.inline_fixed_json = json.dumps(
+            sorted(inline_fixed), ensure_ascii=False)
+
     # Une note réellement produite : comptée UNE fois, à sa première
     # génération — la régénération d'un brouillon déjà « genere » ne re-compte
     # pas (le compteur NotesDaily survit à la purge des dossiers).
@@ -3403,6 +3525,7 @@ async def api_generate(
         "truncated": result["truncated"],
         "usage": result["usage"],
         "elapsed_seconds": result["elapsed_seconds"],
+        "compute_stats": compute,
         "consultation_id": consultation.id,
         "template_name": template_row.name,
         "metadata": metadata,
@@ -3587,8 +3710,15 @@ def patch_consultation(
     if "raw_transcript" in updates:
         nouveau = " ".join((updates["raw_transcript"] or "").split())
         courant = " ".join((consultation.raw_transcript or "").split())
-        if nouveau != courant and not nouveau:
-            consultation.transcript_conf = None
+        if nouveau != courant:
+            if not nouveau:
+                consultation.transcript_conf = None
+            # Le texte a changé : le cache de normalisation pré-calculé au
+            # « Terminer » est périmé (la prochaine génération vérifie l'égalité
+            # et le recalcularait seule, mais autant ne pas laisser un artefact
+            # mort traîner dans le brouillon).
+            consultation.normalized_transcript = None
+            consultation.inline_fixed_json = None
 
     consultation.updated_at = utcnow()
     db.commit()
@@ -3837,6 +3967,11 @@ async def retranscribe_consultation(
         )
     consultation.stt_language = preferences.document_language()
     consultation.updated_at = utcnow()
+    # La retranscription remplace le transcript : le cache de normalisation
+    # pré-calculé au « Terminer » et son ``inline_fixed`` sont périmés (recalculés
+    # au besoin à la prochaine génération, même source que ``_apply_grounding``).
+    consultation.normalized_transcript = None
+    consultation.inline_fixed_json = None
     db.commit()
     live.publish(user.owner_key, "consultation_patched", {
         "consultation_id": consultation.id,

@@ -1261,7 +1261,7 @@ La base BDP peut être régénérée depuis les extraits bruts (dossier
 `med_grounding/` du dépôt, scripts `build_db.py` / `seed_common.py` /
 `seed_aliases.py` /
 `prune_db.py` / `ban_terms.py` / `fix_inactive_otc.py` / `prune_scope.py` /
-`prune_otc.py` / `prune_generic_mfg.py`) ;
+`prune_otc.py` / `prune_generic_mfg.py` / `prune_molecule.py`) ;
 ce dossier ne fait pas partie du conteneur. La base est **assainie pour le
 périmètre gériatrique** : hors catalogue — vaccins (sauf Shingrix, Pneumovax
 23, Prevnar, Capvaxive, Vaxneuvance, Fluzone, Fluad, Arexvy, Abrysvo),
@@ -1294,6 +1294,25 @@ TECNAL). À la résolution, un préfixe reconnu est élagué dès qu'il forme un
 marque de fabricant suivie d'un générique authentique (borné par token pour
 ne pas tronquer les vraies marques comme AVAPRO) : « van-quetiapine » s'affiche
 « quétiapine », « riva-metformin » → « metformine ».
+
+Depuis 2026-09-05, `prune_molecule.py` pousse la refonte à l'extrême : une
+**molécule = un générique ± marques utiles**. Outre les doublons de
+fabricants déjà purgés, sont retirés les **copies exactes** du générique
+(« DIAZEPAM », « FOLIC ACID »), les **« générique + décor »**
+(« CODEINE PHOSPHATE », « METOPROLOL-L », « HALOPERIDOL LA »,
+« METHOTREXATE SODIUM », « CISPLATIN BP » — sel/dose/forme/libération/
+pharmacopée strippés → noyau du générique), les **FULL_GENERIC doublons**
+déjà portés par un BASE_GENERIC, les **doublons BASE par noyau**, et les
+marques inactives ré-couvertes par un générique. La résolution n'est jamais
+cassée : tout alias d'une ligne retirée est **remappé vers le générique
+noyau survivant** (invariant vérifié par le script — une ligne est conservée
+si un seul de ses alias deviendrait orphelin), et les cibles `STT_GARBLE`,
+les noms de `common_meds.json`, les clés `OTC_DISPLAY`/`FR_COMMON` et tous
+les médicaments observés dans les consultations réelles (option
+`--corpus-json`) sont intouchables. Résultat 11 898 → 7 980 lignes, avec une
+résolution identique (transcripts de référence et corpus complet rescanés
+sans perte). Rejouer `seed_common.py` après le prune (la table `common_meds`
+référence les ids de la base en cours).
 
 ---
 

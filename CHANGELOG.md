@@ -3,6 +3,14 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-05 — Refonte maximale de la base : une molécule = un générique ± marques utiles
+
+- **`meds.sqlite` : 11 898 → 7 980 lignes** (`med_grounding/prune_molecule.py`). Au-delà des doublons de fabricants déjà purgés, la base ne retient plus que l'essentiel dictable par molécule. Retirés : les **copies exactes** du générique (« DIAZEPAM », « FOLIC ACID », « THYROID », « CHLORDIAZEPOXIDE »), les **« générique + décor »** (« CODEINE PHOSPHATE », « METOPROLOL-L », « HALOPERIDOL LA », « METHOTREXATE SODIUM », « CISPLATIN BP », « GENTAMICIN(E) » — sel/dose/forme galénique/libération/pharmacopée/parenthèse retirés → noyau générique), les **FULL_GENERIC couverts par un BASE_GENERIC**, les **doublons BASE par noyau**, et les marques inactives ré-couvertes par un générique.
+- **Invariant de résolution** : aucun alias ne devient orphelin — chaque alias d'une ligne retirée est **remappé vers le générique noyau survivant**, et une ligne est conservée si un seul de ses alias deviendrait irrésolu. Cibles `STT_GARBLE` (136), noms de `common_meds.json`, clés `OTC_DISPLAY`/`FR_COMMON` du moteur et médicaments observés dans les consultations réelles (`--corpus-json`) sont intouchables.
+- **Validation zéro perte** : transcripts de référence (4 notes) et les 31 consultations du corpus (`consultai-test`) rescanés avant/après — listes et textes inline **identiques**, sauf 3 artefacts phonétiques corrigés (dont la double quetiapine de la consultation 42 : Seroquel + quetiapine, plus de doublon « AG-/VAN-QUETIAPINE »).
+- **`seed_common.py` rejoué** : la table `common_meds` référençait les ids de l'ancienne base (périmés) ; elle repointe désormais 118 génériques valides.
+- REJOUER `seed_common.py` après tout nouveau `prune_molecule.py --apply`.
+
 ## 2026-09-05 — Grounding : posologies fantômes éliminées + garde prose du canal phonétique
 
 - **Fin des posologies fantômes « 1 »** (`_dose_posology`, consultation 42) : la ponctuation forte COLLÉE au jeton brut (« denépésil. », « …à 1,25. ») clôt désormais la capture — le scan ne traverse plus le point vers la phrase suivante ; et un cardinal écrit en lettres (« Un trouble… », « une petite dose ») n'est une dose QUE s'il est suivi d'une preuve de posologie (mot de `_DOSE_WORDS`) dans les 3 jetons suivants. Les 4 items fantômes « 1 » (Seroquel, quetiapine, denépésil, la ketiapine) sortent de la liste, la vraie dose « 1,25 » de Zyprexa est conservée, et les doses en lettres légitimes (« vingt-cinq mg ») restent captées.

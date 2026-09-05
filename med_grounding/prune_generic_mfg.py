@@ -36,7 +36,9 @@ MFG_PREFIXES = {
     "apo", "pms", "teva", "mylan", "sandoz", "jamp", "mint", "act", "auro",
     "baxter", "dom", "glenmark", "mar", "pharmascience", "ranbaxy", "ratio",
     "taro", "zydus", "accord", "apotex", "aa", "biomed", "medley", "pro doc",
-    "sivem", "sab", "stanton",
+    "sivem", "sab", "stanton", "accel", "ach", "alti", "ava", "bio", "gd",
+    "gen", "med", "nat", "ntp", "nu", "odan", "phl", "priva", "pro", "reddy",
+    "rhoxal", "riva", "torrent", "van",
 }
 
 

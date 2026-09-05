@@ -1025,7 +1025,10 @@ class Matcher:
             "qpi-", "rph-", "rxd-", "sag-", "sap-", "sbx-", "sci-", "sep-",
             "sgm-", "shl-", "smi-", "spc-", "spt-", "stp-", "srx-", "sun-",
             "swx-", "tgx-", "the-", "tpi-", "tpg-", "trm-", "tst-", "upi-",
-            "vxl-", "wht-", "xix-", "xph-", "zph-", "zyd-"
+            "vxl-", "wht-", "xix-", "xph-", "zph-", "zyd-", "accel-", "ach-",
+            "alti-", "ava-", "bio-", "gd-", "gen-", "nat-", "ntp-", "nu-",
+            "odan-", "phl-", "priva-", "reddy-", "rhoxal-", "riva-",
+            "torrent-", "van-",
         )
         # Presentation/salt tokens to strip from brand names
         self.PRESENTATION_SALT_TOKENS = {
@@ -1334,7 +1337,7 @@ class Matcher:
         first = b.split()[:1][0] if b.split() else ""
         for pref in self.MANUFACTURER_PREFIXES:
             p_norm = norm_orth(pref)
-            if b.startswith(p_norm):
+            if b == p_norm or b.startswith(p_norm + " "):
                 remainder = b[len(p_norm):].strip()
                 if remainder in self.generics:
                     return self.FR_COMMON.get(remainder, remainder)
@@ -1348,9 +1351,9 @@ class Matcher:
         bb = norm_orth(base) if base else ""
         for pref in self.MANUFACTURER_PREFIXES:
             p_norm = norm_orth(pref)
-            if bb.startswith(p_norm):
+            if bb == p_norm or bb.startswith(p_norm + " "):
                 core = bb[len(p_norm):].strip()
-                b_rest = b[len(p_norm):].strip() if b.startswith(p_norm) else ""
+                b_rest = b[len(p_norm):].strip() if (b == p_norm or b.startswith(p_norm + " ")) else ""
                 if core and core in self.generics:
                     return self.FR_COMMON.get(core, core)
                 if core and b_rest and core == b_rest:

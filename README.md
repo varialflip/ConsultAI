@@ -1283,10 +1283,17 @@ les substances cliniquement dictables (acétaminophène, docusate,
 diphénhydramine, calcium…) et une **ligne représentative par famille** (une
 seule variante TYLENOL, ADVIL, GRAVOL au lieu de leurs multiples forces/parfums)
 sont conservées pour l'ancrage. Les **marques de fabricants génériques**
-(APO-, TEVA-, PMS-, SANDOZ-…) sont dédupliquées à **une seule par molécule**
+(APO-, TEVA-, PMS-, SANDOZ-, RIVA-, VAN-, ACCEL-, PHL-, NTP-, AVA-, ACH-,
+PRIVA-, BIO-, NAT-, NU-, ALTI-… soit une trentaine de préfixes :
+`accel`, `ach`, `alti`, `ava`, `bio`, `gd`, `gen`, `med`, `nat`, `ntp`, `nu`,
+`odan`, `phl`, `priva`, `pro`, `reddy`, `rhoxal`, `riva`, `torrent`, `van` en
+plus des précédents) sont dédupliquées à **une seule par molécule**
 couverte par un générique (« furosemide », pas « TEVA-FUROSEMIDE »), sans
 jamais toucher les génériques ni les produits uniques (combinaisons OXYCOCET,
-TECNAL).
+TECNAL). À la résolution, un préfixe reconnu est élagué dès qu'il forme une
+marque de fabricant suivie d'un générique authentique (borné par token pour
+ne pas tronquer les vraies marques comme AVAPRO) : « van-quetiapine » s'affiche
+« quétiapine », « riva-metformin » → « metformine ».
 
 ---
 

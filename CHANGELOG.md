@@ -3,6 +3,12 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-05 — Grounding : déduplication élargie des marques de fabricants génériques
+
+- **20 préfixes fabricants ajoutés au prune et à la canonicalisation** (`accel, ach, alti, ava, bio, gd, gen, med, nat, ntp, nu, odan, phl, priva, pro, reddy, rhoxal, riva, torrent, van`) — désormais reconnus à la fois par `prune_generic_mfg.py` (déduplication 1 marque/molécule à la refonte de `meds.sqlite`) et par `_canonicalize` (règle 1/1b du moteur app + du moteur de référence `match_meds.py`). Un clinicien dictant « van-quetiapine » ou « riva-metformin » reçoit le générique (`quetiapine`, `metformine`) au lieu de la marque de fabricant.
+- **Canonicalisation bornée par tokens** (`Rule 1b`) : le préfixe n'est élagué que s'il est suivi d'une limite de mot — corrige la fausse canonnaisation `AVAPRO` → `pro` (l'irbésartan Sanofi commençait par `ava` mid-word). Les marques de combinaisons (VAN-LOSARTAN-HCTZ…) restent intactes (molécule non couverte par un générique).
+- **Contrainte vérifiée** : après refonte, les 5 483 lignes génériques (`BASE_GENERIC`/`FULL_GENERIC`) sont conservées et chaque molécule dédupliquée garde au moins un générique. Marques `VAN-*` : 38 → 9 (représentants de combinaisons uniquement), jamais de générique retiré.
+
 ## 2026-09-05 — Grounding : zone de médicaments englobante + privilège « common med » 0.1
 
 - **Les doses dictées EN LETTRES comptent comme preuve de dose** (`_nb_lettres` / `_drapeaux_dose` : « vingt-cinq », « trente-cinq », cap 999) dans les quatre constructeurs de drapeaux (`normalize`, `phonetiques_texte`, `_region_medlist`, `suggestions_texte`). Une liste « Synthroid, vingt-cinq microgrammes. Risée de renate, trente-cinq par semaine » étend désormais sa région confirmée au garble multi-mots (n° 39/43 : région `[117..127]` au lieu de `[117..119]`). Les dates (« deux mille vingt-six » = 2026) restent exclues (cap 999).

@@ -64,6 +64,10 @@ MFG_PREFIXES = {
     "sivem", "sab", "stanton", "accel", "ach", "alti", "ava", "bio", "gd",
     "gen", "med", "nat", "ntp", "nu", "odan", "phl", "priva", "pro", "reddy",
     "rhoxal", "riva", "torrent", "van",
+    # préfixes manquants (audit des premiers tokens de marques, 2026-09-05)
+    "novo", "nra", "ran", "penta", "gln", "pdp", "prz", "zym", "bci",
+    "rho", "ftp", "pmsc", "myl", "ccp", "euro", "orb", "pat", "q", "lin",
+    "lupin", "scheinpharm", "albert", "abbott", "bar",
 }
 
 #: Formes de libération prolongée / variantes de formulation.
@@ -73,12 +77,26 @@ RELEASE = {
 }
 
 #: Sels / hydrates / esters — retirés pour atteindre le noyau générique.
+#: Jamais dictés (0 occurrence dans les 31 transcripts réels) : une dictée
+#: porte le nom nu (« perindopril ») ou la marque (« atacand »). NB : « acide »
+#: n'est PAS un sel (« acide folique », « acide tranexamique » — tête du nom).
 SALT = {
     "hcl", "fumarate", "maleate", "sodium", "calcium", "dihydrate",
     "monohydrate", "sulfate", "sodique", "hydrochloride", "phosphate",
-    "citrate", "tartrate", "acide", "mesylate", "besylate", "gluconate",
+    "citrate", "tartrate", "mesylate", "besylate", "gluconate",
     "chlorhydrate", "disodium", "magnesium", "potassium", "zinc", "ferreux",
     "ferrique", "hydroxyde", "carbonate", "bicarbonate", "de", "d",
+    "acetate", "valerate",
+    # sels/esters absents du premier vocabulaire (audit des derniers tokens)
+    "chloride", "bromide", "disodique", "trihydrate", "dihydrochloride",
+    "dichlorhydrate", "cilexetil", "erbumine", "xinafoate", "embonate",
+    "olamine", "mesilate", "succinate", "hemisuccinate", "tosylate",
+    "camsylate", "nitrate", "dinitrate", "mononitrate", "trinitrate",
+    "lactate", "anhydre", "anhydrous", "hydrobromide", "propionate",
+    "dipropionate", "butyrate", "enanthate", "estolate", "pivalate",
+    "palmitate", "stearate", "undecylenate", "oxalate", "pamoate",
+    "gluceptate", "cypionate", "decanoate", "bromhydrate", "arginine",
+    "lysine",
 }
 
 #: Formes galéniques / voies / concentrations.
@@ -107,9 +125,43 @@ def nph(s):
 
 
 def core(s):
-    """Noyau molécule : mots du nom normalisé, sans fabricant ni décor."""
-    return " ".join(t for t in norm(s).split()
-                    if t not in DECOR and not t.isdigit() and len(t) >= 3)
+    """Noyau molécule : mots du nom normalisé, sans fabricant ni décor.
+    Les mots répétés sont dédoublonnés (« valacyclovir valacyclovir » →
+    « valacyclovir ») : les FULL chimiques dupliquent le nom + son sel."""
+    out = []
+    for t in norm(s).split():
+        if t in DECOR or t.isdigit() or len(t) < 3:
+            continue
+        if t not in out:
+            out.append(t)
+    return " ".join(out)
+
+
+def dictable_name(base):
+    """Nom DICTABLE d'un générique : ce que le clinicien prononce.
+
+    Un seul mot porteur après retrait des sels → le nom nu
+    (« perindopril erbumine » → « perindopril »). Plusieurs mots porteurs
+    (« acide folique », « insulin glargine », « levodopa carbidopa ») → le nom
+    d'origine, amputé de ses sels TRAILING uniquement (« acide » n'est jamais
+    strippé : tête du nom, pas un sel). Vide (« sodium chloride ») → nom
+    d'origine intact.
+    """
+    toks = norm(base).split()
+    content = []
+    for t in toks:
+        if t in SALT or t in RELEASE or t.isdigit() or len(t) < 3:
+            continue
+        if t not in content:
+            content.append(t)
+    if not content:
+        return base
+    if len(content) == 1:
+        return content[0]
+    out = list(toks)
+    while out and (out[-1] in SALT or out[-1] in RELEASE):
+        out.pop()
+    return " ".join(out) if out else base
 
 
 def first_word(n):
@@ -144,6 +196,311 @@ def mol_of(row):
     return core(row[2] or row[1])
 
 
+def run_dictable(conn, cur, rows, aliases, aliases_by_mid, stt_ids, gu,
+                 absous, args):
+    """Mode --dictable : la base ne retient que ce qui se dicte.
+
+    Un clinicien prononce le nom nu (« perindopril ») ou la marque
+    (« atacand ») — jamais le sel (« perindopril erbumine »), le nom chimique
+    complet (« valacyclovir valacyclovir hydrochloride monohydrate ») ni la
+    marque fabricant (« TEVA-CANDESARTAN »). Tout le reste n'est qu'une
+    surface de faux positifs (phonétique de noms longs vs prose) :
+
+    D1. les BASE_GENERIC sont RENOMMÉS au nu (``dictable_name``) — un
+        générique salifié n'est plus qu'une variante d'alias ; les lignes de
+        même nom nu fusionnent (sels, doublons FR/EN) ;
+    D2. les FULL_GENERIC sortent (jamais dictés) ;
+    D3. les marques fabricant sortent toutes (simples ET combinaisons) ;
+    D4. les copies exactes / décorées de SEL (C2/C3 sans libération) sortent —
+        les variantes de libération dictables (« Seroquel XR ») restent ;
+    D5. les marques propriétaires (± XR/combos, OTC, legacy inactive) restent :
+        noms distinctifs, réellement dictables.
+
+    INVARIANT : toute ligne retirée voit ses alias remappés vers le générique
+    nu survivant de même noyau — sauf les alias jamais dictés (feuilles
+    « teva »/« fumarate », noms chimiques sans représentation nue), supprimés.
+    Aucun alias STT ne disparaît (garde post-application).
+    """
+    id_of = {r[0]: r for r in rows}
+    drop = set()
+    cat = {}
+    trace = defaultdict(list)
+    renames = []
+
+    def absous_brand(rid):
+        """Garde de MARQUE : les feuilles (BRAND_LEAF) ne protègent pas —
+        au runtime, un générique nu écrase une feuille de même ``norm_phon``,
+        donc une marque fabricant dont la feuille porte le nom du générique
+        n'apporte rien que le générique n'ait déjà."""
+        if rid in stt_ids:
+            return False
+        for _aid, aname, atype in aliases_by_mid.get(rid, ()):
+            if atype == "BRAND_LEAF":
+                continue
+            if nph(aname) in gu:
+                return False
+        return True
+
+    # ---- D1 : renommage des BASE au nu + fusion des sels / doublons FR-EN --
+    base_rows0 = [r for r in rows if r[3] == "BASE_GENERIC"]
+    new_name = {r[0]: dictable_name(r[2]) for r in base_rows0}
+
+    def fold_key(name):
+        """Clé de fusion FR/EN : « metformin »/« metformine », « digoxin »/
+        « digoxine » — même molécule, deux orthographes. On replie le -e
+        final (jamais pour les noms courts)."""
+        n = norm(name)
+        return n[:-1] if len(n) > 4 and n.endswith("e") else n
+
+    by_new = defaultdict(list)
+    for r in base_rows0:
+        by_new[fold_key(new_name[r[0]])].append(r)
+    merge_drop = set()
+    for name, lst in by_new.items():
+        if len(lst) < 2:
+            continue
+        lst2 = sorted(lst, key=lambda r: (
+            0 if nph(new_name[r[0]]) in gu else 1,   # l'orthographe du JSON
+            0 if norm(new_name[r[0]]) == name else 1,  # déjà au nu
+            0 if r[4] else 1, r[0]))
+        keeper = lst2[0]
+        for extra in lst2[1:]:
+            if absous(extra[0]):
+                merge_drop.add(extra[0])
+                trace["D1_merge"].append(extra[2])
+            else:
+                # gardée : conservée, mais renommée au nu comme sa sœur
+                new_name[extra[0]] = new_name[keeper[0]]
+
+    # application en mémoire du renommage
+    rows2 = []
+    for r in rows:
+        if r[3] == "BASE_GENERIC" and r[0] in new_name:
+            nn = new_name[r[0]]
+            if norm(nn) != norm(r[2]):
+                renames.append((r[0], r[2], nn))
+            rows2.append((r[0], r[1], nn, r[3], r[4], r[5], r[6]))
+        else:
+            rows2.append(r)
+    rows = rows2
+    id_of = {r[0]: r for r in rows}
+    base_rows = [r for r in rows if r[3] == "BASE_GENERIC"]
+    base_names = {norm(b[2]) for b in base_rows if b[2]}
+
+    # ---- D5/C2 : copies exactes du nu --------------------------------------
+    for r in rows:
+        rid, brand, base, level, act, otc, src = r
+        if level != "BRAND" or rid in stt_ids or not absous_brand(rid):
+            continue
+        nb = norm(brand)
+        if nb and nb in base_names:
+            drop.add(rid); cat[rid] = "C2_exact"; trace["C2_exact"].append(brand)
+
+    # ---- D5/C3 : décor de sel/forme SANS libération (XR/ER restent) --------
+    for r in rows:
+        rid, brand, base, level, act, otc, src = r
+        if level != "BRAND" or rid in stt_ids or not absous_brand(rid):
+            continue
+        if rid in drop:
+            continue
+        nb = norm(brand)
+        toks = [t for t in nb.split() if t not in SALT and t not in FORM
+                and len(t) >= 3]
+        seen = []
+        for t in toks:
+            if t not in seen:
+                seen.append(t)
+        bare = " ".join(seen)
+        if bare and bare != nb and bare in base_names:
+            drop.add(rid); cat[rid] = "C3_decor"; trace["C3_decor"].append(brand)
+
+    # ---- D2 : FULL_GENERIC sortent tous (jamais dictés) --------------------
+    for r in rows:
+        if r[3] == "FULL_GENERIC" and r[0] not in stt_ids and absous(r[0]):
+            drop.add(r[0]); cat[r[0]] = "D2_full"; trace["D2_full"].append(r[2])
+
+    # ---- D3 : marques fabricant sortent toutes (simples ET combos) --------
+    for r in rows:
+        rid, brand, base, level, act, otc, src = r
+        if level != "BRAND" or rid in stt_ids or not absous_brand(rid):
+            continue
+        if norm(strip_mfg(brand)) != norm(brand):
+            drop.add(rid); cat[rid] = "D3_mfg"; trace["D3_mfg"].append(brand)
+
+    drop |= merge_drop
+    for rid in merge_drop:
+        cat[rid] = "D1_merge"
+
+    # ---- filet dictable : remap vers le générique nu survivant, sinon
+    # SUPPRESSION de l'alias (jamais dicté) — anti-leaf : une feuille
+    # « teva »/« fumarate » ne doit jamais devenir une résolution ------------
+    survivors = {r[0] for r in rows} - drop
+    rep_for_core = {}
+    for b in sorted(base_rows, key=lambda r: len(norm(r[2]))):
+        if b[0] in survivors:
+            c = core(b[2])
+            if c and c not in rep_for_core:
+                rep_for_core[c] = b[0]
+
+    def mol(r):
+        if r[3] == "BRAND":
+            sm = strip_mfg(r[1])
+            return core(sm) if sm else core(r[2] or r[1])
+        return core(r[2] or r[1])
+
+    remap = {}
+    delete_aliases = []
+    rep_keys = defaultdict(set)
+    for b in base_rows:
+        if b[0] in survivors:
+            for _aid, aname, _atype in aliases_by_mid.get(b[0], ()):
+                rep_keys[b[0]].add(nph(aname))
+    for rid in sorted(drop):
+        r = id_of[rid]
+        rep = rep_for_core.get(mol(r))
+        for aid, aname, atype in aliases_by_mid.get(rid, ()):
+            if atype == "BRAND_LEAF":
+                # JAMAIS remapper une feuille : posée sur le générique nu elle
+                # masquerait l'alias BASE de même nom (``_lookup_exact`` refuse
+                # les feuilles → résolution exacte perdue, cf. galantamine) et
+                # une feuille « teva »/« fumarate » créerait un faux positif.
+                # Toute feuille d'une ligne retirée est supprimée.
+                delete_aliases.append(aid)
+                continue
+            key = nph(aname)
+            if rep is not None and key and key not in rep_keys.get(rep, ()):
+                # clé NOUVELLE pour le rep → remap (résolution préservée)
+                remap[aid] = rep
+                rep_keys[rep].add(key)
+            else:
+                # déjà couverte par un alias propre du rep (ou aucun rep) →
+                # suppression (jamais de collision de type sur le rep)
+                delete_aliases.append(aid)
+
+    # ---------- rapport ----------
+    counts = defaultdict(int)
+    for rid in drop:
+        counts[cat.get(rid, "?")] += 1
+    print(f"base {args.db} : {len(rows)} lignes, {len(aliases)} aliases")
+    print(f"  renommages BASE au nu        : {len(renames):>5}")
+    for _rid, old, new in sorted(renames, key=lambda x: x[2])[:12]:
+        print(f"     • {old!r} → {new!r}")
+    if len(renames) > 12:
+        print(f"     • … (+{len(renames)-12})")
+    print()
+    for c in ("D1_merge", "C2_exact", "C3_decor", "D2_full", "D3_mfg"):
+        if counts[c]:
+            print(f"  {c:<12} {counts[c]:>5}")
+    print(f"  {'TOTAL retirés':<12} {len(drop):>5}")
+    print(f"  → après dictable : {len(rows) - len(drop)} lignes "
+          f"({(len(rows)-len(drop))*100//len(rows)} % conservées)")
+    print(f"  alias remappés   : {len(remap):>5} | alias supprimés (jamais "
+          f"dictés) : {len(delete_aliases):>5}")
+    for c in ("D1_merge", "C2_exact", "C3_decor", "D2_full", "D3_mfg"):
+        ex = sorted(trace[c])[:8]
+        if ex:
+            print(f"  ex {c}: {', '.join(map(str, ex))}")
+
+    # ---------- gardes ----------
+    stt_after = stt_ids & survivors
+    if stt_ids - stt_after:
+        names = [id_of[i][1] for i in stt_ids - stt_after]
+        print(f"\n[garde] ÉCHEC : cibles STT_GARBLE perdues : "
+              f"{sorted(map(str, names))}")
+        conn.close()
+        sys.exit(2)
+    print(f"[garde] STT_GARBLE : {len(stt_ids)} cibles, toutes conservées")
+    non_traites = [a for a in aliases
+                   if a[1] in drop and a[0] not in remap
+                   and a[0] not in delete_aliases]
+    if non_traites:
+        print(f"\n[garde] ÉCHEC : {len(non_traites)} alias de lignes retirées "
+              f"ni remappés ni supprimés (ex. {non_traites[:5]})")
+        conn.close()
+        sys.exit(2)
+    print("[garde] tous les alias des lignes retirées sont remappés au nu "
+          "ou supprimés (jamais dictés)")
+
+    # purge DB-wide : feuilles dangereuses (préfixe fabricant / sel — dictation
+    # « teva » ne doit jamais grounder un médicament) + alias orphelins
+    purge_leaves = []
+    for aid, mid, aname, atype in aliases:
+        if atype != "BRAND_LEAF" or mid in drop:
+            continue            # déjà traités ci-dessus
+        toks = norm(aname).split()
+        tok = toks[0] if toks else ""
+        if tok in MFG_PREFIXES or tok in SALT:
+            purge_leaves.append(aid)
+    orphelins = [aid for aid, mid, _an, _at in aliases if mid not in id_of]
+    print(f"  purge feuilles fabricant/sel : {len(purge_leaves):>5} | "
+          f"alias orphelins : {len(orphelins):>5}")
+
+    if not args.apply:
+        print("\n[dry-run] gardes OK, passe --apply pour appliquer")
+        conn.close()
+        return
+
+    # ---------- application ----------
+    stt_before = set(
+        cur.execute("SELECT alias_name, medication_id FROM medication_aliases "
+                    "WHERE alias_type='STT_GARBLE'").fetchall())
+
+    conn.execute("BEGIN")
+    # 1) renommage des BASE au nu (ligne + alias BASE_GENERIC)
+    for rid, old, new in renames:
+        conn.execute("UPDATE medications SET base_generic=? WHERE id=?",
+                     (new, rid))
+        conn.execute("UPDATE medication_aliases SET alias_name=? "
+                     "WHERE medication_id=? AND alias_type='BASE_GENERIC'",
+                     (new, rid))
+    # 2) remap des alias des lignes retirées
+    for aid, rep in remap.items():
+        conn.execute("UPDATE medication_aliases SET medication_id=? WHERE id=?",
+                     (rep, aid))
+    # 3) suppression des alias jamais dictés (feuilles fabricant/décor, noms
+    #    chimiques sans nu)
+    if delete_aliases:
+        ph = ",".join("?" * len(delete_aliases))
+        conn.execute(f"DELETE FROM medication_aliases WHERE id IN ({ph})",
+                     sorted(delete_aliases))
+    # 4) déduplication des alias non-STT (même (medication_id, nom))
+    conn.execute("""
+        DELETE FROM medication_aliases
+        WHERE alias_type != 'STT_GARBLE'
+          AND id NOT IN (
+              SELECT MIN(id) FROM medication_aliases
+              WHERE alias_type != 'STT_GARBLE'
+              GROUP BY medication_id, LOWER(alias_name)
+          )
+    """)
+    # 5) supprimer les lignes retirées
+    ph = ",".join("?" * len(drop))
+    conn.execute(f"DELETE FROM medications WHERE id IN ({ph})", sorted(drop))
+    # 6) purge : feuilles fabricant/sel + alias orphelins (préexistants)
+    all_purge = sorted(set(delete_aliases) | set(purge_leaves) | set(orphelins))
+    if all_purge:
+        ph2 = ",".join("?" * len(all_purge))
+        conn.execute(f"DELETE FROM medication_aliases WHERE id IN ({ph2})",
+                     all_purge)
+
+    # 6) garde post-application : AUCUN alias STT ne doit avoir disparu
+    stt_after2 = set(
+        conn.execute("SELECT alias_name, medication_id FROM medication_aliases "
+                     "WHERE alias_type='STT_GARBLE'").fetchall())
+    lost = stt_before - stt_after2
+    if lost:
+        conn.rollback()
+        print(f"\n[garde] ÉCHEC : {len(lost)} alias STT_GARBLE perdus "
+              f"(ex. {sorted(map(str, list(lost)[:10]))}) — ROLLBACK")
+        conn.close()
+        sys.exit(2)
+    conn.commit()
+    conn.execute("VACUUM")
+    conn.close()
+    print(f"[apply] {len(drop)} lignes supprimées, {len(rows) - len(drop)} "
+          f"conservées, {len(renames)} génériques renommés au nu")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true",
@@ -151,6 +508,11 @@ def main():
     ap.add_argument("--db", default=DB)
     ap.add_argument("--corpus-json", default=None,
                     help="fichier json : liste de norm_phon observés en corpus")
+    ap.add_argument("--dictable", action="store_true",
+                    help="mode dictable : génériques renommés au nu (sels "
+                         "retirés), FULL_GENERIC et marques fabricant "
+                         "supprimées — la base ne retient que ce qui se "
+                         "dicte (nom nu ou marque propriétaire)")
     args = ap.parse_args()
 
     conn = sqlite3.connect(args.db)
@@ -227,6 +589,11 @@ def main():
             if nph(aname) in gu:
                 return False
         return True
+
+    if args.dictable:
+        run_dictable(conn, cur, rows, aliases, aliases_by_mid, stt_ids, gu,
+                     absous, args)
+        return
 
     # ---------- candidats par catégorie ----------
     drop = set()   # id

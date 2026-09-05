@@ -3,6 +3,15 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-05 — Base « dictable » : le grounding ne retient que ce qui se prononce
+
+- **`prune_molecule.py --dictable`** : la base passe de 7 988 à **5 977 lignes** (11 898 au départ). Constat mesuré : aucun sel (« erbumine », « cilexetil », « chlorhydrate »…) n'apparaît dans les 31 transcripts réels — le clinicien dicte « perindopril » ou « atacand », jamais « perindopril erbumine » ni « TEVA-CANDESARTAN ». Tout le reste n'est qu'une surface de faux positifs phonétiques.
+- **Génériques renommés au nu** (259) : « candesartan cilexetil » → `candesartan`, « perindopril erbumine » → `perindopril` — c'est ce nom que le LLM lit, et la liste courante JSON lui correspond directement. Sels et doublons FR/EN fusionnés (« metformine »/« metformin » → une ligne, repli du -e final).
+- **FULL_GENERIC supprimés** (707) — noms chimiques complets jamais dictés ; **marques fabricant supprimées toutes** (1 106 — simples et combinaisons ; vocabulaire de préfixes complété par audit : novo, nra, ran, penta, abbott, lupin, euro, orb…).
+- **Conservés** : marques propriétaires ± variantes de libération (« Seroquel XR »), OTC, marques legacy distinctives, 210 seeds STT_GARBLE (garde post-application : zéro seed perdu).
+- **Filet anti-régression** : tout alias d'une ligne retirée est remappé vers le générique nu survivant (clé nouvelle uniquement — jamais une feuille, qui masquerait l'alias BASE et casserait `_lookup_exact`), purge des feuilles fabricant/sel et des alias orphelins préexistants.
+- **Revalidé** sur les 4 transcripts de référence et les 31 consultations : **zéro molécule dictée perdue** — les seuls diffs sont des assainissements (doublons garble doublant le nom correct dicté dans la même consultation sortent ; « perindopril erbumine » s'affiche « perindopril ») ; les 4 formes à sel quittent `common_meds.json` (devenues mortes après renommage, les formes nues y sont déjà).
+
 ## 2026-09-05 — Médicaments courants : une seule source de vérité (JSON)
 
 - **`app/common_meds.json` devient la source UNIQUE des « médicaments courants »** : la table DPD `common_meds` (et `med_grounding/seed_common.py`) est supprimée du moteur et de `build_db.py` / `prune_molecule.py`. Elle doublonnait la liste JSON avec un décalage (5 formes à sel présentes d'un côté, 21 génériques de l'autre) et obligeait à rejouer un seed à chaque refonte de base.

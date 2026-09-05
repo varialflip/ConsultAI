@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Build the Canadian medication SQLite DB from Health Canada DPD + garble aliases."""
+"""Build the Canadian medication SQLite DB from Health Canada DPD + garble aliases.
+
+Pipeline complet de refonte : `build_db.py` (ingest DPD brut) PUIS
+`prune_molecule.py --dictable` (bases renommées au nu, FULL_GENERIC et marques
+fabricant supprimées — la base ne retient que ce qui se dicte). Le produit de
+build_db seul n'est PAS déployable tel quel.
+"""
 import re, sqlite3, unicodedata
 
 DPD_DIR = "./dpd"

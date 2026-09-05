@@ -1294,25 +1294,23 @@ marque de fabricant suivie d'un générique authentique (borné par token pour
 ne pas tronquer les vraies marques comme AVAPRO) : « van-quetiapine » s'affiche
 « quétiapine », « riva-metformin » → « metformine ».
 
-Depuis 2026-09-05, `prune_molecule.py` pousse la refonte à l'extrême : une
-**molécule = un générique ± marques utiles**. Outre les doublons de
-fabricants déjà purgés, sont retirés les **copies exactes** du générique
-(« DIAZEPAM », « FOLIC ACID »), les **« générique + décor »**
-(« CODEINE PHOSPHATE », « METOPROLOL-L », « HALOPERIDOL LA »,
-« METHOTREXATE SODIUM », « CISPLATIN BP » — sel/dose/forme/libération/
-pharmacopée strippés → noyau du générique), les **FULL_GENERIC doublons**
-déjà portés par un BASE_GENERIC, les **doublons BASE par noyau**, et les
-marques inactives ré-couvertes par un générique. La résolution n'est jamais
-cassée : tout alias d'une ligne retirée est **remappé vers le générique
-noyau survivant** (invariant vérifié par le script — une ligne est conservée
-si un seul de ses alias deviendrait orphelin), et les cibles `STT_GARBLE`,
-les noms de `common_meds.json`, les clés `OTC_DISPLAY`/`FR_COMMON` et tous
-les médicaments observés dans les consultations réelles (option
-`--corpus-json`) sont intouchables. Résultat 11 898 → 7 980 lignes, avec une
-résolution identique (transcripts de référence et corpus complet rescanés
-sans perte). La liste des « médicaments courants » a sa source unique dans
-`common_meds.json` (plus de table `common_meds` ni de `seed_common.py` à
-rejouer après refonte).
+Depuis 2026-09-05, `prune_molecule.py` pousse la refonte à l'extrême avec le
+mode **`--dictable`** : la base ne retient que ce qui se dicte. Un clinicien
+prononce le nom nu (« perindopril ») ou la marque (« atacand ») — jamais le
+sel (« perindopril erbumine »), le nom chimique complet ni la marque
+fabricant (« TEVA-CANDESARTAN »). Dès lors : les **BASE_GENERIC sont
+renommés au nu** (« candesartan cilexetil » → « candesartan » — c'est ce nom
+que le LLM lit), les sels/doublons FR-EN fusionnent (« metformine » et
+« metformin » → une seule ligne), les **FULL_GENERIC sortent**, les **marques
+fabricant sortent toutes** (simples et combinaisons), et les **copies/décor
+de sel** des marques auto-nommées sortent — les variantes de libération
+dictables (« Seroquel XR ») et les marques propriétaires, OTC et legacy
+restent. Aucun alias STT ne disparaît, les feuilles fabricant/décor
+(« teva », « fumarate ») sont purgées, et tout alias d'une ligne retirée est
+remappé vers le générique nu survivant (sinon supprimé — jamais dicté).
+Résultat : **11 898 → 5 977 lignes** ; les transcripts de référence et le
+corpus complet rescanés ne perdent AUCUNE molécule dictée (les garbles
+redondants doublant un nom correct dicté sortent, le nom correct reste).
 
 ---
 

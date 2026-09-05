@@ -1664,6 +1664,20 @@ class Matcher:
             if not cand:
                 continue
             can, base, brand, s, _lvl = cand
+            # Garde PROSE conf-élastique : un mot que le STT a entendu avec
+            # confiance (>= CONF_PROSE_SURE, donc ABSENT de ``conf_keys``) et
+            # qui flotte dans un contexte de dose doit être phonétiquement
+            # QUASI-IDENTIQUE au médicament pour être une piste. Un score moyen
+            # (0.72–0.84) sur un mot français courant est de la PROSE
+            # (« renouvelé » → Renvela 0.75), pas un nom déformé. Mi-roir des
+            # seuils de la prose douteuse (l.1657) et du gate suggestions
+            # (l.2063) ; un vrai garble, mal entendu, est en ``conf_keys`` et
+            # reste exempté.
+            cand_phon = norm_phon(base or "")
+            barre_prose = (COMMON_PHON_PROSE if cand_phon in self.common
+                           else CONF_PHON_PROSE_DOUTEUSE)
+            if conf_keys and p not in conf_keys and s < barre_prose:
+                continue
             poso = _dose_posology(texte, jet) or ""
             # Hors liste confirmée, la POSOLOGIE doit être crédible pour porter
             # la piste phonétique : un simple voisin numérique (valeur de lab
@@ -2419,6 +2433,19 @@ class Matcher:
                     fusionnes[-1][1] = e
                 else:
                     fusionnes.append([s, e])
+            # G5 : une QUEUE de dose séparée du bloc par une ligne vide de
+            # transcription (« 500 \n\n mg », « 850 \n\n bid ») reste partie
+            # de la liste : on étend chaque bloc sur les jetons de dose
+            # (nombre/unité) qui le suivent immédiatement, borné, pour que la
+            # ligne vide ne fasse pas sortir la dose hors de la liste.
+            for b in fusionnes:
+                e = b[1]
+                prolonge = 0
+                while (e + 1 < n and (num_token[e + 1] or dose_unit[e + 1])
+                       and prolonge < 4):
+                    e += 1
+                    prolonge += 1
+                b[1] = e
             for s, e in fusionnes:
                 for k in range(s, e + 1):
                     encadrer[k] = True
@@ -2946,6 +2973,11 @@ def _dose_posology(text: str, name: str) -> str:
     (invention d'une dose « 2026 »). ``normalize`` réécrit le transcrit avec
     des espaces, la borne ``(?<![a-zà-ÿ])`` protège des slurres comme
     « kilomètre » pour « kilo ».
+
+    Deux gardes structurelles (posologies fantômes « 1 » de la consultation
+    42) : la ponctuation forte COLLÉE au jeton brut clôt la phrase sans jamais
+    l'enjamber, et un cardinal écrit en lettres n'est une dose que s'il est
+    suivi d'une preuve de posologie (mot de ``_DOSE_WORDS``) à portée.
     """
     idx = -1
     pat = re.compile(
@@ -2963,23 +2995,47 @@ def _dose_posology(text: str, name: str) -> str:
     for ei, tok in enumerate(toks_tail):
         if not tok:
             break
-        aplat = tok.strip(" \t,;:().")
+        # D1 : ponctuation forte collée au jeton BRUT (« denépésil. »,
+        # « Zyprexa à 1,25. ») clôt la phrase — on traite le jeton courant puis
+        # on s'arrête, sans jamais enjamber le point vers la phrase suivante
+        # (« …la quétiapine. Prochain point. Un trouble… » : le « Un » d'après
+        # le point ne devient plus une dose « 1 »).
+        fin_phrase = tok.endswith((".", "!", "?"))
+        aplat = tok.strip(" \t,;:.()")
         if not aplat:
+            # Une virgule isolée (« Dosexazocin, 4 ») est à SKIPPER ;
+            # un point seul clôt la phrase (D1), on ne l'enjambe jamais.
+            if fin_phrase:
+                break
             continue
-        if aplat in (".", "!", "?"):
-            break
         # Les chiffres comptent (dose !) mais norm_phon les élimine.
         if re.fullmatch(r"\d+(?:[.,]\d+)?", aplat):
             pieces.append(aplat)
-            if len(pieces) >= 8:
+            if len(pieces) >= 8 or fin_phrase:
                 break
             continue
         # Un nombre dicté EN LETTRES (« trente-cinq par semaine ») est une
         # dose : on l'exprime en chiffres (« 35 par semaine ») pour le LLM.
         nb_lettres = _nb_lettres(aplat)
         if nb_lettres is not None:
+            # D2 : un cardinal en lettres n'est une dose QUE s'il est suivi
+            # d'une preuve de posologie — mot de ``_DOSE_WORDS`` / forme
+            # galénique dans les 3 jetons suivants (« vingt-cinq mg », « deux
+            # fois par jour »). Un cardinal isolé est du récit (« …la
+            # quétiapine. Un trouble… », « une petite dose ») : sans preuve à
+            # portée, on le saute comme prose, jamais comme dose « 1 ».
+            preuve_dose = any(
+                norm_phon(v.strip(" \t,;:.()")) in _DOSE_WORDS
+                for v in toks_tail[ei + 1: ei + 4])
+            if not preuve_dose:
+                if not pieces:
+                    sauts += 1
+                    if sauts > 6:
+                        break
+                    continue
+                break
             pieces.append(str(int(nb_lettres)))
-            if len(pieces) >= 8:
+            if len(pieces) >= 8 or fin_phrase:
                 break
             continue
         p = norm_phon(aplat)
@@ -3001,13 +3057,15 @@ def _dose_posology(text: str, name: str) -> str:
                         continue
                     break
             pieces.append(aplat)
-            if len(pieces) >= 8:
+            if len(pieces) >= 8 or fin_phrase:
                 break
             continue
         # Un autre nom de médicament = fin de l'entrée courante.
         if _lookup_exact(aplat):
             break
         if not pieces:
+            if fin_phrase:
+                break
             # Prose entre le nom et sa dose : passer outre, borné.
             sauts += 1
             if sauts > 6:

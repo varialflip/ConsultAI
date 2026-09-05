@@ -3,6 +3,13 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-05 — Grounding : posologies fantômes éliminées + garde prose du canal phonétique
+
+- **Fin des posologies fantômes « 1 »** (`_dose_posology`, consultation 42) : la ponctuation forte COLLÉE au jeton brut (« denépésil. », « …à 1,25. ») clôt désormais la capture — le scan ne traverse plus le point vers la phrase suivante ; et un cardinal écrit en lettres (« Un trouble… », « une petite dose ») n'est une dose QUE s'il est suivi d'une preuve de posologie (mot de `_DOSE_WORDS`) dans les 3 jetons suivants. Les 4 items fantômes « 1 » (Seroquel, quetiapine, denépésil, la ketiapine) sortent de la liste, la vraie dose « 1,25 » de Zyprexa est conservée, et les doses en lettres légitimes (« vingt-cinq mg ») restent captées.
+- **Garde prose conf-élastique du canal phonétique** (`phonetiques_texte`) : un mot entendu avec confiance par le STT (absent des clés douteuses) n'est proposé comme piste médicament que s'il colle phonétiquement comme un vrai garble — miroir des seuils `CONF_PHON_PROSE_DOUTEUSE`/`COMMON_PHON_PROSE`. Un score moyen est de la prose (« renouvelé » → Renvela 0.75 ne sort plus comme piste avec posologie « 30 jours ») ; les vrais garbles mal entendus restent exemptés, et la garde est inactive sans métadonnée de confiance (conf-élasticité).
+- **Zone de liste : la queue de dose séparée par une ligne vide reste dans la liste** : un transcrit « …atorvastatine 40 puis metformine 850  \n bid » n'isole plus la dose (« 850 BID » sortait du bloc `encadrer`) — chaque bloc est étendu sur les jetons de dose (nombre/unité) qui le suivent immédiatement.
+- Revalidé sur les transcripts de référence (33 items, aucun changement) et sur la consultation 42 (zéro perte collatérale).
+
 ## 2026-09-05 — Grounding : déduplication élargie des marques de fabricants génériques
 
 - **20 préfixes fabricants ajoutés au prune et à la canonicalisation** (`accel, ach, alti, ava, bio, gd, gen, med, nat, ntp, nu, odan, phl, priva, pro, reddy, rhoxal, riva, torrent, van`) — désormais reconnus à la fois par `prune_generic_mfg.py` (déduplication 1 marque/molécule à la refonte de `meds.sqlite`) et par `_canonicalize` (règle 1/1b du moteur app + du moteur de référence `match_meds.py`). Un clinicien dictant « van-quetiapine » ou « riva-metformin » reçoit le générique (`quetiapine`, `metformine`) au lieu de la marque de fabricant.

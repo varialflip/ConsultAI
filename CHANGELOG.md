@@ -3,6 +3,12 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-05 — Vocabulaire curaté : élargissement des médicaments courants + termes gériatriques
+
+- **`app/common_meds.json` — 38 entrées ajoutées** (100 → 138, après dédoublonnage, catégories nouvelles) : inhibiteurs de la pompe à protons (Pantoprazole/Pantoloc, Oméprazole/Losec, Rabéprazole/Pariet, Lansoprazole/Prevacid, Ésoméprazole/Nexium), anticoagulants/antiplaquettaires (Apixaban/Eliquis, Rivaroxaban/Xarelto, Dabigatran/Pradaxa, Édoxaban/Lixiana, Warfarine/Coumadin, Clopidogrel/Plavix, Ticagrélor/Brilinta, Aspirine), opioïdes (Hydromorphone/Dilaudid, Morphine/Statex, Oxycodone/OxyNEO, Fentanyl/Duragesic, Tramadol/Ultram), vessie hyperactive (Oxybutynine/Ditropan, Solifénacine/Vesicare, Tolterodine/Detrol, Mirabégron/Myrbetriq, Darifénacine/Enablex), HBP (Tamsulosine/Flomax, Finastéride/Proscar, Dutastéride/Avodart, Alfuzosine/Xatral), santé osseuse (Alendronate/Fosamax, **Risédronate/Actonel**, Cholécalciférol/D-Tabs), transit (Polyéthylène glycol/RestoraLAX, Docusate/Colace, Séné/Senokot), rythme cardiaque (Digoxine/Lanoxin) et « other » (Lévothyroxine/Synthroid, Acétaminophène/Tylenol, Ibuprofène/Advil, Vitamine B12).
+- **`app/geriatric_terms.json` — 7 entrées ajoutées** : réécritures déterministes « corps de Louis » → corps de Lewy, « qu'y aissante/qu'y aissant » → quiescente/quiescent, « brady/hypo kinétique » → bradykinétique/hypokinétique, « bras tikinétiques » → bras akinétiques ; hint phonétique « noïka » → signe de Noïka (manœuvre de renforcement, examen Parkinson).
+- Revalidé sur les transcripts de référence (médicaments en liste reconnus, garbles réels corrigés, prose non touchée).
+
 ## 2026-09-04 — Grounding : liste définitive = scan plein texte au « Terminer » + seuil de paire 0.78
 
 - **Les hints médicaments du LLM partent désormais toujours d'une liste COMPLÈTE.** La liste persistée au « Terminer » était l'ACCUMULATION live par fenêtre de queue (~600 derniers mots, `maxi_phon=8`) : les garbles dictés en début de note n'atteignaient jamais les hints — n° 42 : « sérocoïl » → Seroquel absent, le modèle inventait « sertraline ». `_finalize_grounding` exécute maintenant un **scan plein texte** (`extract_validation_items` sur le transcript complet, avec la confiance STT complète), persisté dans `med_grounding_json` avec la marque `grounding_finalized_at`.

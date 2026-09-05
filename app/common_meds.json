@@ -122,5 +122,61 @@
   ],
   "corticosteroids": [
     { "generic_name": "Fludrocortisone", "brand_name": "Florinef" }
+  ],
+  "proton_pump_inhibitors": [
+    { "generic_name": "Pantoprazole", "brand_name": "Pantoloc" },
+    { "generic_name": "Omeprazole", "brand_name": "Losec" },
+    { "generic_name": "Rabeprazole", "brand_name": "Pariet" },
+    { "generic_name": "Lansoprazole", "brand_name": "Prevacid" },
+    { "generic_name": "Esomeprazole", "brand_name": "Nexium" }
+  ],
+  "anticoagulants": [
+    { "generic_name": "Apixaban", "brand_name": "Eliquis" },
+    { "generic_name": "Rivaroxaban", "brand_name": "Xarelto" },
+    { "generic_name": "Dabigatran", "brand_name": "Pradaxa" },
+    { "generic_name": "Edoxaban", "brand_name": "Lixiana" },
+    { "generic_name": "Warfarin", "brand_name": "Coumadin" },
+    { "generic_name": "Clopidogrel", "brand_name": "Plavix" },
+    { "generic_name": "Ticagrelor", "brand_name": "Brilinta" },
+    { "generic_name": "Acetylsalicylic acid", "brand_name": "Aspirin" }
+  ],
+  "opioids": [
+    { "generic_name": "Hydromorphone", "brand_name": "Dilaudid" },
+    { "generic_name": "Morphine", "brand_name": "Statex" },
+    { "generic_name": "Oxycodone", "brand_name": "OxyNEO" },
+    { "generic_name": "Fentanyl", "brand_name": "Duragesic" },
+    { "generic_name": "Tramadol", "brand_name": "Ultram" }
+  ],
+  "overactive_bladder": [
+    { "generic_name": "Oxybutynin", "brand_name": "Ditropan" },
+    { "generic_name": "Solifenacin", "brand_name": "Vesicare" },
+    { "generic_name": "Tolterodine", "brand_name": "Detrol" },
+    { "generic_name": "Mirabegron", "brand_name": "Myrbetriq" },
+    { "generic_name": "Darifenacin", "brand_name": "Enablex" }
+  ],
+  "bph": [
+    { "generic_name": "Tamsulosin", "brand_name": "Flomax" },
+    { "generic_name": "Finasteride", "brand_name": "Proscar" },
+    { "generic_name": "Dutasteride", "brand_name": "Avodart" },
+    { "generic_name": "Alfuzosin", "brand_name": "Xatral" }
+  ],
+  "bone_health": [
+    { "generic_name": "Alendronate", "brand_name": "Fosamax" },
+    { "generic_name": "Risedronate", "brand_name": "Actonel" },
+    { "generic_name": "Cholecalciferol", "brand_name": "D-Tabs" }
+  ],
+  "bowel_regimen": [
+    { "generic_name": "Polyethylene glycol", "brand_name": "RestoraLAX" },
+    { "generic_name": "Docusate", "brand_name": "Colace" },
+    { "generic_name": "Senna", "brand_name": "Senokot" }
+  ],
+  "cardiac_rhythm": [
+    { "generic_name": "Digoxin", "brand_name": "Lanoxin" }
+  ],
+  "other": [
+    { "generic_name": "Levothyroxine", "brand_name": "Synthroid" },
+    { "generic_name": "Acetaminophen", "brand_name": "Tylenol" },
+    { "generic_name": "Ibuprofen", "brand_name": "Advil" },
+    { "generic_name": "Vitamin B12" }
   ]
 }

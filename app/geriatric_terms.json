@@ -87,6 +87,11 @@
       "langue": "fr"
     },
     {
+      "garble": "corps de louis",
+      "correct": "corps de Lewy",
+      "langue": "fr"
+    },
+    {
       "garble": "pet scan",
       "correct": "TEP-Scan",
       "langue": "fr"
@@ -94,6 +99,31 @@
     {
       "garble": "pet-scan",
       "correct": "TEP-Scan",
+      "langue": "fr"
+    },
+    {
+      "garble": "qu'y aissante",
+      "correct": "quiescente",
+      "langue": "fr"
+    },
+    {
+      "garble": "qu'y aissant",
+      "correct": "quiescent",
+      "langue": "fr"
+    },
+    {
+      "garble": "brady kinétique",
+      "correct": "bradykinétique",
+      "langue": "fr"
+    },
+    {
+      "garble": "hypo kinétique",
+      "correct": "hypokinétique",
+      "langue": "fr"
+    },
+    {
+      "garble": "bras tikinétiques",
+      "correct": "bras akinétiques",
       "langue": "fr"
     }
   ],
@@ -250,6 +280,12 @@
       "contexte": "Loi sur la santé publique",
       "langue": "fr",
       "phonetic": true
+    },
+    {
+      "fragment": "noïka",
+      "lecture": "signe de Noïka",
+      "contexte": "manœuvre de renforcement à l'examen clinique (maladie de Parkinson)",
+      "langue": "fr"
     }
   ]
 }

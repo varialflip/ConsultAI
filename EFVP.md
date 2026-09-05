@@ -469,9 +469,10 @@ résidence ni à la dénominalisation** :
 - **Garbles STT supplémentaires** (« faire » → fer, « 13 IBA » → Tresiba) :
   alias de la base BDP de référence (§ 7.10, donnée publique traitée
   localement) — aucun renseignement de santé, aucune identité ajoutée.
-- **Liste des « médicaments courants »** (`common_meds`, renseignée par
-  `med_grounding/seed_common.py`) : simple sous-ensemble public de noms de la
-  BDP (ordonnance géronto/gériatrique courante), toujours traitée localement —
+- **Liste des « médicaments courants »** (`app/common_meds.json`, source
+  unique — noms de la BDP, ordonnance géronto/gériatrique courante, formes
+  simples et à sel) : simple sous-ensemble public de noms, toujours traité
+  localement —
   aucun renseignement de santé ni identité supplémentaire. Le bonus de score et
   les seuils abaissés (`COMMON_*` dans `app/med_grounding.py`) ne concernent
   que cette liste ; les garde-fous de prose restent en place.

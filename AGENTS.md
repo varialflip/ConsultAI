@@ -114,8 +114,9 @@ même commit** :
 - Sauvegardes **sanitisées** : jamais d'audio ni de données cliniques dans les
   archives.
 - Le moteur de grounding charge au démarrage `app/common_meds.json` (liste
-  curatée des **médicaments courants**, complémentaire de la table BDP
-  `common_meds` / `med_grounding/seed_common.py`) : toute modification de ce
+  curatée des **médicaments courants** — source UNIQUE, génériques formes
+  simples et à sel + marques ; l'ancienne table BDP `common_meds` /
+  `med_grounding/seed_common.py` a été supprimée) : toute modification de ce
   fichier ou des constantes `COMMON_*` / `SUGGEST_*` / `_HINTS_PROSE` de
   `app/med_grounding.py`
   doit être re-validée sur les transcripts de référence (faux positifs de

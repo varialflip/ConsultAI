@@ -27,10 +27,6 @@ CREATE TABLE IF NOT EXISTS medication_aliases (
 );
 CREATE INDEX IF NOT EXISTS idx_meds_alias  ON medication_aliases(alias_name);
 CREATE INDEX IF NOT EXISTS idx_meds_phonetic ON medication_aliases(phonetic_fr);
-CREATE TABLE IF NOT EXISTS common_meds (
-    medication_id INTEGER PRIMARY KEY REFERENCES medications(id),
-    rank INTEGER NOT NULL DEFAULT 0
-);
 """
 
 # Salt / dosage-form suffixes to strip to derive the base generic name.

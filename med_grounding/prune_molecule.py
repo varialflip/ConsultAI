@@ -39,8 +39,9 @@ ses alias reste résoluble après le prune :
    sinon la ligne est conservée (filet de sécurité).
 
 Résultat attendu : résolution IDENTIQUE à l'identique (benchmark), base allégée
-des doublons de fabricants/sels/formes. Rejouer `seed_common.py` ensuite
-(la table `common_meds` référence les ids périmés de l'ancienne base).
+des doublons de fabricants/sels/formes. La liste des médicaments « courants »
+est la source unique JSON `app/common_meds.json` (plus de table `common_meds`
+à rejouer après refonte).
 
 Idempotent / dry-runnable comme prune_generic_mfg.py, prune_otc.py.
 """
@@ -379,9 +380,7 @@ def main():
               GROUP BY medication_id, LOWER(alias_name)
           )
     """)
-    # 4) purger common_meds (ids périmés de l'ancienne base : rejouer seed_common)
-    conn.execute("DELETE FROM common_meds")
-    # 5) supprimer les lignes retirées
+    # 4) supprimer les lignes retirées
     ph = ",".join("?" * len(drop))
     conn.execute(f"DELETE FROM medications WHERE id IN ({ph})", sorted(drop))
 

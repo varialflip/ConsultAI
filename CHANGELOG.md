@@ -3,6 +3,13 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-05 — Médicaments courants : une seule source de vérité (JSON)
+
+- **`app/common_meds.json` devient la source UNIQUE des « médicaments courants »** : la table DPD `common_meds` (et `med_grounding/seed_common.py`) est supprimée du moteur et de `build_db.py` / `prune_molecule.py`. Elle doublonnait la liste JSON avec un décalage (5 formes à sel présentes d'un côté, 21 génériques de l'autre) et obligeait à rejouer un seed à chaque refonte de base.
+- **Les 5 formes à sel migrées dans le JSON** : « Candesartan cilexetil », « Perindopril erbumine », « Oxybutynin chloride », « Pramipexole dihydrochloride », « Levodopa » — sans quoi `perindopril` (qui se résout en `base_generic='perindopril erbumine'`) et ses semblables perdaient le statut « courant » (bonus / seuils abaissés `COMMON_*`).
+- **Table `common_meds` droppée** des bases `app/` et `med_grounding/` ; `self.common` alimenté uniquement par `load_common_json()`.
+- Revalidé sur les transcripts de référence (33 items, textes inline identiques) et les 31 consultations du corpus — aucun changement de résolution.
+
 ## 2026-09-05 — Refonte maximale de la base : une molécule = un générique ± marques utiles
 
 - **`meds.sqlite` : 11 898 → 7 980 lignes** (`med_grounding/prune_molecule.py`). Au-delà des doublons de fabricants déjà purgés, la base ne retient plus que l'essentiel dictable par molécule. Retirés : les **copies exactes** du générique (« DIAZEPAM », « FOLIC ACID », « THYROID », « CHLORDIAZEPOXIDE »), les **« générique + décor »** (« CODEINE PHOSPHATE », « METOPROLOL-L », « HALOPERIDOL LA », « METHOTREXATE SODIUM », « CISPLATIN BP », « GENTAMICIN(E) » — sel/dose/forme galénique/libération/pharmacopée/parenthèse retirés → noyau générique), les **FULL_GENERIC couverts par un BASE_GENERIC**, les **doublons BASE par noyau**, et les marques inactives ré-couvertes par un générique.

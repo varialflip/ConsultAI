@@ -45,8 +45,10 @@
     { "generic_name": "Amlodipine", "brand_name": "Norvasc" },
     { "generic_name": "Bisoprolol", "brand_name": "Monocor" },
     { "generic_name": "Candesartan", "brand_name": "Atacand" },
+    { "generic_name": "Candesartan cilexetil", "brand_name": "Atacand" },
     { "generic_name": "Ramipril", "brand_name": "Altace" },
     { "generic_name": "Perindopril", "brand_name": "Coversyl" },
+    { "generic_name": "Perindopril erbumine", "brand_name": "Coversyl" },
     { "generic_name": "Losartan", "brand_name": "Cozaar" },
     { "generic_name": "Valsartan", "brand_name": "Diovan" },
     { "generic_name": "Telmisartan", "brand_name": "Micardis" },
@@ -102,7 +104,9 @@
   ],
   "parkinsons_medications": [
     { "generic_name": "Levodopa/Carbidopa", "brand_name": "Sinemet" },
+    { "generic_name": "Levodopa", "brand_name": "Sinemet" },
     { "generic_name": "Pramipexole", "brand_name": "Mirapex" },
+    { "generic_name": "Pramipexole dihydrochloride", "brand_name": "Mirapex" },
     { "generic_name": "Ropinirole", "brand_name": "ReQuip" },
     { "generic_name": "Rasagiline", "brand_name": "Azilect" },
     { "generic_name": "Amantadine", "brand_name": "Symmetrel" }
@@ -149,6 +153,7 @@
   ],
   "overactive_bladder": [
     { "generic_name": "Oxybutynin", "brand_name": "Ditropan" },
+    { "generic_name": "Oxybutynin chloride", "brand_name": "Ditropan" },
     { "generic_name": "Solifenacin", "brand_name": "Vesicare" },
     { "generic_name": "Tolterodine", "brand_name": "Detrol" },
     { "generic_name": "Mirabegron", "brand_name": "Myrbetriq" },

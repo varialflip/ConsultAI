@@ -57,14 +57,15 @@ MIN_FUZZY_LEN = 5      # tokens shorter than this are exact-match only (no fuzzy
                        # their garble is unrecoverable by ortho anyway.
 HIGH_SIM = 0.80       # near-certain fuzzy matches; exempt from context signals
 
-#: Ensemble des médicaments « courants » (table `common_meds` de la base).
-#: Curé sur l'ordonnance géronto-gériatrique/ambulatoire (listes fournies
-#: dans `med_grounding/seed_common.py`). Pour ces médicaments on baisse
-#: légèrement les barrières d'admission et on gratifie d'un bonus de score :
-#: ce sont les plus dictés, donc les plus déformés par la reconnaissance
-#: vocale (« ketapine » → quetiapine, « lipitar » → lipitor) et les plus
-#: coûteux à manquer. Le bonus/la baisse ne s'applique JAMAIS aux mots de
-#: prose (``FRENCH_STOP`` / ``_HINTS_PROSE`` restent de stricts garde-fous).
+#: Ensemble des médicaments « courants » (liste JSON curatée).
+#: Curé sur l'ordonnance géronto-gériatrique/ambulatoire (`common_meds.json`,
+#: chargé à chaque construction du moteur — source unique). Pour ces
+#: médicaments on baisse légèrement les barrières d'admission et on gratifie
+#: d'un bonus de score : ce sont les plus dictés, donc les plus déformés par
+#: la reconnaissance vocale (« ketapine » → quetiapine, « lipitar » →
+#: lipitor) et les plus coûteux à manquer. Le bonus/la baisse ne s'applique
+#: JAMAIS aux mots de prose (``FRENCH_STOP`` / ``_HINTS_PROSE`` restent de
+#: stricts garde-fous).
 COMMON_BONUS        = 10    # points de score supplémentaires accordés à un
                             # candidat courant (fait franchir THRESHOLD avec un
                             # SEUL signal : 40 + 25 + 10 = 75 >= 65)
@@ -98,12 +99,16 @@ COMMON_PRIVILEGE_GAP = 0.10
 #: (paires `generic_name`/`brand_name`). Chargé à la CONSTRUCTION de chaque
 #: ``Matcher`` (donc à chaque démarrage / recréation du moteur), ce qui
 #: permet de l'éditer et de redéployer le conteneur sans reconstruire la base
-#: DPD. Le fichier est l'autorité : ses noms sont admis comme « courants »
-#: MÊME s'ils sont absents de la base DPD (contrairement à `seed_common.py`
-#: qui les ignore silencieusement). Les clés générique ET marque sont toutes
-#: deux ajoutées à ``self.common`` (clé = ``norm_phon``). Les marques multi-mots
-#: (« Effexor XR », « Cardizem CD », « NovoMix 30 ») sont enregistrées comme
-#: phrases pour le chemin de joint multi-tokens (voir ``load_common_json``).
+#: DPD. Le fichier est l'autorité : ses noms (génériques — formes simples ET à
+#: sel « perindopril erbumine » — et marques) sont admis comme « courants »
+#: MÊME s'ils sont absents de la base DPD. Les clés générique ET marque sont
+#: toutes deux ajoutées à ``self.common`` (clé = ``norm_phon``). Les marques
+#: multi-mots (« Effexor XR », « Cardizem CD », « NovoMix 30 ») sont
+#: enregistrées comme phrases pour le chemin de joint multi-tokens (voir
+#: ``load_common_json``). C'est la SOURCE UNIQUE des médicaments courants (la
+#: table DPD `common_meds`, renseignée par `seed_common.py`, a été supprimée :
+#: elle doublonnait cette liste avec un décalage et obligeait à rejouer un seed
+#: à chaque refonte de la base).
 COMMON_JSON_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                                 "common_meds.json")
 
@@ -863,11 +868,12 @@ def load_common_json(path: str | None = None) -> tuple[set, dict]:
       ``_resolve_phrase``). Les marques à UN SEUL mot sont simplement ajoutées
       à ``common_keys``.
 
-    Le fichier est l'AUTORITÉ : on n'exige pas que les noms existent dans la
-    base DPD (contrairement à ``seed_common.py``). Un fichier absent ou illisible
-    renvoie un ensemble vide — le moteur démarre avec la seule liste DPD
-    (`table common_meds`), comme historiquement. Aucune exception ne doit
-    empêcher le démarrage.
+    Le fichier est l'AUTORITÉ et la source unique : on n'exige pas que les noms
+    existent dans la base DPD. Les génériques portent leurs formes simples ET à
+    sel (« Perindopril » et « Perindopril erbumine ») pour que la résolution
+    d'un jeton qui retombe sur le BASE_GENERIC salifié soit reconnue courante.
+    Un fichier absent ou illisible renvoie un ensemble vide — le moteur démarre
+    sans médicaments courants. Aucune exception ne doit empêcher le démarrage.
     """
     common_keys: set = set()
     brand_phrases: dict = {}
@@ -967,32 +973,16 @@ class Matcher:
         # Médicaments « courants » — clé = norm_phon du base_generic canonique.
         # Servent à abaisser sélectivement les barrières d'admission (voir
         # COMMON_*) et à piloter la correction INLINE agressive (COMMON_INLINE_*)
-        # pour les noms les plus dictés/déformés. Deux sources se complètent :
-        #   * la table DPD `common_meds` (génériques curés par `seed_common.py`) ;
-        #   * la liste JSON curatée `COMMON_JSON_PATH` (génériques + MARQUES de
-        #     l'autorité, rechargée à chaque construction du moteur).
+        # pour les noms les plus dictés/déformés. SOURCE UNIQUE : la liste JSON
+        # curatée `COMMON_JSON_PATH` (génériques — formes simples et à sel — et
+        # MARQUES de l'autorité), rechargée à chaque construction du moteur. La
+        # table DPD `common_meds` (ex-`seed_common.py`) a été supprimée : elle
+        # doublonnait cette liste avec un décalage.
         # Les marques multi-mots (Effexor XR…) sont gardées dans
         # `self.common_brand_phrases` pour le chemin de joint multi-tokens.
-        try:
-            self.common = frozenset(
-                norm_phon(b)
-                for (b,) in self.conn.execute(
-                    "SELECT m.base_generic FROM common_meds c "
-                    "JOIN medications m ON m.id = c.medication_id "
-                    "WHERE m.level='BASE_GENERIC'"
-                )
-                if b
-            )
-        except sqlite3.OperationalError:
-            # Base non régénérée : la table `common_meds` peut manquer (les
-            # anciennes bases pré-2026-09 n'en ont pas). Le moteur doit alors
-            # DÉMARRER avec un set vide — le comportement reste l'historique.
-            self.common = frozenset()
-        # Union avec la liste JSON curatée, chargée à chaque run.
         _json_keys, _json_phrases = load_common_json()
+        self.common = frozenset(_json_keys)
         self.common_brand_phrases = _json_phrases
-        if _json_keys:
-            self.common = frozenset(self.common | _json_keys)
         self.bk_ortho = BKTree(lev)
         self.ortho_node = {}
         for n, level, base, brand, is_leaf, is_otc in self.ortho:

@@ -1172,8 +1172,8 @@ Seroquel, n° 42) ; le scan complet les retrouve tous et écrase le brouillon,
   écran (en plus de la rubrique « Corrections » et de l'audit existants).
 
 Les noms de la liste curatée des **médicaments courants** (ordonnance
-géronto/gériatrique & ambulatoire, table `common_meds` + fichier JSON
-`app/common_meds.json`, renseignée par `med_grounding/seed_common.py`) sont les
+géronto/gériatrique & ambulatoire, fichier JSON `app/common_meds.json` —
+source UNIQUE, génériques — formes simples et à sel — et marques) sont les
 plus dictés, donc les plus déformés par la reconnaissance vocale, et les plus
 coûteux à manquer. Ils bénéficient de deux traitement privilégiés (constantes
 `COMMON_*` et `SUGGEST_*` dans `app/med_grounding.py`) :
@@ -1258,9 +1258,8 @@ coûteux à manquer. Ils bénéficient de deux traitement privilégiés (constan
   fréquence (un « … gérée par autrui … » ne devient jamais une dose).
 
 La base BDP peut être régénérée depuis les extraits bruts (dossier
-`med_grounding/` du dépôt, scripts `build_db.py` / `seed_common.py` /
-`seed_aliases.py` /
-`prune_db.py` / `ban_terms.py` / `fix_inactive_otc.py` / `prune_scope.py` /
+`med_grounding/` du dépôt, scripts `build_db.py` /
+`seed_aliases.py` / `prune_db.py` / `ban_terms.py` / `fix_inactive_otc.py` / `prune_scope.py` /
 `prune_otc.py` / `prune_generic_mfg.py` / `prune_molecule.py`) ;
 ce dossier ne fait pas partie du conteneur. La base est **assainie pour le
 périmètre gériatrique** : hors catalogue — vaccins (sauf Shingrix, Pneumovax
@@ -1311,8 +1310,9 @@ les noms de `common_meds.json`, les clés `OTC_DISPLAY`/`FR_COMMON` et tous
 les médicaments observés dans les consultations réelles (option
 `--corpus-json`) sont intouchables. Résultat 11 898 → 7 980 lignes, avec une
 résolution identique (transcripts de référence et corpus complet rescanés
-sans perte). Rejouer `seed_common.py` après le prune (la table `common_meds`
-référence les ids de la base en cours).
+sans perte). La liste des « médicaments courants » a sa source unique dans
+`common_meds.json` (plus de table `common_meds` ni de `seed_common.py` à
+rejouer après refonte).
 
 ---
 

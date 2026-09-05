@@ -49,6 +49,7 @@ def log_llm_usage(
     output_tokens: Optional[int],
     audio_prompt_tokens: Optional[int] = None,
     cached_tokens: Optional[int] = None,
+    compute_stats: Optional[dict] = None,
 ) -> None:
     cost, currency = pricing.compute_cost(
         db, "llm", provider, model,
@@ -62,6 +63,8 @@ def log_llm_usage(
         prompt_tokens=prompt_tokens, output_tokens=output_tokens,
         audio_prompt_tokens=audio_prompt_tokens, cached_tokens=cached_tokens,
         cost=cost, currency=currency,
+        compute_stats_json=json.dumps(compute_stats, ensure_ascii=False)
+        if compute_stats else None,
     ))
 
 
@@ -397,16 +400,16 @@ def admin_log(
     # Titres des consultations, pour afficher un libellé lisible à côté de
     # l'identifiant sans charger les corps de documents.
     titres = {row.id: row.title for row in db.scalars(select(Consultation))}
-    # Statistiques de calcul par consultation (``compute_stats_json``) : on les
-    # joint aux lignes de génération pour afficher la part déterministe
-    # (« pré-traitement ») et la latence au premier jeton, sans charger les
-    # corps de documents. Timings uniquement, aucune donnée clinique.
+    # Statistiques de calcul capturées SUR L'ÉVÉNEMENT au moment de la
+    # génération (``usage_events.compute_stats_json``) : chacune des
+    # générations affiche SES durées (déterministe + premier jeton). Repli
+    # sur les statistiques COURANTES de la consultation quand l'événement,
+    # plus ancien, n'en porta pas. Timings uniquement, aucune donnée clinique.
     compute_stats = {
         row.id: row.compute_stats_json for row in db.scalars(select(Consultation))
     }
 
-    def _parsed_compute(consultation_id):
-        raw = compute_stats.get(consultation_id)
+    def _parsed_compute(raw) -> Optional[dict]:
         if not raw:
             return None
         try:
@@ -417,10 +420,12 @@ def admin_log(
 
     def rend(created_at, kind, owner_key, consultation_id, provider, model,
              prompt_tokens, output_tokens, audio_prompt_tokens, cached_tokens,
-             audio_seconds, cost, currency, segments):
+             audio_seconds, cost, currency, segments,
+             event_compute_stats=None):
         extra = {}
         if kind == "llm":
-            stats = _parsed_compute(consultation_id)
+            stats = _parsed_compute(event_compute_stats) or _parsed_compute(
+                compute_stats.get(consultation_id))
             if stats:
                 extra = {
                     "deterministic_seconds": round(
@@ -474,6 +479,7 @@ def admin_log(
                 row.provider, row.model,
                 row.prompt_tokens, row.output_tokens, row.audio_prompt_tokens,
                 row.cached_tokens, row.audio_seconds, row.cost, row.currency, None,
+                event_compute_stats=row.compute_stats_json,
             ))
 
     for (owner_key, cid), bucket in stt_buckets.items():

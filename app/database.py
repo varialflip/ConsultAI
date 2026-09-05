@@ -543,6 +543,11 @@ class UsageEvent(Base):
     audio_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     currency: Mapped[str] = mapped_column(String(8), default="USD", nullable=False)
+    #: Statistiques de calcul DE CETTE génération (``compute_stats_json`` de la
+    #: consultation au moment de l'appel) : figées à l'écriture, pour que le
+    #: journal admin montre les durées de CHAQUE génération et non celles de
+    #: la dernière connue de la consultation.
+    compute_stats_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
@@ -2858,6 +2863,7 @@ _ADDED_COLUMNS = {
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),
         ("cached_tokens", "INTEGER"),
+        ("compute_stats_json", "TEXT"),
     ],
     "usage_daily": [
         ("audio_prompt_tokens", "INTEGER NOT NULL DEFAULT 0"),

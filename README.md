@@ -999,13 +999,14 @@ Seroquel, n° 42) ; le scan complet les retrouve tous et écrase le brouillon,
    s'affichent sous leur **nom canonique** (« la Six » → **Lasix**) ; les
    candidats phonétiques gardent le nom dicté + flèche vers la cible.
 - **Statistiques de calcul dans les métadonnées** (`compute_stats_json`, toutes
-  consultations) : durées déterministes de la génération (normalisation avec
-  source `precomputed`/`compute`, gériatrique, mots douteux, préparation audio),
-  du scan de fond du « Terminer » (`grounding_scan_ms`), et du modèle
-  (`llm_ttft_ms` — latence au premier jeton —, `llm_total_ms`). Timings et
-  compteurs uniquement, aucune donnée clinique. Visibles dans le panneau
-  « Informations techniques » du brouillon et, par ligne, dans l'onglet admin
-  « Statistiques » (journal de génération).
+   consultations) : durées déterministes de la génération (normalisation avec
+   source `precomputed`/`compute`, gériatrique, mots douteux, préparation audio),
+   du scan de fond du « Terminer » (`grounding_scan_ms`), et du modèle
+   (`llm_ttft_ms` — latence au premier jeton —, `llm_total_ms`). Timings et
+   compteurs uniquement, aucune donnée clinique. Visibles dans le panneau
+   « Informations techniques » du brouillon et, par ligne, dans l'onglet admin
+   « Statistiques » (journal de génération) — chaque génération garde SES
+   durées figées sur son événement d'usage (`usage_events.compute_stats_json`).
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`). S'y ajoutent les
   **candidats phonétiques** (bloc `MEDICAMENTS_PHONETIQUES`) : le G2P français

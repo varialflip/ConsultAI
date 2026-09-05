@@ -3471,6 +3471,7 @@ async def api_generate(
         output_tokens=result["usage"].get("output_tokens"),
         audio_prompt_tokens=result["usage"].get("audio_prompt_tokens"),
         cached_tokens=result["usage"].get("cached_tokens"),
+        compute_stats=compute,
     )
     db.commit()
     db.refresh(consultation)

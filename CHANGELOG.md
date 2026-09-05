@@ -3,6 +3,18 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-05 — Grounding : zone de médicaments englobante + privilège « common med » 0.1
+
+- **Les doses dictées EN LETTRES comptent comme preuve de dose** (`_nb_lettres` / `_drapeaux_dose` : « vingt-cinq », « trente-cinq », cap 999) dans les quatre constructeurs de drapeaux (`normalize`, `phonetiques_texte`, `_region_medlist`, `suggestions_texte`). Une liste « Synthroid, vingt-cinq microgrammes. Risée de renate, trente-cinq par semaine » étend désormais sa région confirmée au garble multi-mots (n° 39/43 : région `[117..127]` au lieu de `[117..119]`). Les dates (« deux mille vingt-six » = 2026) restent exclues (cap 999).
+- **Règle produit « à sim semblable, le common med l'emporte »** (`_classer_candidats`, `COMMON_PRIVILEGE_GAP = 0.10`) : un MÉDICAMENT COURANT à moins de 0.10 de similarité du meilleur candidat passe en tête — sur les quatre chemins (rewrite phrase, rewrite mono-token, hints phonétiques, suggestions). Corrige « Risée de renate » → risedronate 0.769, qui était REJETÉ car son 2e voisin Q-RISEDRONATE (même molécule) tombait dans l'ancien écart `COMMON_JOIN_GAP` 0.08. Le rejet « voisin similaire » disparaît.
+- **Déduplication par molécule** (`_molecule_cle`) : générique + marques du même principe actif (risedronate / Q-RISEDRONATE / Actonel) ne se concurrencent plus — le LLM reçoit les 2 meilleures MOLÉCULES distinctes, courant priorisé, jamais de doublon de marque.
+- **Common meds plus sensibles** : planchers phonétiques des courants abaissés (`COMMON_PHON_FLOOR`/`COMMON_PHON_NOPOSO` 0.68→0.62) — les hints faux positifs sont préférés aux courants manqués (le LLM fait le tri sémantique avec le contexte clinique).
+- **Passe phrase multi-mots dans le canal hints** (`_phrase_candidats_multi`) : dans une région de liste confirmée, une jointure ortho ≤ 3 mots + articles émet la piste « Risée de renate » → risedronate (`source: "phonetic"`, posologie « 35 par semaine ») SANS jamais réécrire le transcrit.
+- **`suggestions_texte` réparé** : il passait `[False]*n` à `_medlist_regions` (région inerte) ; il utilise maintenant les vrais drapeaux + un **canal région** (un courant situé dans une liste confirmée est suggéré même sans dose ni doute STT).
+- **Posologie captée avec les nombres en lettres** : `_dose_posology` exprime « trente-cinq par semaine » → « 35 par semaine » ; « par » n'est retenu que suivi d'une fréquence (jamais « … gérée par autrui … »).
+- **Régression lab corrigée** : hors région confirmée, un nombre en lettres après un ion de laboratoire (« Sodium cent quarante et un ») n'est plus crédité comme dose — l'électrolyte n'est plus réécrit (`posology`, branche « nombre » réservée aux chiffres hors région).
+- Revalidé sur les transcripts de référence (régions, hints et réécritures identiques) + n° 39/43 (région étendue, piste risedronate présente, transcrit non réécrit).
+
 ## 2026-09-05 — Génération plus rapide : normalisation pré-calculée + télémesure des calculs
 
 - **Le pré-traitement déterministe sort de la fenêtre d'attente.** Au « Terminer », `_finalize_grounding` PRÉ-CALCULE désormais en tâche de fond le texte déjà normalisé (inline sûr médicamenteux + termes gériatriques) et le persiste (`normalized_transcript` + `inline_fixed_json`) : `api_generate` le réutilise quand le transcrit n'a pas changé, au lieu de re-résoudre ~5-14 s au clic. Le cache est invalidé sur édition du transcrit, retranscription et import, et re-persisté à chaque génération (valable pour la suivante).

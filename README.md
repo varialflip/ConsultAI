@@ -1224,6 +1224,39 @@ coûteux à manquer. Ils bénéficient de deux traitement privilégiés (constan
   perdre un seul garble réel. Le bonus ne s'applique jamais aux mots de prose
   (les garde-fous `FRENCH_STOP`/`_HINTS_PROSE` subsistent).
 
+### Règles produit 2026-09-05 : zone englobante, nombres en lettres, privilège « common med »
+
+- **Les doses dictées EN LETTRES comptent comme preuve de dose** (`_nb_lettres`
+  et `_drapeaux_dose`, cap 999) : « Synthroid, vingt-cinq microgrammes. Risée de
+  renate, trente-cinq par semaine » étend la région « liste de médicaments » au
+  garble multi-mots (la dictée orthographie souvent la dose). Les dates
+  (« deux mille vingt-six » = 2026) et les valeurs de bilan (« Sodium cent
+  quarante et un ») restent exclues : hors région confirmée, un nombre en
+  lettres après un électrolyte n'est jamais crédité comme dose.
+- **Règle « à sim semblable, le common med l'emporte »** (`_classer_candidats`,
+  `COMMON_PRIVILEGE_GAP = 0.10`) : à moins de 0.10 de similarité du meilleur
+  candidat, un médicament COURANT passe en tête — sur TOUS les chemins (rewrite
+  phrase, rewrite mono-token, hints phonétiques, suggestions). Un candidat
+  courant n'est donc plus rejeté parce qu'une marque de la MÊME molécule
+  (ex. Q-RISEDRONATE) tombe dans l'ancien « écart d'ambiguïté ».
+- **Déduplication par molécule** (`_molecule_cle`) : générique + marques du même
+  principe actif ne se concurrencent pas ; le LLM reçoit les 2 meilleures
+  MOLÉCULES distinctes, courant d'abord (« Risée de renate » → risedronate,
+  un seul candidat — Q-risedronate est la même molécule).
+- **Planchers phonétiques des courants abaissés** (0.68 → 0.62) : les hints
+  faux positifs sont préférés aux courants manqués (le modèle fait le tri
+  sémantique avec le contexte clinique).
+- **Passe phrase multi-mots dans le canal hints** (`_phrase_candidats_multi`) :
+  dans une région confirmée, une jointure ortho ≤ 3 mots + articles remonte la
+  piste « Risée de renate » → **risedronate** (`source: "phonetic"`, posologie
+  « 35 par semaine ») — jamais de réécriture du transcrit.
+- **`suggestions_texte` utilise enfin la région** : les vrais drapeaux de dose
+  (chiffres ET nombres en lettres) lui sont passés, et un courant SITUÉ dans une
+  liste confirmée est suggéré même sans dose ni doute STT (canal région).
+- **Posologie captée avec les nombres en lettres** : « trente-cinq par
+  semaine » → « 35 par semaine » ; « par » n'est retenu que suivi d'une
+  fréquence (un « … gérée par autrui … » ne devient jamais une dose).
+
 La base BDP peut être régénérée depuis les extraits bruts (dossier
 `med_grounding/` du dépôt, scripts `build_db.py` / `seed_common.py` /
 `seed_aliases.py` /

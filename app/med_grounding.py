@@ -70,14 +70,26 @@ COMMON_BONUS        = 10    # points de score supplémentaires accordés à un
                             # SEUL signal : 40 + 25 + 10 = 75 >= 65)
 COMMON_ORTHO_FLOOR  = 0.58  # vs ORTHO_FLOOR 0.62 : mais permet un candidat
                             # courant déformé mais présent d'entrer encore
-COMMON_PHON_FLOOR   = 0.68  # vs 0.72 dans l'arbre BK phonétique
+COMMON_PHON_FLOOR   = 0.62  # vs 0.72 dans l'arbre BK phonétique : un candidat
+                            # COURANT déformé est admis bien plus bas — les hints
+                            # faux positifs sont préférés aux courants manqués
+                            # (le LLM fait le tri sémantique, décision 2026-09-05)
 COMMON_PHON_PROSE   = 0.82  # vs CONF_PHON_PROSE_DOUTEUSE 0.85 (prose douteuse)
-COMMON_PHON_NOPOSO  = 0.68  # vs 0.72 (token non douteux sans dose)
+COMMON_PHON_NOPOSO  = 0.62  # vs 0.72 (token non douteux sans dose) — même logique
 COMMON_JOIN_FLOOR   = 0.62  # vs 0.70 : phrase multi-mots (join ortho) d'un
                             # médicament COURANT acceptée un cran plus bas
 COMMON_JOIN_GAP     = 0.08  # vs 0.12 : ambiguïté d'un courant tolérée (le
                             # 2e plus proche voisin peut être proche sans
                             # que le 1er soit un faux positif)
+#: Privilège accordé à un MÉDICAMENT COURANT dans la sélection d'un candidat
+#: parmi des concurrents proches (0.1 = 0.10 de similarité). Décision produit
+#: 2026-09-05 : « à sim semblable, le common med l'emporte » — le courant
+#: passe en tête s'il est à moins de ``COMMON_PRIVILEGE_GAP`` du meilleur
+#: candidat global (même quand un non-courant de la DPD complète score un
+#: poil plus haut). Vaut sur TOUS les chemins (rewrite phrase, rewrite mono-
+#: token, hints phonétiques, suggestions) : le courant est le plus dicté,
+#: donc le plus déformé, donc le plus coûteux à manquer.
+COMMON_PRIVILEGE_GAP = 0.10
 
 #: ---------------------------------------------------------------------------
 #: Liste « courante » curatée, chargée À CHAQUE RUN (fichier JSON).
@@ -1142,7 +1154,7 @@ class Matcher:
                     return (idxs[ln - 1] + 1, can, 100)
             if garble_seed_only:
                 continue              # hors proactive : pas de score flou
-            best, second = None, 0.0
+            cands = []
             L = len(t)
             for bln in range(max(1, L - MAX_LEN_DIFF - 2), L + MAX_LEN_DIFF + 3):
                 for entry in self.ortho_by_len.get(bln, ()):
@@ -1151,22 +1163,24 @@ class Matcher:
                         continue          # skip junk presentation aliases
                     s = sim(t, orth)
                     if s >= PROACTIVE_ORTHO_FLOOR:
-                        if best is None or s > best[0]:
-                            second = best[0] if best else 0.0
-                            best = (s, level, base, brand, is_otc)
-                        elif s > second:
-                            second = s
-            if best is None:
+                        cands.append((s, level, base, brand, is_otc))
+            if not cands:
                 continue
-            # Un candidat COURANT est admis un cran en dessous (seuil ET écart
-            # au 2e voisin) : c'est le plus prescrit, donc le plus dicté.
-            # ex. « Périn de prille » → perindopril (0.769, 2e = 0.615).
-            best_is_common = norm_phon(best[2] or "") in self.common
+            # Règle produit 2026-09-05 : dédup par molécule + privilège au
+            # MÉDICAMENT COURANT dans l'intervalle 0.1 — le rejet « 2e voisin
+            # trop proche » disparaît (ex. « Risée de renate » → risedronate
+            # 0.769 / Q-RISEDRONATE 0.692 : même molécule, dédupliqués ; le
+            # courant gagne). Un candidat COURANT est admis un cran en dessous
+            # (seuil COMMON_JOIN_FLOOR) ; un non-courant exige 0.70.
+            classe = self._classer_candidats(cands)
+            if not classe:
+                continue
+            best_sim, level, base, brand, is_otc = classe[0]
+            best_is_common = norm_phon(base or "") in self.common
             floor = COMMON_JOIN_FLOOR if best_is_common else 0.70
-            gap = COMMON_JOIN_GAP if best_is_common else 0.12
-            if best[0] < floor or (best[0] - second) < gap:
-                continue              # weak or ambiguous -> stay conservative
-            can = self._canonicalize(best[1], best[2], best[3], best[4])
+            if best_sim < floor:
+                continue              # weak -> stay conservative
+            can = self._canonicalize(level, base, brand, bool(is_otc))
             if can:
                 return (idxs[ln - 1] + 1, can, 100)
         return None
@@ -1206,12 +1220,22 @@ class Matcher:
         k = 0
         while k < len(idxs):
             start = idxs[k]; j = k
+            # Jointure des runs : écart <= 6 jets (VALEUR CONSERVÉE). Une fenêtre
+            # plus large (11-12) laissait confirmer des runs de PROSE (« l'urgence
+            # le 17 mars pour malaise … », consultai4) dès que deux noms flous
+            # resolvent. L'extension à la liste entière passe par les NOMBRES EN
+            # LETTRES reconnus comme doses (``_drapeaux_dose``) : ils font de
+            # « Risée de renate » un nom dosedé contigu au run (écart 5), sans
+            # jamais élargir l'écart qui formerait des runs de prose.
             while j + 1 < len(idxs) and idxs[j + 1] - idxs[j] <= 6:
                 j += 1
             cnt = j - k + 1
             strong = 0
             for t in range(k, j + 1):
                 i = idxs[t]
+                pp = norm_phon(words[i])
+                if _est_prose(pp):
+                    continue          # symptôme/prose ne renforce JAMAIS un run
                 cand = self._resolve_single(words[i])
                 if (cand and not cand[4]
                         and norm_orth(words[i]).replace(" ", "") not in LAB_ION):
@@ -1417,6 +1441,22 @@ class Matcher:
                         g_best = (level, base, brand, sw, is_leaf, is_otc)
                 if g_best is not None:
                     best = g_best
+        # Règle produit 2026-09-05 : privilège 0.1 au MÉDICAMENT COURANT +
+        # dédup par molécule (générique + marques du même principe actif ne
+        # se concurrencent pas : risedronate 0.769 / Q-RISEDRONATE 0.692 →
+        # le courant l'emporte au lieu d'être rejeté par un « écart »).
+        # Le réordonnancement ne touche qu'à la TÊTE (le candidat retenu) ;
+        # les gardes de rewrite (dose, narrative gate, confiance STT) restent.
+        classe = self._classer_candidats([
+            (s, lvl, base, brand, otc)
+            for (_nn, lvl, base, brand, s, _leaf, otc) in cands])
+        if classe:
+            s_head, lvl, base, brand, otc = classe[0]
+            tete = next((c for c in cands
+                         if c[1] == lvl and c[2] == base and c[3] == brand
+                         and c[4] == s_head and c[6] == otc), None)
+            if tete is not None:
+                best = (tete[1], tete[2], tete[3], tete[4], tete[5], tete[6])
         return best
 
     def _resolve_phonetic(self, token):
@@ -1441,6 +1481,61 @@ class Matcher:
             if row is not None:
                 best = (row[0], row[1], row[2], s, row[3], row[4])
         return best
+
+    def _molecule_cle(self, level, base, brand):
+        """Clé « molécule » pour dédupliquer les candidats d'un même principe
+        actif (générique + toutes les marques). On prend le PLUS COURT noyau
+        générique connu (``self.generics``) qui préfixe la base : pour
+        « risedronate sodique hemipentahydrate de risedronate », le noyau
+        retenu est « risedronate » (le nom chimique complet est AUSSI dans
+        ``generics``, donc on garde le préfixe le plus court). Retombe sur la
+        base/marque brute si aucun noyau n'est reconnu."""
+        src = base or brand or ""
+        toks = norm_orth(src).split()
+        if not toks:
+            return norm_phon(src)
+        membres = []
+        for end in range(1, len(toks) + 1):
+            core = " ".join(toks[:end])
+            if core in self.generics:
+                membres.append(core)
+        if membres:
+            return norm_phon(min(membres, key=len))
+        return norm_phon(src)
+
+    def _classer_candidats(self, cands, gap=COMMON_PRIVILEGE_GAP, maxi=2):
+        """Classe une liste de candidats ``(sim, level, base, brand, is_otc)``.
+
+        Règle produit 2026-09-05 : « à sim semblable, le common med l'emporte,
+        mais ne pas éliminer les deux ». On (1) déduplique par MOLÉCULE
+        (générique + marques du même principe actif → un seul candidat, le
+        mieux scoré), puis (2) on trie par similarité décroissante, puis (3) on
+        fait passer en tête le meilleur MÉDICAMENT COURANT à moins de ``gap``
+        du meilleur candidat global — le courant l'emporte à similarité
+        semblable, sans jamais jeter le candidat non-courant. Retourne au plus
+        ``maxi`` candidats dans l'ordre retenu."""
+        best_par_mol: dict = {}
+        for cand in cands:
+            sim, level, base, brand, is_otc = cand
+            cle = self._molecule_cle(level, base, brand)
+            if cle not in best_par_mol or sim > best_par_mol[cle][0]:
+                best_par_mol[cle] = cand
+        uniq = list(best_par_mol.values())
+        if not uniq:
+            return []
+        uniq.sort(key=lambda c: (-c[0], c[1]))
+        best = uniq[0]
+
+        def est_courant(c):
+            return norm_phon(c[2] or "") in self.common
+
+        if not est_courant(best):
+            for i, c in enumerate(uniq[1:], start=1):
+                if best[0] - c[0] <= gap and est_courant(c):
+                    uniq.pop(i)
+                    uniq.insert(0, c)
+                    break
+        return uniq[:maxi]
 
     def phonetiques_texte(self, texte, maxi=10, conf_keys=None):
         """Candidats PHONÉTIQUES pour le modèle de langage (bloc hints).
@@ -1472,16 +1567,7 @@ class Matcher:
             return []
         words = texte.split()
         n = len(words)
-        dose_unit = [False] * n
-        num_token = [False] * n
-        for i, w in enumerate(words):
-            if (POSOLOGY_RE.search(w) or DOSE_RE.search(w)
-                    or w.strip(",;:.()").lower() in
-                    {"mg", "mcg", "µg", "g", "ml", "unités", "unites", "ui",
-                     "bid", "tid", "hs", "prn", "qid", "die", "po", "peros"}):
-                dose_unit[i] = True
-            if re.fullmatch(r"\d+(?:[,.]\d+)?", w.strip(",;:.()")):
-                num_token[i] = True
+        dose_unit, num_token = _drapeaux_dose(words)
         # Régions « liste de médicaments » confirmées : on y exige une dose à
         # portée pour admettre un débile/candidat phonétique ; hors région, un
         # nombre nu de lab/dossier ne doit jamais autoriser une piste.
@@ -1494,6 +1580,7 @@ class Matcher:
         region = self._medlist_regions(words, fragile, num_token, dose_unit)
         result: list = []
         vus = set()
+        passes_deja: dict = {}
         for i, w in enumerate(words):
             jet = w.strip(" \t,;:.()\"'’")
             p = norm_phon(jet)
@@ -1738,6 +1825,67 @@ class Matcher:
                 })
                 if len(result) >= maxi:
                     break
+        # Passe des PHRASES multi-mots (≤3 noms + articles) dans les régions de
+        # liste confirmées : un garble STT peut éclater en plusieurs mots
+        # français (« Risée de renate » → risedronate). ``_phrase_candidats_multi``
+        # joint par ortho, déduplique par molécule ET laisse le courant
+        # l'emporter dans l'intervalle 0.1 — aucune réécriture, uniquement des
+        # PISTES pour le modèle. Réservée aux tokens EN région (la prose, même
+        # douteuse, n'est jamais jointe en phrase) et jamais sur un token déjà
+        # rendu par l'unigramme / la paire.
+        if len(result) < maxi:
+            for i in range(n):
+                if passes_deja.get(i):
+                    continue
+                if not region[i] and not (region[i + 1] if i + 1 < n else False):
+                    continue
+                jet = words[i].strip(" \t,;:.()\"'’")
+                p = norm_phon(jet)
+                if not p or len(p) < 4:
+                    continue
+                if (p in FRENCH_STOP or p in ANCHOR_WORDS
+                        or p in PROTOCOL_WORDS or _est_prose(p)):
+                    continue
+                if p in self.exact_garble or p in self.exact or p in self.common:
+                    continue
+                if i > 0:
+                    prev = words[i - 1].strip(" \t,;:.()\"'’")
+                    if prev and _lookup_exact(f"{prev} {jet}"):
+                        continue
+                if i + 1 < len(words):
+                    nxt = words[i + 1].strip(" \t,;:.()\"'’")
+                    if nxt and _lookup_exact(f"{jet} {nxt}"):
+                        continue
+                res = self._phrase_candidats_multi(
+                    words, i, n, dose_unit, num_token, fragile, maxi=2)
+                if res is None:
+                    continue
+                end, items = res
+                nom_phrase = " ".join(
+                    words[i:end]).strip(" \t,;:.()\"'’")
+                for can, base, brand, s, lvl in items:
+                    if norm_phon(can) in vus:
+                        continue
+                    if ((base or brand or "") and norm_orth(base or brand)
+                            .replace(" ", "") in BAN_ORTH):
+                        continue
+                    poso = _dose_posology(texte, nom_phrase) or ""
+                    vus.add(norm_phon(can))
+                    passes_deja[i] = True
+                    result.append({
+                        "name": nom_phrase,
+                        "base": base or brand or can,
+                        "brand": brand,
+                        "canonical": can,
+                        "posology": poso,
+                        "score": int(round(s * 100)),
+                        "level": lvl,
+                        "source": "phonetic",
+                    })
+                    if len(result) >= maxi:
+                        break
+                if len(result) >= maxi:
+                    break
         return result
 
     #: Mots qui portent la preuve qu'un jeton voisin est un MÉDICAMENT pour la
@@ -1793,8 +1941,14 @@ class Matcher:
         """
         words = texte.split()
         n = len(words)
-        region = self._medlist_regions(
-            words, [False] * n, [False] * n, [False] * n)
+        dose_unit, num_token = _drapeaux_dose(words)
+        fragile = [False] * n
+        for i, w in enumerate(words):
+            pp = norm_phon(w)
+            if (pp in FRENCH_STOP or pp in ANCHOR_WORDS or pp in PROTOCOL_WORDS
+                    or words[i].isdigit()):
+                fragile[i] = True
+        region = self._medlist_regions(words, fragile, num_token, dose_unit)
         result: list = []
         vus = set()
         for i, w in enumerate(words):
@@ -1870,7 +2024,7 @@ class Matcher:
             # correspondance phonétique est proche = nom déformé probable).
             label = round(math.sqrt((stt_val if stt_val is not None else 1.0)
                                     * sim), 3)
-            # Admission en deux canaux (voir constantes SUGGEST_*) :
+            # Admission (voir constantes SUGGEST_*) :
             #   * CANAL DOSE  : une posologie voisine est la preuve physique
             #     que c'est un médicament — proposé quel que soit `label` ;
             #   * CANAL DOUTE : sans dose, seul un nom TRÈS DOUTEUX
@@ -1879,9 +2033,20 @@ class Matcher:
             #     souple inondait le prompt de fausses pistes de prose qui
             #     résolvent vers des noms obscurs de la DPD complète, et un
             #     mot de prose stable (coupe/section/Robert) franchissait le
-            #     label bas via de la prose à confiance Cohere réduite.
-            if not (has_dose or (sim >= SUGGEST_DOUBT_SIM
-                                 and label < SUGGEST_CONF_MAX)):
+            #     label bas via de la prose à confiance Cohere réduite ;
+            #   * CANAL RÉGION : un MÉDICAMENT COURANT SITUÉ DANS une région
+            #     « liste de médicaments » confirmée est proposé même sans dose
+            #     ni doute — la zone confirmée est la preuve physique (un nom
+            #     de liste déformé ne doit pas dépendre d'un chiffre dicté
+            #     pour être re-suggéré au modèle). La prose est protégée : la
+            #     région n'est confirmée que par des noms résolus munIS d'une
+            #     dose.
+            in_region_c = bool(region[i])
+            is_common_c = norm_phon(base or "") in self.common
+            if not (has_dose
+                    or (sim >= SUGGEST_DOUBT_SIM and label < SUGGEST_CONF_MAX)
+                    or (in_region_c and is_common_c
+                        and sim >= CONF_SUGGEST_SIM)):
                 continue
             # Garde « prose très confiante » : un jeton capté par le STT avec
             # quasi-certitude (>= CONF_PROSE_SURE) mais dont la correspondance
@@ -1890,8 +2055,11 @@ class Matcher:
             # forme (« timbre », « crème ») ou un chiffre voisin a déclenché le
             # canal dose (commencé→CALQUENCE, Retour→CRESTOR, façon→YOCON,
             # applique→ELIQUIS, composante→acamprosate, observés 2026-09-03).
+            # Le CANAL RÉGION échappe à cette garde-prose : dans une région
+            # confirmée, un nom courant déformé est dicté, pas de la prose.
             if (stt_val is not None and stt_val >= CONF_PROSE_SURE
-                    and sim < SUGGEST_HIGH_SIM):
+                    and sim < SUGGEST_HIGH_SIM
+                    and not (in_region_c and is_common_c)):
                 continue
             # Électrolyte/ion de laboratoire (vitamine D, ferritine…) : un
             # supplément n'est retenu QUE muni d'une posologie réelle ; sinon
@@ -1970,6 +2138,127 @@ class Matcher:
             return None
         return (best[1], best[2], best[3], best[0], best[4])
 
+    def _phonetic_candidats_multi(self, token, maxi=2,
+                                  base_floor=COMMON_PHON_FLOOR):
+        """Jusqu'à ``maxi`` candidats phonétiques d'un token (dédup molécule +
+        privilège courant 0.1), ou ``[]``.
+
+        Même recherche que ``_phonetic_candidats`` mais classe TOUS les
+        voisins au lieu de ne garder que le meilleur : le LLM reçoit les deux
+        pistes à sim proche (règle « ne pas éliminer les deux ») et le courant
+        passe en tête dans l'intervalle 0.1. ``maxi`` borne le nombre de
+        molécules distinctes rendues.
+        """
+        if not self.use_phonetic:
+            return []
+        q = phonetic_fr(token)
+        if not q:
+            return []
+        voie = self.bk.search(q, max_dist=3)
+        cands = []
+        for dist, node in voie[:16]:
+            s = sim(q, node)
+            row = self.bk_node.get(node)
+            if row is None:
+                continue
+            level, base, brand, is_leaf, is_otc = row
+            ph_floor = (base_floor
+                        if norm_phon(base or "") in self.common else 0.72)
+            if s < ph_floor:
+                continue
+            if is_leaf or _is_cosmetic(base or brand):
+                continue
+            can = self._canonicalize(level, base, brand, bool(is_otc))
+            if can is None:
+                continue
+            sw = sim_phon_w(q, node)
+            cands.append((sw, level, base, brand, is_otc))
+        if not cands:
+            return []
+        classe = self._classer_candidats(cands, maxi=maxi)
+        out = []
+        for sw, level, base, brand, is_otc in classe:
+            can = self._canonicalize(level, base, brand, bool(is_otc))
+            if can:
+                out.append((can, base or brand, brand, sw, level))
+        return out
+
+    def _phrase_candidats_multi(self, words, start, n, dose_unit, num_token,
+                                fragile, maxi=2):
+        """Candidats de PHRASE multi-mots (≤3 noms + articles) pour un jeton de
+        région liste, par jointure ortho (logique ``_resolve_phrase`` sans le
+        rejet « 2e voisin proche »).
+
+        Retourne ``(end, [(can, base, brand, sim, level), …])`` : les ``maxi``
+        molécules distinctes, courant priorisé dans l'intervalle 0.1. Exige
+        une dose à portée (une liste dictée colle un nombre à chaque nom) et
+        sert UNIQUEMENT aux HINTS — jamais de réécriture."""
+        BRIDGE = {"de", "du", "des", "d", "à", "au", "aux", "le", "la",
+                  "les", "l", "un", "une", "et"}
+        def clean(w):
+            return w.strip(" \t,;:.()\"'’")
+        if (fragile[start] or dose_unit[start] or num_token[start]
+                or not clean(words[start])):
+            return None
+        parts, idxs, content = [], [], 0
+        k = start
+        while k < n and len(parts) < 4:
+            cw = clean(words[k])
+            if not cw or dose_unit[k] or num_token[k]:
+                break
+            low = cw.lower()
+            p = norm_phon(cw)
+            if p in BRIDGE or low in BRIDGE:
+                if not content:
+                    return None
+                parts.append(cw); idxs.append(k); k += 1
+                continue
+            if p in ANCHOR_WORDS or p in PROTOCOL_WORDS:
+                break
+            parts.append(cw); idxs.append(k); content += 1; k += 1
+            if content >= 3:
+                break
+        if content < 2:
+            return None
+        e = idxs[-1]
+        if not any(dose_unit[a] or num_token[a]
+                   for a in range(e, min(e + 4, n))):
+            return None
+        for ln in range(len(parts), 1, -1):
+            joined = "".join(parts[:ln])
+            t = norm_phon(joined)
+            if not t or len(t) < 6:
+                continue
+            cands = []
+            L = len(t)
+            for bln in range(max(1, L - MAX_LEN_DIFF - 2),
+                             L + MAX_LEN_DIFF + 3):
+                for entry in self.ortho_by_len.get(bln, ()):
+                    orth, level, base, brand, is_leaf, is_otc = entry
+                    if re.search(r"\d|%|mg|mcg|tablet|injection", orth):
+                        continue
+                    s = sim(t, orth)
+                    if s >= PROACTIVE_ORTHO_FLOOR:
+                        cands.append((s, level, base, brand, is_otc))
+            if not cands:
+                continue
+            classe = self._classer_candidats(cands, maxi=maxi)
+            if not classe:
+                continue
+            out = []
+            for sw, level, base, brand, is_otc in classe:
+                if norm_phon(base or "") in self.common:
+                    if sw < COMMON_JOIN_FLOOR:
+                        continue
+                elif sw < 0.70:
+                    continue
+                can = self._canonicalize(level, base, brand, bool(is_otc))
+                if can:
+                    out.append((can, base or brand, brand, sw, level))
+            if out:
+                return idxs[ln - 1] + 1, out
+        return None
+
     def normalize(self, text, conf=None, inline_safe=False):
         # ``inline_safe`` — mode « texte envoyé au LLM » : on ne réécrit que les
         # substitutions déterministes et auditées (exact, alias STT seedés) ;
@@ -1984,16 +2273,8 @@ class Matcher:
         flat = "".join(c for c in flat if unicodedata.category(c) != "Mn").lower()
         words = text.split()
         n = len(words)
-        dose_unit = [False] * n     # this token is dose+unit, a unit word, or a protocol
-        num_token = [False] * n     # this token is a bare number (potential dose)
-        for i, w in enumerate(words):
-            if (POSOLOGY_RE.search(w) or DOSE_RE.search(w)
-                    or w.strip(",;:.()").lower() in
-                    {"mg","mcg","µg","g","ml","unités","unites","ui","bid","tid",
-                     "hs","prn","qid","die","po","peros"}):
-                dose_unit[i] = True
-            if re.fullmatch(r"\d+(?:[,.]\d+)?", w.strip(",;:.()")):
-                num_token[i] = True
+        # this token is dose+unit, a unit word, or a protocol
+        dose_unit, num_token = _drapeaux_dose(words)
         # ---- posology signal ----
         # A med token counts as dosed if a real dose+unit/protocol sits nearby,
         # or a bare number is glued directly after it AND the orthographic match is
@@ -2015,13 +2296,17 @@ class Matcher:
                 if in_region or sim >= HIGH_SIM:
                     return "avant"
             if i + 1 < n and num_token[i + 1]:
-                if sim >= 0.85:
-                    return "nombre"
-                # Inside a confirmed med-list region a name followed by a bare
-                # dose number is a list entry (e.g. "pantoloque 40"), so a
-                # moderate fuzzy match suffices there; outside the region the
-                # near-certain 0.85 bar is kept to avoid prose / lab false hits.
-                if in_region and sim >= ORTHO_FLOOR:
+                # Un CHIFFRE nu après un nom quasi-certain est une dose partout
+                # (« aspirine 80 ») ; un nombre dicté EN LETTRES n'est une dose
+                # que DANS une région de liste confirmée — hors région, « Sodium
+                # cent quarante et un » est une VALEUR DE BILAN (le jeton lab
+                # résout exactement, sim 1.0, et la preuve « nombre » ferait
+                # réécrire l'électrolyte en médicament, régression 2026-09-05).
+                chiffre_collé = re.fullmatch(
+                    r"\d+(?:[,.]\d+)?", words[i + 1].strip(",;:.()"))
+                if not chiffre_collé and not in_region:
+                    pass
+                elif sim >= 0.85 or (in_region and sim >= ORTHO_FLOOR):
                     return "nombre"
             # Small backward window for dose-BEFORE-name phrasings
             # ("administrer 25 mg HS de kétiapine"): the dose marker sits up to
@@ -2471,18 +2756,151 @@ _UV_COSMETICS = {
 }
 
 
+#: ---------------------------------------------------------------------------
+#: Nombres français en TOUTES LETTRES (« vingt-cinq », « trente-cinq ») comme
+#: preuve de dose. Les dictées de listes orthographient souvent la dose au lieu
+#: de la chiffrer (« Synthroid, vingt-cinq microgrammes », « Risée de renate,
+#: trente-cinq par semaine ») : sans ces jetons, la détection de région « liste
+#: de médicaments » et la condition « dose à portée » de ``_resolve_phrase``
+#: échouent, et le garble (« Risée de renate » → risedronate) n'est jamais
+#: proposé au modèle. Cap à 999 : les dates/n° de dossier (« deux mille
+#: vingt-six » = 2026, « dix mille » = 10000) restent EXCLUS — un nombre EN
+#: LETTRES à valeur > 999 n'est jamais traité comme une dose.
+_FR_NB_UN = {
+    "un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5,
+    "six": 6, "sept": 7, "huit": 8, "neuf": 9, "dix": 10, "onze": 11,
+    "douze": 12, "treize": 13, "quatorze": 14, "quinze": 15, "seize": 16,
+}
+_FR_NB_DIZ = {
+    "dix": 10, "vingt": 20, "trente": 30, "quarante": 40, "cinquante": 50,
+    "soixante": 60, "cent": 100, "mille": 1000,
+}
+#: Mots qui PARENT un nombre en lettres multi-tokens (« deux M I L L E vingt-six »,
+#: « quatre-vingt ») — un jeton cardinal seul peut faire partie d'un nombre
+#: composé; on accumule la phrase complète avant de décider (cap 999).
+_FR_NB_MOTS = set(_FR_NB_UN) | set(_FR_NB_DIZ) | {"et"}
+
+
+def _nb_lettres_phrase(words, i):
+    """Valeur numérique de la phrase « nombre en lettres » commençant en ``i``.
+
+    Retourne ``(valeur, end)`` (``end`` exclusif) quand ``i`` ouvre une phrase
+    cardinale complète ≤ 999, sinon ``None`` (et ``i`` seul). Les formes
+    composées les plus dictées sont supportées : « vingt-cinq » → 25,
+    « trente-cinq » → 35, « quatre-vingt-dix » → 90, « soixante-dix » → 70,
+    « cent-vingt-cinq » → 125. Une phrase dont la valeur dépasse 999 (dates,
+    « dix mille ») retourne ``None`` pour AUCUN de ses jetons : c'est le garde
+    qui empêche un « deux mille vingt-six » de devenir une dose.
+    """
+    n = len(words)
+    parts: list = []
+    end = i
+    while end < n:
+        core = words[end].strip(" \t,;:.()\"'’").lower().replace("–", "-")
+        core = re.sub(r"[^a-zà-ÿ-]+", "", core)
+        if not core:
+            end += 1
+            continue
+        if core in _FR_NB_MOTS:
+            parts.append(core)
+            end += 1
+            continue
+        if core.split("-") and all(
+                (p in _FR_NB_UN or p in _FR_NB_DIZ or p == "et")
+                for p in core.split("-")):
+            parts.append(core)
+            end += 1
+            continue
+        break
+    if not parts:
+        return None
+    # Convertit la séquence de jetons/hyphens en liste de valeurs.
+    vals: list = []
+    for tok in parts:
+        for p in tok.split("-"):
+            if p == "et":
+                continue
+            vals.append(_FR_NB_UN.get(p) or _FR_NB_DIZ.get(p) or 0)
+    total = 0
+    cur = 0
+    for v in vals:
+        if v == 1000:
+            if (cur or 1) * 1000 > 999:
+                return None
+            total += (cur or 1) * 1000
+            cur = 0
+        elif v == 100:
+            cur = (cur or 1) * 100
+        elif v in (10, 20, 30, 40, 50, 60):
+            if cur in (2, 3, 4, 5, 6, 7, 8, 9):
+                cur *= v        # « quatre-vingt » → 4×20 = 80
+            else:
+                cur += v
+        else:
+            cur += v
+    total += cur
+    if total == 0 or total > 999:
+        return None
+    return total, end
+
+
+def _nb_lettres(w):
+    """Valeur d'un jeton unique écrit en toutes lettres, ou ``None``."""
+    res = _nb_lettres_phrase([w], 0)
+    return res[0] if res else None
+
+
+def _drapeaux_dose(words):
+    """Drapeaux ``dose_unit`` / ``num_token`` d'un texte (chiffres ET nombres en
+    lettres ≤ 999). Factorisation des quatre constructions identiques
+    (``normalize``, ``phonetiques_texte``, ``_region_medlist``,
+    ``suggestions_texte``) : toute nouvelle preuve de dose est ajoutée ici
+    une seule fois.
+    """
+    n = len(words)
+    dose_unit = [False] * n
+    num_token = [False] * n
+    for i, w in enumerate(words):
+        if (POSOLOGY_RE.search(w) or DOSE_RE.search(w)
+                or w.strip(",;:.()").lower() in
+                {"mg", "mcg", "µg", "g", "ml", "unités", "unites", "ui", "bid",
+                 "tid", "hs", "prn", "qid", "die", "po", "peros"}):
+            dose_unit[i] = True
+        if re.fullmatch(r"\d+(?:[,.]\d+)?", w.strip(",;:.()")):
+            num_token[i] = True
+    # Nombres en lettres: on ne marque les jetons que si la PHRASE complète
+    # (≤ 999) est une vraie dose; une date composée ne marque AUCUN jeton.
+    spelled = [False] * n
+    i = 0
+    while i < n:
+        res = _nb_lettres_phrase(words, i)
+        if res is None:
+            i += 1
+            continue
+        _val, end = res
+        for k in range(i, end):
+            spelled[k] = True
+        i = end
+    for i in range(n):
+        if spelled[i]:
+            num_token[i] = True
+    return dose_unit, num_token
+
+
 def _dose_nb(w):
     """Renvoie la valeur numérique d'un jeton-dose, ou ``None``.
 
     Le jeton peut porter la dose avec sa ponctuation de liste (« 6,25, »,
     « 20. ») — ``float`` brut, si :`` `` y reste, lèverait en
     ``phonetiques_texte`` et tuerait tout le hint phonétique (c'est le bug P0).
-    On retire la ponctuation terminale avant conversion.
+    On retire la ponctuation terminale avant conversion. Repli sur le français
+    écrit en toutes lettres (« trente-cinq » → 35) pour les gardes « dose à
+    portée » du canal hints.
     """
     try:
         return float(w.strip(" \t,;:.()\"").replace(",", "."))
     except (TypeError, ValueError):
-        return None
+        return _nb_lettres(w)
 
 
 _DOSE_UNIT_RE = re.compile(
@@ -2538,7 +2956,8 @@ def _dose_posology(text: str, name: str) -> str:
     tail = text[idx + len(name):]
     pieces: list = []
     sauts = 0
-    for tok in re.split(r"\s+", tail.strip()):
+    toks_tail = re.split(r"\s+", tail.strip())
+    for ei, tok in enumerate(toks_tail):
         if not tok:
             break
         aplat = tok.strip(" \t,;:().")
@@ -2552,8 +2971,32 @@ def _dose_posology(text: str, name: str) -> str:
             if len(pieces) >= 8:
                 break
             continue
+        # Un nombre dicté EN LETTRES (« trente-cinq par semaine ») est une
+        # dose : on l'exprime en chiffres (« 35 par semaine ») pour le LLM.
+        nb_lettres = _nb_lettres(aplat)
+        if nb_lettres is not None:
+            pieces.append(str(int(nb_lettres)))
+            if len(pieces) >= 8:
+                break
+            continue
         p = norm_phon(aplat)
         if p in _ITEM_STOP or (p and p in _DOSE_WORDS):
+            # « par » seul ne porte pas une posologie : ce n'est une FREQUENCE
+            # que suivi d'une unité de fréquence (« par semaine », « par jour »).
+            # Une phrase « … gérée par autrui … » ne doit jamais devenir une
+            # dose « par » orpheline après un nom.
+            if p == "par":
+                freq_suivante = any(
+                    norm_phon(v.strip(" \t,;:()."))
+                    in _DOSE_WORDS
+                    for v in toks_tail[ei + 1: ei + 3])
+                if not freq_suivante:
+                    if not pieces:
+                        sauts += 1
+                        if sauts > 6:
+                            break
+                        continue
+                    break
             pieces.append(aplat)
             if len(pieces) >= 8:
                 break
@@ -2598,6 +3041,9 @@ _DOSE_WORDS = {
     "die", "bid", "tid", "qid", "prn", "po", "peros", "am", "pm", "hs",
     "matin", "soir", "coucher", "jour", "jours", "semaine", "fois",
     "quotidien", "quotidienne", "microgramme", "microgrammes", "q1sem", "q2j",
+    # « par » n'est porté que s'il précède une FRÉQUENCE (voir _dose_posology :
+    # « 35 par semaine ») — jamais comme jeton poso isolé.
+    "par",
     "souscut", "souscutane", "souscutanee", "sc",
 } | _DOSE_FORM_WORDS
 
@@ -2844,16 +3290,7 @@ def _region_medlist(fixed: str) -> set:
     re-matching)."""
     words = fixed.split()
     n = len(words)
-    dose_unit = [False] * n
-    num_token = [False] * n
-    for i, w in enumerate(words):
-        if (POSOLOGY_RE.search(w) or DOSE_RE.search(w)
-                or w.strip(",;:.()").lower() in
-                {"mg", "mcg", "µg", "g", "ml", "unités", "unites", "ui", "bid",
-                 "tid", "hs", "prn", "qid", "die", "po", "peros"}):
-            dose_unit[i] = True
-        if re.fullmatch(r"\d+(?:[,.]\d+)?", w.strip(",;:.()")):
-            num_token[i] = True
+    dose_unit, num_token = _drapeaux_dose(words)
     fragile = [False] * n
     for i, w in enumerate(words):
         p = norm_phon(w)

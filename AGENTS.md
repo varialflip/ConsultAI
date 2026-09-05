@@ -120,6 +120,17 @@ même commit** :
   `app/med_grounding.py`
   doit être re-validée sur les transcripts de référence (faux positifs de
   prose vs garbles réels) avant redéploiement.
+- **Règles produit des candidats** (2026-09-05, cf. `_classer_candidats`) : à
+  sim semblable (intervalle `COMMON_PRIVILEGE_GAP` = 0.10) le MÉDICAMENT COURANT
+  l'emporte partout (rewrite phrase/mono-token, hints, suggestions) ; les
+  candidats sont dédupliqués **par molécule** (générique + marques du même
+  principe actif ne se concurrencent pas) ; on n'élimine jamais un candidat
+  parce qu'un voisin est proche — on propose les 2 meilleures molécules
+  distinctes, courant d'abord. Les doses peuvent être dictées **en toutes
+  lettres** (« vingt-cinq », cap 999 via `_nb_lettres`/`_drapeaux_dose`) :
+  elles comptent comme preuve de dose partout (région liste, phr, posologie) ;
+  hors région confirmée elles ne créditent JAMAIS un ion de laboratoire
+  (« Sodium cent quarante et un » reste une valeur de bilan).
 - Le texte normalisé envoyé au LLM est **pré-calculé au « Terminer »** et mis
   en cache par consultation (`normalized_transcript` + `inline_fixed_json`).
   Toute modification de la chaîne inline (médicaments **ou** gériatrique) doit

@@ -31,6 +31,16 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   consultation 37 (mms→MMSE, ISOSNAF→ISO-SMAF), 4 transcripts de référence
   (consult7 : apixaban déterministe + Eliquice→Eliquis ; consultai4 :
   Retour→Crestor ; dictee1 ; dictee6) — aucune fusion indue.
+- **`_medlist_regions` : gap 6 → 12, ratio 0.5 → 0.3, strong ≥ 1**. Validation
+  croisée sur 18 consultations annotées manuellement (25 régions) : les listes
+  de médicaments dictées comportent des phrases intercalées (« une fois par
+  jour », « au coucher », « ainsi que ») qui séparent deux entrées de 7-12
+  tokens — l'ancien gap de 6 fragmentait systématiquement les listes en régions
+  multiples. Le ratio abaissé (0.3) et le seuil `strong ≥ 1` (contre `≥ 2`)
+  permettent de capturer les runs où un seul nom résolu est présent parmi des
+  tokens de dose/fréquence. Résultat : précision 80.6%, couverture 68.1% — le
+  prochain levier est le filtrage des faux positifs de `_resolve_single` (seuil
+  de similarité phonétique).
 
 ## 2026-09-06 — Termes gériatriques : convert presque tout en profils phonétiques + fenêtres 1–3 jetons
 

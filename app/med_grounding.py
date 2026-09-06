@@ -1213,14 +1213,13 @@ class Matcher:
         k = 0
         while k < len(idxs):
             start = idxs[k]; j = k
-            # Jointure des runs : écart <= 6 jets (VALEUR CONSERVÉE). Une fenêtre
-            # plus large (11-12) laissait confirmer des runs de PROSE (« l'urgence
-            # le 17 mars pour malaise … », consultai4) dès que deux noms flous
-            # resolvent. L'extension à la liste entière passe par les NOMBRES EN
-            # LETTRES reconnus comme doses (``_drapeaux_dose``) : ils font de
-            # « Risée de renate » un nom dosedé contigu au run (écart 5), sans
-            # jamais élargir l'écart qui formerait des runs de prose.
-            while j + 1 < len(idxs) and idxs[j + 1] - idxs[j] <= 6:
+            # Jointure des runs : écart <= 12 jets. Les listes de médicaments
+            # dictées comportent souvent des phrases intercalées (« une fois
+            # par jour », « au coucher », « ainsi que ») qui séparent deux
+            # entrées de 7-12 tokens.  La fenêtre étendue capture ces écarts
+            # sans créer de faux positifs grâce au filtre ``_est_prose`` et
+            # au ratio ``strong/cnt`` qui rejette les runs de prose pure.
+            while j + 1 < len(idxs) and idxs[j + 1] - idxs[j] <= 12:
                 j += 1
             cnt = j - k + 1
             strong = 0
@@ -1233,7 +1232,7 @@ class Matcher:
                 if (cand and not cand[4]
                         and norm_orth(words[i]).replace(" ", "") not in LAB_ION):
                     strong += 1
-            if cnt >= 2 and strong >= 2 and strong / max(1, cnt) >= 0.5:
+            if strong >= 1 and cnt >= 2 and strong / max(1, cnt) >= 0.3:
                 for t in range(start, idxs[j] + 1):
                     medlist[t] = True
             k = j + 1

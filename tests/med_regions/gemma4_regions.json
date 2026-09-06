@@ -1,0 +1,110 @@
+{
+  "4": {
+    "text": "d'apaglyflosine 10 mg d'illés.\nHamelot d'épine, 5 mg dillé déjeuner.\nVitamine D, 10 000 unités Q semaine.\nVal Sartan 320 mg dyés AM.\nHydrochloroxia 12.5 mg dié.\nAtorvastatin quarante quatre vingt milligrammes HS.\nCitagliptine, 50 mg BID, oméprazole, 20 mg dié.\nТризиба.\nNeuf unités HS plus échelles.",
+    "time_s": 2.64,
+    "prompt_tokens": 2923,
+    "completion_tokens": 123
+  },
+  "8": {
+    "text": "Risperdal 2 et Pival 500 mg deux fois par jour, ainsi que Trasodone 150 au coucher et Sipradex 20 au coucher.\nAinsi que neurontin 400 mg trois fois par jour.",
+    "time_s": 1.41,
+    "prompt_tokens": 1015,
+    "completion_tokens": 56
+  },
+  "10": {
+    "text": "Péros Q2 jours HS.\nEliquice 2,5 mg BID.\nLipitor 20 mg HS.\nBisoprolol 2,5 mg d'ye.\nAmlodipine 7,5 mg Péros AM.\nSynthroïde 50 mg Péros AM.\nPantoloque 40 mg Péros d'ye.\nCalcium 500 mg Péros d'ye.\nVitamine D 10 000 unités Q semaine.\nPérin de prille, 1 mg per os",
+    "time_s": 1.8,
+    "prompt_tokens": 3466,
+    "completion_tokens": 121
+  },
+  "11": {
+    "text": "Data Glyphlosine, 10 mg DIE.\namLODIPine, 5 mg DIE.\nDéjeuner.\nVitamine D, 10 000\n\nUI Q1SEM.\nvalsartan, 320 mg DIE AM.\nHydrochlorothiadide, 12,5 mg DIE.\natorvastatin, 80 mg DIE HS, citaglyptine, 50 mg, BID, omeprazole, 20 mg, dillé, Tresiba, 9 UI HS plus échelle",
+    "time_s": 1.91,
+    "prompt_tokens": 2972,
+    "completion_tokens": 118
+  },
+  "12": {
+    "text": "sertraline 75 au souper, vitamine B12 1200 microgrammes trois fois par semaine.\nQui tapine 25 000 grammes BID.\nmetformine 1 g BID, Diamicron MR90,\n\naspirine 80, Crestor\n\n10.",
+    "time_s": 0.94,
+    "prompt_tokens": 1825,
+    "completion_tokens": 71
+  },
+  "15": {
+    "text": "phézothérodine, 4 000 g PO DIE, Celexa, 20 000 g PO DIE, Antoloch, 40 000 g PO DIE, vitamine B12, 1200 microgram PO DIE.\nMotilium, 10 mg PO BID.\nEsétrol, 10 mg PO dillé HS.\nMirapex, 0,5 mg deux heures avant le coucher.\nlevodopa carbidopa 100 plus 25, 2,5 comprimés TID.\nPoumadin, 4 mg au souper.\nThe Piclone, 7,5 mg.\nHS PRN.\nLipitard, 80 mg HS.\namantadine, 100 mg au déjeuner.\nImdur, 60 mg 1,5 comprimé.\nbisoprolol, 1,25 mg.",
+    "time_s": 3.06,
+    "prompt_tokens": 1584,
+    "completion_tokens": 205
+  },
+  "16": {
+    "text": "Lirica 75 BID, Norvasque 5, Crestor 5, Aricept 10, Zoloft 50, Tylenol TID",
+    "time_s": 0.61,
+    "prompt_tokens": 839,
+    "completion_tokens": 38
+  },
+  "21": {
+    "text": "Aldactone 6,25, la Six 20, Norvasc 10, Doxazocin.\n4.\nCalcium vitamine D 1 comprimé par jour.\nLipar 10.\nAricepte 10.\nAvapro 150.\nSerpaline 50.",
+    "time_s": 1.22,
+    "prompt_tokens": 2196,
+    "completion_tokens": 72
+  },
+  "22": {
+    "text": "Insuline, admelogue en auto-ajustement.\nCalcium, 500, deux fois par jour.\nFer, 300, d'yé.\nPantoloque, 40 d'yé.\nTorinef, 0,1 mg d'yé.\nKepra, 500 mg d'yé.\nAspirine, 80 mg d'yé.\nHydrocortisone, 10 mg, deux fois par jour.\nPancré-lipase, Vitamine D, 20 000 unités une fois par semaine.\nPuis insuline très bas, 17 unités au coucher.",
+    "time_s": 1.93,
+    "prompt_tokens": 1358,
+    "completion_tokens": 151
+  },
+  "24": {
+    "text": "Solifumacine 10HS.\nMethformine 250BID.\nNon.\nC'est Methformine 250DIE.\nFlomax 0.4DIE.\nCoversile 2 dié, vitamine D 10 000 une fois par semaine, Posamax 70 une fois par semaine, Calcium 500 dié, Crestor 5 dié, Gabapentin 100 HS, Crestor 5 HS.",
+    "time_s": 1.9,
+    "prompt_tokens": 1473,
+    "completion_tokens": 109
+  },
+  "25": {
+    "text": "myrtazapine 7,5 mg au coucher, risperidone 0,25 mg deux fois par jour, vitamine D 10 000 unités une fois par semaine, pantoloque 40, acide folique 5, bisoprolol.\n5 deux fois par jour, Restore 5, Aspirine 80.",
+    "time_s": 0.44,
+    "prompt_tokens": 2034,
+    "completion_tokens": 76
+  },
+  "26": {
+    "text": "prégabalin, 25 mg deux fois par jour.\nFamotidine, 20 mg deux fois par jour au besoin.\nSénocote, 8,6 mg au coucher.\nUne fois par jour, citagliptine 100 mg une fois par jour, simvastatine 10 mg au coucher, donépésil 5 mg le matin, vitamine D 10 000 unités une fois par jour, une fois par semaine, dexylant 60 mg, tilénol au besoin.",
+    "time_s": 1.27,
+    "prompt_tokens": 2135,
+    "completion_tokens": 118
+  },
+  "28": {
+    "text": "Coversil 4, un Dapamide 1,25, Flomax, 0.4, l'Anzoprazole 30, Finastéride 5",
+    "time_s": 0.67,
+    "prompt_tokens": 1354,
+    "completion_tokens": 41
+  },
+  "29": {
+    "text": "sodium, un comprimé deux fois par jour, vitamine B12, 1200 microgrammes trois fois par semaine.\nAmatine, 5 mg trois fois par jour en plus de 2,5.\nNon, en fait, c'est amatine, 7,5 mg trois fois par jour.\nPère, en 50 mg une fois par jour.\nZyprexa, 1,25 mg au coucher.\nAricept, 5 mg une fois par jour.\nFludrocortisone, 0,1 mg une fois par jour.\n500, deux fois par jour.\nVitamine D, 400 unités, deux fois par jour.\nAfexor, 75 mg, une fois par jour.\nApixaban, 2,5 mg, deux fois par jour.\nLanzoprazole, 30 mg, une fois par jour.",
+    "time_s": 3.19,
+    "prompt_tokens": 877,
+    "completion_tokens": 201
+  },
+  "31": {
+    "text": "vitamine D, 10 000 unités par semaine, méthotrexate, 10 mg une fois par semaine, vitamine B, 12 200 microgrammes trois fois par semaine, trigabalin, 200 mg deux fois par jour, acide folique, 5 mg deux fois par semaine, phylénol, 1 g, quatre fois par jour au besoin, hydroxychloroquine, 200 mg deux fois par jour, cinq jours sur sept, Calcium 500 d'yé, pantoloque 40 d'yé, Mativan 1 au coucher, Synthroïde 75 microgrammes, Polia 60 mg sous-cutané au 6 mois.",
+    "time_s": 4.77,
+    "prompt_tokens": 1425,
+    "completion_tokens": 159
+  },
+  "38": {
+    "text": "épival 500 mg deux fois par jour, myrtazapine 30 mg au coucher, clonazépam 0,5 mg au coucher, crestor 10 mg.\nPantoloque, 40 mg.\nApplique, ça bande 5 mg deux fois par jour.",
+    "time_s": 0.47,
+    "prompt_tokens": 1954,
+    "completion_tokens": 67
+  },
+  "39": {
+    "text": "Cinémette, un comprimé quatre fois par jour, Pantoprazole 40, Galantamine 16, ER, Synthroïde 25 microgrammes, Risidronate 35, Par semaine, vitamine D 10 000 unités par semaine, calcium 500 mg deux fois par jour.",
+    "time_s": 0.4,
+    "prompt_tokens": 805,
+    "completion_tokens": 74
+  },
+  "43": {
+    "text": "Cinémète, un comprimé quatre fois par jour.\nPantoprazole 40.\nGalantamine 16.\nER.\nSynthroïde, vingt-cinq microgrammes.\nRisée de renate, trente-cinq par semaine.\nVitamine D, dix mille.\nUnité par semaine, calcium 500 mg deux fois par jour.",
+    "time_s": 1.64,
+    "prompt_tokens": 829,
+    "completion_tokens": 84
+  }
+}

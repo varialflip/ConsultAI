@@ -7,21 +7,30 @@ POURQUOI UN MODULE SÉPARÉ DE MÉDICAMENTS
 Les médicaments déformés par la reconnaissance vocale sont corrigés par
 ``med_grounding`` (moteur déterministe : base DPD, liste curatée
 ``common_meds.json``, correction inline + suggestions). Les TERMES gériatriques
-— établissements, conditions, tests cognitifs, abréviations (Hôtel-Dieu,
-HTO/CHSLD, MMSE, AVQ…) — n'y ont pas leur place : ce ne sont pas des
-médicaments, et les chercher dans la base DPD serait faux.
+— établissements, conditions, tests cognitifs, abréviations (MMSE, MoCA,
+ISO-SMAF, Maison Aloïs, TEP-Scan, corps de Lewy, brady/hypo kinétique…) —
+n'y ont pas leur place : ce ne sont pas des médicaments, et les chercher
+dans la base DPD serait faux.
 
 Ce module vit donc À PART, alimenté par ``geriatric_terms.json``. Il offre
-DEUX canaux, comme ``med_grounding`` mais pour des termes non médicamenteux :
+TROIS canaux, comme ``med_grounding`` mais pour des termes non
+médicamenteux :
 
-  * ``apply_inline_replacements`` — remplacements DÉTERMINISTES dans le texte
-    (canonicalisation d'abréviations, orthographe d'établissement), appliqués
-    AVANT le LLM : l'erreur est corrigée dans le texte, zéro attention du
-    modèle. Chaque remplacement est explicitement curaté dans le JSON.
-  * ``pertinent_hints`` — candidats AMBIGUS laissés au jugement clinique du
-    LLM (homophonies à lecture possible multiple), injectés dans le bloc
-    <<<HOMOPHONIES_CE_CALL>>>. Un terme sans ambiguïté n'y figure pas : s'il
-    a une lecture unique sûre, il est remplacé (canal précédent), pas suggéré.
+  * ``apply_inline_replacements`` — remplacements DÉTERMINISTES dans le
+    texte (formes qu'un profil phonétique ne peut pas capturer :
+    acronymes au canon collé comme ``mms``/``mo ca``/``iso smaf``, ou
+    locutions à plus de trois jetons), appliqués AVANT le LLM :
+    l'erreur est corrigée dans le texte, zéro attention du modèle.
+    Chaque remplacement est explicitement curaté dans le JSON.
+  * ``pertinent_hints`` — candidats AMBIGUS laissés au jugement clinique
+    du LLM (homophonies à lecture possible multiple), injectés dans le
+    bloc <<<HOMOPHONIES_CE_CALL>>>. Un terme sans ambiguïté n'y figure
+    pas : s'il a une lecture unique sûre, il est remplacé (canal
+    précédent), pas suggéré.
+  * ``matcher_profils`` — matching phonétique FLOU (G2P) par profil
+    (``phonetic_profiles``) : suggère au LLM les variantes d'un terme
+    SANS réécrire le texte. Sert l'onglet « Termes gériatriques à
+    valider » de la consultation.
 
 COLLISIONS AVEC LES MÉDICAMENTS
 -------------------------------
@@ -98,10 +107,11 @@ def liste_profils(langue: str = "fr") -> List[dict]:
     return _filtre_langue(_charger().get("phonetic_profiles") or [], langue)
 
 
-#: Fenêtres texte (en jetons) sondées pour un probe phonétique : 1 + 2 jetons —
-#: « moca », « mms exam », « iso smaf »… couvre les acronymes et leurs
-#: variantes en toutes lettres sans jamais charger le scan.
-_FENETRES = (1, 2)
+#: Fenêtres texte (en jetons) sondées pour un probe phonétique : 1 → 3 jetons.
+#: « moca », « iso smaf », « corps de louis », « clinique d'évaluation »… couvre
+#: les acronymes, leurs variantes en toutes lettres et les locutions à 3 jetons
+#: sans jamais charger le scan (le G2P pré-filtré ramène chaque appel à ~0,2 ms).
+_FENETRES = (1, 2, 3)
 
 #: Motifs synonymes d'une cote : un mot de cote (« cote », « score »,
 #: « code ») précédant/formant la cible d'une échelle d'autonomie tient lieu
@@ -190,10 +200,19 @@ def matcher_profils(
             continue
         desigs_plain = {
             _normaliser("".join(_purge_ponct(m) for m in s.split()))
-            for s in [canon]
-            + [e.get("garble") or "" for e in inline_par_canon.get(canon, [])]
+            for s in [e.get("garble") or "" for e in inline_par_canon.get(canon, [])]
             if _normaliser("".join(_purge_ponct(m) for m in s.split()))
         }
+        # Le canon lui-même ne rejoint les désignations valides QUE s'il porte
+        # un séparateur non-espace (tiret apostrophe) — « ISO-SMAF » → «
+        # isosmaf » : une fenêtre collée équivalente est déjà la bonne forme.
+        # Un canon MONO-MOT (« bradykinétique ») ou À ESPACES (« Maison
+        # Aloïs ») ne se colle PAS : « brady kinétique » est une déformation
+        # à suggérer, pas une façon valide d'écrire.
+        if re.search(r"[^\w\s]", canon):
+            desigs_plain.add(
+                _normaliser("".join(_purge_ponct(m) for m in canon.split()))
+            )
         for probe in profil.get("probes") or []:
             forme = probe.get("forme") or ""
             fn = _normaliser(_purge_ponct(forme))
@@ -241,12 +260,14 @@ def matcher_profils(
                     continue
                 if sim < seuil:
                     continue
-                # Fenêtre la plus précise pour le canonique : la plus courte
-                # d'abord, puis la plus proche phonétiquement (départage).
+                # Fenêtre la plus précise pour le canonique : en priorité celle
+                # qui matche le MIEUX phonétiquement (la locution pleine « maison
+                # à lois » bat la troncature « maison à »), à sim égale la plus
+                # courte d'abord (« mms » bat « mms a »).
                 retenu = retenus.get(canon)
-                if retenu is None or n < retenu[0] or (
-                        n == retenu[0] and sim > retenu[1]):
-                    if req_score and not _a_une_cote(tokens[k + n:k + n + 2]):
+                if retenu is None or sim > retenu[1] or (
+                        sim == retenu[1] and n < retenu[0]):
+                    if req_score and not _a_une_cote(tokens[k + n:k + n + 3]):
                         continue
                     retenus[canon] = (n, sim, {
                         "erreur": " ".join(fen),

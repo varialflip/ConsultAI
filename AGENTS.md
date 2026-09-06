@@ -132,6 +132,19 @@ même commit** :
   elles comptent comme preuve de dose partout (région liste, phr, posologie) ;
   hors région confirmée elles ne créditent JAMAIS un ion de laboratoire
   (« Sodium cent quarante et un » reste une valeur de bilan).
+- **`phonetic_profiles` gériatriques** (2026-09-06) : `_FENETRES = (1, 2, 3)`,
+  `require_score` à 3 jetons suivant, `min_sim` 0.75 par défaut sur les
+  nouveaux profils (MMSE/MoCA/ISO-SMAF conservent leurs seuils). Le
+  gate « no-op » ne déclenche via `desigs_plain` QUE sur le canon (s'il
+  porte un séparateur non-espace) et sur les garbles inline — un canon
+  multi-mots à espaces (« Maison Aloïs », « bradykinétique ») ne bloque
+  plus sa propre fenêtre déformée. Le dedup par canonique privilégie
+  la fenêtre la plus proche phonétiquement (la locution pleine bat la
+  troncature), la plus courte en sim égale. Tout ajout dans
+  `geriatric_terms.json` (canal, sonde, `min_sim`) doit être re-validé
+  sur les transcripts de référence `med_grounding/*-cohere.txt` et la
+  consultation n° 37, et `compute_stats_json` doit confirmer le budget
+  de scan (≤ ~500 ms sur 12 k caractères).
 - Le texte normalisé envoyé au LLM est **pré-calculé au « Terminer »** et mis
   en cache par consultation (`normalized_transcript` + `inline_fixed_json`).
   Toute modification de la chaîne inline (médicaments **ou** gériatrique) doit

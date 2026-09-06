@@ -715,47 +715,60 @@ vit en code (`app/geriatric_terms.py` + `geriatric_terms.json`) et seules les
 lignes pertinentes pour la dictée en cours arrivent au modèle dans le bloc
 `<<<HOMOPHONIES_CE_CALL>>>` (canal `prompt_hints`).
 
-**Termes gériatriques québécois.** Outre les homophonies ambiguës (laissées au
-jugement du modèle), les termes au sens unique — établissements (Hôtel-Dieu de
-Québec), abréviations cliniques (HTO, CLSC), tests cognitifs (MMSE, y compris
-les multi-désignations « mini mental » / « MMS » / « mini mental status ») —
-sont **réécrits déterministiquement dans le texte** AVANT le modèle
-(`apply_inline_replacements`), zéro attention de l'LLM. Le fichier
-`app/geriatric_terms.json` (module à part de `med_grounding`) ne porte aucun nom de médicament ; un mot déjà corrigé par la correction des médicaments n'est jamais retouché (le médicament gagne sur la collision). À la génération, une réécriture n'est appliquée que si la reconnaissance vocale était incertaine (confiance < 0.98). Pendant la dictée, les termes corrigés apparaissent **surlignés en italique-souligné** dans la transcription, avec un rollover `[garble] → [correction]`.
+**Termes gériatriques québécois.** Le fichier `app/geriatric_terms.json`
+(module à part de `med_grounding`) ne porte aucun nom de médicament ; un mot
+déjà corrigé par la correction des médicaments n'est jamais retouché (le
+médicament gagne sur la collision). Trois canaux, par NATURE du terme :
 
-Les entrées du JSON sont de deux natures, distinguées par un drapeau
-`phonetic` :
-- **Équivalences autoritaires** (sans `phonetic`) — p. ex. « mini mental » →
-  MMSE : lecture univoque, réécrivées inline, **aucune confiance** n'est
-  affichée ni envoyée (le mapping est de référence, pas un doute).
-- **Garbles phonétiques** (`phonetic: true`) — p. ex. « tep scan » → TEP-Scan :
-  le STT déformera ce terme « dur ». Ils sont suggérés au modèle avec une
-  **confiance combinée `sqrt(min_stt × sim)`** (minimale `min_stt` sur les
-  jetons du fragment, `sim` = similarité phonémique G2P), la MÊME convention
-que les suggestions phonétiques des médicaments : **plus elle est basse,
-   plus la piste est forte** (STT incertain + phonétique proche → garble
-   probable). Le fichier reste sans nom de médicament.
+- `deterministic_replacements` — réécritures EXACTES et SÛRES, **injectées
+  dans le texte** AVANT le modèle (`apply_inline_replacements`), zéro
+  attention LLM. Réservé aux formes qu'un profil phonétique ne peut pas
+  capturer : acronyme coupé par des espaces dont le canon collé bloque le
+  profil (`mms` → `MMSE`, `mo ca` → `MoCA`, `iso smaf` → `ISO-SMAF`, tous
+  `force: true`) ou locution trop longue pour les fenêtres (`clinique
+  d'évaluation des capacités cognitives` → `CLSC`). Une réécriture n'est
+  appliquée que si la reconnaissance vocale était incertaine (confiance
+  < 0.98) ; les `force: true` passent toujours. Pendant la dictée, les
+  termes corrigés apparaissent **surlignés en italique-souligné** dans la
+  transcription, avec un rollover `[garble] → [correction]`.
+- `prompt_hints` — homophonies ambiguës ou termes « durs » à lecture
+  exacte, **suggérés au modèle** dans `<<<HOMOPHONIES_CE_CALL>>>`. Deux
+  variantes : `phonetic: true` (piste phonétique avec confiance combinée
+  `sqrt(min_stt × sim)`, la même convention que les médicaments) ou sans
+  `phonetic` (équivalence pré-orthographiée servant de consigne
+  contextuelle, aucune confiance envoyée).
+- `phonetic_profiles` — matching **phonétique flou** (G2P) par profil,
+  qui **suggère au modèle sans réécrire le texte** (les formes
+  converties depuis `deterministic_replacements` deviennent des
+  suggestions : le texte brut reste intact, l'onglet **« Termes
+  gériatriques à valider »** de la validation les présente avec
+  confiance `%`). Fenêtres texte de 1–3 jetons (cf. `_FENETRES`),
+  comparées (G2P, `med_grounding.sim_phon_w`) aux `probes` de chaque
+  profil avec `min_sim` par sonde. Chaque candidat passe un triple
+  pré-filtre orthographique (écart de longueur ≤ 2, premier caractère
+  identique, ≥ 1 bigramme commun) avant G2P, ramenant le scan à
+  ~quelques centaines de ms sur ~2 000 mots. Trois drapeaux par
+  profil :
+  - `require_score: true` — un candidat n'est retenu que si un score
+    (entier ≤ 30 dans les ~3 jetons suivants, tolérant « à/de/sur »)
+    suit l'échelle (« mms 18 sur 30 ») ; protège les acronymes courts
+    (mms/moca/mmse) contre Mme/mse/mais ;
+  - `require_score: false` — simple seuil de similarité (termes à très
+    peu d'homonymes, ex. ISO-SMAF, Maison Aloïs) ;
+  - dédup **par canonique** : la fenêtre la plus proche phonétiquement
+    (départage : la plus courte en sim égale) l'emporte ; un même
+    canon ne fournit qu'UNE suggestion.
 
-**Variantes floues des échelles cognitives** (`phonetic_profiles`). Les
-déformations NON énumérées des noms d'échelles se résolvent par balayage
-phonétique : `matcher_profils` découpe le transcrit en fenêtres de 1–2 jetons
-et les compare (G2P, `med_grounding.sim_phon_w`) aux sondes de chaque profil
-(`probes`, avec `min_sim` par sonde) — MMSE, MoCA et ISO-SMAF. Chaque candidat
-est soumis à un **triple pré-filtre orthographique** (écart de longueur ≤ 2,
-premier caractère identique, ≥ 1 bigramme commun) pour ramener le scan à
-~100 ms sur ~2 000 mots, puis à une somme phonétique ≥ `min_sim`. Les
-candidats sont dédupliqués **par canonique** (le MÉDICAMENT absent ici, mais un
-score englobant ne gagne pas sur le terme). Trois drapeaux par profil :
-- `force: true` — variante SÛRE de la forme canonique, réécrite inline comme
-  une équivalence autoritaire sans attendre le gate de confiance STT < 0.98 ;
-- `require_score: true` — un candidat n'est retenu que si un score (entier
-  ≤ 30 dans les ~2 jetons suivants, tolérant « à/de/sur ») suit l'échelle
-  (« mms 18 sur 30 ») ; désactivé pour ISO-SMAF (toujours dicté sans score) ;
-- suggestions de variantes floues = `prompt_hints`, jamais une réécriture : la
-  forme est proposée au modèle avec confiance combinée, le texte brut reste
-  intact. La forme canonique déjà écrite (no-op) est écartée.
-Ce canal couvre aussi des homophonies réelles (« ISRS », un antidépresseur,
-est tenu à l'écart par `min_sim` ≥ 0.60 sur ISO-SMAF).
+Les profils en place (canoniques) : **MMSE**, **MoCA**, **ISO-SMAF**,
+**Maison Aloïs**, **corps de Lewy**, **TEP-Scan**, **quiescente**,
+**quiescent**, **bradykinétique**, **hypokinétique**. Les noms
+d'hôpitaux (Hôtel-Dieu de Québec, Hôpital régional de Saint-Jérôme)
+ont été retirés — la prosodie STT les laissait dériver en faux
+positifs hors fenêtre, et le LLM les corrige de lui-même à la
+génération. Les locutions à 5 jetons (« aide au tovertan » → HTO, «
+bras tikinétiques » → bras akinétiques) sont elles aussi retirées
+pour les mêmes raisons (acronyme épelé ou homophone non
+discriminant).
 
 **Le LLM reste aveugle aux corrections inline.** Les formes déjà corrigées en
 inline (médicaments et termes gériatriques) sont **retirées** du bloc
@@ -777,27 +790,40 @@ que la correction changera, sans réécrire ce que le médecin a dicté.
 `app/geriatric_terms.json` (`langue: "fr"`), jamais dans la consigne générale.
 Décider du canal selon la NATURE du terme, pas selon sa simple présence :
 
-1. **Lecture univoque, mot courant, le STT l'entend bien** (ex. « mini mental » →
-   `MMSE`, « ISO-SMAF », « Maison Aloïs ») → **`deterministic_replacements`**
-   (`garble` + `correct`, écrivant la forme dictée déformée ; plusieurs
-   désignations = plusieurs entrées vers la même `correct`). Ce canal réécrit
-   le texte AVANT le modèle (zéro attention LLM) et alimente le surlignage
-   dictée.
-2. **Terme « dur » que le STT va déformer, ou homophonie à jugement clinique**
-   (ex. « tep scan » → `TEP-Scan`, « chellesled » → `CHSLD`, « outéréf » →
-   `UTRF`, « rezzber » → `Reisberg`) → **`prompt_hints`** avec
-   `"phonetic": true`. Le fragment porte une **confiance combinée** envoyée au
-   modèle (`<<<HOMOPHONIES_CE_CALL>>>`) et affichée en rollover.
-3. **Équivalence pré-orthographiée** (ne change pas l'orthographe, sert de
-    consigne contextuelle — ex. « leucoaraïose », « leucopatie ») →
-    `prompt_hints` **sans** `phonetic` : aucune confiance, le modèle reçoit la
-    lecture correcte.
-4. **Échelle cognitive dont le STT déforme le nom de mille façons non
-    énumérables** (MMSE, MoCA, ISO-SMAF) → **`phonetic_profiles`** : les
-    `probes` (`forme` + `min_sim`) couvrent les variantes connues, le balayage
-    attrape les autres. Prévoir `require_score: true` si la cible est toujours
-    dictée avec un score (échelle cognitive), `force: true` pour les variantes
-    sûres à réécrire inline, `false` sinon (le reste = suggestions au modèle).
+1. **Forme qu'un profil phonétique ne peut pas capturer** (canonique
+   collé, locution > 3 jetons) → **`deterministic_replacements`**
+   (`garble` + `correct` + éventuel `force: true`). Ce canal réécrit
+   le texte AVANT le modèle (zéro attention LLM) et alimente le
+   surlignage dictée. En pratique aujourd'hui : `mms` → `MMSE`,
+   `mo ca` → `MoCA`, `iso smaf` → `ISO-SMAF` (tous `force: true`,
+   parce que les profils MMSE/MoCA/ISO-SMAF ont leur canon collé
+   dans `desigs_plain` et la fenêtre « iso smaf » ne pourrait pas
+   être suggérée par le profil), et la locution « clinique
+   d'évaluation des capacités cognitives » → `CLSC` (5 jetons,
+   fenêtre _FENETRES = (1, 2, 3) ne l'atteint pas).
+2. **Terme « dur » que le STT va déformer, ou homophonie à jugement
+   clinique** (ex. « tep scan » → `TEP-Scan`, « chellesled » →
+   `CHSLD`, « outéréf » → `UTRF`, « rezzber » → `Reisberg`) →
+   **`prompt_hints`** avec `"phonetic": true`. Le fragment porte une
+   **confiance combinée** envoyée au modèle
+   (`<<<HOMOPHONIES_CE_CALL>>>`) et affichée en rollover.
+3. **Équivalence pré-orthographiée** (ne change pas l'orthographe, sert
+   de consigne contextuelle — ex. « leucoaraïose », « leucopatie ») →
+   `prompt_hints` **sans** `phonetic` : aucune confiance, le modèle
+   reçoit la lecture correcte.
+4. **Terme clinique gériatrique à plusieurs variantes phonétiques non
+   énumérables, en SUGGESTION (pas en réécriture)** (MMSE, MoCA,
+   ISO-SMAF, Maison Aloïs, corps de Lewy, TEP-Scan, quiescent(e),
+   brady/hypo kinétique) → **`phonetic_profiles`** : un `canonical` +
+   des `probes` (`forme` + `min_sim`). Le balayage 1–3 jetons attrape
+   les variantes ; la cote affichée (Validation tab) provient de
+   `sqrt(min_stt × sim(fenêtre, canon))`. Prévoir
+   `require_score: true` pour les échelles toujours dictées avec un
+   score (MMSE/MoCA) ; `false` pour les termes à très peu d'homonymes
+   (ISO-SMAF, Maison Aloïs, …). `min_sim` 0.75 par défaut pour les
+   nouveaux profils — 0.62 reste admissible sur les sondes très
+   distinctives (MMSE `mms` 0.70, `mini mental` 0.62) où
+   `require_score` filtre déjà le bruit.
 
 Pour un `garble` multi-mots, mettre la forme dictée DÉFORMÉE dans le champ
 `garble`/**`fragment`** et l'orthographe CANONIQUE dans `correct`/`lecture`.

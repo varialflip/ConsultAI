@@ -3,6 +3,64 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-06 — Termes gériatriques : convert presque tout en profils phonétiques + fenêtres 1–3 jetons
+
+- **`phonetic_profiles` absorbe la majorité des `deterministic_replacements`.**
+  « mini mental », « miny mental », « mini mental status », « izo-smaff »,
+  « maison aloi », « maison à lois », « corps de louis », « pet scan »,
+  « pet-scan », « qu'y aissante », « qu'y aissant », « brady kinétique »,
+  « hypo kinétique » passent en `phonetic_profiles` (= **suggestions** au
+  modèle, le texte n'est PAS réécrit — l'onglet « Termes gériatriques à
+  valider » les affiche avec confiance `%`). Les 4 `deterministic_replacements`
+  restants sont UNIQUEMENT les formes qu'un profil ne peut pas capturer :
+  `mms` → `MMSE` (force), `mo ca` → `MoCA` (force), `iso smaf` →
+  `ISO-SMAF` (force) — leur canon collé bloque la suggestion profil — et
+  la locution « clinique d'évaluation des capacités cognitives » → `CLSC`
+  (5 jetons, hors fenêtre).
+- **Noms d'hôpitaux retirés** : « hôtel dieu du québec », « hôtel dieu de
+  québec », « hôtel dieu », « hôpital régional de saint jérôme ». Les
+  établissements passent par la génération LLM plutôt qu'un
+  réécriture/suggestion phonétique étroite (les fenêtres courtes
+  ramassaient du français courant en faux positif — « la maison. Le… »).
+- **Locutions retirées** : « aide au tovertan » → HTO (acronyme épelé
+  lettre par lettre, sans ancre phonétique stable), « bras tikinétiques »
+  → bras akinétiques (sonde trop courte au milieu d'un texte
+  Parkinson) ; « mms exam » déjà retiré. Les médecins reçoivent une cote
+  ISO-SMAF et un examen akinétique via la cotation Parkinson standard,
+  pas un mapping hard-codé.
+- **`_FENETRES = (1, 2, 3)`** : le balayage phonétique monte à 3 jetons
+  pour capter les locutions à 3 mots (« maison à lois », « corps de
+  louis », « mini mental status », « aide au tovertan » quand il passe).
+  Coût du scan ~×1.5 (mesuré : 12 k caractères en ~500 ms, sous le
+  budget d'attente de la dictée).
+- **Gate « no-op » corrigé** : le canon ne rejoint `desigs_plain` QUE
+  s'il porte un séparateur non-espace (tiret, apostrophe — ex. « ISO-SMAF »
+  → canon collé « isosmaf »). Les canons multi-mots à espaces (« Maison
+  Aloïs », « bradykinétique ») ne bloquent plus leur propre fenêtre
+  déformée (« maison à lois » / « brady kinétique »). Le pré-filtre de
+  longueur à ± 2 sur la sonde purgée sans espace reste en place pour
+  éviter le bruit du français courant (« qui sont », « m. le »).
+- **Départage par canonique** : préférence à la fenêtre la plus proche
+  phonétiquement (la locution pleine « maison à lois » sim 0.83 bat la
+  troncature « maison à » sim 0.67) ; à sim égale, la plus courte
+  d'abord (« mms » 1.0 bat « mms a » < 1.0). Le dedup par canonique
+  continue d'éviter les redondances.
+- **Cote à 3 jetons** : `_a_une_cote` regarde maintenant les 3 jetons
+  suivant la fenêtre (au lieu de 2) pour les profils `require_score` —
+  une cote « 22 » après « mini mental est à 22/30 » est désormais vue
+  par la fenêtre 2 jetons « mini mental » (au lieu d'être manquée et de
+  pousser le 3 jetons « mini mental est » à fausser la suggestion).
+- **min_sim des nouveaux profils remonté à 0.75** : « maison aloi »,
+  « maison à lois », « corps de louis », « pet scan » / « petscan »,
+  « qu'y aissante » / « qu'y aissant », « brady kinétique »,
+  « hypo kinétique ». Les MMSE / MoCA / ISO-SMAF conservent leurs
+  `min_sim` ajustés (0.60–0.80), `require_score` filtre le bruit.
+- Revalidé : transcripts de référence consult7 / consultai4 /
+  dictee-1 / dictee-6 (faux positifs `maison. Le`, `qui sont` éliminés ;
+  vrais positifs `mini mental est à 22/30`, `MMSE 28`, `ISOSNAF`
+  conservés) + consultation n° 37 (mms→MMSE inline, ISOSNAF→ISO-SMAF
+  suggestion 0.866).
+
 ## 2026-09-06 — Termes gériatriques : matching phonétique des échelles MMSE / MoCA / ISO-SMAF
 
 - **`phonetic_profiles`** dans `geriatric_terms.json` : au lieu d'énumérer

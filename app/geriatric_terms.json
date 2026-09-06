@@ -1,50 +1,6 @@
 {
-  "_comment": "Termes gériatriques québécois curatés, corrigés AVANT/PENDANT la dictée et la génération (voir geriatric_terms.py). Aucun nom de médicament ici (ceux-ci sont gérés par med_grounding) : termes cliniques, d'établissement ou abréviations. Un mot déjà corrigé inline par med_grounding est protégé (diffusion med gagne). Trois canaux : deterministic_replacements = remplacements EXACTS et sûrs, réécrits dans le texte (avec l'option force pour les formes qui s'appliquent toujours, même STT confiant) ; prompt_hints = homophonies ambiguës ou termes 'durs' à lecture exacte, suggérés au LLM (bloc HOMOPHONIES_CE_CALL) ; phonetic_profiles = matching PHONÉTIQUE FLOU (G2P) par profil, qui couvre toutes les variantes d'un terme sans les énumérer (voir doc du champ require_score). Entrées françaises pour l'instant.",
+  "_comment": "Termes gériatriques québécois curatés, corrigés AVANT/PENDANT la dictée et la génération (voir geriatric_terms.py). Aucun nom de médicament ici (ceux-ci sont gérés par med_grounding) : termes cliniques, d'établissement ou abréviations. Un mot déjà corrigé inline par med_grounding est protégé (diffusion med gagne). Trois canaux : deterministic_replacements = remplacements EXACTS et sûrs, réécrits dans le texte (réservés aux formes qu'un profil phonétique ne peut PAS capturer : canonique coupé par des espaces comme « mo ca »/« iso smaf », ou locution trop longue comme « clinique d'évaluation des capacités cognitives ») ; prompt_hints = homophonies ambiguës ou termes 'durs' à lecture exacte, suggérés au LLM (bloc HOMOPHONIES_CE_CALL) ; phonetic_profiles = matching PHONÉTIQUE FLOU (G2P) par profil, DONC suggestions au LLM — le texte n'est PAS réécrit (ex. « brady kinétique » → bradykinétique est suggéré, pas injecté) : voir geriatric_terms.py, corrections_et_hints. Fenêtres texte 1–3 jetons (cf. _FENETRES). Entrées françaises pour l'instant.",
   "deterministic_replacements": [
-    {
-      "garble": "hôtel dieu du québec",
-      "correct": "Hôtel-Dieu de Québec",
-      "langue": "fr"
-    },
-    {
-      "garble": "hôtel dieu de québec",
-      "correct": "Hôtel-Dieu de Québec",
-      "langue": "fr"
-    },
-    {
-      "garble": "hôtel dieu",
-      "correct": "Hôtel-Dieu",
-      "langue": "fr"
-    },
-    {
-      "garble": "aide au tovertan",
-      "correct": "HTO (hypotension orthostatique)",
-      "langue": "fr"
-    },
-    {
-      "garble": "mini mental",
-      "correct": "MMSE",
-      "langue": "fr",
-      "force": true
-    },
-    {
-      "garble": "miny mental",
-      "correct": "MMSE",
-      "langue": "fr",
-      "force": true
-    },
-    {
-      "garble": "mini mental status",
-      "correct": "MMSE",
-      "langue": "fr",
-      "force": true
-    },
-    {
-      "garble": "mms exam",
-      "correct": "MMSE",
-      "langue": "fr",
-      "force": true
-    },
     {
       "garble": "mms",
       "correct": "MMSE",
@@ -58,81 +14,14 @@
       "force": true
     },
     {
-      "garble": "hôpital régional de saint jérôme",
-      "correct": "Hôpital régional de Saint-Jérôme",
-      "langue": "fr"
-    },
-    {
-      "garble": "clinique d'évaluation des capacités cognitives",
-      "correct": "CLSC",
-      "langue": "fr"
-    },
-    {
-      "garble": "izo-smaff",
-      "correct": "ISO-SMAF",
-      "langue": "fr",
-      "force": true
-    },
-    {
       "garble": "iso smaf",
       "correct": "ISO-SMAF",
       "langue": "fr",
       "force": true
     },
     {
-      "garble": "smaf",
-      "correct": "ISO-SMAF",
-      "langue": "fr",
-      "force": true
-    },
-    {
-      "garble": "maison aloi",
-      "correct": "Maison Aloïs",
-      "langue": "fr"
-    },
-    {
-      "garble": "maison à lois",
-      "correct": "Maison Aloïs",
-      "langue": "fr"
-    },
-    {
-      "garble": "corps de louis",
-      "correct": "corps de Lewy",
-      "langue": "fr"
-    },
-    {
-      "garble": "pet scan",
-      "correct": "TEP-Scan",
-      "langue": "fr"
-    },
-    {
-      "garble": "pet-scan",
-      "correct": "TEP-Scan",
-      "langue": "fr"
-    },
-    {
-      "garble": "qu'y aissante",
-      "correct": "quiescente",
-      "langue": "fr"
-    },
-    {
-      "garble": "qu'y aissant",
-      "correct": "quiescent",
-      "langue": "fr"
-    },
-    {
-      "garble": "brady kinétique",
-      "correct": "bradykinétique",
-      "langue": "fr"
-    },
-    {
-      "garble": "hypo kinétique",
-      "correct": "hypokinétique",
-      "langue": "fr"
-    },
-    {
-      "garble": "bras tikinétiques",
-      "correct": "bras akinétiques",
+      "garble": "clinique d'évaluation des capacités cognitives",
+      "correct": "CLSC",
       "langue": "fr"
     }
   ],
@@ -305,10 +194,12 @@
       "langue": "fr",
       "require_score": true,
       "probes": [
-        { "forme": "mms",         "min_sim": 0.70 },
-        { "forme": "mmse",        "min_sim": 0.80 },
-        { "forme": "mini mental", "min_sim": 0.62 },
-        { "forme": "minimental",  "min_sim": 0.62 }
+        { "forme": "mms",             "min_sim": 0.70 },
+        { "forme": "mmse",            "min_sim": 0.80 },
+        { "forme": "mini mental",     "min_sim": 0.62 },
+        { "forme": "minimental",      "min_sim": 0.62 },
+        { "forme": "miny mental",     "min_sim": 0.62 },
+        { "forme": "mini mental status", "min_sim": 0.62 }
       ]
     },
     {
@@ -329,7 +220,74 @@
       "probes": [
         { "forme": "iso smaf", "min_sim": 0.60 },
         { "forme": "iso snaf", "min_sim": 0.60 },
-        { "forme": "smaf",     "min_sim": 0.75 }
+        { "forme": "smaf",     "min_sim": 0.75 },
+        { "forme": "izo-smaff", "min_sim": 0.60 }
+      ]
+    },
+    {
+      "canonical": "Maison Aloïs",
+      "contexte": "maison privée de soins pour aînés",
+      "langue": "fr",
+      "require_score": false,
+      "probes": [
+        { "forme": "maison aloi",  "min_sim": 0.75 },
+        { "forme": "maison à lois", "min_sim": 0.75 }
+      ]
+    },
+    {
+      "canonical": "corps de Lewy",
+      "contexte": "démence à corps de Lewy",
+      "langue": "fr",
+      "require_score": false,
+      "probes": [
+        { "forme": "corps de louis", "min_sim": 0.75 }
+      ]
+    },
+    {
+      "canonical": "TEP-Scan",
+      "contexte": "imagerie — tomographie par émission de positons",
+      "langue": "fr",
+      "require_score": false,
+      "probes": [
+        { "forme": "pet scan", "min_sim": 0.75 },
+        { "forme": "petscan",  "min_sim": 0.75 }
+      ]
+    },
+    {
+      "canonical": "quiescente",
+      "contexte": "aspect du signal vasculaire — quiescent (bande roulante ? pour parole)",
+      "langue": "fr",
+      "require_score": false,
+      "probes": [
+        { "forme": "qu'y aissante", "min_sim": 0.75 },
+        { "forme": "qui aissante", "min_sim": 0.75 }
+      ]
+    },
+    {
+      "canonical": "quiescent",
+      "contexte": "aspect du signal — quiescent",
+      "langue": "fr",
+      "require_score": false,
+      "probes": [
+        { "forme": "qu'y aissant", "min_sim": 0.75 }
+      ]
+    },
+    {
+      "canonical": "bradykinétique",
+      "contexte": "examen neurologique — lenteur du mouvement",
+      "langue": "fr",
+      "require_score": false,
+      "probes": [
+        { "forme": "brady kinétique", "min_sim": 0.75 }
+      ]
+    },
+    {
+      "canonical": "hypokinétique",
+      "contexte": "examen neurologique — réduction du mouvement",
+      "langue": "fr",
+      "require_score": false,
+      "probes": [
+        { "forme": "hypo kinétique", "min_sim": 0.75 }
       ]
     }
   ]

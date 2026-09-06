@@ -1,0 +1,246 @@
+{
+  "consultation_id": 16,
+  "title": "Prise en charge d'une diverticulite avec abcès",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "Crestor",
+      "base": "crestor",
+      "posology": "5",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Aricept",
+      "base": "aricept",
+      "posology": "10",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Zoloft",
+      "base": "zoloft",
+      "posology": "50",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Tylenol",
+      "base": "acetaminophen",
+      "posology": "TID",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Lirica",
+      "base": "lyrica",
+      "brand": "LYRICA",
+      "posology": "75 BID",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Norvasque",
+      "base": "norvasc",
+      "brand": "NORVASC",
+      "posology": "5",
+      "score": 88,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 71,
+      "token_end": 80,
+      "context_start": 61,
+      "context_end": 90,
+      "region_text": "Lirica 75 BID, Norvasque 5, Crestor 5, Aricept 10, Zoloft",
+      "full_text": "coloviscale en 2019. Comme médicaments à domicile, elle prend du Lirica 75 BID, Norvasque 5, Crestor 5, Aricept 10, Zoloft 50, Tylenol TID. Ici, il y a eu ajout d'hertapenem,",
+      "tokens": [
+        {
+          "idx": 61,
+          "token": "coloviscale",
+          "in_region": false,
+          "conf": 0.8476352453231811
+        },
+        {
+          "idx": 62,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.46910175681114197
+        },
+        {
+          "idx": 63,
+          "token": "2019.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 64,
+          "token": "Comme",
+          "in_region": false,
+          "conf": 0.9625259637832642
+        },
+        {
+          "idx": 65,
+          "token": "médicaments",
+          "in_region": false,
+          "conf": 0.8645656928420067
+        },
+        {
+          "idx": 66,
+          "token": "à",
+          "in_region": false,
+          "conf": 0.999997615814209
+        },
+        {
+          "idx": 67,
+          "token": "domicile,",
+          "in_region": false,
+          "conf": 0.9994703978300095
+        },
+        {
+          "idx": 68,
+          "token": "elle",
+          "in_region": false,
+          "conf": 0.9998514652252197
+        },
+        {
+          "idx": 69,
+          "token": "prend",
+          "in_region": false,
+          "conf": 0.9997754693031311
+        },
+        {
+          "idx": 70,
+          "token": "du",
+          "in_region": false,
+          "conf": 0.9992152452468872
+        },
+        {
+          "idx": 71,
+          "token": "Lirica",
+          "in_region": true,
+          "conf": 0.5449805557727814
+        },
+        {
+          "idx": 72,
+          "token": "75",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 73,
+          "token": "BID,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 74,
+          "token": "Norvasque",
+          "in_region": true,
+          "conf": 0.7960961659749349
+        },
+        {
+          "idx": 75,
+          "token": "5,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 76,
+          "token": "Crestor",
+          "in_region": true,
+          "conf": 0.9813868006070455
+        },
+        {
+          "idx": 77,
+          "token": "5,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 78,
+          "token": "Aricept",
+          "in_region": true,
+          "conf": 0.8980794548988342
+        },
+        {
+          "idx": 79,
+          "token": "10,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 80,
+          "token": "Zoloft",
+          "in_region": true,
+          "conf": 0.9671532313028971
+        },
+        {
+          "idx": 81,
+          "token": "50,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 82,
+          "token": "Tylenol",
+          "in_region": false,
+          "conf": 0.719617985188961
+        },
+        {
+          "idx": 83,
+          "token": "TID.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 84,
+          "token": "Ici,",
+          "in_region": false,
+          "conf": 0.9957293272018433
+        },
+        {
+          "idx": 85,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.9998675584793091
+        },
+        {
+          "idx": 86,
+          "token": "y",
+          "in_region": false,
+          "conf": 0.9998278617858887
+        },
+        {
+          "idx": 87,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.999997615814209
+        },
+        {
+          "idx": 88,
+          "token": "eu",
+          "in_region": false,
+          "conf": 0.9999386072158813
+        },
+        {
+          "idx": 89,
+          "token": "ajout",
+          "in_region": false,
+          "conf": 0.9900038838386536
+        },
+        {
+          "idx": 90,
+          "token": "d'hertapenem,",
+          "in_region": false,
+          "conf": 0.8086315180574145
+        }
+      ]
+    }
+  ]
+}

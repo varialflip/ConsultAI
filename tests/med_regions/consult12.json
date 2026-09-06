@@ -1,0 +1,195 @@
+{
+  "consultation_id": 12,
+  "title": "Trouble cognitif évolutif",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "aspirine 80",
+      "base": "aspirine",
+      "posology": "",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "sertraline",
+      "base": "sertraline",
+      "posology": "75",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Diamicron",
+      "base": "gliclazide",
+      "posology": "",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Crestor",
+      "base": "crestor",
+      "posology": "10",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "anxiété",
+      "base": "flumazenil",
+      "brand": "ANEXATE",
+      "posology": "",
+      "score": 75,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "metformine",
+      "base": "metformin",
+      "brand": null,
+      "posology": "1 g BID",
+      "score": 90,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "aspirine",
+      "base": "acide acetylsalicylique",
+      "brand": "ASPIRIN",
+      "posology": "80",
+      "score": 88,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 1026,
+      "token_end": 1034,
+      "context_start": 1016,
+      "context_end": 1035,
+      "region_text": "metformine 1 g BID, Diamicron MR90, aspirine 80, Crestor",
+      "full_text": "ou d'un changement comportemental. Rajouter dans la liste des médicaments metformine 1 g BID, Diamicron MR90, aspirine 80, Crestor 10.",
+      "tokens": [
+        {
+          "idx": 1016,
+          "token": "ou",
+          "in_region": false,
+          "conf": 0.9986453652381897
+        },
+        {
+          "idx": 1017,
+          "token": "d'un",
+          "in_region": false,
+          "conf": 0.9995365341504415
+        },
+        {
+          "idx": 1018,
+          "token": "changement",
+          "in_region": false,
+          "conf": 0.9982353150844574
+        },
+        {
+          "idx": 1019,
+          "token": "comportemental.",
+          "in_region": false,
+          "conf": 0.9974032193422318
+        },
+        {
+          "idx": 1020,
+          "token": "Rajouter",
+          "in_region": false,
+          "conf": 0.9112116545438766
+        },
+        {
+          "idx": 1021,
+          "token": "dans",
+          "in_region": false,
+          "conf": 0.9984105825424194
+        },
+        {
+          "idx": 1022,
+          "token": "la",
+          "in_region": false,
+          "conf": 0.9998140931129456
+        },
+        {
+          "idx": 1023,
+          "token": "liste",
+          "in_region": false,
+          "conf": 0.9999918341636658
+        },
+        {
+          "idx": 1024,
+          "token": "des",
+          "in_region": false,
+          "conf": 0.531078040599823
+        },
+        {
+          "idx": 1025,
+          "token": "médicaments",
+          "in_region": false,
+          "conf": 0.9999253898859024
+        },
+        {
+          "idx": 1026,
+          "token": "metformine",
+          "in_region": true,
+          "conf": 0.8549430767695109
+        },
+        {
+          "idx": 1027,
+          "token": "1",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 1028,
+          "token": "g",
+          "in_region": true,
+          "conf": 0.8182713985443115
+        },
+        {
+          "idx": 1029,
+          "token": "BID,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 1030,
+          "token": "Diamicron",
+          "in_region": true,
+          "conf": 0.9370064536730448
+        },
+        {
+          "idx": 1031,
+          "token": "MR90,",
+          "in_region": true,
+          "conf": 0.8144042491912842
+        },
+        {
+          "idx": 1032,
+          "token": "aspirine",
+          "in_region": true,
+          "conf": 0.9969412684440613
+        },
+        {
+          "idx": 1033,
+          "token": "80,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 1034,
+          "token": "Crestor",
+          "in_region": true,
+          "conf": 0.9493622382481893
+        },
+        {
+          "idx": 1035,
+          "token": "10.",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    }
+  ]
+}

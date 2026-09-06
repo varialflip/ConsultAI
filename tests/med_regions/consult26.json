@@ -1,0 +1,256 @@
+{
+  "consultation_id": 26,
+  "title": "Trouble neurocognitif majeur en installation",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "10 000 UI DIE",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "pregabalin",
+      "base": "pregabalin",
+      "posology": "25 mg BID",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "famotidine",
+      "base": "famotidine",
+      "posology": "20 mg BID PRN",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "simvastatin",
+      "base": "simvastatin",
+      "posology": "10 mg HS",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Tylenol",
+      "base": "acetaminophen",
+      "posology": "PRN",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Sénocote",
+      "base": "docusate",
+      "brand": "SENOKOT S",
+      "posology": "8,6 mg",
+      "score": 88,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "citagliptine",
+      "base": "sitagliptine",
+      "brand": null,
+      "posology": "100 mg",
+      "score": 92,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "donépésil",
+      "base": "donepezil",
+      "brand": null,
+      "posology": "5 mg",
+      "score": 97,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "dexylant",
+      "base": "dexilant",
+      "brand": "DEXILANT",
+      "posology": "60 mg",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Tépin",
+      "base": "gatifloxacine",
+      "brand": "TEQUIN",
+      "posology": "",
+      "score": 88,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 131,
+      "token_end": 136,
+      "context_start": 121,
+      "context_end": 146,
+      "region_text": "simvastatine 10 mg au coucher, donépésil",
+      "full_text": "fois par jour, citagliptine 100 mg une fois par jour, simvastatine 10 mg au coucher, donépésil 5 mg le matin, vitamine D 10 000 unités une",
+      "tokens": [
+        {
+          "idx": 121,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999200105667114
+        },
+        {
+          "idx": 122,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999691247940063
+        },
+        {
+          "idx": 123,
+          "token": "jour,",
+          "in_region": false,
+          "conf": 0.9366697371006012
+        },
+        {
+          "idx": 124,
+          "token": "citagliptine",
+          "in_region": false,
+          "conf": 0.8951171785593033
+        },
+        {
+          "idx": 125,
+          "token": "100",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 126,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.97722989320755
+        },
+        {
+          "idx": 127,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9999535083770752
+        },
+        {
+          "idx": 128,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999200105667114
+        },
+        {
+          "idx": 129,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999691247940063
+        },
+        {
+          "idx": 130,
+          "token": "jour,",
+          "in_region": false,
+          "conf": 0.9366697371006012
+        },
+        {
+          "idx": 131,
+          "token": "simvastatine",
+          "in_region": true,
+          "conf": 0.9640864372253418
+        },
+        {
+          "idx": 132,
+          "token": "10",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 133,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.97722989320755
+        },
+        {
+          "idx": 134,
+          "token": "au",
+          "in_region": true,
+          "conf": 0.6440069675445557
+        },
+        {
+          "idx": 135,
+          "token": "coucher,",
+          "in_region": true,
+          "conf": 0.9840329587459564
+        },
+        {
+          "idx": 136,
+          "token": "donépésil",
+          "in_region": true,
+          "conf": 0.5694831982254982
+        },
+        {
+          "idx": 137,
+          "token": "5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 138,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.97722989320755
+        },
+        {
+          "idx": 139,
+          "token": "le",
+          "in_region": false,
+          "conf": 0.9995245933532715
+        },
+        {
+          "idx": 140,
+          "token": "matin,",
+          "in_region": false,
+          "conf": 0.999890923500061
+        },
+        {
+          "idx": 141,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9999943971633911
+        },
+        {
+          "idx": 142,
+          "token": "D",
+          "in_region": false,
+          "conf": 0.9993371367454529
+        },
+        {
+          "idx": 143,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 144,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 145,
+          "token": "unités",
+          "in_region": false,
+          "conf": 0.9973146021366119
+        },
+        {
+          "idx": 146,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9999535083770752
+        }
+      ]
+    }
+  ]
+}

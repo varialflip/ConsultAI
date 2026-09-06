@@ -1,0 +1,584 @@
+{
+  "consultation_id": 31,
+  "title": "Évaluation chimiothérapie palliative cancer bouche",
+  "inline_fixed": [
+    "ativan",
+    "mmse",
+    "pantoloc",
+    "synthroid"
+  ],
+  "med_grounding_items": [
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "10 000 UI",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "vitamine b",
+      "base": "vitamine b",
+      "posology": "12 200 microgrammes 3 fois",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "acide folique",
+      "base": "acide folique",
+      "posology": "5 mg 2 fois",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "methotrexate",
+      "base": "methotrexate",
+      "posology": "",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "hydroxychloroquine",
+      "base": "hydroxychloroquine",
+      "posology": "200 mg BID 5 jours",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "calcium",
+      "base": "calcium",
+      "posology": "500 DIE",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Pantoloc",
+      "base": "pantoloc",
+      "posology": "40 DIE",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "pantoloque"
+    },
+    {
+      "name": "Ativan",
+      "base": "ativan",
+      "posology": "1 HS",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "Mativan"
+    },
+    {
+      "name": "Synthroid",
+      "base": "synthroid",
+      "posology": "75 microgrammes",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "Synthroïde"
+    },
+    {
+      "name": "trigabalin",
+      "base": "pregabalin",
+      "brand": null,
+      "canonical": "pregabalin",
+      "posology": "200 mg 2 fois par jour",
+      "score": 84,
+      "level": "BASE_GENERIC",
+      "source": "phonetic",
+      "conf": 0.845
+    },
+    {
+      "name": "phylénol",
+      "base": "acetaminophen",
+      "brand": "TYLENOL",
+      "canonical": "Tylenol",
+      "posology": "1 g 4 fois par jour",
+      "score": 86,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.841
+    },
+    {
+      "name": "Polia",
+      "base": "prolia",
+      "brand": "PROLIA",
+      "canonical": "Prolia",
+      "posology": "60 mg sous-cutané",
+      "score": 83,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.842
+    }
+  ],
+  "nb_regions": 2,
+  "regions": [
+    {
+      "token_start": 125,
+      "token_end": 145,
+      "context_start": 115,
+      "context_end": 155,
+      "region_text": "microgrammes trois fois Q1SEM, trigabalin, 200 mg BID, acide folique, 5 mg deux fois Q1SEM, phylénol, 1 g, QID PRN, hydroxychloroquine,",
+      "full_text": "methotrexate, 10 mg une fois Q1SEM, vitamine B, 12 200 microgrammes trois fois Q1SEM, trigabalin, 200 mg BID, acide folique, 5 mg deux fois Q1SEM, phylénol, 1 g, QID PRN, hydroxychloroquine, 200 mg BID, cinq jours sur sept, calcium 500 DIE,",
+      "tokens": [
+        {
+          "idx": 115,
+          "token": "methotrexate,",
+          "in_region": false,
+          "conf": 0.9661773868969509
+        },
+        {
+          "idx": 116,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 117,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9870528876781464
+        },
+        {
+          "idx": 118,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9999731779098511
+        },
+        {
+          "idx": 119,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999656677246094
+        },
+        {
+          "idx": 120,
+          "token": "Q1SEM,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 121,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9999412298202515
+        },
+        {
+          "idx": 122,
+          "token": "B,",
+          "in_region": false,
+          "conf": 0.9238830208778381
+        },
+        {
+          "idx": 123,
+          "token": "12",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 124,
+          "token": "200",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 125,
+          "token": "microgrammes",
+          "in_region": true,
+          "conf": 0.998405122756958
+        },
+        {
+          "idx": 126,
+          "token": "trois",
+          "in_region": true,
+          "conf": 0.9705116748809814
+        },
+        {
+          "idx": 127,
+          "token": "fois",
+          "in_region": true,
+          "conf": 0.9999656677246094
+        },
+        {
+          "idx": 128,
+          "token": "Q1SEM,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 129,
+          "token": "trigabalin,",
+          "in_region": true,
+          "conf": 0.8509329438209534
+        },
+        {
+          "idx": 130,
+          "token": "200",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 131,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9870528876781464
+        },
+        {
+          "idx": 132,
+          "token": "BID,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 133,
+          "token": "acide",
+          "in_region": true,
+          "conf": 0.9997920989990234
+        },
+        {
+          "idx": 134,
+          "token": "folique,",
+          "in_region": true,
+          "conf": 0.994843324025472
+        },
+        {
+          "idx": 135,
+          "token": "5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 136,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9870528876781464
+        },
+        {
+          "idx": 137,
+          "token": "deux",
+          "in_region": true,
+          "conf": 0.999880313873291
+        },
+        {
+          "idx": 138,
+          "token": "fois",
+          "in_region": true,
+          "conf": 0.9999656677246094
+        },
+        {
+          "idx": 139,
+          "token": "Q1SEM,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 140,
+          "token": "phylénol,",
+          "in_region": true,
+          "conf": 0.8254377663135528
+        },
+        {
+          "idx": 141,
+          "token": "1",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 142,
+          "token": "g,",
+          "in_region": true,
+          "conf": 0.9994431138038635
+        },
+        {
+          "idx": 143,
+          "token": "QID",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 144,
+          "token": "PRN,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 145,
+          "token": "hydroxychloroquine,",
+          "in_region": true,
+          "conf": 0.9996725022792816
+        },
+        {
+          "idx": 146,
+          "token": "200",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 147,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9870528876781464
+        },
+        {
+          "idx": 148,
+          "token": "BID,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 149,
+          "token": "cinq",
+          "in_region": false,
+          "conf": 0.9654202461242676
+        },
+        {
+          "idx": 150,
+          "token": "jours",
+          "in_region": false,
+          "conf": 0.9994335770606995
+        },
+        {
+          "idx": 151,
+          "token": "sur",
+          "in_region": false,
+          "conf": 0.9890444278717041
+        },
+        {
+          "idx": 152,
+          "token": "sept,",
+          "in_region": false,
+          "conf": 0.8421986103057861
+        },
+        {
+          "idx": 153,
+          "token": "calcium",
+          "in_region": false,
+          "conf": 0.9905922015508016
+        },
+        {
+          "idx": 154,
+          "token": "500",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 155,
+          "token": "DIE,",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    },
+    {
+      "token_start": 153,
+      "token_end": 165,
+      "context_start": 143,
+      "context_end": 175,
+      "region_text": "calcium 500 DIE, Pantoloc 40 DIE, Ativan 1 HS, Synthroid 75 microgrammes, Polia",
+      "full_text": "QID PRN, hydroxychloroquine, 200 mg BID, cinq jours sur sept, calcium 500 DIE, Pantoloc 40 DIE, Ativan 1 HS, Synthroid 75 microgrammes, Polia 60 mg S/C au 6 mois. Elle habite avec son",
+      "tokens": [
+        {
+          "idx": 143,
+          "token": "QID",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 144,
+          "token": "PRN,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 145,
+          "token": "hydroxychloroquine,",
+          "in_region": false,
+          "conf": 0.9996725022792816
+        },
+        {
+          "idx": 146,
+          "token": "200",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 147,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9870528876781464
+        },
+        {
+          "idx": 148,
+          "token": "BID,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 149,
+          "token": "cinq",
+          "in_region": false,
+          "conf": 0.9654202461242676
+        },
+        {
+          "idx": 150,
+          "token": "jours",
+          "in_region": false,
+          "conf": 0.9994335770606995
+        },
+        {
+          "idx": 151,
+          "token": "sur",
+          "in_region": false,
+          "conf": 0.9890444278717041
+        },
+        {
+          "idx": 152,
+          "token": "sept,",
+          "in_region": false,
+          "conf": 0.8421986103057861
+        },
+        {
+          "idx": 153,
+          "token": "calcium",
+          "in_region": true,
+          "conf": 0.9905922015508016
+        },
+        {
+          "idx": 154,
+          "token": "500",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 155,
+          "token": "DIE,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 156,
+          "token": "Pantoloc",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 157,
+          "token": "40",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 158,
+          "token": "DIE,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 159,
+          "token": "Ativan",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 160,
+          "token": "1",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 161,
+          "token": "HS,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 162,
+          "token": "Synthroid",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 163,
+          "token": "75",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 164,
+          "token": "microgrammes,",
+          "in_region": true,
+          "conf": 0.998405122756958
+        },
+        {
+          "idx": 165,
+          "token": "Polia",
+          "in_region": true,
+          "conf": 0.8516228199005127
+        },
+        {
+          "idx": 166,
+          "token": "60",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 167,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9870528876781464
+        },
+        {
+          "idx": 168,
+          "token": "S/C",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 169,
+          "token": "au",
+          "in_region": false,
+          "conf": 0.8616518378257751
+        },
+        {
+          "idx": 170,
+          "token": "6",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 171,
+          "token": "mois.",
+          "in_region": false,
+          "conf": 0.9870913624763489
+        },
+        {
+          "idx": 172,
+          "token": "Elle",
+          "in_region": false,
+          "conf": 0.999937891960144
+        },
+        {
+          "idx": 173,
+          "token": "habite",
+          "in_region": false,
+          "conf": 0.998344898223877
+        },
+        {
+          "idx": 174,
+          "token": "avec",
+          "in_region": false,
+          "conf": 0.9679979085922241
+        },
+        {
+          "idx": 175,
+          "token": "son",
+          "in_region": false,
+          "conf": 0.9998533725738525
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,327 @@
+{
+  "consultation_id": 11,
+  "title": "Évaluation trouble mnésique",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "Vitamine D",
+      "base": "vitamine d",
+      "posology": "10 000 UI",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "omeprazole 20",
+      "base": "oméprazole",
+      "posology": "",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "amLODIPine",
+      "base": "amlodipine",
+      "posology": "5 mg DIE",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "valsartan",
+      "base": "valsartan",
+      "posology": "320 mg DIE AM",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "atorvastatin",
+      "base": "atorvastatin",
+      "posology": "80 mg DIE HS",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Tresiba",
+      "base": "tresiba",
+      "posology": "9 UI HS",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "insuline",
+      "base": "insuline",
+      "posology": "13",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 330,
+      "token_end": 352,
+      "context_start": 320,
+      "context_end": 362,
+      "region_text": "valsartan, 320 mg DIE AM. Hydrochlorothiadide, 12,5 mg DIE. atorvastatin, 80 mg DIE HS, citaglyptine, 50 mg, BID, omeprazole, 20 mg, dillé, Tresiba,",
+      "full_text": "5 mg DIE. Déjeuner. Vitamine D, 10 000 UI Q1SEM. valsartan, 320 mg DIE AM. Hydrochlorothiadide, 12,5 mg DIE. atorvastatin, 80 mg DIE HS, citaglyptine, 50 mg, BID, omeprazole, 20 mg, dillé, Tresiba, 9 UI HS plus échelle, prescrite le 26 juin 2026,",
+      "tokens": [
+        {
+          "idx": 320,
+          "token": "5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 321,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.974117785692215
+        },
+        {
+          "idx": 322,
+          "token": "DIE.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 323,
+          "token": "Déjeuner.",
+          "in_region": false,
+          "conf": 0.9727261463801066
+        },
+        {
+          "idx": 324,
+          "token": "Vitamine",
+          "in_region": false,
+          "conf": 0.9967605769634247
+        },
+        {
+          "idx": 325,
+          "token": "D,",
+          "in_region": false,
+          "conf": 0.9214015007019043
+        },
+        {
+          "idx": 326,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 327,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 328,
+          "token": "UI",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 329,
+          "token": "Q1SEM.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 330,
+          "token": "valsartan,",
+          "in_region": true,
+          "conf": 0.977668845653534
+        },
+        {
+          "idx": 331,
+          "token": "320",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 332,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.974117785692215
+        },
+        {
+          "idx": 333,
+          "token": "DIE",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 334,
+          "token": "AM.",
+          "in_region": true,
+          "conf": 0.9120890100797018
+        },
+        {
+          "idx": 335,
+          "token": "Hydrochlorothiadide,",
+          "in_region": true,
+          "conf": 0.8755664110183716
+        },
+        {
+          "idx": 336,
+          "token": "12,5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 337,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.974117785692215
+        },
+        {
+          "idx": 338,
+          "token": "DIE.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 339,
+          "token": "atorvastatin,",
+          "in_region": true,
+          "conf": 0.9301719324929374
+        },
+        {
+          "idx": 340,
+          "token": "80",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 341,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.974117785692215
+        },
+        {
+          "idx": 342,
+          "token": "DIE",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 343,
+          "token": "HS,",
+          "in_region": true,
+          "conf": 0.9091573556264242
+        },
+        {
+          "idx": 344,
+          "token": "citaglyptine,",
+          "in_region": true,
+          "conf": 0.8044477899869283
+        },
+        {
+          "idx": 345,
+          "token": "50",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 346,
+          "token": "mg,",
+          "in_region": true,
+          "conf": 0.974117785692215
+        },
+        {
+          "idx": 347,
+          "token": "BID,",
+          "in_region": true,
+          "conf": 0.9519171516100565
+        },
+        {
+          "idx": 348,
+          "token": "omeprazole,",
+          "in_region": true,
+          "conf": 0.8941364188989004
+        },
+        {
+          "idx": 349,
+          "token": "20",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 350,
+          "token": "mg,",
+          "in_region": true,
+          "conf": 0.974117785692215
+        },
+        {
+          "idx": 351,
+          "token": "dillé,",
+          "in_region": true,
+          "conf": 0.627956934273243
+        },
+        {
+          "idx": 352,
+          "token": "Tresiba,",
+          "in_region": true,
+          "conf": 0.8373245358467102
+        },
+        {
+          "idx": 353,
+          "token": "9",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 354,
+          "token": "UI",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 355,
+          "token": "HS",
+          "in_region": false,
+          "conf": 0.9091573556264242
+        },
+        {
+          "idx": 356,
+          "token": "plus",
+          "in_region": false,
+          "conf": 0.9466748833656311
+        },
+        {
+          "idx": 357,
+          "token": "échelle,",
+          "in_region": false,
+          "conf": 0.9879882335662842
+        },
+        {
+          "idx": 358,
+          "token": "prescrite",
+          "in_region": false,
+          "conf": 0.993019719918569
+        },
+        {
+          "idx": 359,
+          "token": "le",
+          "in_region": false,
+          "conf": 0.9988458156585693
+        },
+        {
+          "idx": 360,
+          "token": "26",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 361,
+          "token": "juin",
+          "in_region": false,
+          "conf": 0.9999755024909973
+        },
+        {
+          "idx": 362,
+          "token": "2026,",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    }
+  ]
+}

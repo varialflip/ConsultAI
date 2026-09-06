@@ -1,0 +1,242 @@
+{
+  "consultation_id": 29,
+  "title": "Suivi téléphonique Alzheimer et hypotension orthostatique",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "400 UI BID",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "sodium",
+      "base": "sodium",
+      "posology": "comprimé BID",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Amatine",
+      "base": "chlorhydrate de midodrine",
+      "posology": "5 mg TID",
+      "score": 100,
+      "level": "BRAND",
+      "garble": null
+    },
+    {
+      "name": "Zyprexa",
+      "base": "zyprexa",
+      "posology": "1,25 mg HS",
+      "score": 100,
+      "level": "BRAND",
+      "garble": null
+    },
+    {
+      "name": "Aricept",
+      "base": "aricept",
+      "posology": "5 mg DIE",
+      "score": 100,
+      "level": "BRAND",
+      "garble": null
+    },
+    {
+      "name": "apixaban",
+      "base": "apixaban",
+      "posology": "2,5 mg BID",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "lansoprazole",
+      "base": "lansoprazole",
+      "posology": "30 mg DIE",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": "Lanzoprazole"
+    },
+    {
+      "name": "Afexor",
+      "base": "venlafaxine",
+      "brand": "EFFEXOR ,",
+      "posology": "75 mg",
+      "score": 75,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.78
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 157,
+      "token_end": 162,
+      "context_start": 147,
+      "context_end": 172,
+      "region_text": "Zyprexa, 1,25 mg au coucher. Aricept,",
+      "full_text": "par jour. Père, en 50 mg une fois par jour. Zyprexa, 1,25 mg au coucher. Aricept, 5 mg une fois par jour. Fludrocortisone, 0,1 mg une",
+      "tokens": [
+        {
+          "idx": 147,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999986886978149
+        },
+        {
+          "idx": 148,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9999777674674988
+        },
+        {
+          "idx": 149,
+          "token": "Père,",
+          "in_region": false,
+          "conf": 0.810538093249003
+        },
+        {
+          "idx": 150,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.9998716115951538
+        },
+        {
+          "idx": 151,
+          "token": "50",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 152,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9998832543691
+        },
+        {
+          "idx": 153,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9996644258499146
+        },
+        {
+          "idx": 154,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999752044677734
+        },
+        {
+          "idx": 155,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999986886978149
+        },
+        {
+          "idx": 156,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9999777674674988
+        },
+        {
+          "idx": 157,
+          "token": "Zyprexa,",
+          "in_region": true,
+          "conf": 0.864750067392985
+        },
+        {
+          "idx": 158,
+          "token": "1,25",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 159,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9998832543691
+        },
+        {
+          "idx": 160,
+          "token": "au",
+          "in_region": true,
+          "conf": 0.9989928603172302
+        },
+        {
+          "idx": 161,
+          "token": "coucher.",
+          "in_region": true,
+          "conf": 0.9991772572199503
+        },
+        {
+          "idx": 162,
+          "token": "Aricept,",
+          "in_region": true,
+          "conf": 0.7946089506149292
+        },
+        {
+          "idx": 163,
+          "token": "5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 164,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9998832543691
+        },
+        {
+          "idx": 165,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9996644258499146
+        },
+        {
+          "idx": 166,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999752044677734
+        },
+        {
+          "idx": 167,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999986886978149
+        },
+        {
+          "idx": 168,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9999777674674988
+        },
+        {
+          "idx": 169,
+          "token": "Fludrocortisone,",
+          "in_region": false,
+          "conf": 0.8425730988383293
+        },
+        {
+          "idx": 170,
+          "token": "0,1",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 171,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9998832543691
+        },
+        {
+          "idx": 172,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9996644258499146
+        }
+      ]
+    }
+  ]
+}

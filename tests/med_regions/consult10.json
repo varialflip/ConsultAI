@@ -1,0 +1,380 @@
+{
+  "consultation_id": 10,
+  "title": "Trouble neurocognitif suspecté",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "10 000 UI",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Lipitor",
+      "base": "lipitor",
+      "posology": "20 mg HS",
+      "score": 100,
+      "level": "BRAND",
+      "garble": null
+    },
+    {
+      "name": "bisoprolol",
+      "base": "bisoprolol",
+      "posology": "2,5 mg DIE",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "amlodipine",
+      "base": "amlodipine",
+      "posology": "7,5 mg PO AM",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Synthroid",
+      "base": "synthroid",
+      "posology": "50 mg PO AM",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "Synthroïde"
+    },
+    {
+      "name": "Pantoloc",
+      "base": "pantoloc",
+      "posology": "40 mg PO DIE",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "Pantoloque"
+    },
+    {
+      "name": "calcium",
+      "base": "calcium",
+      "posology": "500 mg PO DIE",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "perindopril",
+      "base": "perindopril",
+      "posology": "1 mg PO",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": "Périn de prille"
+    },
+    {
+      "name": "Eliquis",
+      "base": "eliquis",
+      "posology": "",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "éliquée"
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 124,
+      "token_end": 151,
+      "context_start": 114,
+      "context_end": 161,
+      "region_text": "Eliquice 2,5 mg BID. Lipitor 20 mg HS. Bisoprolol 2,5 mg d'ye. Amlodipine 7,5 mg Péros AM. Synthroïde 50 mg Péros AM. Pantoloque 40 mg Péros d'ye. Calcium",
+      "full_text": "consultation gériatrique en externe pour TNC. Péros Q2 jours HS. Eliquice 2,5 mg BID. Lipitor 20 mg HS. Bisoprolol 2,5 mg d'ye. Amlodipine 7,5 mg Péros AM. Synthroïde 50 mg Péros AM. Pantoloque 40 mg Péros d'ye. Calcium 500 mg Péros d'ye. Vitamine D 10 000 unités Q",
+      "tokens": [
+        {
+          "idx": 114,
+          "token": "consultation",
+          "in_region": false,
+          "conf": 0.9999819397926331
+        },
+        {
+          "idx": 115,
+          "token": "gériatrique",
+          "in_region": false,
+          "conf": 0.7293776392936706
+        },
+        {
+          "idx": 116,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.999927282333374
+        },
+        {
+          "idx": 117,
+          "token": "externe",
+          "in_region": false,
+          "conf": 0.9149220188458761
+        },
+        {
+          "idx": 118,
+          "token": "pour",
+          "in_region": false,
+          "conf": 0.9999721050262451
+        },
+        {
+          "idx": 119,
+          "token": "TNC.",
+          "in_region": false,
+          "conf": 0.9769372940063477
+        },
+        {
+          "idx": 120,
+          "token": "Péros",
+          "in_region": false,
+          "conf": 0.9948201179504395
+        },
+        {
+          "idx": 121,
+          "token": "Q2",
+          "in_region": false,
+          "conf": 0.9917466640472412
+        },
+        {
+          "idx": 122,
+          "token": "jours",
+          "in_region": false,
+          "conf": 0.997937798500061
+        },
+        {
+          "idx": 123,
+          "token": "HS.",
+          "in_region": false,
+          "conf": 0.999562402566274
+        },
+        {
+          "idx": 124,
+          "token": "Eliquice",
+          "in_region": true,
+          "conf": 0.6363426372408867
+        },
+        {
+          "idx": 125,
+          "token": "2,5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 126,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9891844689846039
+        },
+        {
+          "idx": 127,
+          "token": "BID.",
+          "in_region": true,
+          "conf": 0.972030778725942
+        },
+        {
+          "idx": 128,
+          "token": "Lipitor",
+          "in_region": true,
+          "conf": 0.8442690769831339
+        },
+        {
+          "idx": 129,
+          "token": "20",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 130,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9891844689846039
+        },
+        {
+          "idx": 131,
+          "token": "HS.",
+          "in_region": true,
+          "conf": 0.999562402566274
+        },
+        {
+          "idx": 132,
+          "token": "Bisoprolol",
+          "in_region": true,
+          "conf": 0.8619687110185623
+        },
+        {
+          "idx": 133,
+          "token": "2,5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 134,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9891844689846039
+        },
+        {
+          "idx": 135,
+          "token": "d'ye.",
+          "in_region": true,
+          "conf": 0.9996146410703659
+        },
+        {
+          "idx": 136,
+          "token": "Amlodipine",
+          "in_region": true,
+          "conf": 0.8955828428268433
+        },
+        {
+          "idx": 137,
+          "token": "7,5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 138,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9891844689846039
+        },
+        {
+          "idx": 139,
+          "token": "Péros",
+          "in_region": true,
+          "conf": 0.9948201179504395
+        },
+        {
+          "idx": 140,
+          "token": "AM.",
+          "in_region": true,
+          "conf": 0.9994718233744303
+        },
+        {
+          "idx": 141,
+          "token": "Synthroïde",
+          "in_region": true,
+          "conf": 0.8715895513693491
+        },
+        {
+          "idx": 142,
+          "token": "50",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 143,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9891844689846039
+        },
+        {
+          "idx": 144,
+          "token": "Péros",
+          "in_region": true,
+          "conf": 0.9948201179504395
+        },
+        {
+          "idx": 145,
+          "token": "AM.",
+          "in_region": true,
+          "conf": 0.9994718233744303
+        },
+        {
+          "idx": 146,
+          "token": "Pantoloque",
+          "in_region": true,
+          "conf": 0.8633483499288559
+        },
+        {
+          "idx": 147,
+          "token": "40",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 148,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9891844689846039
+        },
+        {
+          "idx": 149,
+          "token": "Péros",
+          "in_region": true,
+          "conf": 0.9948201179504395
+        },
+        {
+          "idx": 150,
+          "token": "d'ye.",
+          "in_region": true,
+          "conf": 0.9996146410703659
+        },
+        {
+          "idx": 151,
+          "token": "Calcium",
+          "in_region": true,
+          "conf": 0.9995672504107157
+        },
+        {
+          "idx": 152,
+          "token": "500",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 153,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9891844689846039
+        },
+        {
+          "idx": 154,
+          "token": "Péros",
+          "in_region": false,
+          "conf": 0.9948201179504395
+        },
+        {
+          "idx": 155,
+          "token": "d'ye.",
+          "in_region": false,
+          "conf": 0.9996146410703659
+        },
+        {
+          "idx": 156,
+          "token": "Vitamine",
+          "in_region": false,
+          "conf": 0.9990731775760651
+        },
+        {
+          "idx": 157,
+          "token": "D",
+          "in_region": false,
+          "conf": 0.9981465339660645
+        },
+        {
+          "idx": 158,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 159,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 160,
+          "token": "unités",
+          "in_region": false,
+          "conf": 0.9114739894866943
+        },
+        {
+          "idx": 161,
+          "token": "Q",
+          "in_region": false,
+          "conf": 0.9917466640472412
+        }
+      ]
+    }
+  ]
+}

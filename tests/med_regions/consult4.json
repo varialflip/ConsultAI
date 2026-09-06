@@ -1,0 +1,425 @@
+{
+  "consultation_id": 4,
+  "title": "Troubles mnésiques et suspicion de démence",
+  "inline_fixed": [],
+  "med_grounding_items": [],
+  "nb_regions": 2,
+  "regions": [
+    {
+      "token_start": 317,
+      "token_end": 322,
+      "context_start": 307,
+      "context_end": 332,
+      "region_text": "d'apaglyflosine 10 mg d'illés. Hamelot d'épine,",
+      "full_text": "escaliers. Quoi connu du CLSC? Au niveau de la médication, d'apaglyflosine 10 mg d'illés. Hamelot d'épine, 5 mg dillé déjeuner. Vitamine D, 10 000 unités Q",
+      "tokens": [
+        {
+          "idx": 307,
+          "token": "escaliers.",
+          "in_region": false,
+          "conf": 0.9981844425201416
+        },
+        {
+          "idx": 308,
+          "token": "Quoi",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 309,
+          "token": "connu",
+          "in_region": false,
+          "conf": 0.980612059434255
+        },
+        {
+          "idx": 310,
+          "token": "du",
+          "in_region": false,
+          "conf": 0.942788302898407
+        },
+        {
+          "idx": 311,
+          "token": "CLSC?",
+          "in_region": false,
+          "conf": 0.9463146805763245
+        },
+        {
+          "idx": 312,
+          "token": "Au",
+          "in_region": false,
+          "conf": 0.7054939866065979
+        },
+        {
+          "idx": 313,
+          "token": "niveau",
+          "in_region": false,
+          "conf": 0.9995377063751221
+        },
+        {
+          "idx": 314,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9988652467727661
+        },
+        {
+          "idx": 315,
+          "token": "la",
+          "in_region": false,
+          "conf": 0.9996902942657471
+        },
+        {
+          "idx": 316,
+          "token": "médication,",
+          "in_region": false,
+          "conf": 0.916952446103096
+        },
+        {
+          "idx": 317,
+          "token": "d'apaglyflosine",
+          "in_region": true,
+          "conf": 0.7456210404634476
+        },
+        {
+          "idx": 318,
+          "token": "10",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 319,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9909262359142303
+        },
+        {
+          "idx": 320,
+          "token": "d'illés.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 321,
+          "token": "Hamelot",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 322,
+          "token": "d'épine,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 323,
+          "token": "5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 324,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9909262359142303
+        },
+        {
+          "idx": 325,
+          "token": "dillé",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 326,
+          "token": "déjeuner.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 327,
+          "token": "Vitamine",
+          "in_region": false,
+          "conf": 0.9864297807216644
+        },
+        {
+          "idx": 328,
+          "token": "D,",
+          "in_region": false,
+          "conf": 0.8371577858924866
+        },
+        {
+          "idx": 329,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 330,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 331,
+          "token": "unités",
+          "in_region": false,
+          "conf": 0.9578652381896973
+        },
+        {
+          "idx": 332,
+          "token": "Q",
+          "in_region": false,
+          "conf": 0.39772751927375793
+        }
+      ]
+    },
+    {
+      "token_start": 335,
+      "token_end": 354,
+      "context_start": 325,
+      "context_end": 364,
+      "region_text": "Sartan 320 mg dyés AM. Hydrochloroxia 12.5 mg dié. Atorvastatin quarante quatre vingt milligrammes HS. Citagliptine, 50 mg BID, oméprazole,",
+      "full_text": "dillé déjeuner. Vitamine D, 10 000 unités Q semaine. Val Sartan 320 mg dyés AM. Hydrochloroxia 12.5 mg dié. Atorvastatin quarante quatre vingt milligrammes HS. Citagliptine, 50 mg BID, oméprazole, 20 mg dié. Тризиба. Neuf unités HS plus échelles. Prescrite",
+      "tokens": [
+        {
+          "idx": 325,
+          "token": "dillé",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 326,
+          "token": "déjeuner.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 327,
+          "token": "Vitamine",
+          "in_region": false,
+          "conf": 0.9864297807216644
+        },
+        {
+          "idx": 328,
+          "token": "D,",
+          "in_region": false,
+          "conf": 0.8371577858924866
+        },
+        {
+          "idx": 329,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 330,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 331,
+          "token": "unités",
+          "in_region": false,
+          "conf": 0.9578652381896973
+        },
+        {
+          "idx": 332,
+          "token": "Q",
+          "in_region": false,
+          "conf": 0.39772751927375793
+        },
+        {
+          "idx": 333,
+          "token": "semaine.",
+          "in_region": false,
+          "conf": 0.8825389742851257
+        },
+        {
+          "idx": 334,
+          "token": "Val",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 335,
+          "token": "Sartan",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 336,
+          "token": "320",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 337,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9909262359142303
+        },
+        {
+          "idx": 338,
+          "token": "dyés",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 339,
+          "token": "AM.",
+          "in_region": true,
+          "conf": 0.6704776386419932
+        },
+        {
+          "idx": 340,
+          "token": "Hydrochloroxia",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 341,
+          "token": "12.5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 342,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9909262359142303
+        },
+        {
+          "idx": 343,
+          "token": "dié.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 344,
+          "token": "Atorvastatin",
+          "in_region": true,
+          "conf": 0.9618756969769796
+        },
+        {
+          "idx": 345,
+          "token": "quarante",
+          "in_region": true,
+          "conf": 0.9951010346412659
+        },
+        {
+          "idx": 346,
+          "token": "quatre",
+          "in_region": true,
+          "conf": 0.97223299741745
+        },
+        {
+          "idx": 347,
+          "token": "vingt",
+          "in_region": true,
+          "conf": 0.7268879810969034
+        },
+        {
+          "idx": 348,
+          "token": "milligrammes",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 349,
+          "token": "HS.",
+          "in_region": true,
+          "conf": 0.841204305489858
+        },
+        {
+          "idx": 350,
+          "token": "Citagliptine,",
+          "in_region": true,
+          "conf": 0.8503270149230957
+        },
+        {
+          "idx": 351,
+          "token": "50",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 352,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9909262359142303
+        },
+        {
+          "idx": 353,
+          "token": "BID,",
+          "in_region": true,
+          "conf": 0.858311394850413
+        },
+        {
+          "idx": 354,
+          "token": "oméprazole,",
+          "in_region": true,
+          "conf": 0.919496500492096
+        },
+        {
+          "idx": 355,
+          "token": "20",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 356,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9909262359142303
+        },
+        {
+          "idx": 357,
+          "token": "dié.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 358,
+          "token": "Тризиба.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 359,
+          "token": "Neuf",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 360,
+          "token": "unités",
+          "in_region": false,
+          "conf": 0.9578652381896973
+        },
+        {
+          "idx": 361,
+          "token": "HS",
+          "in_region": false,
+          "conf": 0.841204305489858
+        },
+        {
+          "idx": 362,
+          "token": "plus",
+          "in_region": false,
+          "conf": 0.9517545700073242
+        },
+        {
+          "idx": 363,
+          "token": "échelles.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 364,
+          "token": "Prescrite",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    }
+  ]
+}

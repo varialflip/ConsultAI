@@ -1,0 +1,267 @@
+{
+  "consultation_id": 39,
+  "title": "Suivi Parkinson et Alzheimer",
+  "inline_fixed": [
+    "risedronate",
+    "synthroid"
+  ],
+  "med_grounding_items": [
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "10 000 UI",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "pantoprazole",
+      "base": "pantoprazole",
+      "posology": "40",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "galantamine",
+      "base": "galantamine",
+      "posology": "16",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Synthroid",
+      "base": "synthroid",
+      "posology": "25 microgrammes",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "Synthroïde"
+    },
+    {
+      "name": "risedronate",
+      "base": "risedronate",
+      "posology": "35",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": "Risidronate"
+    },
+    {
+      "name": "calcium",
+      "base": "calcium",
+      "posology": "500 mg BID",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Cinémette",
+      "base": "levodopa",
+      "brand": "SINEMET",
+      "canonical": "Sinemet",
+      "posology": "1 comprimé 4 fois par jour",
+      "score": 78,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.72
+    },
+    {
+      "name": "motylium",
+      "base": "domperidone maleate de domperidone",
+      "brand": "MOTILIUM",
+      "canonical": "Motilium",
+      "posology": "5 mg 3 fois par jour",
+      "score": 100,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.906
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 114,
+      "token_end": 122,
+      "context_start": 104,
+      "context_end": 132,
+      "region_text": "pantoprazole 40, galantamine 16, ER, Synthroid 25 microgrammes, risedronate",
+      "full_text": "Sa liste de médicaments aujourd'hui : Cinémette, un comprimé QID, pantoprazole 40, galantamine 16, ER, Synthroid 25 microgrammes, risedronate 35, Q1SEM, vitamine D 10 000 UI Q1SEM, calcium 500",
+      "tokens": [
+        {
+          "idx": 104,
+          "token": "Sa",
+          "in_region": false,
+          "conf": 0.9543310403823853
+        },
+        {
+          "idx": 105,
+          "token": "liste",
+          "in_region": false,
+          "conf": 0.9999773502349854
+        },
+        {
+          "idx": 106,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.5278513431549072
+        },
+        {
+          "idx": 107,
+          "token": "médicaments",
+          "in_region": false,
+          "conf": 0.9999803304672241
+        },
+        {
+          "idx": 108,
+          "token": "aujourd'hui",
+          "in_region": false,
+          "conf": 0.8723186403512955
+        },
+        {
+          "idx": 109,
+          "token": ":",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 110,
+          "token": "Cinémette,",
+          "in_region": false,
+          "conf": 0.6667488276958465
+        },
+        {
+          "idx": 111,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.6018521189689636
+        },
+        {
+          "idx": 112,
+          "token": "comprimé",
+          "in_region": false,
+          "conf": 0.8386183778444926
+        },
+        {
+          "idx": 113,
+          "token": "QID,",
+          "in_region": false,
+          "conf": 0.9790423711140951
+        },
+        {
+          "idx": 114,
+          "token": "pantoprazole",
+          "in_region": true,
+          "conf": 0.9088093439737955
+        },
+        {
+          "idx": 115,
+          "token": "40,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 116,
+          "token": "galantamine",
+          "in_region": true,
+          "conf": 0.9534536004066467
+        },
+        {
+          "idx": 117,
+          "token": "16,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 118,
+          "token": "ER,",
+          "in_region": true,
+          "conf": 0.9395500818888346
+        },
+        {
+          "idx": 119,
+          "token": "Synthroid",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 120,
+          "token": "25",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 121,
+          "token": "microgrammes,",
+          "in_region": true,
+          "conf": 0.9459708094596863
+        },
+        {
+          "idx": 122,
+          "token": "risedronate",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 123,
+          "token": "35,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 124,
+          "token": "Q1SEM,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 125,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9977162182331085
+        },
+        {
+          "idx": 126,
+          "token": "D",
+          "in_region": false,
+          "conf": 0.9909259676933289
+        },
+        {
+          "idx": 127,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 128,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 129,
+          "token": "UI",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 130,
+          "token": "Q1SEM,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 131,
+          "token": "calcium",
+          "in_region": false,
+          "conf": 0.9994331200917562
+        },
+        {
+          "idx": 132,
+          "token": "500",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    }
+  ]
+}

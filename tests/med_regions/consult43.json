@@ -1,0 +1,262 @@
+{
+  "consultation_id": 43,
+  "title": "Suivi maladie de Parkinson et Alzheimer",
+  "inline_fixed": [
+    "synthroid"
+  ],
+  "med_grounding_items": [
+    {
+      "name": "pantoprazole",
+      "base": "pantoprazole",
+      "posology": "40",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "galantamine",
+      "base": "galantamine",
+      "posology": "16",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Synthroid",
+      "base": "synthroid",
+      "posology": "microgrammes",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "Synthroïde"
+    },
+    {
+      "name": "calcium",
+      "base": "calcium",
+      "posology": "500 mg BID",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Cinémète",
+      "base": "levodopa",
+      "brand": "SINEMET",
+      "canonical": "Sinemet",
+      "posology": "comprimé",
+      "score": 88,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.81
+    },
+    {
+      "name": "motylium",
+      "base": "domperidone maleate de domperidone",
+      "brand": "MOTILIUM",
+      "canonical": "Motilium",
+      "posology": "5 mg",
+      "score": 100,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.906
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 117,
+      "token_end": 127,
+      "context_start": 107,
+      "context_end": 137,
+      "region_text": "pantoprazole 40. galantamine 16. ER. Synthroid, vingt-cinq microgrammes. Risée de renate,",
+      "full_text": "autrui. Sa liste de médicaments aujourd'hui. Cinémète, un comprimé QID. pantoprazole 40. galantamine 16. ER. Synthroid, vingt-cinq microgrammes. Risée de renate, trente-cinq par semaine. Vitamine D, dix mille. Unité par semaine,",
+      "tokens": [
+        {
+          "idx": 107,
+          "token": "autrui.",
+          "in_region": false,
+          "conf": 0.9942848682403564
+        },
+        {
+          "idx": 108,
+          "token": "Sa",
+          "in_region": false,
+          "conf": 0.9929037690162659
+        },
+        {
+          "idx": 109,
+          "token": "liste",
+          "in_region": false,
+          "conf": 0.9999773502349854
+        },
+        {
+          "idx": 110,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.5278513431549072
+        },
+        {
+          "idx": 111,
+          "token": "médicaments",
+          "in_region": false,
+          "conf": 0.9999803304672241
+        },
+        {
+          "idx": 112,
+          "token": "aujourd'hui.",
+          "in_region": false,
+          "conf": 0.8723186403512955
+        },
+        {
+          "idx": 113,
+          "token": "Cinémète,",
+          "in_region": false,
+          "conf": 0.7490756611029307
+        },
+        {
+          "idx": 114,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.6018521189689636
+        },
+        {
+          "idx": 115,
+          "token": "comprimé",
+          "in_region": false,
+          "conf": 0.994014302889506
+        },
+        {
+          "idx": 116,
+          "token": "QID.",
+          "in_region": false,
+          "conf": 0.9790423711140951
+        },
+        {
+          "idx": 117,
+          "token": "pantoprazole",
+          "in_region": true,
+          "conf": 0.9339977105458578
+        },
+        {
+          "idx": 118,
+          "token": "40.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 119,
+          "token": "galantamine",
+          "in_region": true,
+          "conf": 0.9559203535318375
+        },
+        {
+          "idx": 120,
+          "token": "16.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 121,
+          "token": "ER.",
+          "in_region": true,
+          "conf": 0.9395500818888346
+        },
+        {
+          "idx": 122,
+          "token": "Synthroid,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 123,
+          "token": "vingt-cinq",
+          "in_region": true,
+          "conf": 0.9527620077133179
+        },
+        {
+          "idx": 124,
+          "token": "microgrammes.",
+          "in_region": true,
+          "conf": 0.9459708094596863
+        },
+        {
+          "idx": 125,
+          "token": "Risée",
+          "in_region": true,
+          "conf": 0.7187512318293253
+        },
+        {
+          "idx": 126,
+          "token": "de",
+          "in_region": true,
+          "conf": 0.5278513431549072
+        },
+        {
+          "idx": 127,
+          "token": "renate,",
+          "in_region": true,
+          "conf": 0.7095982035001119
+        },
+        {
+          "idx": 128,
+          "token": "trente-cinq",
+          "in_region": false,
+          "conf": 0.9992849429448446
+        },
+        {
+          "idx": 129,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.6533737182617188
+        },
+        {
+          "idx": 130,
+          "token": "semaine.",
+          "in_region": false,
+          "conf": 0.9829879403114319
+        },
+        {
+          "idx": 131,
+          "token": "Vitamine",
+          "in_region": false,
+          "conf": 0.9977162182331085
+        },
+        {
+          "idx": 132,
+          "token": "D,",
+          "in_region": false,
+          "conf": 0.9909259676933289
+        },
+        {
+          "idx": 133,
+          "token": "dix",
+          "in_region": false,
+          "conf": 0.9989133775234222
+        },
+        {
+          "idx": 134,
+          "token": "mille.",
+          "in_region": false,
+          "conf": 0.9080996910730997
+        },
+        {
+          "idx": 135,
+          "token": "Unité",
+          "in_region": false,
+          "conf": 0.8050801753997803
+        },
+        {
+          "idx": 136,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.6533737182617188
+        },
+        {
+          "idx": 137,
+          "token": "semaine,",
+          "in_region": false,
+          "conf": 0.9829879403114319
+        }
+      ]
+    }
+  ]
+}

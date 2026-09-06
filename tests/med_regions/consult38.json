@@ -1,0 +1,332 @@
+{
+  "consultation_id": 38,
+  "title": "TNC, somnolence, troubles de l'équilibre",
+  "inline_fixed": [
+    "epival",
+    "mirtazapine",
+    "pantoloc"
+  ],
+  "med_grounding_items": [
+    {
+      "name": "Epival",
+      "base": "epival",
+      "posology": "500 mg BID",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "l'épival"
+    },
+    {
+      "name": "mirtazapine",
+      "base": "mirtazapine",
+      "posology": "30 mg HS",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": "myrtazapine"
+    },
+    {
+      "name": "clonazepam",
+      "base": "clonazepam",
+      "posology": "0,5 mg HS",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Crestor",
+      "base": "crestor",
+      "posology": "10 mg",
+      "score": 100,
+      "level": "BRAND",
+      "garble": null
+    },
+    {
+      "name": "Pantoloc",
+      "base": "pantoloc",
+      "posology": "40 mg",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "Pantoloque"
+    },
+    {
+      "name": "Applique",
+      "base": "eliquis",
+      "brand": "ELIQUIS",
+      "canonical": "Eliquis",
+      "posology": "5 mg 2 fois par jour",
+      "score": 71,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.595
+    },
+    {
+      "name": "bande",
+      "base": "banzel",
+      "brand": "BANZEL",
+      "canonical": "Banzel",
+      "posology": "5 mg 2 fois par jour",
+      "score": 67,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.561
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 96,
+      "token_end": 116,
+      "context_start": 86,
+      "context_end": 126,
+      "region_text": "Epival 500 mg BID, mirtazapine 30 mg HS, clonazepam 0,5 mg HS, Crestor 10 mg. Pantoloc, 40 mg. Applique, ça bande",
+      "full_text": "du gyrus singulaire postérieur. Dans ces médicaments, il prend de Epival 500 mg BID, mirtazapine 30 mg HS, clonazepam 0,5 mg HS, Crestor 10 mg. Pantoloc, 40 mg. Applique, ça bande 5 mg BID. Il est universitaire. Il a été travailleur",
+      "tokens": [
+        {
+          "idx": 86,
+          "token": "du",
+          "in_region": false,
+          "conf": 0.9819934368133545
+        },
+        {
+          "idx": 87,
+          "token": "gyrus",
+          "in_region": false,
+          "conf": 0.9630983471870422
+        },
+        {
+          "idx": 88,
+          "token": "singulaire",
+          "in_region": false,
+          "conf": 0.9898943503697714
+        },
+        {
+          "idx": 89,
+          "token": "postérieur.",
+          "in_region": false,
+          "conf": 0.9990756313006083
+        },
+        {
+          "idx": 90,
+          "token": "Dans",
+          "in_region": false,
+          "conf": 0.9922780990600586
+        },
+        {
+          "idx": 91,
+          "token": "ces",
+          "in_region": false,
+          "conf": 0.9115883111953735
+        },
+        {
+          "idx": 92,
+          "token": "médicaments,",
+          "in_region": false,
+          "conf": 0.999992698431015
+        },
+        {
+          "idx": 93,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.9809889197349548
+        },
+        {
+          "idx": 94,
+          "token": "prend",
+          "in_region": false,
+          "conf": 0.9980504512786865
+        },
+        {
+          "idx": 95,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9996819496154785
+        },
+        {
+          "idx": 96,
+          "token": "Epival",
+          "in_region": true,
+          "conf": 0.7872726519902548
+        },
+        {
+          "idx": 97,
+          "token": "500",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 98,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9997240602970123
+        },
+        {
+          "idx": 99,
+          "token": "BID,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 100,
+          "token": "mirtazapine",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 101,
+          "token": "30",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 102,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9997240602970123
+        },
+        {
+          "idx": 103,
+          "token": "HS,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 104,
+          "token": "clonazepam",
+          "in_region": true,
+          "conf": 0.8999796032905578
+        },
+        {
+          "idx": 105,
+          "token": "0,5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 106,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9997240602970123
+        },
+        {
+          "idx": 107,
+          "token": "HS,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 108,
+          "token": "Crestor",
+          "in_region": true,
+          "conf": 0.9528857668240865
+        },
+        {
+          "idx": 109,
+          "token": "10",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 110,
+          "token": "mg.",
+          "in_region": true,
+          "conf": 0.9997240602970123
+        },
+        {
+          "idx": 111,
+          "token": "Pantoloc,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 112,
+          "token": "40",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 113,
+          "token": "mg.",
+          "in_region": true,
+          "conf": 0.9997240602970123
+        },
+        {
+          "idx": 114,
+          "token": "Applique,",
+          "in_region": true,
+          "conf": 0.4963943213224411
+        },
+        {
+          "idx": 115,
+          "token": "ça",
+          "in_region": true,
+          "conf": 0.545197606086731
+        },
+        {
+          "idx": 116,
+          "token": "bande",
+          "in_region": true,
+          "conf": 0.47135037183761597
+        },
+        {
+          "idx": 117,
+          "token": "5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 118,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9997240602970123
+        },
+        {
+          "idx": 119,
+          "token": "BID.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 120,
+          "token": "Il",
+          "in_region": false,
+          "conf": 0.9809889197349548
+        },
+        {
+          "idx": 121,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.9998788833618164
+        },
+        {
+          "idx": 122,
+          "token": "universitaire.",
+          "in_region": false,
+          "conf": 0.9930851310491562
+        },
+        {
+          "idx": 123,
+          "token": "Il",
+          "in_region": false,
+          "conf": 0.9809889197349548
+        },
+        {
+          "idx": 124,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9997361302375793
+        },
+        {
+          "idx": 125,
+          "token": "été",
+          "in_region": false,
+          "conf": 0.999966025352478
+        },
+        {
+          "idx": 126,
+          "token": "travailleur",
+          "in_region": false,
+          "conf": 0.9409911930561066
+        }
+      ]
+    }
+  ]
+}

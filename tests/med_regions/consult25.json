@@ -1,0 +1,462 @@
+{
+  "consultation_id": 25,
+  "title": "Troubles cognitifs, début de SCPD",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "10 000 UI",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "acide folique",
+      "base": "acide folique",
+      "posology": "5",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "aspirine",
+      "base": "aspirine",
+      "posology": "",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "mirtazapine",
+      "base": "mirtazapine",
+      "posology": "7,5 mg HS",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": "myrtazapine"
+    },
+    {
+      "name": "risperidone",
+      "base": "risperidone",
+      "posology": "0,25 mg BID",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": "rispiridone"
+    },
+    {
+      "name": "Pantoloc",
+      "base": "pantoloc",
+      "posology": "40",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "pantoloque"
+    },
+    {
+      "name": "bisoprolol",
+      "base": "bisoprolol",
+      "posology": "5 BID",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": null
+    },
+    {
+      "name": "Crestor",
+      "base": "crestor",
+      "posology": "5",
+      "score": 100,
+      "level": "BRAND",
+      "garble": "Restore"
+    },
+    {
+      "name": "quetiapine",
+      "base": "quetiapine",
+      "posology": "comprimés",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "garble": "kétsapine"
+    }
+  ],
+  "nb_regions": 2,
+  "regions": [
+    {
+      "token_start": 99,
+      "token_end": 104,
+      "context_start": 89,
+      "context_end": 114,
+      "region_text": "myrtazapine 7,5 mg au coucher, risperidone",
+      "full_text": "depuis quatre ans. Dans sa liste de médicaments, elle prend myrtazapine 7,5 mg au coucher, risperidone 0,25 mg deux fois par jour, vitamine D 10 000",
+      "tokens": [
+        {
+          "idx": 89,
+          "token": "depuis",
+          "in_region": false,
+          "conf": 0.9747962355613708
+        },
+        {
+          "idx": 90,
+          "token": "quatre",
+          "in_region": false,
+          "conf": 0.9782373309135437
+        },
+        {
+          "idx": 91,
+          "token": "ans.",
+          "in_region": false,
+          "conf": 0.9999641180038452
+        },
+        {
+          "idx": 92,
+          "token": "Dans",
+          "in_region": false,
+          "conf": 0.9945946335792542
+        },
+        {
+          "idx": 93,
+          "token": "sa",
+          "in_region": false,
+          "conf": 0.997897744178772
+        },
+        {
+          "idx": 94,
+          "token": "liste",
+          "in_region": false,
+          "conf": 0.9999792575836182
+        },
+        {
+          "idx": 95,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9972980618476868
+        },
+        {
+          "idx": 96,
+          "token": "médicaments,",
+          "in_region": false,
+          "conf": 0.9999933838844299
+        },
+        {
+          "idx": 97,
+          "token": "elle",
+          "in_region": false,
+          "conf": 0.9897866249084473
+        },
+        {
+          "idx": 98,
+          "token": "prend",
+          "in_region": false,
+          "conf": 0.9999790191650391
+        },
+        {
+          "idx": 99,
+          "token": "myrtazapine",
+          "in_region": true,
+          "conf": 0.9602109591166178
+        },
+        {
+          "idx": 100,
+          "token": "7,5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 101,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9274798035621643
+        },
+        {
+          "idx": 102,
+          "token": "au",
+          "in_region": true,
+          "conf": 0.9924605488777161
+        },
+        {
+          "idx": 103,
+          "token": "coucher,",
+          "in_region": true,
+          "conf": 0.999882976214091
+        },
+        {
+          "idx": 104,
+          "token": "risperidone",
+          "in_region": true,
+          "conf": 0.8712466731667519
+        },
+        {
+          "idx": 105,
+          "token": "0,25",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 106,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9274798035621643
+        },
+        {
+          "idx": 107,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.9716501235961914
+        },
+        {
+          "idx": 108,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999232292175293
+        },
+        {
+          "idx": 109,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999434947967529
+        },
+        {
+          "idx": 110,
+          "token": "jour,",
+          "in_region": false,
+          "conf": 0.7540944516658783
+        },
+        {
+          "idx": 111,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9998849034309387
+        },
+        {
+          "idx": 112,
+          "token": "D",
+          "in_region": false,
+          "conf": 0.9997574687004089
+        },
+        {
+          "idx": 113,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 114,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    },
+    {
+      "token_start": 120,
+      "token_end": 133,
+      "context_start": 110,
+      "context_end": 143,
+      "region_text": "pantoloque 40, acide folique 5, bisoprolol. 5 deux fois par jour, Restore 5, Aspirine",
+      "full_text": "jour, vitamine D 10 000 unités une fois par semaine, pantoloque 40, acide folique 5, bisoprolol. 5 deux fois par jour, Restore 5, Aspirine 80. Au niveau social, elle a un baccalauréat en administration.",
+      "tokens": [
+        {
+          "idx": 110,
+          "token": "jour,",
+          "in_region": false,
+          "conf": 0.7540944516658783
+        },
+        {
+          "idx": 111,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9998849034309387
+        },
+        {
+          "idx": 112,
+          "token": "D",
+          "in_region": false,
+          "conf": 0.9997574687004089
+        },
+        {
+          "idx": 113,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 114,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 115,
+          "token": "unités",
+          "in_region": false,
+          "conf": 0.9952277839183807
+        },
+        {
+          "idx": 116,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9999680519104004
+        },
+        {
+          "idx": 117,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999232292175293
+        },
+        {
+          "idx": 118,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999434947967529
+        },
+        {
+          "idx": 119,
+          "token": "semaine,",
+          "in_region": false,
+          "conf": 0.9997468193372091
+        },
+        {
+          "idx": 120,
+          "token": "pantoloque",
+          "in_region": true,
+          "conf": 0.9542699605226517
+        },
+        {
+          "idx": 121,
+          "token": "40,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 122,
+          "token": "acide",
+          "in_region": true,
+          "conf": 0.9980012476444244
+        },
+        {
+          "idx": 123,
+          "token": "folique",
+          "in_region": true,
+          "conf": 0.995024710893631
+        },
+        {
+          "idx": 124,
+          "token": "5,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 125,
+          "token": "bisoprolol.",
+          "in_region": true,
+          "conf": 0.8708990633487701
+        },
+        {
+          "idx": 126,
+          "token": "5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 127,
+          "token": "deux",
+          "in_region": true,
+          "conf": 0.9716501235961914
+        },
+        {
+          "idx": 128,
+          "token": "fois",
+          "in_region": true,
+          "conf": 0.9999232292175293
+        },
+        {
+          "idx": 129,
+          "token": "par",
+          "in_region": true,
+          "conf": 0.9999434947967529
+        },
+        {
+          "idx": 130,
+          "token": "jour,",
+          "in_region": true,
+          "conf": 0.7540944516658783
+        },
+        {
+          "idx": 131,
+          "token": "Restore",
+          "in_region": true,
+          "conf": 0.687385082244873
+        },
+        {
+          "idx": 132,
+          "token": "5,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 133,
+          "token": "Aspirine",
+          "in_region": true,
+          "conf": 0.9910574704408646
+        },
+        {
+          "idx": 134,
+          "token": "80.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 135,
+          "token": "Au",
+          "in_region": false,
+          "conf": 0.9924605488777161
+        },
+        {
+          "idx": 136,
+          "token": "niveau",
+          "in_region": false,
+          "conf": 0.9999796152114868
+        },
+        {
+          "idx": 137,
+          "token": "social,",
+          "in_region": false,
+          "conf": 0.9997764825820923
+        },
+        {
+          "idx": 138,
+          "token": "elle",
+          "in_region": false,
+          "conf": 0.9897866249084473
+        },
+        {
+          "idx": 139,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9999136924743652
+        },
+        {
+          "idx": 140,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.9987589120864868
+        },
+        {
+          "idx": 141,
+          "token": "baccalauréat",
+          "in_region": false,
+          "conf": 0.9997787078221639
+        },
+        {
+          "idx": 142,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.9998749494552612
+        },
+        {
+          "idx": 143,
+          "token": "administration.",
+          "in_region": false,
+          "conf": 0.9302847385406494
+        }
+      ]
+    }
+  ]
+}

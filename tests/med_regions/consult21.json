@@ -1,0 +1,436 @@
+{
+  "consultation_id": 21,
+  "title": "Transfert dossier suivi TNC léger vasculaire",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "Lasix",
+      "base": "lasix",
+      "posology": "20",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "1 comprimé DIE",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Norvasc",
+      "base": "norvasc",
+      "posology": "10",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "calcium",
+      "base": "calcium",
+      "posology": "1 comprimé DIE",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Lipitor",
+      "base": "lipitor",
+      "posology": "10",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Aricept",
+      "base": "aricept",
+      "posology": "10",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Avapro",
+      "base": "avapro",
+      "posology": "150",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "l'Aldactone",
+      "base": "aldactone",
+      "brand": "ALDACTONE",
+      "posology": "6,25",
+      "score": 82,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Doxazocin",
+      "base": "doxazosin",
+      "brand": null,
+      "posology": "4",
+      "score": 90,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Serpaline",
+      "base": "sertraline",
+      "brand": null,
+      "posology": "50",
+      "score": 84,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    }
+  ],
+  "nb_regions": 2,
+  "regions": [
+    {
+      "token_start": 150,
+      "token_end": 157,
+      "context_start": 140,
+      "context_end": 167,
+      "region_text": "l'Aldactone 6,25, la Six 20, Norvasc 10, Doxazocin.",
+      "full_text": "sur 30 en 2024. Dans ses médicaments, il prend de l'Aldactone 6,25, la Six 20, Norvasc 10, Doxazocin. 4. Calcium vitamine D 1 comprimé par jour. Lipar 10.",
+      "tokens": [
+        {
+          "idx": 140,
+          "token": "sur",
+          "in_region": false,
+          "conf": 0.9983090162277222
+        },
+        {
+          "idx": 141,
+          "token": "30",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 142,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.9904746413230896
+        },
+        {
+          "idx": 143,
+          "token": "2024.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 144,
+          "token": "Dans",
+          "in_region": false,
+          "conf": 0.9971820116043091
+        },
+        {
+          "idx": 145,
+          "token": "ses",
+          "in_region": false,
+          "conf": 0.9907611012458801
+        },
+        {
+          "idx": 146,
+          "token": "médicaments,",
+          "in_region": false,
+          "conf": 0.9999938905239105
+        },
+        {
+          "idx": 147,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.9841550588607788
+        },
+        {
+          "idx": 148,
+          "token": "prend",
+          "in_region": false,
+          "conf": 0.9998564720153809
+        },
+        {
+          "idx": 149,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9999836683273315
+        },
+        {
+          "idx": 150,
+          "token": "l'Aldactone",
+          "in_region": true,
+          "conf": 0.9379171629746755
+        },
+        {
+          "idx": 151,
+          "token": "6,25,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 152,
+          "token": "la",
+          "in_region": true,
+          "conf": 0.9999418258666992
+        },
+        {
+          "idx": 153,
+          "token": "Six",
+          "in_region": true,
+          "conf": 0.9618640542030334
+        },
+        {
+          "idx": 154,
+          "token": "20,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 155,
+          "token": "Norvasc",
+          "in_region": true,
+          "conf": 0.8515861829121908
+        },
+        {
+          "idx": 156,
+          "token": "10,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 157,
+          "token": "Doxazocin.",
+          "in_region": true,
+          "conf": 0.8358254581689835
+        },
+        {
+          "idx": 158,
+          "token": "4.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 159,
+          "token": "Calcium",
+          "in_region": false,
+          "conf": 0.9935234983762106
+        },
+        {
+          "idx": 160,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9999806880950928
+        },
+        {
+          "idx": 161,
+          "token": "D",
+          "in_region": false,
+          "conf": 0.9981129169464111
+        },
+        {
+          "idx": 162,
+          "token": "1",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 163,
+          "token": "comprimé",
+          "in_region": false,
+          "conf": 0.9951922496159872
+        },
+        {
+          "idx": 164,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999918937683105
+        },
+        {
+          "idx": 165,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9559954404830933
+        },
+        {
+          "idx": 166,
+          "token": "Lipar",
+          "in_region": false,
+          "conf": 0.6023177703221639
+        },
+        {
+          "idx": 167,
+          "token": "10.",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    },
+    {
+      "token_start": 166,
+      "token_end": 172,
+      "context_start": 156,
+      "context_end": 182,
+      "region_text": "Lipar 10. Aricepte 10. Avapro 150. Serpaline",
+      "full_text": "10, Doxazocin. 4. Calcium vitamine D 1 comprimé par jour. Lipar 10. Aricepte 10. Avapro 150. Serpaline 50. Il a travaillé chez Nortel. Il est marié. Il",
+      "tokens": [
+        {
+          "idx": 156,
+          "token": "10,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 157,
+          "token": "Doxazocin.",
+          "in_region": false,
+          "conf": 0.8358254581689835
+        },
+        {
+          "idx": 158,
+          "token": "4.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 159,
+          "token": "Calcium",
+          "in_region": false,
+          "conf": 0.9935234983762106
+        },
+        {
+          "idx": 160,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9999806880950928
+        },
+        {
+          "idx": 161,
+          "token": "D",
+          "in_region": false,
+          "conf": 0.9981129169464111
+        },
+        {
+          "idx": 162,
+          "token": "1",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 163,
+          "token": "comprimé",
+          "in_region": false,
+          "conf": 0.9951922496159872
+        },
+        {
+          "idx": 164,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999918937683105
+        },
+        {
+          "idx": 165,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9559954404830933
+        },
+        {
+          "idx": 166,
+          "token": "Lipar",
+          "in_region": true,
+          "conf": 0.6023177703221639
+        },
+        {
+          "idx": 167,
+          "token": "10.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 168,
+          "token": "Aricepte",
+          "in_region": true,
+          "conf": 0.837881863117218
+        },
+        {
+          "idx": 169,
+          "token": "10.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 170,
+          "token": "Avapro",
+          "in_region": true,
+          "conf": 0.9881344437599182
+        },
+        {
+          "idx": 171,
+          "token": "150.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 172,
+          "token": "Serpaline",
+          "in_region": true,
+          "conf": 0.9150131940841675
+        },
+        {
+          "idx": 173,
+          "token": "50.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 174,
+          "token": "Il",
+          "in_region": false,
+          "conf": 0.9841550588607788
+        },
+        {
+          "idx": 175,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9999479055404663
+        },
+        {
+          "idx": 176,
+          "token": "travaillé",
+          "in_region": false,
+          "conf": 0.9999361435572306
+        },
+        {
+          "idx": 177,
+          "token": "chez",
+          "in_region": false,
+          "conf": 0.9993211030960083
+        },
+        {
+          "idx": 178,
+          "token": "Nortel.",
+          "in_region": false,
+          "conf": 0.9761011600494385
+        },
+        {
+          "idx": 179,
+          "token": "Il",
+          "in_region": false,
+          "conf": 0.9841550588607788
+        },
+        {
+          "idx": 180,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.9986151456832886
+        },
+        {
+          "idx": 181,
+          "token": "marié.",
+          "in_region": false,
+          "conf": 0.869031290213267
+        },
+        {
+          "idx": 182,
+          "token": "Il",
+          "in_region": false,
+          "conf": 0.9841550588607788
+        }
+      ]
+    }
+  ]
+}

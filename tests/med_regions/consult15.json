@@ -1,0 +1,846 @@
+{
+  "consultation_id": 15,
+  "title": "Hallucinations agitation confusion post-opératoire fracture hanche Parkinson",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "vitamine D",
+      "base": "vitamine d",
+      "posology": "41",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Celexa",
+      "base": "celexa",
+      "posology": "20 000 g PO DIE",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Motilium",
+      "base": "domperidone maleate de domperidone",
+      "posology": "10 mg PO BID",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Mirapex",
+      "base": "mirapex",
+      "posology": "0,5 mg",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "levodopa",
+      "base": "levodopa",
+      "posology": "",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "carbidopa",
+      "base": "carbidopa",
+      "posology": "100",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "amantadine",
+      "base": "amantadine",
+      "posology": "100 mg",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Imdur",
+      "base": "imdur",
+      "posology": "60 mg 1,5",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "bisoprolol",
+      "base": "bisoprolol",
+      "posology": "1,25 mg",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Dilaudid",
+      "base": "dilaudid",
+      "posology": "0,25",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Tylenol",
+      "base": "acetaminophen",
+      "posology": "650 mg",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "phézothérodine",
+      "base": "fesoterodine",
+      "brand": null,
+      "posology": "4 000 g PO DIE",
+      "score": 98,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Antoloch",
+      "base": "pantoloc",
+      "brand": "PANTOLOC",
+      "posology": "40 000 g PO DIE",
+      "score": 75,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Esétrol",
+      "base": "ezetrol",
+      "brand": "EZETROL",
+      "posology": "10 mg PO",
+      "score": 96,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Poumadin",
+      "base": "warfarine",
+      "brand": "COUMADIN",
+      "posology": "4 mg",
+      "score": 91,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Piclone",
+      "base": "zopiclone",
+      "brand": null,
+      "posology": "7,5 mg HS PRN",
+      "score": 78,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Lipitard",
+      "base": "lipitor",
+      "brand": "LIPITOR",
+      "posology": "80 mg HS",
+      "score": 88,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "kitsapine",
+      "base": "quetiapine",
+      "brand": null,
+      "posology": "12,5",
+      "score": 78,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    }
+  ],
+  "nb_regions": 3,
+  "regions": [
+    {
+      "token_start": 90,
+      "token_end": 102,
+      "context_start": 80,
+      "context_end": 112,
+      "region_text": "phézothérodine, 4 000 g PO DIE, Celexa, 20 000 g PO DIE, Antoloch,",
+      "full_text": "de Parkinson. En ces médicaments, à domicile, il prend un phézothérodine, 4 000 g PO DIE, Celexa, 20 000 g PO DIE, Antoloch, 40 000 g PO DIE, vitamine B12, 1200 microgram PO",
+      "tokens": [
+        {
+          "idx": 80,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9947702288627625
+        },
+        {
+          "idx": 81,
+          "token": "Parkinson.",
+          "in_region": false,
+          "conf": 0.9981862157583237
+        },
+        {
+          "idx": 82,
+          "token": "En",
+          "in_region": false,
+          "conf": 0.9654902815818787
+        },
+        {
+          "idx": 83,
+          "token": "ces",
+          "in_region": false,
+          "conf": 0.6470823287963867
+        },
+        {
+          "idx": 84,
+          "token": "médicaments,",
+          "in_region": false,
+          "conf": 0.8868118584156036
+        },
+        {
+          "idx": 85,
+          "token": "à",
+          "in_region": false,
+          "conf": 0.9900638461112976
+        },
+        {
+          "idx": 86,
+          "token": "domicile,",
+          "in_region": false,
+          "conf": 0.9931007921695709
+        },
+        {
+          "idx": 87,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.9996700286865234
+        },
+        {
+          "idx": 88,
+          "token": "prend",
+          "in_region": false,
+          "conf": 0.9965568780899048
+        },
+        {
+          "idx": 89,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.50870281457901
+        },
+        {
+          "idx": 90,
+          "token": "phézothérodine,",
+          "in_region": true,
+          "conf": 0.8080860264599323
+        },
+        {
+          "idx": 91,
+          "token": "4",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 92,
+          "token": "000",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 93,
+          "token": "g",
+          "in_region": true,
+          "conf": 0.9996738433837891
+        },
+        {
+          "idx": 94,
+          "token": "PO",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 95,
+          "token": "DIE,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 96,
+          "token": "Celexa,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 97,
+          "token": "20",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 98,
+          "token": "000",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 99,
+          "token": "g",
+          "in_region": true,
+          "conf": 0.9996738433837891
+        },
+        {
+          "idx": 100,
+          "token": "PO",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 101,
+          "token": "DIE,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 102,
+          "token": "Antoloch,",
+          "in_region": true,
+          "conf": 0.8422887176275253
+        },
+        {
+          "idx": 103,
+          "token": "40",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 104,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 105,
+          "token": "g",
+          "in_region": false,
+          "conf": 0.9996738433837891
+        },
+        {
+          "idx": 106,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 107,
+          "token": "DIE,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 108,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9166930516560873
+        },
+        {
+          "idx": 109,
+          "token": "B12,",
+          "in_region": false,
+          "conf": 0.9861658811569214
+        },
+        {
+          "idx": 110,
+          "token": "1200",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 111,
+          "token": "microgram",
+          "in_region": false,
+          "conf": 0.9017698367436727
+        },
+        {
+          "idx": 112,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    },
+    {
+      "token_start": 114,
+      "token_end": 125,
+      "context_start": 104,
+      "context_end": 135,
+      "region_text": "Motilium, 10 mg PO BID. Esétrol, 10 mg PO dillé HS. Mirapex,",
+      "full_text": "000 g PO DIE, vitamine B12, 1200 microgram PO DIE. Motilium, 10 mg PO BID. Esétrol, 10 mg PO dillé HS. Mirapex, 0,5 mg deux heures avant le coucher. levodopa carbidopa 100",
+      "tokens": [
+        {
+          "idx": 104,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 105,
+          "token": "g",
+          "in_region": false,
+          "conf": 0.9996738433837891
+        },
+        {
+          "idx": 106,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 107,
+          "token": "DIE,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 108,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9166930516560873
+        },
+        {
+          "idx": 109,
+          "token": "B12,",
+          "in_region": false,
+          "conf": 0.9861658811569214
+        },
+        {
+          "idx": 110,
+          "token": "1200",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 111,
+          "token": "microgram",
+          "in_region": false,
+          "conf": 0.9017698367436727
+        },
+        {
+          "idx": 112,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 113,
+          "token": "DIE.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 114,
+          "token": "Motilium,",
+          "in_region": true,
+          "conf": 0.9171847343444824
+        },
+        {
+          "idx": 115,
+          "token": "10",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 116,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 117,
+          "token": "PO",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 118,
+          "token": "BID.",
+          "in_region": true,
+          "conf": 0.8923177917798361
+        },
+        {
+          "idx": 119,
+          "token": "Esétrol,",
+          "in_region": true,
+          "conf": 0.7248555049300194
+        },
+        {
+          "idx": 120,
+          "token": "10",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 121,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 122,
+          "token": "PO",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 123,
+          "token": "dillé",
+          "in_region": true,
+          "conf": 0.7275379101435343
+        },
+        {
+          "idx": 124,
+          "token": "HS.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 125,
+          "token": "Mirapex,",
+          "in_region": true,
+          "conf": 0.9961672186851501
+        },
+        {
+          "idx": 126,
+          "token": "0,5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 127,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 128,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.7247344851493835
+        },
+        {
+          "idx": 129,
+          "token": "heures",
+          "in_region": false,
+          "conf": 0.8722890218098959
+        },
+        {
+          "idx": 130,
+          "token": "avant",
+          "in_region": false,
+          "conf": 0.999975323677063
+        },
+        {
+          "idx": 131,
+          "token": "le",
+          "in_region": false,
+          "conf": 0.6499703526496887
+        },
+        {
+          "idx": 132,
+          "token": "coucher.",
+          "in_region": false,
+          "conf": 0.5711243748664856
+        },
+        {
+          "idx": 133,
+          "token": "levodopa",
+          "in_region": false,
+          "conf": 0.926240861415863
+        },
+        {
+          "idx": 134,
+          "token": "carbidopa",
+          "in_region": false,
+          "conf": 0.9074864745140075
+        },
+        {
+          "idx": 135,
+          "token": "100",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    },
+    {
+      "token_start": 141,
+      "token_end": 166,
+      "context_start": 131,
+      "context_end": 176,
+      "region_text": "Poumadin, 4 mg au souper. The Piclone, 7,5 mg. HS PRN. Lipitard, 80 mg HS. amantadine, 100 mg au déjeuner. Imdur, 60 mg 1,5 comprimé. bisoprolol,",
+      "full_text": "le coucher. levodopa carbidopa 100 plus 25, 2,5 comprimés TID. Poumadin, 4 mg au souper. The Piclone, 7,5 mg. HS PRN. Lipitard, 80 mg HS. amantadine, 100 mg au déjeuner. Imdur, 60 mg 1,5 comprimé. bisoprolol, 1,25 mg. Ici, on a ajouté du Dilaudid 0,25 aux",
+      "tokens": [
+        {
+          "idx": 131,
+          "token": "le",
+          "in_region": false,
+          "conf": 0.6499703526496887
+        },
+        {
+          "idx": 132,
+          "token": "coucher.",
+          "in_region": false,
+          "conf": 0.5711243748664856
+        },
+        {
+          "idx": 133,
+          "token": "levodopa",
+          "in_region": false,
+          "conf": 0.926240861415863
+        },
+        {
+          "idx": 134,
+          "token": "carbidopa",
+          "in_region": false,
+          "conf": 0.9074864745140075
+        },
+        {
+          "idx": 135,
+          "token": "100",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 136,
+          "token": "plus",
+          "in_region": false,
+          "conf": 0.9999043941497803
+        },
+        {
+          "idx": 137,
+          "token": "25,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 138,
+          "token": "2,5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 139,
+          "token": "comprimés",
+          "in_region": false,
+          "conf": 0.9317999084790548
+        },
+        {
+          "idx": 140,
+          "token": "TID.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 141,
+          "token": "Poumadin,",
+          "in_region": true,
+          "conf": 0.8660714974006017
+        },
+        {
+          "idx": 142,
+          "token": "4",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 143,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 144,
+          "token": "au",
+          "in_region": true,
+          "conf": 0.8655390739440918
+        },
+        {
+          "idx": 145,
+          "token": "souper.",
+          "in_region": true,
+          "conf": 0.9995331366856893
+        },
+        {
+          "idx": 146,
+          "token": "The",
+          "in_region": true,
+          "conf": 0.484186589717865
+        },
+        {
+          "idx": 147,
+          "token": "Piclone,",
+          "in_region": true,
+          "conf": 0.774000632762909
+        },
+        {
+          "idx": 148,
+          "token": "7,5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 149,
+          "token": "mg.",
+          "in_region": true,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 150,
+          "token": "HS",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 151,
+          "token": "PRN.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 152,
+          "token": "Lipitard,",
+          "in_region": true,
+          "conf": 0.7497427225112915
+        },
+        {
+          "idx": 153,
+          "token": "80",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 154,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 155,
+          "token": "HS.",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 156,
+          "token": "amantadine,",
+          "in_region": true,
+          "conf": 0.9091528058052063
+        },
+        {
+          "idx": 157,
+          "token": "100",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 158,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 159,
+          "token": "au",
+          "in_region": true,
+          "conf": 0.8655390739440918
+        },
+        {
+          "idx": 160,
+          "token": "déjeuner.",
+          "in_region": true,
+          "conf": 0.999825370311737
+        },
+        {
+          "idx": 161,
+          "token": "Imdur,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 162,
+          "token": "60",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 163,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 164,
+          "token": "1,5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 165,
+          "token": "comprimé.",
+          "in_region": true,
+          "conf": 0.9802054762840271
+        },
+        {
+          "idx": 166,
+          "token": "bisoprolol,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 167,
+          "token": "1,25",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 168,
+          "token": "mg.",
+          "in_region": false,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 169,
+          "token": "Ici,",
+          "in_region": false,
+          "conf": 0.9994218150774637
+        },
+        {
+          "idx": 170,
+          "token": "on",
+          "in_region": false,
+          "conf": 0.9947699904441833
+        },
+        {
+          "idx": 171,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9900638461112976
+        },
+        {
+          "idx": 172,
+          "token": "ajouté",
+          "in_region": false,
+          "conf": 0.9999707142512003
+        },
+        {
+          "idx": 173,
+          "token": "du",
+          "in_region": false,
+          "conf": 0.9983996748924255
+        },
+        {
+          "idx": 174,
+          "token": "Dilaudid",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 175,
+          "token": "0,25",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 176,
+          "token": "aux",
+          "in_region": false,
+          "conf": 0.9878623485565186
+        }
+      ]
+    }
+  ]
+}

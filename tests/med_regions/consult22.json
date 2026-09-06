@@ -1,0 +1,314 @@
+{
+  "consultation_id": 22,
+  "title": "Évaluation d'un ralentissement",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "aspirine",
+      "base": "aspirine",
+      "posology": "",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "20 000 UI",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "calcium",
+      "base": "calcium",
+      "posology": "500 BID",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "fer",
+      "base": "fer",
+      "posology": "300 DIE",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Pantoloc",
+      "base": "pantoloc",
+      "posology": "40 DIE",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "hydrocortisone",
+      "base": "hydrocortisone",
+      "posology": "10 mg BID",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Torinef",
+      "base": "florinef",
+      "brand": "FLORINEF",
+      "posology": "0,1 mg",
+      "score": 75,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Kepra",
+      "base": "keppra",
+      "brand": "KEPPRA",
+      "posology": "500 mg",
+      "score": 83,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Aspirine",
+      "base": "acide acetylsalicylique",
+      "brand": "ASPIRIN",
+      "posology": "80 mg",
+      "score": 88,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "très bas",
+      "base": "tresiba",
+      "brand": "TRESIBA",
+      "posology": "17 unités",
+      "score": 75,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 688,
+      "token_end": 703,
+      "context_start": 678,
+      "context_end": 713,
+      "region_text": "Pantoloque, 40 d'yé. Torinef, 0,1 mg d'yé. Kepra, 500 mg d'yé. Aspirine, 80 mg d'yé. Hydrocortisone,",
+      "full_text": "auto-ajustement. Calcium, 500, deux fois par jour. Fer, 300, d'yé. Pantoloque, 40 d'yé. Torinef, 0,1 mg d'yé. Kepra, 500 mg d'yé. Aspirine, 80 mg d'yé. Hydrocortisone, 10 mg, deux fois par jour. Pancré-lipase, Vitamine D, 20",
+      "tokens": [
+        {
+          "idx": 678,
+          "token": "auto-ajustement.",
+          "in_region": false,
+          "conf": 0.8954001466433207
+        },
+        {
+          "idx": 679,
+          "token": "Calcium,",
+          "in_region": false,
+          "conf": 0.985682338476181
+        },
+        {
+          "idx": 680,
+          "token": "500,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 681,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.997455894947052
+        },
+        {
+          "idx": 682,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999761581420898
+        },
+        {
+          "idx": 683,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9932492971420288
+        },
+        {
+          "idx": 684,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9999572038650513
+        },
+        {
+          "idx": 685,
+          "token": "Fer,",
+          "in_region": false,
+          "conf": 0.9321623146533966
+        },
+        {
+          "idx": 686,
+          "token": "300,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 687,
+          "token": "d'yé.",
+          "in_region": false,
+          "conf": 0.9999714374542237
+        },
+        {
+          "idx": 688,
+          "token": "Pantoloque,",
+          "in_region": true,
+          "conf": 0.9067010521888733
+        },
+        {
+          "idx": 689,
+          "token": "40",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 690,
+          "token": "d'yé.",
+          "in_region": true,
+          "conf": 0.9999714374542237
+        },
+        {
+          "idx": 691,
+          "token": "Torinef,",
+          "in_region": true,
+          "conf": 0.8637076318264008
+        },
+        {
+          "idx": 692,
+          "token": "0,1",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 693,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.863620380560557
+        },
+        {
+          "idx": 694,
+          "token": "d'yé.",
+          "in_region": true,
+          "conf": 0.9999714374542237
+        },
+        {
+          "idx": 695,
+          "token": "Kepra,",
+          "in_region": true,
+          "conf": 0.8282537937164307
+        },
+        {
+          "idx": 696,
+          "token": "500",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 697,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.863620380560557
+        },
+        {
+          "idx": 698,
+          "token": "d'yé.",
+          "in_region": true,
+          "conf": 0.9999714374542237
+        },
+        {
+          "idx": 699,
+          "token": "Aspirine,",
+          "in_region": true,
+          "conf": 0.9993197560310364
+        },
+        {
+          "idx": 700,
+          "token": "80",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 701,
+          "token": "mg",
+          "in_region": true,
+          "conf": 0.863620380560557
+        },
+        {
+          "idx": 702,
+          "token": "d'yé.",
+          "in_region": true,
+          "conf": 0.9999714374542237
+        },
+        {
+          "idx": 703,
+          "token": "Hydrocortisone,",
+          "in_region": true,
+          "conf": 0.9515560194849968
+        },
+        {
+          "idx": 704,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 705,
+          "token": "mg,",
+          "in_region": false,
+          "conf": 0.863620380560557
+        },
+        {
+          "idx": 706,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.997455894947052
+        },
+        {
+          "idx": 707,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999761581420898
+        },
+        {
+          "idx": 708,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9932492971420288
+        },
+        {
+          "idx": 709,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9999572038650513
+        },
+        {
+          "idx": 710,
+          "token": "Pancré-lipase,",
+          "in_region": false,
+          "conf": 0.7528069061892373
+        },
+        {
+          "idx": 711,
+          "token": "Vitamine",
+          "in_region": false,
+          "conf": 0.984689250588417
+        },
+        {
+          "idx": 712,
+          "token": "D,",
+          "in_region": false,
+          "conf": 0.982469379901886
+        },
+        {
+          "idx": 713,
+          "token": "20",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    }
+  ]
+}

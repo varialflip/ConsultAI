@@ -1,0 +1,241 @@
+{
+  "consultation_id": 28,
+  "title": "Troubles cognitifs amnésiques prédominants",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "Flomax",
+      "base": "chlorhydrate de tamsulosine",
+      "posology": "0.4",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "finasteride",
+      "base": "finasteride",
+      "posology": "5",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Coversil",
+      "base": "coversyl",
+      "brand": "COVERSYL",
+      "posology": "4",
+      "score": 100,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "Dapamide",
+      "base": "indapamide",
+      "brand": null,
+      "posology": "1,25",
+      "score": 80,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    },
+    {
+      "name": "l'Anzoprazole",
+      "base": "lansoprazole",
+      "brand": null,
+      "posology": "30",
+      "score": 90,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 85,
+      "token_end": 94,
+      "context_start": 75,
+      "context_end": 104,
+      "region_text": "Coversil 4, un Dapamide 1,25, Flomax, 0.4, l'Anzoprazole 30, Finastéride",
+      "full_text": "de l'hypertrophie de la prostate. Comme médicament, il prend un Coversil 4, un Dapamide 1,25, Flomax, 0.4, l'Anzoprazole 30, Finastéride 5. Il a une douzième année de scolarité, il est",
+      "tokens": [
+        {
+          "idx": 75,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.7102649211883545
+        },
+        {
+          "idx": 76,
+          "token": "l'hypertrophie",
+          "in_region": false,
+          "conf": 0.999840684235096
+        },
+        {
+          "idx": 77,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.7102649211883545
+        },
+        {
+          "idx": 78,
+          "token": "la",
+          "in_region": false,
+          "conf": 0.9951876401901245
+        },
+        {
+          "idx": 79,
+          "token": "prostate.",
+          "in_region": false,
+          "conf": 0.9974868496259054
+        },
+        {
+          "idx": 80,
+          "token": "Comme",
+          "in_region": false,
+          "conf": 0.9169719815254211
+        },
+        {
+          "idx": 81,
+          "token": "médicament,",
+          "in_region": false,
+          "conf": 0.9440645128488541
+        },
+        {
+          "idx": 82,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.336527943611145
+        },
+        {
+          "idx": 83,
+          "token": "prend",
+          "in_region": false,
+          "conf": 0.9999562501907349
+        },
+        {
+          "idx": 84,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.9998160004615784
+        },
+        {
+          "idx": 85,
+          "token": "Coversil",
+          "in_region": true,
+          "conf": 0.7527841925621033
+        },
+        {
+          "idx": 86,
+          "token": "4,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 87,
+          "token": "un",
+          "in_region": true,
+          "conf": 0.9998160004615784
+        },
+        {
+          "idx": 88,
+          "token": "Dapamide",
+          "in_region": true,
+          "conf": 0.9731061607599258
+        },
+        {
+          "idx": 89,
+          "token": "1,25,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 90,
+          "token": "Flomax,",
+          "in_region": true,
+          "conf": 0.8961557894945145
+        },
+        {
+          "idx": 91,
+          "token": "0.4,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 92,
+          "token": "l'Anzoprazole",
+          "in_region": true,
+          "conf": 0.8649912145402696
+        },
+        {
+          "idx": 93,
+          "token": "30,",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 94,
+          "token": "Finastéride",
+          "in_region": true,
+          "conf": 0.8242630809545517
+        },
+        {
+          "idx": 95,
+          "token": "5.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 96,
+          "token": "Il",
+          "in_region": false,
+          "conf": 0.336527943611145
+        },
+        {
+          "idx": 97,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.5477526783943176
+        },
+        {
+          "idx": 98,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9998865127563477
+        },
+        {
+          "idx": 99,
+          "token": "douzième",
+          "in_region": false,
+          "conf": 0.9792592525482178
+        },
+        {
+          "idx": 100,
+          "token": "année",
+          "in_region": false,
+          "conf": 0.9999967813491821
+        },
+        {
+          "idx": 101,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.7102649211883545
+        },
+        {
+          "idx": 102,
+          "token": "scolarité,",
+          "in_region": false,
+          "conf": 0.8745314329862595
+        },
+        {
+          "idx": 103,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.336527943611145
+        },
+        {
+          "idx": 104,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.6106246113777161
+        }
+      ]
+    }
+  ]
+}

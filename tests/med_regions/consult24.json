@@ -1,0 +1,280 @@
+{
+  "consultation_id": 24,
+  "title": "Évaluation de la cognition",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "vitamine d",
+      "base": "vitamine d",
+      "posology": "10 000",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Flomax",
+      "base": "chlorhydrate de tamsulosine",
+      "posology": "0.4DIE",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "calcium",
+      "base": "calcium",
+      "posology": "500 DIE",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Crestor",
+      "base": "crestor",
+      "posology": "5 DIE",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "gabapentin",
+      "base": "gabapentin",
+      "posology": "100 HS",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Posamax",
+      "base": "fosamax",
+      "brand": "FOSAMAX",
+      "posology": "70",
+      "score": 88,
+      "level": "BASE_GENERIC",
+      "source": "phonetic"
+    }
+  ],
+  "nb_regions": 1,
+  "regions": [
+    {
+      "token_start": 600,
+      "token_end": 615,
+      "context_start": 590,
+      "context_end": 625,
+      "region_text": "Posamax 70 une fois par semaine, Calcium 500 dié, Crestor 5 dié, Gabapentin 100 HS, Crestor",
+      "full_text": "2 dié, vitamine D 10 000 une fois par semaine, Posamax 70 une fois par semaine, Calcium 500 dié, Crestor 5 dié, Gabapentin 100 HS, Crestor 5 HS. Impression : il s'agit d'un homme de 78",
+      "tokens": [
+        {
+          "idx": 590,
+          "token": "2",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 591,
+          "token": "dié,",
+          "in_region": false,
+          "conf": 0.9994752804438273
+        },
+        {
+          "idx": 592,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9937612215677897
+        },
+        {
+          "idx": 593,
+          "token": "D",
+          "in_region": false,
+          "conf": 0.9988670349121094
+        },
+        {
+          "idx": 594,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 595,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 596,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.99993896484375
+        },
+        {
+          "idx": 597,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999819993972778
+        },
+        {
+          "idx": 598,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9989914298057556
+        },
+        {
+          "idx": 599,
+          "token": "semaine,",
+          "in_region": false,
+          "conf": 0.9997133811314901
+        },
+        {
+          "idx": 600,
+          "token": "Posamax",
+          "in_region": true,
+          "conf": 0.9136646787325541
+        },
+        {
+          "idx": 601,
+          "token": "70",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 602,
+          "token": "une",
+          "in_region": true,
+          "conf": 0.99993896484375
+        },
+        {
+          "idx": 603,
+          "token": "fois",
+          "in_region": true,
+          "conf": 0.9999819993972778
+        },
+        {
+          "idx": 604,
+          "token": "par",
+          "in_region": true,
+          "conf": 0.9989914298057556
+        },
+        {
+          "idx": 605,
+          "token": "semaine,",
+          "in_region": true,
+          "conf": 0.9997133811314901
+        },
+        {
+          "idx": 606,
+          "token": "Calcium",
+          "in_region": true,
+          "conf": 0.9642963409423828
+        },
+        {
+          "idx": 607,
+          "token": "500",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 608,
+          "token": "dié,",
+          "in_region": true,
+          "conf": 0.9994752804438273
+        },
+        {
+          "idx": 609,
+          "token": "Crestor",
+          "in_region": true,
+          "conf": 0.9997635881106058
+        },
+        {
+          "idx": 610,
+          "token": "5",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 611,
+          "token": "dié,",
+          "in_region": true,
+          "conf": 0.9994752804438273
+        },
+        {
+          "idx": 612,
+          "token": "Gabapentin",
+          "in_region": true,
+          "conf": 0.8796274304389954
+        },
+        {
+          "idx": 613,
+          "token": "100",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 614,
+          "token": "HS,",
+          "in_region": true,
+          "conf": 0.9986348152160645
+        },
+        {
+          "idx": 615,
+          "token": "Crestor",
+          "in_region": true,
+          "conf": 0.9997635881106058
+        },
+        {
+          "idx": 616,
+          "token": "5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 617,
+          "token": "HS.",
+          "in_region": false,
+          "conf": 0.9986348152160645
+        },
+        {
+          "idx": 618,
+          "token": "Impression",
+          "in_region": false,
+          "conf": 0.9996473491191864
+        },
+        {
+          "idx": 619,
+          "token": ":",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 620,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.8701351881027222
+        },
+        {
+          "idx": 621,
+          "token": "s'agit",
+          "in_region": false,
+          "conf": 0.9996268351872762
+        },
+        {
+          "idx": 622,
+          "token": "d'un",
+          "in_region": false,
+          "conf": 0.9998167951901754
+        },
+        {
+          "idx": 623,
+          "token": "homme",
+          "in_region": false,
+          "conf": 0.9999783039093018
+        },
+        {
+          "idx": 624,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9999241828918457
+        },
+        {
+          "idx": 625,
+          "token": "78",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    }
+  ]
+}

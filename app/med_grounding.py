@@ -2133,6 +2133,8 @@ class Matcher:
         mesuré négligeable (< 1 ms).
         """
         if not items or len(items) < 2:
+            for it in (items or []):
+                it.pop("_i", None)
             return items
         out: list = []
         jetees: set = set()

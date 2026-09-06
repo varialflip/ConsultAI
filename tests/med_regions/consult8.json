@@ -1,0 +1,411 @@
+{
+  "consultation_id": 8,
+  "title": "Trouble marche et confusion",
+  "inline_fixed": [],
+  "med_grounding_items": [
+    {
+      "name": "Risperdal",
+      "base": "risperidone",
+      "posology": "2",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Epival",
+      "base": "epival",
+      "posology": "500 mg BID",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "trazodone",
+      "base": "trazodone",
+      "posology": "150 HS",
+      "score": 100,
+      "level": "BASE_GENERIC"
+    },
+    {
+      "name": "Cipralex",
+      "base": "escitalopram",
+      "posology": "20 HS",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "Neurontin",
+      "base": "neurontin",
+      "posology": "400 mg TID",
+      "score": 100,
+      "level": "BRAND"
+    },
+    {
+      "name": "trois",
+      "base": "clofibrate",
+      "brand": "ATROMID S",
+      "posology": "fois",
+      "score": 62,
+      "level": "BRAND",
+      "source": "phonetic",
+      "conf": 0.79
+    }
+  ],
+  "nb_regions": 2,
+  "regions": [
+    {
+      "token_start": 52,
+      "token_end": 55,
+      "context_start": 42,
+      "context_end": 65,
+      "region_text": "Risperdal 2 et Pival",
+      "full_text": "est connu pour un trouble d'anxiété généralisé qui était sous Risperdal 2 et Pival 500 mg deux fois par jour, ainsi que Trasodone 150",
+      "tokens": [
+        {
+          "idx": 42,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.9990045428276062
+        },
+        {
+          "idx": 43,
+          "token": "connu",
+          "in_region": false,
+          "conf": 0.9997989535331726
+        },
+        {
+          "idx": 44,
+          "token": "pour",
+          "in_region": false,
+          "conf": 0.9995575547218323
+        },
+        {
+          "idx": 45,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.9978766441345215
+        },
+        {
+          "idx": 46,
+          "token": "trouble",
+          "in_region": false,
+          "conf": 0.9698482155799866
+        },
+        {
+          "idx": 47,
+          "token": "d'anxiété",
+          "in_region": false,
+          "conf": 0.6549344261487325
+        },
+        {
+          "idx": 48,
+          "token": "généralisé",
+          "in_region": false,
+          "conf": 0.9936407804489136
+        },
+        {
+          "idx": 49,
+          "token": "qui",
+          "in_region": false,
+          "conf": 0.980527400970459
+        },
+        {
+          "idx": 50,
+          "token": "était",
+          "in_region": false,
+          "conf": 0.9988096952438354
+        },
+        {
+          "idx": 51,
+          "token": "sous",
+          "in_region": false,
+          "conf": 0.9995280504226685
+        },
+        {
+          "idx": 52,
+          "token": "Risperdal",
+          "in_region": true,
+          "conf": 0.9004062116146088
+        },
+        {
+          "idx": 53,
+          "token": "2",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 54,
+          "token": "et",
+          "in_region": true,
+          "conf": 0.9149191379547119
+        },
+        {
+          "idx": 55,
+          "token": "Pival",
+          "in_region": true,
+          "conf": 0.5574159771203995
+        },
+        {
+          "idx": 56,
+          "token": "500",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 57,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.8979083895683289
+        },
+        {
+          "idx": 58,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.9999947547912598
+        },
+        {
+          "idx": 59,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999215602874756
+        },
+        {
+          "idx": 60,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9998013377189636
+        },
+        {
+          "idx": 61,
+          "token": "jour,",
+          "in_region": false,
+          "conf": 0.9923470616340637
+        },
+        {
+          "idx": 62,
+          "token": "ainsi",
+          "in_region": false,
+          "conf": 0.9769092798233032
+        },
+        {
+          "idx": 63,
+          "token": "que",
+          "in_region": false,
+          "conf": 0.9779402613639832
+        },
+        {
+          "idx": 64,
+          "token": "Trasodone",
+          "in_region": false,
+          "conf": 0.6985296756029129
+        },
+        {
+          "idx": 65,
+          "token": "150",
+          "in_region": false,
+          "conf": null
+        }
+      ]
+    },
+    {
+      "token_start": 64,
+      "token_end": 75,
+      "context_start": 54,
+      "context_end": 85,
+      "region_text": "Trasodone 150 au coucher et Sipradex 20 au coucher. Ainsi que neurontin",
+      "full_text": "et Pival 500 mg deux fois par jour, ainsi que Trasodone 150 au coucher et Sipradex 20 au coucher. Ainsi que neurontin 400 mg trois fois par jour. Madame a été admise",
+      "tokens": [
+        {
+          "idx": 54,
+          "token": "et",
+          "in_region": false,
+          "conf": 0.9149191379547119
+        },
+        {
+          "idx": 55,
+          "token": "Pival",
+          "in_region": false,
+          "conf": 0.5574159771203995
+        },
+        {
+          "idx": 56,
+          "token": "500",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 57,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.8979083895683289
+        },
+        {
+          "idx": 58,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.9999947547912598
+        },
+        {
+          "idx": 59,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999215602874756
+        },
+        {
+          "idx": 60,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9998013377189636
+        },
+        {
+          "idx": 61,
+          "token": "jour,",
+          "in_region": false,
+          "conf": 0.9923470616340637
+        },
+        {
+          "idx": 62,
+          "token": "ainsi",
+          "in_region": false,
+          "conf": 0.9769092798233032
+        },
+        {
+          "idx": 63,
+          "token": "que",
+          "in_region": false,
+          "conf": 0.9779402613639832
+        },
+        {
+          "idx": 64,
+          "token": "Trasodone",
+          "in_region": true,
+          "conf": 0.6985296756029129
+        },
+        {
+          "idx": 65,
+          "token": "150",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 66,
+          "token": "au",
+          "in_region": true,
+          "conf": 0.9496285319328308
+        },
+        {
+          "idx": 67,
+          "token": "coucher",
+          "in_region": true,
+          "conf": 0.9880866209665934
+        },
+        {
+          "idx": 68,
+          "token": "et",
+          "in_region": true,
+          "conf": 0.9149191379547119
+        },
+        {
+          "idx": 69,
+          "token": "Sipradex",
+          "in_region": true,
+          "conf": 0.6756569087505341
+        },
+        {
+          "idx": 70,
+          "token": "20",
+          "in_region": true,
+          "conf": null
+        },
+        {
+          "idx": 71,
+          "token": "au",
+          "in_region": true,
+          "conf": 0.9496285319328308
+        },
+        {
+          "idx": 72,
+          "token": "coucher.",
+          "in_region": true,
+          "conf": 0.9880866209665934
+        },
+        {
+          "idx": 73,
+          "token": "Ainsi",
+          "in_region": true,
+          "conf": 0.9769092798233032
+        },
+        {
+          "idx": 74,
+          "token": "que",
+          "in_region": true,
+          "conf": 0.9779402613639832
+        },
+        {
+          "idx": 75,
+          "token": "neurontin",
+          "in_region": true,
+          "conf": 0.7036957144737244
+        },
+        {
+          "idx": 76,
+          "token": "400",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 77,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.8979083895683289
+        },
+        {
+          "idx": 78,
+          "token": "trois",
+          "in_region": false,
+          "conf": 0.9996727705001831
+        },
+        {
+          "idx": 79,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999215602874756
+        },
+        {
+          "idx": 80,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9998013377189636
+        },
+        {
+          "idx": 81,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9923470616340637
+        },
+        {
+          "idx": 82,
+          "token": "Madame",
+          "in_region": false,
+          "conf": 0.934341311454773
+        },
+        {
+          "idx": 83,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9988971948623657
+        },
+        {
+          "idx": 84,
+          "token": "été",
+          "in_region": false,
+          "conf": 0.999914288520813
+        },
+        {
+          "idx": 85,
+          "token": "admise",
+          "in_region": false,
+          "conf": 0.9999525547027588
+        }
+      ]
+    }
+  ]
+}

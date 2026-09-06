@@ -390,6 +390,23 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     return items
 
 
+def _geriatric_items(consultation) -> list:
+    """Candidats gériatriques (module À PART) d'une transcription, pour la
+    réponse HTTP des routes locales (retranscription, import) — même source
+    que le flux SSE ``med_grounding_result`` et le calcul à la réouverture."""
+    try:
+        texte = (consultation.raw_transcript or "").strip()
+        if texte:
+            return geriatric_terms.corrections_et_hints(
+                texte, langue=preferences.document_language(),
+            ) or []
+    except Exception:
+        logger.exception(
+            "Termes gériatriques indisponibles (consultation %s)", getattr(consultation, "id", None),
+        )
+    return []
+
+
 def _med_grounding_on() -> bool:
     try:
         if not med_grounding.is_available():
@@ -2368,6 +2385,7 @@ async def api_transcribe(
                     db, consultation,
                     origin_tab=request.headers.get("x-consultai-tab", ""),
                 )
+                result["geriatric"] = _geriatric_items(consultation)
 
         # Le fichier importé est conservé au même titre qu'une dictée, qu'il
         # ait ou non gagné la course ci-dessus : il sert à trancher un doute
@@ -4001,6 +4019,7 @@ async def retranscribe_consultation(
             db, consultation,
             origin_tab=request.headers.get("x-consultai-tab", ""),
         )
+        reponse["geriatric"] = _geriatric_items(consultation)
     return reponse
 
 

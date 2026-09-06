@@ -806,42 +806,65 @@
    * « Validation » (``#secondPassMeds``). La correction elle-même est
    * appliquée INLINE dans le texte de la dictée (le serveur normalise les
    * parts) — aucune liste séparée n'est affichée sous le transcrit.
-   * ``items`` = [{name, posology, ...}].
+   * ``items`` = [{name, posology, ...}], ``geriatric`` = candidats du module
+   * à part (voir ``geriatric_terms``) : suggestions phonétiques {garble,
+   * correct, confidence} à valider, réunies dans leur propre rubrique.
    */
-  function renderMedItems(items) {
-    const liste = items && Array.isArray(items) ? items : [];
-    state.medItems = liste;
+   function renderMedItems(items, geriatric) {
+     const liste = items && Array.isArray(items) ? items : [];
+     state.medItems = liste;
+     const geriatriques = Array.isArray(geriatric) ? geriatric : [];
+     state.geriatricItems = geriatriques;
 
-    // --- Onglet Validation (liste pointée, en markdown, PUCE DE LISTE) ---
-    const vueValidation = $('secondPassMeds');
-    if (vueValidation) {
-      if (liste.length) {
-        // Tri par confiance décroissante (score = similarité 0-100).
-        const sorted = [...liste].sort((a, b) => (b.score || 0) - (a.score || 0));
-        const lignes = [`## ${T('medgrounding.title')}`];
-        for (const item of sorted) {
-          // Nom corrigé : marque en capitale initiale, générique en minuscules.
-          // Les items déterministes (``source`` absent) portent déjà leur nom
-          // canonique tel quel.
-          const cible = !item.source ? item.name
-            : item.brand ? titleBrand(item.brand)
-              : (item.base || item.name).toLowerCase();
-          // Forme dicTÉE d'origine : quand la correction inline a été appliquée
-          // (« ketapine » → quétiapine), on montre le garble en italique plutôt
-          // que deux fois le nom corrigé.
-          const dicté = item.garble || item.name;
-          const dose = item.posology ? ` ${item.posology}` : '';
-          const tag = item.source === 'phonetic'
-              ? ` ${T('medgrounding.confirm')}` : '';
-          lignes.push(`- _${dicté}_ → **${cible}**${dose} _(${item.score}%${tag})_`);
-        }
-        vueValidation.innerHTML = markdownToHtml(lignes.join('\n'));
-        vueValidation.classList.remove('hidden');
-      } else {
-        vueValidation.classList.add('hidden');
-      }
-    }
-  }
+     // --- Onglet Validation (liste pointée, en markdown, PUCE DE LISTE) ---
+     const vueValidation = $('secondPassMeds');
+     if (vueValidation) {
+       const lignes = [];
+       if (liste.length) {
+         // Tri par confiance décroissante (score = similarité 0-100).
+         const sorted = [...liste].sort((a, b) => (b.score || 0) - (a.score || 0));
+         lignes.push(`## ${T('medgrounding.title')}`);
+         for (const item of sorted) {
+           // Nom corrigé : marque en capitale initiale, générique en minuscules.
+           // Les items déterministes (``source`` absent) portent déjà leur nom
+           // canonique tel quel.
+           const cible = !item.source ? item.name
+             : item.brand ? titleBrand(item.brand)
+               : (item.base || item.name).toLowerCase();
+           // Forme dicTÉE d'origine : quand la correction inline a été appliquée
+           // (« ketapine » → quétiapine), on montre le garble en italique plutôt
+           // que deux fois le nom corrigé.
+           const dicté = item.garble || item.name;
+           const dose = item.posology ? ` ${item.posology}` : '';
+           const tag = item.source === 'phonetic'
+               ? ` ${T('medgrounding.confirm')}` : '';
+           lignes.push(`- _${dicté}_ → **${cible}**${dose} _(${item.score}%${tag})_`);
+         }
+       }
+       // Suggestions phonétiques gériatriques (MMSE, MoCA, ISO-SMAF…) : seuls
+       // les candidats FLous (avec ``confidence``) sont à valider ici — les
+       // réécritures inline sûres sont déjà dans le texte du transcrit.
+       const aValider = geriatriques.filter((g) => g && g.garble && g.correct
+         && typeof g.confidence === 'number');
+       if (aValider.length) {
+         lignes.push(`## ${T('geriatric.title')}`);
+         const flushSorted = [...aValider]
+           .sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+         for (const g of flushSorted) {
+           // Confiance combinée 0-1 → % (plus élevée = correction plus sûre).
+           const pct = Math.round((g.confidence || 0) * 100);
+           const tag = ` ${T('medgrounding.confirm')}`;
+           lignes.push(`- _${g.garble}_ → **${g.correct}** _(${pct}%${tag})_`);
+         }
+       }
+       if (lignes.length) {
+         vueValidation.innerHTML = markdownToHtml(lignes.join('\n'));
+         vueValidation.classList.remove('hidden');
+       } else {
+         vueValidation.classList.add('hidden');
+       }
+     }
+   }
 
   const state = {
     templates: [],
@@ -892,6 +915,9 @@
     // « Correction des médicaments » : réglage admin global + liste pointée.
     medGroundingOn: false,
     medItems: [],
+    // Suggestions phonétiques gériatriques (MMSE, MoCA, ISO-SMAF…) à valider,
+    // montrées dans l'onglet Validation à côté des médicaments.
+    geriatricItems: [],
     // Indisponibilité du service STT (service vocal non joignable) : la dictée
     // enregistre toujours, mais on prévient l'utilisateur immédiatement.
     sttClosed: false,
@@ -1198,7 +1224,7 @@
       }
       if (data.med_items) {
         state.medGroundingOn = true;
-        renderMedItems(data.med_items);
+        renderMedItems(data.med_items, data.geriatric);
       }
       state.transcriptLanguage = data.stt_language || (tpl ? tpl.language : '');
       // Le serveur a déjà écrit ce texte en base. On force malgré tout une
@@ -2494,7 +2520,7 @@
 
       if (result.med_items) {
         state.medGroundingOn = true;
-        renderMedItems(result.med_items);
+        renderMedItems(result.med_items, result.geriatric);
       }
 
       if (result.stt_language) state.transcriptLanguage = result.stt_language;
@@ -3171,7 +3197,9 @@
       // pointée des médicaments (grounding) y est présentée en haut. Sur
       // mobile on reste sur la note générée (l'usager bascule lui-même).
       const correctionsOuAudit = Boolean(
-        result.corrections || state.secondPass || state.medItems.length,
+        result.corrections || state.secondPass || state.medItems.length
+          || state.geriatricItems.some((g) => g && g.garble && g.correct
+            && typeof g.confidence === 'number'),
       );
       if (!isMobileLayout() && correctionsOuAudit) {
         selectDicteeTab('secondpass');
@@ -4530,9 +4558,9 @@
       }
       if (Array.isArray(medItemsPersistés) && medItemsPersistés.length) {
         state.medGroundingOn = true;
-        renderMedItems(medItemsPersistés);
+        renderMedItems(medItemsPersistés, draft.geriatric);
       } else {
-        renderMedItems([]);
+        renderMedItems([], draft.geriatric);
       }
 
       if (draft.template_id) {
@@ -6875,7 +6903,7 @@
     }
     if (payload.items) {
       state.medGroundingOn = true;
-      renderMedItems(payload.items);
+      renderMedItems(payload.items, payload.geriatric);
     }
   }
 
@@ -6891,7 +6919,7 @@
     }
     if (payload.items) {
       state.medGroundingOn = true;
-      renderMedItems(payload.items);
+      renderMedItems(payload.items, payload.geriatric);
     }
   }
 

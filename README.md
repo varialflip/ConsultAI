@@ -319,6 +319,11 @@ direct** (tranche par tranche) que pour les **enregistrements importés**
 > **« Validation - 2e passe »** — se présentent en simple markdown, comme le
 > reste de l'application. Les brouillons antérieurs qui portent encore la
 > rubrique dans leur note la font réextraire à l'ouverture.
+> Les suggestions phonétiques gériatriques (échelles MMSE, MoCA, ISO-SMAF —
+> cf. § Termes gériatriques) apparaissent en haut de l'onglet, sous la rubrique
+> **« Termes gériatriques à valider »**, à côté de la liste des médicaments
+> normalisés ; les réécritures inline sûres (déjà appliquées au texte) n'y
+> figurent pas.
 > Une régénération réinitialise `verification_json` au moment où la nouvelle
 > note est persistée : la base ne porte jamais un audit de l'ancienne note
 > pendant le contrôle en cours.

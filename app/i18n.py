@@ -373,6 +373,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "à confirmer",
         "to confirm",
     ),
+    "geriatric.title": (
+        "Termes gériatriques à valider",
+        "Geriatric terms to validate",
+    ),
     "pane.clear": ("Supprimer", "Delete"),
     "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),
     "pane.generate": ("Mettre en forme", "Format"),

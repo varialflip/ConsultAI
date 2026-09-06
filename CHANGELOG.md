@@ -29,6 +29,14 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   frontières de mot strictes — le « SMAF » sous-mot de « ISO-SMAF » ne
   corrompt plus la forme canonique (Python inline et surlignage JS), « ISO-SMAF
   est à 10 » reste intact.
+- **Onglet Validation** : les suggestions phonétiques gériatriques floues
+  (MMSE, MoCA, ISO-SMAF… avec `confidence`) sont désormais listées sous leur
+  propre rubrique « Termes gériatriques à valider », à côté des médicaments
+  normalisés — dictée (flux live), fin de dictée/génération (résultat), import
+  audio, retranscription et réouverture du brouillon. Les réécritures inline
+  sûres (déjà dans le texte) n'y figurent pas ; la bascule automatique sur
+  l'onglet Validation après génération tient compte des suggestions
+  gériatriques seules (sans médicaments).
 - Revalidé : 25 réécritures inline (24/24 non-régression + « smaf »),
   24 hints, 3 profils ; références consult7 / consultai4 / dictee-1 / dictee-6
   (inline et matcher), consultation n° 37 (mms→MMSE, MMS→MMSE conf 0.864,

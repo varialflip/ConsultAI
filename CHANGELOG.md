@@ -3,7 +3,12 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-05 — Base « dictable » : le grounding ne retient que ce qui se prononce
+## 2026-09-06 — Grounding : vitamines B12 et nicotine intégrable en dictée
+
+- **Base `meds.sqlite`** : lignes BASE_GENERIC `vitamine b12` (+ alias `vitamine B12` / `vitamine b`, même clé phonétique — couvre les deux segmentations du STT : « vitamine B12 » et « vitamine B, 12 ») et `nicotine` (+ alias `nicotine`). Les marques B12 inactives (RUBRAMIN…) existaient déjà mais sans générique ni alias, aucun candidat ne pouvait se résoudre — le JSON seul n'y pouvait rien (les clés « courant » ne font que baisser des seuils sur des résolutions existantes).
+- **Crédit de dose complété** : `microgram` au singulier (`_DOSE_WORDS`, la capture s'arrêtait à « 1 200 »), et `microgram/microgramme/microgrammes`, `fois`, `q1sem` ajoutés aux regex de preuve de posologie (LAB/poso_credible + canal phonétique) — une « vitamine B12, 1 200 microgram PO DIE » passe désormais le garde des électrolytes/valeurs de lab (les vitamines restent du lab sans posologie crédible : « vitamine D réduite à 41 »).
+- **`common_meds.json`** : l'entrée « Vitamin B12 » existante (morte — sans `brand_name`, skippée par `load_common_json`) reçoit la marque `Rubramin` ; ajout de Nicotine/Nicorette.
+- Consultation 15 et 31 : « vitamine B12 » et « vitamine B, 12 200 microgrammes » apparaissent enfin en liste. (Le « timbre de nicotine » sans dose reste un cas de prose sûre — écarté sans posologie, doctrine inchangée.)
 
 - **`prune_molecule.py --dictable`** : la base passe de 7 988 à **5 977 lignes** (11 898 au départ). Constat mesuré : aucun sel (« erbumine », « cilexetil », « chlorhydrate »…) n'apparaît dans les 31 transcripts réels — le clinicien dicte « perindopril » ou « atacand », jamais « perindopril erbumine » ni « TEVA-CANDESARTAN ». Tout le reste n'est qu'une surface de faux positifs phonétiques.
 - **Génériques renommés au nu** (259) : « candesartan cilexetil » → `candesartan`, « perindopril erbumine » → `perindopril` — c'est ce nom que le LLM lit, et la liste courante JSON lui correspond directement. Sels et doublons FR/EN fusionnés (« metformine »/« metformin » → une ligne, repli du -e final).

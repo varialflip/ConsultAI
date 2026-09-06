@@ -593,7 +593,12 @@
       "brand_name": "Advil"
     },
     {
-      "generic_name": "Vitamin B12"
+      "generic_name": "Vitamin B12",
+      "brand_name": "Rubramin"
+    },
+    {
+      "generic_name": "Nicotine",
+      "brand_name": "Nicorette"
     }
   ]
 }

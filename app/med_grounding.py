@@ -1687,7 +1687,8 @@ class Matcher:
             is_common = norm_phon(base or "") in self.common
             no_unit_floor = COMMON_PHON_FLOOR if is_common else 0.72
             if poso and not re.search(
-                    r"\b(mg|mcg|µg|g|ml|ui|unité|unites|comprimé|tid|bid|hs|prn|po|die)\b",
+                    r"\b(mg|mcg|µg|g|ml|ui|unité|unites|microgram|microgramme|"
+                    r"microgrammes|fois|comprimé|tid|bid|hs|prn|po|die)\b",
                     poso, re.I) and s < no_unit_floor:
                 continue
             # Le token douteux (conf_keys) sans posologie crédible est admis à
@@ -2924,7 +2925,8 @@ def _dose_nb(w):
 
 
 _DOSE_UNIT_RE = re.compile(
-    r"\b(mg|mcg|µg|ug|g|ml|ui|unit|unite|unites|unité|unités|die|bid|tid|qid|"
+    r"\b(mg|mcg|µg|ug|g|ml|ui|unit|unite|unites|unité|unités|microgram|"
+    r"microgramme|microgrammes|fois|q1sem|die|bid|tid|qid|"
     r"prn|hs|po|peros|am|pm)\b", re.I)
 _DOSE_FORM_NUM_RE = re.compile(
     r"\b\d+(?:[.,]\d+)?\s*(comprimé|comprimés|capsule|capsules|goutte|gouttes|"
@@ -3091,7 +3093,8 @@ _DOSE_WORDS = {
     "mg", "mcg", "µg", "ug", "g", "ml", "unite", "unites", "unités", "units", "ui",
     "die", "bid", "tid", "qid", "prn", "po", "peros", "am", "pm", "hs",
     "matin", "soir", "coucher", "jour", "jours", "semaine", "fois",
-    "quotidien", "quotidienne", "microgramme", "microgrammes", "q1sem", "q2j",
+    "quotidien", "quotidienne", "microgram", "microgramme", "microgrammes",
+    "q1sem", "q2j",
     # « par » n'est porté que s'il précède une FRÉQUENCE (voir _dose_posology :
     # « 35 par semaine ») — jamais comme jeton poso isolé.
     "par",
@@ -3259,7 +3262,8 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # supplément.
     base_cle = norm_orth(base).replace(" ", "")
     if base_cle in LAB_ION_FLAT and not re.search(
-            r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm|"
+            r"\b(mg|mcg|µg|g|ml|ui|unit|microgram|microgramme|microgrammes|"
+            r"fois|q1sem|die|bid|tid|qid|prn|hs|po|am|pm|"
             r"comprimé|comprimés|capsule|capsules|goutte|gouttes|timbre|timbres|"
             r"crème|pommade|ampoule|suppositoire)\b",
             poso, re.I):
@@ -3299,7 +3303,8 @@ def _append_item(items, vus, fixed, jeton, res, force_name=None,
     # médicament en liste (``ancre_poso``) ni à un nom non résolu exactement
     # (déformé) : ceux-là ont confiance en général < 0.95 ou une région.
     poso_credible = bool(re.search(
-        r"\b(mg|mcg|µg|g|ml|ui|unit|die|bid|tid|qid|prn|hs|po|am|pm|"
+        r"\b(mg|mcg|µg|g|ml|ui|unit|microgram|microgramme|microgrammes|"
+        r"fois|q1sem|die|bid|tid|qid|prn|hs|po|am|pm|"
         r"comprimé|comprimés|capsule|capsules|goutte|gouttes|timbre|timbres|"
         r"crème|pommade|ampoule|suppositoire)\b",
         poso, re.I))

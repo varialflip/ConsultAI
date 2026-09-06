@@ -1281,6 +1281,18 @@ coûteux à manquer. Ils bénéficient de deux traitement privilégiés (constan
   de prose (les mots ordinaires résolvent vers des noms obscurs de la BDP) sans
   perdre un seul garble réel. Le bonus ne s'applique jamais aux mots de prose
   (les garde-fous `FRENCH_STOP`/`_HINTS_PROSE` subsistent).
+- **Fusion des pistes partageant une même posologie** (`Matcher._fusionner_
+  candidats_posologie`, en fin de `suggestions_texte`) : quand le STT éclate un
+  nom unique en plusieurs jetons (« apixaban » → « Applique, ça bande »), le
+  canal orthographique suggère deux médicaments distincts portés par la MÊME
+  dose adjacente — le LLM verrait « Eliquis 5 mg bid, Banzel 5 mg bid » (deux
+  anticoagulants pour un seul garble). Deux candidats phonetic portant la même
+  `posology` (strictement identique, non vide, positions `_i` à écart ≤ 2
+  jetons) sont FUSIONNÉS : le MÉDICAMENT COURANT l'emporte (sinon le score le
+  plus haut), et la `name` regroupe les fragments (« Applique bande » → Eliquis
+  conf 0.595). Deux médicaments légitimes à même dose mais à positions éloignées
+  restent distincts (gap > 2), et les items déterministes ne sont jamais
+  fusionnés.
 
 ### Règles produit 2026-09-05 : zone englobante, nombres en lettres, privilège « common med »
 

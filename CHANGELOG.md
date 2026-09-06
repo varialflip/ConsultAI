@@ -3,6 +3,35 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-06 — Med_grounding : fusion des candidats phonétiques portés par une même posologie
+
+- **Bug rapporté (consultation n° 38)** : « apixaban » dicté est éclaté par le
+  STT en « Applique, ça bande 5 mg deux fois par jour ». Le canal
+  orthographique suggérait DEUX médicaments distincts (« Applique » → Eliquis
+  sim 0.71, « bande » → Banzel sim 0.67), tous deux portés par la MÊME
+  posologie adjacente. Le LLM intégrait « Eliquis 5 mg bid, Banzel 5 mg bid »
+  — deux anticoagulants pour un seul garble segmenté → note erronée.
+- **Fix (`Matcher._fusionner_candidats_posologie`, appelé en fin de
+  `suggestions_texte`)** : deux candidats phonetic qui se DISPUTENT une même
+  posologie (``posology`` strictement identique, non vide, positions
+  ``_i`` à écart ≤ 2 jetons dans le texte) sont FUSIONNÉS en un seul. Le
+  survivant est le MÉDICAMENT COURANT (règle produit 2026-09-05), sinon le
+  score le plus haut ; sa ``name`` concatène les deux fragments (« Applique
+  bande ») pour que l'onglet Validation et le prompt LLM affichent la locution
+  complète. Le LLM reçoit désormais « Applique bande » → Eliquis conf 0.595 —
+  un seul médicament.
+- **Non-fusion protégée** : deux médicaments distincts à même dose mais à
+  positions éloignées (gap > 2) restent deux candidats (« lirica 5 mg … puis
+  norvasque 5 mg »). Les items déterministes (`source` absent, déjà
+  dédupliqués par base) ne sont jamais fusionnés. Clé interne ``_i`` retirée
+  avant retour (le contrat de ``suggestions_texte`` ne change pas).
+- **Coût** : O(n²) sur ≤ 25 items phonetic par consultation — mesuré
+  <= 1.3 ms à n=100, négligeable devant le scan BK-tree.
+- Revalidé : consultation 38 (2 candidats → 1 : « Applique bande » → Eliquis),
+  consultation 37 (mms→MMSE, ISOSNAF→ISO-SMAF), 4 transcripts de référence
+  (consult7 : apixaban déterministe + Eliquice→Eliquis ; consultai4 :
+  Retour→Crestor ; dictee1 ; dictee6) — aucune fusion indue.
+
 ## 2026-09-06 — Termes gériatriques : convert presque tout en profils phonétiques + fenêtres 1–3 jetons
 
 - **`phonetic_profiles` absorbe la majorité des `deterministic_replacements`.**

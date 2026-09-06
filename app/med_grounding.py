@@ -2091,10 +2091,104 @@ class Matcher:
                 "level": level,
                 "source": "phonetic",
                 "conf": label,               # étiquette combinée STT × similarité
+                "_i": i,                     # index dans words (post-traitement)
             })
             if len(result) >= maxi:
                 break
-        return result
+        return self._fusionner_candidats_posologie(result)
+
+    def _fusionner_candidats_posologie(self, items):
+        """Fusionne les candidats phonetic qui se DISPUTENT une même posologie.
+
+        Quand le STT éclate un nom de médicament en plusieurs jetons
+        (« apixaban » → « Applique, ça bande »), le canal orthographique
+        (« Applique » → Eliquis sim 0.71, « bande » → Banzel sim 0.67) et le
+        canal phonétique produisent deux candidats DIFFÉRENTS, portés par la
+        MÊME posologie adjacente (« 5 mg 2 fois par jour »). Le LLM reçoit
+        alors la liste « Eliquis 5 mg bid, Banzel 5 mg bid » — deux
+        médicaments distincts pour un seul garble segmenté. Consultation
+        n° 38 (apixaban→{Eliquis, Banzel}, note générée erronée) ;
+        pattern déjà référencé en commentaire ligne ~2064 (« applique→ELIQUIS,
+        observés 2026-09-03 »).
+
+        Règle de fusion (TOUS ces critères doivent être vrais) :
+          * deux items phonetic, ``base`` distinctes (= deux molécules
+            différentes) ;
+          * ``posology`` strictement identiques ET non vides (= ils se
+            disputent la même dose, ce qui est incompatible avec deux
+            médicaments distincts) ;
+          * positions ``_i`` dans le texte à écart ≤ 2 jetons (= même
+            fenêtre posologique, pas deux mentions distantes).
+
+        Le choix du survivant : MÉDICAMENT COURANT l'emporte (règle produit
+        2026-09-05), sinon ``score`` le plus haut, sinon premier collecté.
+        Le perdant est écarté ; le gagnant conserve son ``canonical``,
+        ``posology``, ``conf`` ; sa ``name`` est la concaténation des
+        ``name`` des deux items (le médecin voit « Applique bande » →
+        Eliquis, pas un seul mot qui serait faux).
+
+        Les items déterministes (``source`` absent) ne sont pas touchés :
+        le canal resolved est déjà dédupliqué par ``base``. Le coût est
+        O(n²) sur n items phonetic par consultation (n ≤ 25, maxi canal) —
+        mesuré négligeable (< 1 ms).
+        """
+        if not items or len(items) < 2:
+            return items
+        out: list = []
+        jetees: set = set()
+        for i, it in enumerate(items):
+            if i in jetees or it.get("source") != "phonetic":
+                if i in jetees:
+                    continue             # déjà fusionné dans un groupe précédent
+                out.append(it)
+                continue
+            pos_i = (it.get("posology") or "").strip()
+            ii = it.get("_i")
+            if not pos_i or ii is None:
+                out.append(it)
+                continue
+            groupe = [it]
+            for j in range(i + 1, len(items)):
+                if j in jetees:
+                    continue
+                jt = items[j]
+                if jt.get("source") != "phonetic":
+                    continue
+                if (jt.get("base") or "") == (it.get("base") or ""):
+                    continue                # même molécule : dédup upstream
+                pos_j = (jt.get("posology") or "").strip()
+                if pos_j != pos_i:
+                    continue
+                jj = jt.get("_i")
+                if jj is None or abs(jj - ii) > 2:
+                    continue
+                groupe.append(jt)
+            if len(groupe) == 1:
+                out.append(it)
+                continue
+            # Survivant : commun d'abord, sinon score le plus haut, sinon
+            # premier collecté. La ``name`` du survivant regroupe les deux
+            # fragments pour que le surlignage/rollover affiche la locution
+            # complète (« Applique bande »).
+            def cle(c):
+                is_c = norm_phon(c.get("base") or "") in self.common
+                return (0 if is_c else 1, -(c.get("score") or 0))
+            survivant = min(groupe, key=cle)
+            jette = [c for c in groupe if c is not survivant]
+            jette_idx = [items.index(c) for c in jette]
+            jetees.update(jette_idx)
+            names = sorted({(c.get("name") or "").strip() for c in groupe
+                            if (c.get("name") or "").strip()})
+            nouveau = dict(survivant)
+            nouveau["name"] = " ".join(names) if len(names) > 1 else survivant["name"]
+            nouveau.pop("_i", None)
+            out.append(nouveau)
+        # Strip the internal ``_i`` from any item that didn't get fused (defensive
+        # : callers never see this key, the contract of ``suggestions_texte`` is
+        # unchanged).
+        for it in out:
+            it.pop("_i", None)
+        return out
 
     def _phonetic_candidats(self, token):
         """Meilleur candidat phonétique d'un token, ou ``None``.

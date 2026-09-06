@@ -132,6 +132,20 @@ même commit** :
   elles comptent comme preuve de dose partout (région liste, phr, posologie) ;
   hors région confirmée elles ne créditent JAMAIS un ion de laboratoire
   (« Sodium cent quarante et un » reste une valeur de bilan).
+- **Fusion des candidats phonétiques partageant une posologie** (2026-09-06,
+  cf. `Matcher._fusionner_candidats_posologie` en fin de
+  `suggestions_texte`) : quand le STT éclate un nom unique en plusieurs
+  jetons (« apixaban » → « Applique, ça bande »), deux candidats phonetic
+  peuvent être suggérés pour la MÊME dose adjacente — le LLM verrait deux
+  médicaments distincts. Deux candidats phonetic de molécules différentes,
+  portant la même `posology` (strictement identique, non vide, positions à
+  écart ≤ 2 jetons), sont FUSIONNÉS : le MÉDICAMENT COURANT l'emporte
+  (sinon la sim la plus haute), et la `name` concatène les fragments.
+  Deux médicaments légitimes à même dose mais à positions éloignées
+  (gap > 2) ne sont JAMAIS fusionnés, ni les items déterministes
+  (`source` absent). Toute évolution de ce regroupement doit être
+  re-validée sur la consultation 38 (apixaban) et les 4 transcripts
+  de référence.
 - **`phonetic_profiles` gériatriques** (2026-09-06) : `_FENETRES = (1, 2, 3)`,
   `require_score` à 3 jetons suivant, `min_sim` 0.75 par défaut sur les
   nouveaux profils (MMSE/MoCA/ISO-SMAF conservent leurs seuils). Le

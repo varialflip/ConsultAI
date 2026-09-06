@@ -611,15 +611,29 @@
     // n'est jamais enchâssée dans une autre déjà marquée.
     const marquees = [];
     const occupe = (s, e) => marquees.some(([ms, me]) => s < me && ms < e);
+    // Frappe-moi seulement un MOT : ni lettre/chiffre ni apostrophe/tiret collé
+    // ne peuvent border la cible (« SMAF » dans « ISO-SMAF » n'est pas une
+    // cible, « xmmsy » non plus).
+    const estLettre = (ch) => !!ch && /[\p{L}\p{N}]/u.test(ch);
+    const bordeMot = (pos) => {
+      const c = text[pos];
+      if (!c) return false;
+      if (estLettre(c)) return true;
+      if ((c === '-' || c === "'") && pos + 1 < text.length) {
+        return estLettre(text[pos + 1]);
+      }
+      return false;
+    };
     const ordonnees = [...transcriptCorrections]
       .filter((c) => c && c.correct)
       .sort((a, b) => (b.garble || b.correct).length - (a.garble || a.correct).length);
     for (const c of ordonnees) {
       const tok = c.garble || c.correct;
       if (!tok) continue;
-      const re = new RegExp(escapeRegExp(tok), 'gi');
+      const re = new RegExp(escapeRegExp(tok), 'giu');
       for (const m of text.matchAll(re)) {
         const s = m.index, e = m.index + m[0].length;
+        if (bordeMot(s - 1) || bordeMot(e)) continue;
         if (!occupe(s, e)) {
           marquees.push([s, e, c]);
         }

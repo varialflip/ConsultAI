@@ -727,9 +727,30 @@ Les entrées du JSON sont de deux natures, distinguées par un drapeau
   le STT déformera ce terme « dur ». Ils sont suggérés au modèle avec une
   **confiance combinée `sqrt(min_stt × sim)`** (minimale `min_stt` sur les
   jetons du fragment, `sim` = similarité phonémique G2P), la MÊME convention
-  que les suggestions phonétiques des médicaments : **plus elle est basse,
-  plus la piste est forte** (STT incertain + phonétique proche → garble
-  probable). Le fichier reste sans nom de médicament.
+que les suggestions phonétiques des médicaments : **plus elle est basse,
+   plus la piste est forte** (STT incertain + phonétique proche → garble
+   probable). Le fichier reste sans nom de médicament.
+
+**Variantes floues des échelles cognitives** (`phonetic_profiles`). Les
+déformations NON énumérées des noms d'échelles se résolvent par balayage
+phonétique : `matcher_profils` découpe le transcrit en fenêtres de 1–2 jetons
+et les compare (G2P, `med_grounding.sim_phon_w`) aux sondes de chaque profil
+(`probes`, avec `min_sim` par sonde) — MMSE, MoCA et ISO-SMAF. Chaque candidat
+est soumis à un **triple pré-filtre orthographique** (écart de longueur ≤ 2,
+premier caractère identique, ≥ 1 bigramme commun) pour ramener le scan à
+~100 ms sur ~2 000 mots, puis à une somme phonétique ≥ `min_sim`. Les
+candidats sont dédupliqués **par canonique** (le MÉDICAMENT absent ici, mais un
+score englobant ne gagne pas sur le terme). Trois drapeaux par profil :
+- `force: true` — variante SÛRE de la forme canonique, réécrite inline comme
+  une équivalence autoritaire sans attendre le gate de confiance STT < 0.98 ;
+- `require_score: true` — un candidat n'est retenu que si un score (entier
+  ≤ 30 dans les ~2 jetons suivants, tolérant « à/de/sur ») suit l'échelle
+  (« mms 18 sur 30 ») ; désactivé pour ISO-SMAF (toujours dicté sans score) ;
+- suggestions de variantes floues = `prompt_hints`, jamais une réécriture : la
+  forme est proposée au modèle avec confiance combinée, le texte brut reste
+  intact. La forme canonique déjà écrite (no-op) est écartée.
+Ce canal couvre aussi des homophonies réelles (« ISRS », un antidépresseur,
+est tenu à l'écart par `min_sim` ≥ 0.60 sur ISO-SMAF).
 
 **Le LLM reste aveugle aux corrections inline.** Les formes déjà corrigées en
 inline (médicaments et termes gériatriques) sont **retirées** du bloc
@@ -763,9 +784,15 @@ Décider du canal selon la NATURE du terme, pas selon sa simple présence :
    `"phonetic": true`. Le fragment porte une **confiance combinée** envoyée au
    modèle (`<<<HOMOPHONIES_CE_CALL>>>`) et affichée en rollover.
 3. **Équivalence pré-orthographiée** (ne change pas l'orthographe, sert de
-   consigne contextuelle — ex. « leucoaraïose », « leucopatie ») →
-   `prompt_hints` **sans** `phonetic` : aucune confiance, le modèle reçoit la
-   lecture correcte.
+    consigne contextuelle — ex. « leucoaraïose », « leucopatie ») →
+    `prompt_hints` **sans** `phonetic` : aucune confiance, le modèle reçoit la
+    lecture correcte.
+4. **Échelle cognitive dont le STT déforme le nom de mille façons non
+    énumérables** (MMSE, MoCA, ISO-SMAF) → **`phonetic_profiles`** : les
+    `probes` (`forme` + `min_sim`) couvrent les variantes connues, le balayage
+    attrape les autres. Prévoir `require_score: true` si la cible est toujours
+    dictée avec un score (échelle cognitive), `force: true` pour les variantes
+    sûres à réécrire inline, `false` sinon (le reste = suggestions au modèle).
 
 Pour un `garble` multi-mots, mettre la forme dictée DÉFORMÉE dans le champ
 `garble`/**`fragment`** et l'orthographe CANONIQUE dans `correct`/`lecture`.

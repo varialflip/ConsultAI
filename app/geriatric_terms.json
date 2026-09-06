@@ -1,5 +1,5 @@
 {
-  "_comment": "Termes gériatriques québécois curatés, corrigés AVANT/PENDANT la dictée et la génération (voir geriatric_terms.py). Aucun nom de médicament ici (ceux-ci sont gérés par med_grounding) : termes cliniques, d'établissement ou abréviations. Un mot déjà corrigé inline par med_grounding est protégé (diffusion med gagne). deterministic_replacements = réécriture sûre dans le texte ; prompt_hints = homophonies ambiguës laissées au jugement du LLM (bloc HOMOPHONIES_CE_CALL). Entrées françaises pour l'instant.",
+  "_comment": "Termes gériatriques québécois curatés, corrigés AVANT/PENDANT la dictée et la génération (voir geriatric_terms.py). Aucun nom de médicament ici (ceux-ci sont gérés par med_grounding) : termes cliniques, d'établissement ou abréviations. Un mot déjà corrigé inline par med_grounding est protégé (diffusion med gagne). Trois canaux : deterministic_replacements = remplacements EXACTS et sûrs, réécrits dans le texte (avec l'option force pour les formes qui s'appliquent toujours, même STT confiant) ; prompt_hints = homophonies ambiguës ou termes 'durs' à lecture exacte, suggérés au LLM (bloc HOMOPHONIES_CE_CALL) ; phonetic_profiles = matching PHONÉTIQUE FLOU (G2P) par profil, qui couvre toutes les variantes d'un terme sans les énumérer (voir doc du champ require_score). Entrées françaises pour l'instant.",
   "deterministic_replacements": [
     {
       "garble": "hôtel dieu du québec",
@@ -24,22 +24,38 @@
     {
       "garble": "mini mental",
       "correct": "MMSE",
-      "langue": "fr"
+      "langue": "fr",
+      "force": true
     },
     {
       "garble": "miny mental",
       "correct": "MMSE",
-      "langue": "fr"
+      "langue": "fr",
+      "force": true
     },
     {
       "garble": "mini mental status",
       "correct": "MMSE",
-      "langue": "fr"
+      "langue": "fr",
+      "force": true
     },
     {
       "garble": "mms exam",
       "correct": "MMSE",
-      "langue": "fr"
+      "langue": "fr",
+      "force": true
+    },
+    {
+      "garble": "mms",
+      "correct": "MMSE",
+      "langue": "fr",
+      "force": true
+    },
+    {
+      "garble": "mo ca",
+      "correct": "MoCA",
+      "langue": "fr",
+      "force": true
     },
     {
       "garble": "hôpital régional de saint jérôme",
@@ -52,32 +68,25 @@
       "langue": "fr"
     },
     {
-      "garble": "iso-smaf",
-      "correct": "ISO-SMAF",
-      "langue": "fr"
-    },
-    {
-      "garble": "izo-smaf",
-      "correct": "ISO-SMAF",
-      "langue": "fr"
-    },
-    {
       "garble": "izo-smaff",
       "correct": "ISO-SMAF",
-      "langue": "fr"
+      "langue": "fr",
+      "force": true
     },
     {
       "garble": "iso smaf",
       "correct": "ISO-SMAF",
-      "langue": "fr"
+      "langue": "fr",
+      "force": true
+    },
+    {
+      "garble": "smaf",
+      "correct": "ISO-SMAF",
+      "langue": "fr",
+      "force": true
     },
     {
       "garble": "maison aloi",
-      "correct": "Maison Aloïs",
-      "langue": "fr"
-    },
-    {
-      "garble": "maison aloïs",
       "correct": "Maison Aloïs",
       "langue": "fr"
     },
@@ -286,6 +295,42 @@
       "lecture": "signe de Noïka",
       "contexte": "manœuvre de renforcement à l'examen clinique (maladie de Parkinson)",
       "langue": "fr"
+    }
+  ],
+  "phonetic_profiles": [
+    {
+      "_comment": "Profil EXEMPLIER : canaux de lecture d'un terme, matchés PHONÉTIQUEMENT (G2P) et suggérés au LLM (bloc HOMOPHONIES_CE_CALL) + rollover. require_score=true : le match ne compte que si un score (entier <= 30) suit à ~2 jetons, tolérant 'à'/'de'/'/'sur' — protège les acronymes courts (mms/moca/mmse) contre Mme/mse/mais. require_score=false : simple seuil de similarité (termes à très peu d'homonymes, ex. ISO-SMAF). Fenêtres déjà égales à canonical ignorées (pas de no-op).",
+      "canonical": "MMSE",
+      "contexte": "échelle cognitive — mini mental state exam",
+      "langue": "fr",
+      "require_score": true,
+      "probes": [
+        { "forme": "mms",         "min_sim": 0.70 },
+        { "forme": "mmse",        "min_sim": 0.80 },
+        { "forme": "mini mental", "min_sim": 0.62 },
+        { "forme": "minimental",  "min_sim": 0.62 }
+      ]
+    },
+    {
+      "canonical": "MoCA",
+      "contexte": "échelle cognitive de Montréal",
+      "langue": "fr",
+      "require_score": true,
+      "probes": [
+        { "forme": "moca",  "min_sim": 0.60 },
+        { "forme": "mo ca", "min_sim": 0.70 }
+      ]
+    },
+    {
+      "canonical": "ISO-SMAF",
+      "contexte": "cote de maintien à domicile — autonomie fonctionnelle",
+      "langue": "fr",
+      "require_score": false,
+      "probes": [
+        { "forme": "iso smaf", "min_sim": 0.60 },
+        { "forme": "iso snaf", "min_sim": 0.60 },
+        { "forme": "smaf",     "min_sim": 0.75 }
+      ]
     }
   ]
 }

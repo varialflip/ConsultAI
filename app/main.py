@@ -369,14 +369,15 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     consultation.compute_stats_json = merge_compute_stats(
         consultation.compute_stats_json, {"grounding_scan_ms": grounding_scan_ms})
     db.commit()
-    # Termes gériatriques (module À PART) : paires {garble, correct} pour le
-    # surlignage du transcrit, calculées sur le texte complet.
+    # Termes gériatriques (module À PART) : réécritures inline sûres + candidats
+    # phonétiques du profil (ex. MMS→MMSE, isosnaphe→ISO-SMAF), pour le
+    # surlignage/rollover du transcrit et les échelles à valider. Calculées sur
+    # le texte complet.
     geriatric: list = []
     try:
-        _g_corr, _g_ch = geriatric_terms.apply_inline_replacements(
-            text, langue=preferences.document_language(), conf=conf_map or None,
+        geriatric = geriatric_terms.corrections_et_hints(
+            text, langue=preferences.document_language(), conf_map=conf_map or None,
         )
-        geriatric = _g_ch or []
     except Exception:
         logger.exception("Termes gériatriques indisponibles (consultation %s)", consultation.id)
         geriatric = []
@@ -3660,16 +3661,16 @@ def get_consultation(consultation_id: int, request: Request, db: Session = Depen
     user = current_user(request)
     consultation = _get_owned_consultation(db, consultation_id, user)
     data = consultation.to_dict()
-    # Termes gériatriques (module À PART) : paire {garble, correct} pour le
+    # Termes gériatriques (module À PART) : réécritures inline sûres + candidats
+    # phonétiques du profil (ex. MMS→MMSE, isosnaphe→ISO-SMAF), pour le
     # SURlignage du transcrit à la réouverture (NOTAMMENT après refresh) —
     # mêmes curations que pendant la dictée / à la génération.
     try:
         texte = (consultation.raw_transcript or "").strip()
         if texte:
-            _g_corr, geriatric = geriatric_terms.apply_inline_replacements(
+            data["geriatric"] = geriatric_terms.corrections_et_hints(
                 texte, langue=preferences.document_language(),
-            )
-            data["geriatric"] = geriatric or []
+            ) or []
         else:
             data["geriatric"] = []
     except Exception:

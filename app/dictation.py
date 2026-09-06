@@ -1683,15 +1683,19 @@ def _merge_and_publish_meds(session: DictationSession) -> None:
 
 
 def _geriatric_corrections(texte: str) -> list:
-    """Paires ``{garble, correct}`` de termes gériatriques réécrits inline."""
+    """Candidats gériatriques pour le rollover pendant la dictée.
+
+    Réécritures inline sûres (``{garble, correct}``) + candidats phonétiques
+    du profil (``{garble, correct, confidence}``, ex. MMS→MMSE,
+    isosnaphe→ISO-SMAF) sur le texte de CETTE dictée.
+    """
     if not (texte or "").strip():
         return []
     from app import preferences
     try:
-        _corr, changements = geriatric_terms.apply_inline_replacements(
+        return geriatric_terms.corrections_et_hints(
             texte, langue=preferences.document_language(),
         )
-        return changements
     except Exception:
         return []
 

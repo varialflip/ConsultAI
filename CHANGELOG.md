@@ -3,6 +3,38 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-06 — Termes gériatriques : matching phonétique des échelles MMSE / MoCA / ISO-SMAF
+
+- **`phonetic_profiles`** dans `geriatric_terms.json` : au lieu d'énumérer
+  chaque déformation des noms d'échelles cognitives, un profil porte une sonde
+  phonétique (`probes` + `min_sim` par sonde) — MMSE, MoCA et ISO-SMAF.
+  `matcher_profils` découpe le transcrit en fenêtres de 1–2 jetons, applique un
+  **triple pré-filtre orthographique** (écart de longueur ≤ 2, premier
+  caractère, ≥ 1 bigramme commun — scan ~100 ms sur ~2000 mots) puis compare au
+  G2P. Des variantes jamais rencontrées (« izosnaf », « smaph », « moka »…)
+  sont désormais proposées au modèle, deduplicées par canonique (fenêtre la
+  plus courte d'abord).
+- **`require_score`** : MMSE et MoCA n'exigent une cote ≤ 30 dans les ~2 jetons
+  suivants (« mms 18 sur 30 ») ; ISO-SMAF reste libre (souvent dicté sans).
+  **`force`** : les entrées sûres des échelles réécrivent inline sans le gate de
+  confiance < 0.98 (déjà en place pour « mms » → MMSE, étendu à « mo ca »,
+  « izo-smaff »…).
+- **Forme réduite « SMAF »** (« son dernier SMAF est à 10 ») : ajoutée en
+  réécriture inline `force` (couvre la dictée) ET comme sonde `smaf`
+  (min_sim 0.75 — variantes « smaphe », « smaph », « snaf »…).
+  `corrections_et_hints` (rollover dictée + génération + brouillon) émet
+  l'inline `{garble, correct}` puis le candidat flou avec confiance combinée.
+- **Garde-fous** : seuil ISO-SMAF relevé à 0.60 (un antidépresseur NOTÉ « ISRS »
+  n'est plus proposé comme ISO-SMAF ; les vraies variantes ≥ 0.625 passent) ;
+  frontières de mot strictes — le « SMAF » sous-mot de « ISO-SMAF » ne
+  corrompt plus la forme canonique (Python inline et surlignage JS), « ISO-SMAF
+  est à 10 » reste intact.
+- Revalidé : 25 réécritures inline (24/24 non-régression + « smaf »),
+  24 hints, 3 profils ; références consult7 / consultai4 / dictee-1 / dictee-6
+  (inline et matcher), consultation n° 37 (mms→MMSE, MMS→MMSE conf 0.864,
+  ISOSNAF→ISO-SMAF 0.68), faux positifs « ISRS », « mme », « mais », « mise »,
+  « mse » exclus.
+
 ## 2026-09-06 — Grounding : vitamines B12 et nicotine intégrable en dictée
 
 - **Base `meds.sqlite`** : lignes BASE_GENERIC `vitamine b12` (+ alias `vitamine B12` / `vitamine b`, même clé phonétique — couvre les deux segmentations du STT : « vitamine B12 » et « vitamine B, 12 ») et `nicotine` (+ alias `nicotine`). Les marques B12 inactives (RUBRAMIN…) existaient déjà mais sans générique ni alias, aucun candidat ne pouvait se résoudre — le JSON seul n'y pouvait rien (les clés « courant » ne font que baisser des seuils sur des résolutions existantes).

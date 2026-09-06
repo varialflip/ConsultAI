@@ -53,11 +53,71 @@
     {
       "token_start": 600,
       "token_end": 615,
-      "context_start": 590,
-      "context_end": 625,
+      "context_start": 580,
+      "context_end": 635,
       "region_text": "Posamax 70 une fois par semaine, Calcium 500 dié, Crestor 5 dié, Gabapentin 100 HS, Crestor",
-      "full_text": "2 dié, vitamine D 10 000 une fois par semaine, Posamax 70 une fois par semaine, Calcium 500 dié, Crestor 5 dié, Gabapentin 100 HS, Crestor 5 HS. Impression : il s'agit d'un homme de 78",
+      "full_text": "10HS. Methformine 250BID. Non. C'est Methformine 250DIE. Flomax 0.4DIE. Coversile 2 dié, vitamine D 10 000 une fois par semaine, Posamax 70 une fois par semaine, Calcium 500 dié, Crestor 5 dié, Gabapentin 100 HS, Crestor 5 HS. Impression : il s'agit d'un homme de 78 ans avec un cancer urothélial métastatique sous immunothérapie. Premier point",
       "tokens": [
+        {
+          "idx": 580,
+          "token": "10HS.",
+          "in_region": false,
+          "conf": 0.9986348152160645
+        },
+        {
+          "idx": 581,
+          "token": "Methformine",
+          "in_region": false,
+          "conf": 0.9860528260469437
+        },
+        {
+          "idx": 582,
+          "token": "250BID.",
+          "in_region": false,
+          "conf": 0.9018981575965881
+        },
+        {
+          "idx": 583,
+          "token": "Non.",
+          "in_region": false,
+          "conf": 0.8688521981239319
+        },
+        {
+          "idx": 584,
+          "token": "C'est",
+          "in_region": false,
+          "conf": 0.973212997118632
+        },
+        {
+          "idx": 585,
+          "token": "Methformine",
+          "in_region": false,
+          "conf": 0.9860528260469437
+        },
+        {
+          "idx": 586,
+          "token": "250DIE.",
+          "in_region": false,
+          "conf": 0.9994752804438273
+        },
+        {
+          "idx": 587,
+          "token": "Flomax",
+          "in_region": false,
+          "conf": 0.8184739500284195
+        },
+        {
+          "idx": 588,
+          "token": "0.4DIE.",
+          "in_region": false,
+          "conf": 0.9994752804438273
+        },
+        {
+          "idx": 589,
+          "token": "Coversile",
+          "in_region": false,
+          "conf": 0.8598565856615702
+        },
         {
           "idx": 590,
           "token": "2",
@@ -273,6 +333,66 @@
           "token": "78",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 626,
+          "token": "ans",
+          "in_region": false,
+          "conf": 0.9999744892120361
+        },
+        {
+          "idx": 627,
+          "token": "avec",
+          "in_region": false,
+          "conf": 0.997119665145874
+        },
+        {
+          "idx": 628,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.9995964169502258
+        },
+        {
+          "idx": 629,
+          "token": "cancer",
+          "in_region": false,
+          "conf": 0.9999681711196899
+        },
+        {
+          "idx": 630,
+          "token": "urothélial",
+          "in_region": false,
+          "conf": 0.9847976863384247
+        },
+        {
+          "idx": 631,
+          "token": "métastatique",
+          "in_region": false,
+          "conf": 0.9799391825993856
+        },
+        {
+          "idx": 632,
+          "token": "sous",
+          "in_region": false,
+          "conf": 0.993526816368103
+        },
+        {
+          "idx": 633,
+          "token": "immunothérapie.",
+          "in_region": false,
+          "conf": 0.9970351116997855
+        },
+        {
+          "idx": 634,
+          "token": "Premier",
+          "in_region": false,
+          "conf": 0.9902511040369669
+        },
+        {
+          "idx": 635,
+          "token": "point",
+          "in_region": false,
+          "conf": 0.9432843327522278
         }
       ]
     }

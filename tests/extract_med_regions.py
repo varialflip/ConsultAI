@@ -2,7 +2,7 @@
 """Extrait les régions médicaments de chaque consultation ayant une conf_map.
 
 Pour chaque consultation, identifie les régions « liste de médicaments » via
-``_region_medlist``, étend de ±10 mots de contexte, et produit un fichier
+``_region_medlist``, étend de ±20 mots de contexte, et produit un fichier
 JSON avec les tokens, leur statut (médicament / contexte) et la confiance STT.
 
 Usage (dans le conteneur) :
@@ -20,7 +20,7 @@ from app.med_grounding import _region_medlist, norm_phon
 
 DB_PATH = "/data/consultai.db"
 OUT_DIR = "/tmp/med_regions"
-CONTEXT = 10  # mots avant/après
+CONTEXT = 20  # mots avant/après
 
 
 def conf_for_token(token, conf_map):

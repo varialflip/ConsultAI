@@ -75,11 +75,71 @@
     {
       "token_start": 157,
       "token_end": 162,
-      "context_start": 147,
-      "context_end": 172,
+      "context_start": 137,
+      "context_end": 182,
       "region_text": "Zyprexa, 1,25 mg au coucher. Aricept,",
-      "full_text": "par jour. Père, en 50 mg une fois par jour. Zyprexa, 1,25 mg au coucher. Aricept, 5 mg une fois par jour. Fludrocortisone, 0,1 mg une",
+      "full_text": "2,5. Non, en fait, c'est amatine, 7,5 mg trois fois par jour. Père, en 50 mg une fois par jour. Zyprexa, 1,25 mg au coucher. Aricept, 5 mg une fois par jour. Fludrocortisone, 0,1 mg une fois par jour. 500, deux fois par jour. Vitamine D,",
       "tokens": [
+        {
+          "idx": 137,
+          "token": "2,5.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 138,
+          "token": "Non,",
+          "in_region": false,
+          "conf": 0.979339987039566
+        },
+        {
+          "idx": 139,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.9998716115951538
+        },
+        {
+          "idx": 140,
+          "token": "fait,",
+          "in_region": false,
+          "conf": 0.9971532821655273
+        },
+        {
+          "idx": 141,
+          "token": "c'est",
+          "in_region": false,
+          "conf": 0.9998844861984253
+        },
+        {
+          "idx": 142,
+          "token": "amatine,",
+          "in_region": false,
+          "conf": 0.8554517179727554
+        },
+        {
+          "idx": 143,
+          "token": "7,5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 144,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9998832543691
+        },
+        {
+          "idx": 145,
+          "token": "trois",
+          "in_region": false,
+          "conf": 0.999850869178772
+        },
+        {
+          "idx": 146,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999752044677734
+        },
         {
           "idx": 147,
           "token": "par",
@@ -235,6 +295,66 @@
           "token": "une",
           "in_region": false,
           "conf": 0.9996644258499146
+        },
+        {
+          "idx": 173,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999752044677734
+        },
+        {
+          "idx": 174,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999986886978149
+        },
+        {
+          "idx": 175,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9999777674674988
+        },
+        {
+          "idx": 176,
+          "token": "500,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 177,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.9982020854949951
+        },
+        {
+          "idx": 178,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999752044677734
+        },
+        {
+          "idx": 179,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999986886978149
+        },
+        {
+          "idx": 180,
+          "token": "jour.",
+          "in_region": false,
+          "conf": 0.9999777674674988
+        },
+        {
+          "idx": 181,
+          "token": "Vitamine",
+          "in_region": false,
+          "conf": 0.990043893456459
+        },
+        {
+          "idx": 182,
+          "token": "D,",
+          "in_region": false,
+          "conf": 0.9984626770019531
         }
       ]
     }

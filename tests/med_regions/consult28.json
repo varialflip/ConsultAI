@@ -50,11 +50,71 @@
     {
       "token_start": 85,
       "token_end": 94,
-      "context_start": 75,
-      "context_end": 104,
+      "context_start": 65,
+      "context_end": 114,
       "region_text": "Coversil 4, un Dapamide 1,25, Flomax, 0.4, l'Anzoprazole 30, Finastéride",
-      "full_text": "de l'hypertrophie de la prostate. Comme médicament, il prend un Coversil 4, un Dapamide 1,25, Flomax, 0.4, l'Anzoprazole 30, Finastéride 5. Il a une douzième année de scolarité, il est",
+      "full_text": "qui est connu pour de l'hypertension, du diabète, de reflux, de l'hypertrophie de la prostate. Comme médicament, il prend un Coversil 4, un Dapamide 1,25, Flomax, 0.4, l'Anzoprazole 30, Finastéride 5. Il a une douzième année de scolarité, il est veuf depuis un an, il a été fermier. Il habite",
       "tokens": [
+        {
+          "idx": 65,
+          "token": "qui",
+          "in_region": false,
+          "conf": 0.9807317852973938
+        },
+        {
+          "idx": 66,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.6106246113777161
+        },
+        {
+          "idx": 67,
+          "token": "connu",
+          "in_region": false,
+          "conf": 0.9999350309371948
+        },
+        {
+          "idx": 68,
+          "token": "pour",
+          "in_region": false,
+          "conf": 0.9992241859436035
+        },
+        {
+          "idx": 69,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.7102649211883545
+        },
+        {
+          "idx": 70,
+          "token": "l'hypertension,",
+          "in_region": false,
+          "conf": 0.9987280283655439
+        },
+        {
+          "idx": 71,
+          "token": "du",
+          "in_region": false,
+          "conf": 0.997495710849762
+        },
+        {
+          "idx": 72,
+          "token": "diabète,",
+          "in_region": false,
+          "conf": 0.9934088289737701
+        },
+        {
+          "idx": 73,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.7102649211883545
+        },
+        {
+          "idx": 74,
+          "token": "reflux,",
+          "in_region": false,
+          "conf": 0.899169459939003
+        },
         {
           "idx": 75,
           "token": "de",
@@ -234,6 +294,66 @@
           "token": "est",
           "in_region": false,
           "conf": 0.6106246113777161
+        },
+        {
+          "idx": 105,
+          "token": "veuf",
+          "in_region": false,
+          "conf": 0.9960528314113617
+        },
+        {
+          "idx": 106,
+          "token": "depuis",
+          "in_region": false,
+          "conf": 0.9981339573860168
+        },
+        {
+          "idx": 107,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.9998160004615784
+        },
+        {
+          "idx": 108,
+          "token": "an,",
+          "in_region": false,
+          "conf": 0.9533354938030243
+        },
+        {
+          "idx": 109,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.336527943611145
+        },
+        {
+          "idx": 110,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.5477526783943176
+        },
+        {
+          "idx": 111,
+          "token": "été",
+          "in_region": false,
+          "conf": 0.9999898672103882
+        },
+        {
+          "idx": 112,
+          "token": "fermier.",
+          "in_region": false,
+          "conf": 0.9355195313692093
+        },
+        {
+          "idx": 113,
+          "token": "Il",
+          "in_region": false,
+          "conf": 0.336527943611145
+        },
+        {
+          "idx": 114,
+          "token": "habite",
+          "in_region": false,
+          "conf": 0.9989281594753265
         }
       ]
     }

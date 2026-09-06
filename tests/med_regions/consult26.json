@@ -89,11 +89,71 @@
     {
       "token_start": 131,
       "token_end": 136,
-      "context_start": 121,
-      "context_end": 146,
+      "context_start": 111,
+      "context_end": 156,
       "region_text": "simvastatine 10 mg au coucher, donépésil",
-      "full_text": "fois par jour, citagliptine 100 mg une fois par jour, simvastatine 10 mg au coucher, donépésil 5 mg le matin, vitamine D 10 000 unités une",
+      "full_text": "par jour au besoin. Sénocote, 8,6 mg au coucher. Une fois par jour, citagliptine 100 mg une fois par jour, simvastatine 10 mg au coucher, donépésil 5 mg le matin, vitamine D 10 000 unités une fois par jour, une fois par semaine, dexylant 60 mg,",
       "tokens": [
+        {
+          "idx": 111,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999691247940063
+        },
+        {
+          "idx": 112,
+          "token": "jour",
+          "in_region": false,
+          "conf": 0.9366697371006012
+        },
+        {
+          "idx": 113,
+          "token": "au",
+          "in_region": false,
+          "conf": 0.6440069675445557
+        },
+        {
+          "idx": 114,
+          "token": "besoin.",
+          "in_region": false,
+          "conf": 0.9662472605705261
+        },
+        {
+          "idx": 115,
+          "token": "Sénocote,",
+          "in_region": false,
+          "conf": 0.8507887244224548
+        },
+        {
+          "idx": 116,
+          "token": "8,6",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 117,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.97722989320755
+        },
+        {
+          "idx": 118,
+          "token": "au",
+          "in_region": false,
+          "conf": 0.6440069675445557
+        },
+        {
+          "idx": 119,
+          "token": "coucher.",
+          "in_region": false,
+          "conf": 0.9840329587459564
+        },
+        {
+          "idx": 120,
+          "token": "Une",
+          "in_region": false,
+          "conf": 0.9999535083770752
+        },
         {
           "idx": 121,
           "token": "fois",
@@ -249,6 +309,66 @@
           "token": "une",
           "in_region": false,
           "conf": 0.9999535083770752
+        },
+        {
+          "idx": 147,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999200105667114
+        },
+        {
+          "idx": 148,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999691247940063
+        },
+        {
+          "idx": 149,
+          "token": "jour,",
+          "in_region": false,
+          "conf": 0.9366697371006012
+        },
+        {
+          "idx": 150,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9999535083770752
+        },
+        {
+          "idx": 151,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999200105667114
+        },
+        {
+          "idx": 152,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999691247940063
+        },
+        {
+          "idx": 153,
+          "token": "semaine,",
+          "in_region": false,
+          "conf": 0.9997077782948812
+        },
+        {
+          "idx": 154,
+          "token": "dexylant",
+          "in_region": false,
+          "conf": 0.7978355288505554
+        },
+        {
+          "idx": 155,
+          "token": "60",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 156,
+          "token": "mg,",
+          "in_region": false,
+          "conf": 0.97722989320755
         }
       ]
     }

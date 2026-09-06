@@ -149,11 +149,71 @@
     {
       "token_start": 90,
       "token_end": 102,
-      "context_start": 80,
-      "context_end": 112,
+      "context_start": 70,
+      "context_end": 122,
       "region_text": "phézothérodine, 4 000 g PO DIE, Celexa, 20 000 g PO DIE, Antoloch,",
-      "full_text": "de Parkinson. En ces médicaments, à domicile, il prend un phézothérodine, 4 000 g PO DIE, Celexa, 20 000 g PO DIE, Antoloch, 40 000 g PO DIE, vitamine B12, 1200 microgram PO",
+      "full_text": "valve aortique mécanique, un bloc de branche gauche, une maladie de Parkinson. En ces médicaments, à domicile, il prend un phézothérodine, 4 000 g PO DIE, Celexa, 20 000 g PO DIE, Antoloch, 40 000 g PO DIE, vitamine B12, 1200 microgram PO DIE. Motilium, 10 mg PO BID. Esétrol, 10 mg PO",
       "tokens": [
+        {
+          "idx": 70,
+          "token": "valve",
+          "in_region": false,
+          "conf": 0.9999528527259827
+        },
+        {
+          "idx": 71,
+          "token": "aortique",
+          "in_region": false,
+          "conf": 0.9998294313748678
+        },
+        {
+          "idx": 72,
+          "token": "mécanique,",
+          "in_region": false,
+          "conf": 0.9643763065338135
+        },
+        {
+          "idx": 73,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.50870281457901
+        },
+        {
+          "idx": 74,
+          "token": "bloc",
+          "in_region": false,
+          "conf": 0.9044190049171448
+        },
+        {
+          "idx": 75,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9947702288627625
+        },
+        {
+          "idx": 76,
+          "token": "branche",
+          "in_region": false,
+          "conf": 0.9783262610435486
+        },
+        {
+          "idx": 77,
+          "token": "gauche,",
+          "in_region": false,
+          "conf": 0.9988227685292562
+        },
+        {
+          "idx": 78,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9989016056060791
+        },
+        {
+          "idx": 79,
+          "token": "maladie",
+          "in_region": false,
+          "conf": 0.9999563694000244
+        },
         {
           "idx": 80,
           "token": "de",
@@ -351,17 +411,137 @@
           "token": "PO",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 113,
+          "token": "DIE.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 114,
+          "token": "Motilium,",
+          "in_region": false,
+          "conf": 0.9171847343444824
+        },
+        {
+          "idx": 115,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 116,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 117,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 118,
+          "token": "BID.",
+          "in_region": false,
+          "conf": 0.8923177917798361
+        },
+        {
+          "idx": 119,
+          "token": "Esétrol,",
+          "in_region": false,
+          "conf": 0.7248555049300194
+        },
+        {
+          "idx": 120,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 121,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 122,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
         }
       ]
     },
     {
       "token_start": 114,
       "token_end": 125,
-      "context_start": 104,
-      "context_end": 135,
+      "context_start": 94,
+      "context_end": 145,
       "region_text": "Motilium, 10 mg PO BID. Esétrol, 10 mg PO dillé HS. Mirapex,",
-      "full_text": "000 g PO DIE, vitamine B12, 1200 microgram PO DIE. Motilium, 10 mg PO BID. Esétrol, 10 mg PO dillé HS. Mirapex, 0,5 mg deux heures avant le coucher. levodopa carbidopa 100",
+      "full_text": "PO DIE, Celexa, 20 000 g PO DIE, Antoloch, 40 000 g PO DIE, vitamine B12, 1200 microgram PO DIE. Motilium, 10 mg PO BID. Esétrol, 10 mg PO dillé HS. Mirapex, 0,5 mg deux heures avant le coucher. levodopa carbidopa 100 plus 25, 2,5 comprimés TID. Poumadin, 4 mg au souper.",
       "tokens": [
+        {
+          "idx": 94,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 95,
+          "token": "DIE,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 96,
+          "token": "Celexa,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 97,
+          "token": "20",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 98,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 99,
+          "token": "g",
+          "in_region": false,
+          "conf": 0.9996738433837891
+        },
+        {
+          "idx": 100,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 101,
+          "token": "DIE,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 102,
+          "token": "Antoloch,",
+          "in_region": false,
+          "conf": 0.8422887176275253
+        },
+        {
+          "idx": 103,
+          "token": "40",
+          "in_region": false,
+          "conf": null
+        },
         {
           "idx": 104,
           "token": "000",
@@ -553,17 +733,137 @@
           "token": "100",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 136,
+          "token": "plus",
+          "in_region": false,
+          "conf": 0.9999043941497803
+        },
+        {
+          "idx": 137,
+          "token": "25,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 138,
+          "token": "2,5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 139,
+          "token": "comprimés",
+          "in_region": false,
+          "conf": 0.9317999084790548
+        },
+        {
+          "idx": 140,
+          "token": "TID.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 141,
+          "token": "Poumadin,",
+          "in_region": false,
+          "conf": 0.8660714974006017
+        },
+        {
+          "idx": 142,
+          "token": "4",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 143,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 144,
+          "token": "au",
+          "in_region": false,
+          "conf": 0.8655390739440918
+        },
+        {
+          "idx": 145,
+          "token": "souper.",
+          "in_region": false,
+          "conf": 0.9995331366856893
         }
       ]
     },
     {
       "token_start": 141,
       "token_end": 166,
-      "context_start": 131,
-      "context_end": 176,
+      "context_start": 121,
+      "context_end": 186,
       "region_text": "Poumadin, 4 mg au souper. The Piclone, 7,5 mg. HS PRN. Lipitard, 80 mg HS. amantadine, 100 mg au déjeuner. Imdur, 60 mg 1,5 comprimé. bisoprolol,",
-      "full_text": "le coucher. levodopa carbidopa 100 plus 25, 2,5 comprimés TID. Poumadin, 4 mg au souper. The Piclone, 7,5 mg. HS PRN. Lipitard, 80 mg HS. amantadine, 100 mg au déjeuner. Imdur, 60 mg 1,5 comprimé. bisoprolol, 1,25 mg. Ici, on a ajouté du Dilaudid 0,25 aux",
+      "full_text": "mg PO dillé HS. Mirapex, 0,5 mg deux heures avant le coucher. levodopa carbidopa 100 plus 25, 2,5 comprimés TID. Poumadin, 4 mg au souper. The Piclone, 7,5 mg. HS PRN. Lipitard, 80 mg HS. amantadine, 100 mg au déjeuner. Imdur, 60 mg 1,5 comprimé. bisoprolol, 1,25 mg. Ici, on a ajouté du Dilaudid 0,25 aux trois heures, PRN S/C, qui est changé pour 0,5 mg",
       "tokens": [
+        {
+          "idx": 121,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 122,
+          "token": "PO",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 123,
+          "token": "dillé",
+          "in_region": false,
+          "conf": 0.7275379101435343
+        },
+        {
+          "idx": 124,
+          "token": "HS.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 125,
+          "token": "Mirapex,",
+          "in_region": false,
+          "conf": 0.9961672186851501
+        },
+        {
+          "idx": 126,
+          "token": "0,5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 127,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9999662637710571
+        },
+        {
+          "idx": 128,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.7247344851493835
+        },
+        {
+          "idx": 129,
+          "token": "heures",
+          "in_region": false,
+          "conf": 0.8722890218098959
+        },
+        {
+          "idx": 130,
+          "token": "avant",
+          "in_region": false,
+          "conf": 0.999975323677063
+        },
         {
           "idx": 131,
           "token": "le",
@@ -839,6 +1139,66 @@
           "token": "aux",
           "in_region": false,
           "conf": 0.9878623485565186
+        },
+        {
+          "idx": 177,
+          "token": "trois",
+          "in_region": false,
+          "conf": 0.9803909063339233
+        },
+        {
+          "idx": 178,
+          "token": "heures,",
+          "in_region": false,
+          "conf": 0.8722890218098959
+        },
+        {
+          "idx": 179,
+          "token": "PRN",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 180,
+          "token": "S/C,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 181,
+          "token": "qui",
+          "in_region": false,
+          "conf": 0.9969598054885864
+        },
+        {
+          "idx": 182,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.9958024621009827
+        },
+        {
+          "idx": 183,
+          "token": "changé",
+          "in_region": false,
+          "conf": 0.922869861125946
+        },
+        {
+          "idx": 184,
+          "token": "pour",
+          "in_region": false,
+          "conf": 0.9043456315994263
+        },
+        {
+          "idx": 185,
+          "token": "0,5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 186,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9999662637710571
         }
       ]
     }

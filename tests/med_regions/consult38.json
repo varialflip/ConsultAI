@@ -75,11 +75,71 @@
     {
       "token_start": 96,
       "token_end": 116,
-      "context_start": 86,
-      "context_end": 126,
+      "context_start": 76,
+      "context_end": 136,
       "region_text": "Epival 500 mg BID, mirtazapine 30 mg HS, clonazepam 0,5 mg HS, Crestor 10 mg. Pantoloc, 40 mg. Applique, ça bande",
-      "full_text": "du gyrus singulaire postérieur. Dans ces médicaments, il prend de Epival 500 mg BID, mirtazapine 30 mg HS, clonazepam 0,5 mg HS, Crestor 10 mg. Pantoloc, 40 mg. Applique, ça bande 5 mg BID. Il est universitaire. Il a été travailleur",
+      "full_text": "cérébral en 2022 qui démontrait une atteinte du Ricuneus et du gyrus singulaire postérieur. Dans ces médicaments, il prend de Epival 500 mg BID, mirtazapine 30 mg HS, clonazepam 0,5 mg HS, Crestor 10 mg. Pantoloc, 40 mg. Applique, ça bande 5 mg BID. Il est universitaire. Il a été travailleur social, retraité à 53 ans. Il habite avec son épouse",
       "tokens": [
+        {
+          "idx": 76,
+          "token": "cérébral",
+          "in_region": false,
+          "conf": 0.9974972804387411
+        },
+        {
+          "idx": 77,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.999535083770752
+        },
+        {
+          "idx": 78,
+          "token": "2022",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 79,
+          "token": "qui",
+          "in_region": false,
+          "conf": 0.999194324016571
+        },
+        {
+          "idx": 80,
+          "token": "démontrait",
+          "in_region": false,
+          "conf": 0.9996416171391805
+        },
+        {
+          "idx": 81,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9958706498146057
+        },
+        {
+          "idx": 82,
+          "token": "atteinte",
+          "in_region": false,
+          "conf": 0.9996477166811625
+        },
+        {
+          "idx": 83,
+          "token": "du",
+          "in_region": false,
+          "conf": 0.9819934368133545
+        },
+        {
+          "idx": 84,
+          "token": "Ricuneus",
+          "in_region": false,
+          "conf": 0.6831950023770332
+        },
+        {
+          "idx": 85,
+          "token": "et",
+          "in_region": false,
+          "conf": 0.9998643398284912
+        },
         {
           "idx": 86,
           "token": "du",
@@ -325,6 +385,66 @@
           "token": "travailleur",
           "in_region": false,
           "conf": 0.9409911930561066
+        },
+        {
+          "idx": 127,
+          "token": "social,",
+          "in_region": false,
+          "conf": 0.7516738474369049
+        },
+        {
+          "idx": 128,
+          "token": "retraité",
+          "in_region": false,
+          "conf": 0.919306218624115
+        },
+        {
+          "idx": 129,
+          "token": "à",
+          "in_region": false,
+          "conf": 0.9997361302375793
+        },
+        {
+          "idx": 130,
+          "token": "53",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 131,
+          "token": "ans.",
+          "in_region": false,
+          "conf": 0.999984622001648
+        },
+        {
+          "idx": 132,
+          "token": "Il",
+          "in_region": false,
+          "conf": 0.9809889197349548
+        },
+        {
+          "idx": 133,
+          "token": "habite",
+          "in_region": false,
+          "conf": 0.9995315968990326
+        },
+        {
+          "idx": 134,
+          "token": "avec",
+          "in_region": false,
+          "conf": 0.9955013394355774
+        },
+        {
+          "idx": 135,
+          "token": "son",
+          "in_region": false,
+          "conf": 0.9962201714515686
+        },
+        {
+          "idx": 136,
+          "token": "épouse",
+          "in_region": false,
+          "conf": 0.9999966621398926
         }
       ]
     }

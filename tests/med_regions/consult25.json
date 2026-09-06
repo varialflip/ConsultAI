@@ -81,11 +81,71 @@
     {
       "token_start": 99,
       "token_end": 104,
-      "context_start": 89,
-      "context_end": 114,
+      "context_start": 79,
+      "context_end": 124,
       "region_text": "myrtazapine 7,5 mg au coucher, risperidone",
-      "full_text": "depuis quatre ans. Dans sa liste de médicaments, elle prend myrtazapine 7,5 mg au coucher, risperidone 0,25 mg deux fois par jour, vitamine D 10 000",
+      "full_text": "il y a plusieurs années, un TLU-ROH qui est abstinent depuis quatre ans. Dans sa liste de médicaments, elle prend myrtazapine 7,5 mg au coucher, risperidone 0,25 mg deux fois par jour, vitamine D 10 000 unités une fois par semaine, pantoloque 40, acide folique 5,",
       "tokens": [
+        {
+          "idx": 79,
+          "token": "il",
+          "in_region": false,
+          "conf": 0.9995228052139282
+        },
+        {
+          "idx": 80,
+          "token": "y",
+          "in_region": false,
+          "conf": 0.9995042085647583
+        },
+        {
+          "idx": 81,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9999136924743652
+        },
+        {
+          "idx": 82,
+          "token": "plusieurs",
+          "in_region": false,
+          "conf": 0.999932050704956
+        },
+        {
+          "idx": 83,
+          "token": "années,",
+          "in_region": false,
+          "conf": 0.999420553445816
+        },
+        {
+          "idx": 84,
+          "token": "un",
+          "in_region": false,
+          "conf": 0.9987589120864868
+        },
+        {
+          "idx": 85,
+          "token": "TLU-ROH",
+          "in_region": false,
+          "conf": 0.9548544457980565
+        },
+        {
+          "idx": 86,
+          "token": "qui",
+          "in_region": false,
+          "conf": 0.9999698400497437
+        },
+        {
+          "idx": 87,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.9999958276748657
+        },
+        {
+          "idx": 88,
+          "token": "abstinent",
+          "in_region": false,
+          "conf": 0.8651209473609924
+        },
         {
           "idx": 89,
           "token": "depuis",
@@ -241,17 +301,137 @@
           "token": "000",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 115,
+          "token": "unités",
+          "in_region": false,
+          "conf": 0.9952277839183807
+        },
+        {
+          "idx": 116,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.9999680519104004
+        },
+        {
+          "idx": 117,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999232292175293
+        },
+        {
+          "idx": 118,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999434947967529
+        },
+        {
+          "idx": 119,
+          "token": "semaine,",
+          "in_region": false,
+          "conf": 0.9997468193372091
+        },
+        {
+          "idx": 120,
+          "token": "pantoloque",
+          "in_region": false,
+          "conf": 0.9542699605226517
+        },
+        {
+          "idx": 121,
+          "token": "40,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 122,
+          "token": "acide",
+          "in_region": false,
+          "conf": 0.9980012476444244
+        },
+        {
+          "idx": 123,
+          "token": "folique",
+          "in_region": false,
+          "conf": 0.995024710893631
+        },
+        {
+          "idx": 124,
+          "token": "5,",
+          "in_region": false,
+          "conf": null
         }
       ]
     },
     {
       "token_start": 120,
       "token_end": 133,
-      "context_start": 110,
-      "context_end": 143,
+      "context_start": 100,
+      "context_end": 153,
       "region_text": "pantoloque 40, acide folique 5, bisoprolol. 5 deux fois par jour, Restore 5, Aspirine",
-      "full_text": "jour, vitamine D 10 000 unités une fois par semaine, pantoloque 40, acide folique 5, bisoprolol. 5 deux fois par jour, Restore 5, Aspirine 80. Au niveau social, elle a un baccalauréat en administration.",
+      "full_text": "7,5 mg au coucher, risperidone 0,25 mg deux fois par jour, vitamine D 10 000 unités une fois par semaine, pantoloque 40, acide folique 5, bisoprolol. 5 deux fois par jour, Restore 5, Aspirine 80. Au niveau social, elle a un baccalauréat en administration. Elle a travaillé chez Desjardins comme planificatrice testamentaire, puis a",
       "tokens": [
+        {
+          "idx": 100,
+          "token": "7,5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 101,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9274798035621643
+        },
+        {
+          "idx": 102,
+          "token": "au",
+          "in_region": false,
+          "conf": 0.9924605488777161
+        },
+        {
+          "idx": 103,
+          "token": "coucher,",
+          "in_region": false,
+          "conf": 0.999882976214091
+        },
+        {
+          "idx": 104,
+          "token": "risperidone",
+          "in_region": false,
+          "conf": 0.8712466731667519
+        },
+        {
+          "idx": 105,
+          "token": "0,25",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 106,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9274798035621643
+        },
+        {
+          "idx": 107,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.9716501235961914
+        },
+        {
+          "idx": 108,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999232292175293
+        },
+        {
+          "idx": 109,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9999434947967529
+        },
         {
           "idx": 110,
           "token": "jour,",
@@ -455,6 +635,66 @@
           "token": "administration.",
           "in_region": false,
           "conf": 0.9302847385406494
+        },
+        {
+          "idx": 144,
+          "token": "Elle",
+          "in_region": false,
+          "conf": 0.9897866249084473
+        },
+        {
+          "idx": 145,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9999136924743652
+        },
+        {
+          "idx": 146,
+          "token": "travaillé",
+          "in_region": false,
+          "conf": 0.9999794960021973
+        },
+        {
+          "idx": 147,
+          "token": "chez",
+          "in_region": false,
+          "conf": 0.9999871253967285
+        },
+        {
+          "idx": 148,
+          "token": "Desjardins",
+          "in_region": false,
+          "conf": 0.9997765272855759
+        },
+        {
+          "idx": 149,
+          "token": "comme",
+          "in_region": false,
+          "conf": 0.9998610019683838
+        },
+        {
+          "idx": 150,
+          "token": "planificatrice",
+          "in_region": false,
+          "conf": 0.9997618943452835
+        },
+        {
+          "idx": 151,
+          "token": "testamentaire,",
+          "in_region": false,
+          "conf": 0.95772585272789
+        },
+        {
+          "idx": 152,
+          "token": "puis",
+          "in_region": false,
+          "conf": 0.7782183587551117
+        },
+        {
+          "idx": 153,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9999136924743652
         }
       ]
     }

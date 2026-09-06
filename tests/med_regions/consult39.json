@@ -82,11 +82,71 @@
     {
       "token_start": 114,
       "token_end": 122,
-      "context_start": 104,
-      "context_end": 132,
+      "context_start": 94,
+      "context_end": 142,
       "region_text": "pantoprazole 40, galantamine 16, ER, Synthroid 25 microgrammes, risedronate",
-      "full_text": "Sa liste de médicaments aujourd'hui : Cinémette, un comprimé QID, pantoprazole 40, galantamine 16, ER, Synthroid 25 microgrammes, risedronate 35, Q1SEM, vitamine D 10 000 UI Q1SEM, calcium 500",
+      "full_text": "pour de l'incontinence et les AVD sont gérés par autrui. Sa liste de médicaments aujourd'hui : Cinémette, un comprimé QID, pantoprazole 40, galantamine 16, ER, Synthroid 25 microgrammes, risedronate 35, Q1SEM, vitamine D 10 000 UI Q1SEM, calcium 500 mg BID. L'histoire, madame est rencontrée seule d'abord, puis avec",
       "tokens": [
+        {
+          "idx": 94,
+          "token": "pour",
+          "in_region": false,
+          "conf": 0.9788051843643188
+        },
+        {
+          "idx": 95,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.5278513431549072
+        },
+        {
+          "idx": 96,
+          "token": "l'incontinence",
+          "in_region": false,
+          "conf": 0.9998343090216318
+        },
+        {
+          "idx": 97,
+          "token": "et",
+          "in_region": false,
+          "conf": 0.8257463574409485
+        },
+        {
+          "idx": 98,
+          "token": "les",
+          "in_region": false,
+          "conf": 0.730866551399231
+        },
+        {
+          "idx": 99,
+          "token": "AVD",
+          "in_region": false,
+          "conf": 0.9963017106056213
+        },
+        {
+          "idx": 100,
+          "token": "sont",
+          "in_region": false,
+          "conf": 0.9966249465942383
+        },
+        {
+          "idx": 101,
+          "token": "gérés",
+          "in_region": false,
+          "conf": 0.891994833946228
+        },
+        {
+          "idx": 102,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.6533737182617188
+        },
+        {
+          "idx": 103,
+          "token": "autrui.",
+          "in_region": false,
+          "conf": 0.9942848682403564
+        },
         {
           "idx": 104,
           "token": "Sa",
@@ -260,6 +320,66 @@
           "token": "500",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 133,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9670584400494894
+        },
+        {
+          "idx": 134,
+          "token": "BID.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 135,
+          "token": "L'histoire,",
+          "in_region": false,
+          "conf": 0.8772688210010529
+        },
+        {
+          "idx": 136,
+          "token": "madame",
+          "in_region": false,
+          "conf": 0.5398868918418884
+        },
+        {
+          "idx": 137,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.6928658485412598
+        },
+        {
+          "idx": 138,
+          "token": "rencontrée",
+          "in_region": false,
+          "conf": 0.9991543143987656
+        },
+        {
+          "idx": 139,
+          "token": "seule",
+          "in_region": false,
+          "conf": 0.9412327607472738
+        },
+        {
+          "idx": 140,
+          "token": "d'abord,",
+          "in_region": false,
+          "conf": 0.9540098160505295
+        },
+        {
+          "idx": 141,
+          "token": "puis",
+          "in_region": false,
+          "conf": 0.9499465227127075
+        },
+        {
+          "idx": 142,
+          "token": "avec",
+          "in_region": false,
+          "conf": 0.9653919339179993
         }
       ]
     }

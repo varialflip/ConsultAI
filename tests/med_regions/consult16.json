@@ -55,11 +55,71 @@
     {
       "token_start": 71,
       "token_end": 80,
-      "context_start": 61,
-      "context_end": 90,
+      "context_start": 51,
+      "context_end": 100,
       "region_text": "Lirica 75 BID, Norvasque 5, Crestor 5, Aricept 10, Zoloft",
-      "full_text": "coloviscale en 2019. Comme médicaments à domicile, elle prend du Lirica 75 BID, Norvasque 5, Crestor 5, Aricept 10, Zoloft 50, Tylenol TID. Ici, il y a eu ajout d'hertapenem,",
+      "full_text": "pulmonaire obstructive chronique, cholecystectomie, infection urinaire, fistule colovaginale, en fait coloviscale en 2019. Comme médicaments à domicile, elle prend du Lirica 75 BID, Norvasque 5, Crestor 5, Aricept 10, Zoloft 50, Tylenol TID. Ici, il y a eu ajout d'hertapenem, de timbre de nicotine, d'amidol et activant au besoin. Elle",
       "tokens": [
+        {
+          "idx": 51,
+          "token": "pulmonaire",
+          "in_region": false,
+          "conf": 0.9997895061969757
+        },
+        {
+          "idx": 52,
+          "token": "obstructive",
+          "in_region": false,
+          "conf": 0.9878977735837301
+        },
+        {
+          "idx": 53,
+          "token": "chronique,",
+          "in_region": false,
+          "conf": 0.978560229142507
+        },
+        {
+          "idx": 54,
+          "token": "cholecystectomie,",
+          "in_region": false,
+          "conf": 0.8860224410891533
+        },
+        {
+          "idx": 55,
+          "token": "infection",
+          "in_region": false,
+          "conf": 0.9939754903316498
+        },
+        {
+          "idx": 56,
+          "token": "urinaire,",
+          "in_region": false,
+          "conf": 0.9998543560504913
+        },
+        {
+          "idx": 57,
+          "token": "fistule",
+          "in_region": false,
+          "conf": 0.9867803653081259
+        },
+        {
+          "idx": 58,
+          "token": "colovaginale,",
+          "in_region": false,
+          "conf": 0.7976857125759125
+        },
+        {
+          "idx": 59,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.46910175681114197
+        },
+        {
+          "idx": 60,
+          "token": "fait",
+          "in_region": false,
+          "conf": 0.9935516119003296
+        },
         {
           "idx": 61,
           "token": "coloviscale",
@@ -239,6 +299,66 @@
           "token": "d'hertapenem,",
           "in_region": false,
           "conf": 0.8086315180574145
+        },
+        {
+          "idx": 91,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9998716115951538
+        },
+        {
+          "idx": 92,
+          "token": "timbre",
+          "in_region": false,
+          "conf": 0.7972499430179596
+        },
+        {
+          "idx": 93,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9998716115951538
+        },
+        {
+          "idx": 94,
+          "token": "nicotine,",
+          "in_region": false,
+          "conf": 0.9999434649944305
+        },
+        {
+          "idx": 95,
+          "token": "d'amidol",
+          "in_region": false,
+          "conf": 0.7488301455974579
+        },
+        {
+          "idx": 96,
+          "token": "et",
+          "in_region": false,
+          "conf": 0.996263325214386
+        },
+        {
+          "idx": 97,
+          "token": "activant",
+          "in_region": false,
+          "conf": 0.6635250300168991
+        },
+        {
+          "idx": 98,
+          "token": "au",
+          "in_region": false,
+          "conf": 0.971518337726593
+        },
+        {
+          "idx": 99,
+          "token": "besoin.",
+          "in_region": false,
+          "conf": 0.9999711513519287
+        },
+        {
+          "idx": 100,
+          "token": "Elle",
+          "in_region": false,
+          "conf": 0.9998514652252197
         }
       ]
     }

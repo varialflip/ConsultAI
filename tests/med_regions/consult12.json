@@ -64,11 +64,71 @@
     {
       "token_start": 1026,
       "token_end": 1034,
-      "context_start": 1016,
+      "context_start": 1006,
       "context_end": 1035,
       "region_text": "metformine 1 g BID, Diamicron MR90, aspirine 80, Crestor",
-      "full_text": "ou d'un changement comportemental. Rajouter dans la liste des médicaments metformine 1 g BID, Diamicron MR90, aspirine 80, Crestor 10.",
+      "full_text": "six mois à la recherche d'une détérioration cognitive en testing ou d'un changement comportemental. Rajouter dans la liste des médicaments metformine 1 g BID, Diamicron MR90, aspirine 80, Crestor 10.",
       "tokens": [
+        {
+          "idx": 1006,
+          "token": "six",
+          "in_region": false,
+          "conf": 0.9990144968032837
+        },
+        {
+          "idx": 1007,
+          "token": "mois",
+          "in_region": false,
+          "conf": 0.9999827146530151
+        },
+        {
+          "idx": 1008,
+          "token": "à",
+          "in_region": false,
+          "conf": 0.9862973690032959
+        },
+        {
+          "idx": 1009,
+          "token": "la",
+          "in_region": false,
+          "conf": 0.9998140931129456
+        },
+        {
+          "idx": 1010,
+          "token": "recherche",
+          "in_region": false,
+          "conf": 0.9999250769615173
+        },
+        {
+          "idx": 1011,
+          "token": "d'une",
+          "in_region": false,
+          "conf": 0.9977293411890665
+        },
+        {
+          "idx": 1012,
+          "token": "détérioration",
+          "in_region": false,
+          "conf": 0.9997395724058151
+        },
+        {
+          "idx": 1013,
+          "token": "cognitive",
+          "in_region": false,
+          "conf": 0.999819278717041
+        },
+        {
+          "idx": 1014,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.9884461164474487
+        },
+        {
+          "idx": 1015,
+          "token": "testing",
+          "in_region": false,
+          "conf": 0.9975762963294983
+        },
         {
           "idx": 1016,
           "token": "ou",

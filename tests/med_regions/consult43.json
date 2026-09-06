@@ -65,11 +65,71 @@
     {
       "token_start": 117,
       "token_end": 127,
-      "context_start": 107,
-      "context_end": 137,
+      "context_start": 97,
+      "context_end": 147,
       "region_text": "pantoprazole 40. galantamine 16. ER. Synthroid, vingt-cinq microgrammes. Risée de renate,",
-      "full_text": "autrui. Sa liste de médicaments aujourd'hui. Cinémète, un comprimé QID. pantoprazole 40. galantamine 16. ER. Synthroid, vingt-cinq microgrammes. Risée de renate, trente-cinq par semaine. Vitamine D, dix mille. Unité par semaine,",
+      "full_text": "connue pour de l'incontinence et les AVD sont gérés par autrui. Sa liste de médicaments aujourd'hui. Cinémète, un comprimé QID. pantoprazole 40. galantamine 16. ER. Synthroid, vingt-cinq microgrammes. Risée de renate, trente-cinq par semaine. Vitamine D, dix mille. Unité par semaine, calcium 500 mg BID. L'histoire, madame est rencontrée seule d'abord,",
       "tokens": [
+        {
+          "idx": 97,
+          "token": "connue",
+          "in_region": false,
+          "conf": 0.9994946916898092
+        },
+        {
+          "idx": 98,
+          "token": "pour",
+          "in_region": false,
+          "conf": 0.9788051843643188
+        },
+        {
+          "idx": 99,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.5278513431549072
+        },
+        {
+          "idx": 100,
+          "token": "l'incontinence",
+          "in_region": false,
+          "conf": 0.9998343090216318
+        },
+        {
+          "idx": 101,
+          "token": "et",
+          "in_region": false,
+          "conf": 0.8257463574409485
+        },
+        {
+          "idx": 102,
+          "token": "les",
+          "in_region": false,
+          "conf": 0.730866551399231
+        },
+        {
+          "idx": 103,
+          "token": "AVD",
+          "in_region": false,
+          "conf": 0.9963017106056213
+        },
+        {
+          "idx": 104,
+          "token": "sont",
+          "in_region": false,
+          "conf": 0.9966249465942383
+        },
+        {
+          "idx": 105,
+          "token": "gérés",
+          "in_region": false,
+          "conf": 0.891994833946228
+        },
+        {
+          "idx": 106,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.6533737182617188
+        },
         {
           "idx": 107,
           "token": "autrui.",
@@ -255,6 +315,66 @@
           "token": "semaine,",
           "in_region": false,
           "conf": 0.9829879403114319
+        },
+        {
+          "idx": 138,
+          "token": "calcium",
+          "in_region": false,
+          "conf": 0.9994331200917562
+        },
+        {
+          "idx": 139,
+          "token": "500",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 140,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9681316316127777
+        },
+        {
+          "idx": 141,
+          "token": "BID.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 142,
+          "token": "L'histoire,",
+          "in_region": false,
+          "conf": 0.8772688210010529
+        },
+        {
+          "idx": 143,
+          "token": "madame",
+          "in_region": false,
+          "conf": 0.5495452284812927
+        },
+        {
+          "idx": 144,
+          "token": "est",
+          "in_region": false,
+          "conf": 0.6928658485412598
+        },
+        {
+          "idx": 145,
+          "token": "rencontrée",
+          "in_region": false,
+          "conf": 0.9991543143987656
+        },
+        {
+          "idx": 146,
+          "token": "seule",
+          "in_region": false,
+          "conf": 0.9412327607472738
+        },
+        {
+          "idx": 147,
+          "token": "d'abord,",
+          "in_region": false,
+          "conf": 0.9633719772100449
         }
       ]
     }

@@ -81,11 +81,71 @@
     {
       "token_start": 124,
       "token_end": 151,
-      "context_start": 114,
-      "context_end": 161,
+      "context_start": 104,
+      "context_end": 171,
       "region_text": "Eliquice 2,5 mg BID. Lipitor 20 mg HS. Bisoprolol 2,5 mg d'ye. Amlodipine 7,5 mg Péros AM. Synthroïde 50 mg Péros AM. Pantoloque 40 mg Péros d'ye. Calcium",
-      "full_text": "consultation gériatrique en externe pour TNC. Péros Q2 jours HS. Eliquice 2,5 mg BID. Lipitor 20 mg HS. Bisoprolol 2,5 mg d'ye. Amlodipine 7,5 mg Péros AM. Synthroïde 50 mg Péros AM. Pantoloque 40 mg Péros d'ye. Calcium 500 mg Péros d'ye. Vitamine D 10 000 unités Q",
+      "full_text": "connue à domicile, consulte ophtalmo pour cataracte et demande de consultation gériatrique en externe pour TNC. Péros Q2 jours HS. Eliquice 2,5 mg BID. Lipitor 20 mg HS. Bisoprolol 2,5 mg d'ye. Amlodipine 7,5 mg Péros AM. Synthroïde 50 mg Péros AM. Pantoloque 40 mg Péros d'ye. Calcium 500 mg Péros d'ye. Vitamine D 10 000 unités Q semaine. Périn de prille, 1 mg per os lié à",
       "tokens": [
+        {
+          "idx": 104,
+          "token": "connue",
+          "in_region": false,
+          "conf": 0.9980521003405253
+        },
+        {
+          "idx": 105,
+          "token": "à",
+          "in_region": false,
+          "conf": 0.9978481531143188
+        },
+        {
+          "idx": 106,
+          "token": "domicile,",
+          "in_region": false,
+          "conf": 0.9999565283457438
+        },
+        {
+          "idx": 107,
+          "token": "consulte",
+          "in_region": false,
+          "conf": 0.9966461658477783
+        },
+        {
+          "idx": 108,
+          "token": "ophtalmo",
+          "in_region": false,
+          "conf": 0.8228384554386139
+        },
+        {
+          "idx": 109,
+          "token": "pour",
+          "in_region": false,
+          "conf": 0.9999721050262451
+        },
+        {
+          "idx": 110,
+          "token": "cataracte",
+          "in_region": false,
+          "conf": 0.9892979711294174
+        },
+        {
+          "idx": 111,
+          "token": "et",
+          "in_region": false,
+          "conf": 0.9383894801139832
+        },
+        {
+          "idx": 112,
+          "token": "demande",
+          "in_region": false,
+          "conf": 0.999957263469696
+        },
+        {
+          "idx": 113,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9942553639411926
+        },
         {
           "idx": 114,
           "token": "consultation",
@@ -373,6 +433,66 @@
           "token": "Q",
           "in_region": false,
           "conf": 0.9917466640472412
+        },
+        {
+          "idx": 162,
+          "token": "semaine.",
+          "in_region": false,
+          "conf": 0.9870941241582235
+        },
+        {
+          "idx": 163,
+          "token": "Périn",
+          "in_region": false,
+          "conf": 0.8124329447746277
+        },
+        {
+          "idx": 164,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9942553639411926
+        },
+        {
+          "idx": 165,
+          "token": "prille,",
+          "in_region": false,
+          "conf": 0.715374747912089
+        },
+        {
+          "idx": 166,
+          "token": "1",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 167,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9891844689846039
+        },
+        {
+          "idx": 168,
+          "token": "per",
+          "in_region": false,
+          "conf": 0.8312151432037354
+        },
+        {
+          "idx": 169,
+          "token": "os",
+          "in_region": false,
+          "conf": 0.4908563196659088
+        },
+        {
+          "idx": 170,
+          "token": "lié",
+          "in_region": false,
+          "conf": 0.8662751317024231
+        },
+        {
+          "idx": 171,
+          "token": "à",
+          "in_region": false,
+          "conf": 0.9978481531143188
         }
       ]
     }

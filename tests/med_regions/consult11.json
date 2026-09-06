@@ -58,11 +58,71 @@
     {
       "token_start": 330,
       "token_end": 352,
-      "context_start": 320,
-      "context_end": 362,
+      "context_start": 310,
+      "context_end": 372,
       "region_text": "valsartan, 320 mg DIE AM. Hydrochlorothiadide, 12,5 mg DIE. atorvastatin, 80 mg DIE HS, citaglyptine, 50 mg, BID, omeprazole, 20 mg, dillé, Tresiba,",
-      "full_text": "5 mg DIE. Déjeuner. Vitamine D, 10 000 UI Q1SEM. valsartan, 320 mg DIE AM. Hydrochlorothiadide, 12,5 mg DIE. atorvastatin, 80 mg DIE HS, citaglyptine, 50 mg, BID, omeprazole, 20 mg, dillé, Tresiba, 9 UI HS plus échelle, prescrite le 26 juin 2026,",
+      "full_text": "niveau de la médication, Data Glyphlosine, 10 mg DIE. amLODIPine, 5 mg DIE. Déjeuner. Vitamine D, 10 000 UI Q1SEM. valsartan, 320 mg DIE AM. Hydrochlorothiadide, 12,5 mg DIE. atorvastatin, 80 mg DIE HS, citaglyptine, 50 mg, BID, omeprazole, 20 mg, dillé, Tresiba, 9 UI HS plus échelle, prescrite le 26 juin 2026, qui ne semble pas avoir été servie, point d'interrogation. Récents",
       "tokens": [
+        {
+          "idx": 310,
+          "token": "niveau",
+          "in_region": false,
+          "conf": 0.999992847442627
+        },
+        {
+          "idx": 311,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9990092515945435
+        },
+        {
+          "idx": 312,
+          "token": "la",
+          "in_region": false,
+          "conf": 0.9995012283325195
+        },
+        {
+          "idx": 313,
+          "token": "médication,",
+          "in_region": false,
+          "conf": 0.9959106892347336
+        },
+        {
+          "idx": 314,
+          "token": "Data",
+          "in_region": false,
+          "conf": 0.48494182527065277
+        },
+        {
+          "idx": 315,
+          "token": "Glyphlosine,",
+          "in_region": false,
+          "conf": 0.6816742519537607
+        },
+        {
+          "idx": 316,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 317,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.974117785692215
+        },
+        {
+          "idx": 318,
+          "token": "DIE.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 319,
+          "token": "amLODIPine,",
+          "in_region": false,
+          "conf": 0.9798157215118408
+        },
         {
           "idx": 320,
           "token": "5",
@@ -320,6 +380,66 @@
           "token": "2026,",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 363,
+          "token": "qui",
+          "in_region": false,
+          "conf": 0.9999912977218628
+        },
+        {
+          "idx": 364,
+          "token": "ne",
+          "in_region": false,
+          "conf": 0.9792095422744751
+        },
+        {
+          "idx": 365,
+          "token": "semble",
+          "in_region": false,
+          "conf": 0.9999260902404785
+        },
+        {
+          "idx": 366,
+          "token": "pas",
+          "in_region": false,
+          "conf": 0.9995924830436707
+        },
+        {
+          "idx": 367,
+          "token": "avoir",
+          "in_region": false,
+          "conf": 0.9999172687530518
+        },
+        {
+          "idx": 368,
+          "token": "été",
+          "in_region": false,
+          "conf": 0.999955415725708
+        },
+        {
+          "idx": 369,
+          "token": "servie,",
+          "in_region": false,
+          "conf": 0.8093976974487305
+        },
+        {
+          "idx": 370,
+          "token": "point",
+          "in_region": false,
+          "conf": 0.96342933177948
+        },
+        {
+          "idx": 371,
+          "token": "d'interrogation.",
+          "in_region": false,
+          "conf": 0.9908063511053721
+        },
+        {
+          "idx": 372,
+          "token": "Récents",
+          "in_region": false,
+          "conf": 0.6603428522745768
         }
       ]
     }

@@ -87,11 +87,71 @@
     {
       "token_start": 688,
       "token_end": 703,
-      "context_start": 678,
-      "context_end": 713,
+      "context_start": 668,
+      "context_end": 723,
       "region_text": "Pantoloque, 40 d'yé. Torinef, 0,1 mg d'yé. Kepra, 500 mg d'yé. Aspirine, 80 mg d'yé. Hydrocortisone,",
-      "full_text": "auto-ajustement. Calcium, 500, deux fois par jour. Fer, 300, d'yé. Pantoloque, 40 d'yé. Torinef, 0,1 mg d'yé. Kepra, 500 mg d'yé. Aspirine, 80 mg d'yé. Hydrocortisone, 10 mg, deux fois par jour. Pancré-lipase, Vitamine D, 20",
+      "full_text": "Je vais dicter la liste de médicaments. Insuline, admelogue en auto-ajustement. Calcium, 500, deux fois par jour. Fer, 300, d'yé. Pantoloque, 40 d'yé. Torinef, 0,1 mg d'yé. Kepra, 500 mg d'yé. Aspirine, 80 mg d'yé. Hydrocortisone, 10 mg, deux fois par jour. Pancré-lipase, Vitamine D, 20 000 unités une fois par semaine. Puis insuline très bas,",
       "tokens": [
+        {
+          "idx": 668,
+          "token": "Je",
+          "in_region": false,
+          "conf": 0.9887521862983704
+        },
+        {
+          "idx": 669,
+          "token": "vais",
+          "in_region": false,
+          "conf": 0.9993371367454529
+        },
+        {
+          "idx": 670,
+          "token": "dicter",
+          "in_region": false,
+          "conf": 0.9904745817184448
+        },
+        {
+          "idx": 671,
+          "token": "la",
+          "in_region": false,
+          "conf": 0.9982820749282837
+        },
+        {
+          "idx": 672,
+          "token": "liste",
+          "in_region": false,
+          "conf": 0.9999894499778748
+        },
+        {
+          "idx": 673,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.932415246963501
+        },
+        {
+          "idx": 674,
+          "token": "médicaments.",
+          "in_region": false,
+          "conf": 0.9788899779319763
+        },
+        {
+          "idx": 675,
+          "token": "Insuline,",
+          "in_region": false,
+          "conf": 0.9067071477572123
+        },
+        {
+          "idx": 676,
+          "token": "admelogue",
+          "in_region": false,
+          "conf": 0.8137260278066
+        },
+        {
+          "idx": 677,
+          "token": "en",
+          "in_region": false,
+          "conf": 0.7533917427062988
+        },
         {
           "idx": 678,
           "token": "auto-ajustement.",
@@ -307,6 +367,66 @@
           "token": "20",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 714,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 715,
+          "token": "unités",
+          "in_region": false,
+          "conf": 0.9998966753482819
+        },
+        {
+          "idx": 716,
+          "token": "une",
+          "in_region": false,
+          "conf": 0.8947834372520447
+        },
+        {
+          "idx": 717,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999761581420898
+        },
+        {
+          "idx": 718,
+          "token": "par",
+          "in_region": false,
+          "conf": 0.9932492971420288
+        },
+        {
+          "idx": 719,
+          "token": "semaine.",
+          "in_region": false,
+          "conf": 0.9886274337768555
+        },
+        {
+          "idx": 720,
+          "token": "Puis",
+          "in_region": false,
+          "conf": 0.8142911493778229
+        },
+        {
+          "idx": 721,
+          "token": "insuline",
+          "in_region": false,
+          "conf": 0.9067071477572123
+        },
+        {
+          "idx": 722,
+          "token": "très",
+          "in_region": false,
+          "conf": 0.4177286922931671
+        },
+        {
+          "idx": 723,
+          "token": "bas,",
+          "in_region": false,
+          "conf": 0.8013858497142792
         }
       ]
     }

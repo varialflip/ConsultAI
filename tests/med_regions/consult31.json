@@ -119,11 +119,71 @@
     {
       "token_start": 125,
       "token_end": 145,
-      "context_start": 115,
-      "context_end": 155,
+      "context_start": 105,
+      "context_end": 165,
       "region_text": "microgrammes trois fois Q1SEM, trigabalin, 200 mg BID, acide folique, 5 mg deux fois Q1SEM, phylénol, 1 g, QID PRN, hydroxychloroquine,",
-      "full_text": "methotrexate, 10 mg une fois Q1SEM, vitamine B, 12 200 microgrammes trois fois Q1SEM, trigabalin, 200 mg BID, acide folique, 5 mg deux fois Q1SEM, phylénol, 1 g, QID PRN, hydroxychloroquine, 200 mg BID, cinq jours sur sept, calcium 500 DIE,",
+      "full_text": "elle prend de la vitamine D, 10 000 UI Q1SEM, methotrexate, 10 mg une fois Q1SEM, vitamine B, 12 200 microgrammes trois fois Q1SEM, trigabalin, 200 mg BID, acide folique, 5 mg deux fois Q1SEM, phylénol, 1 g, QID PRN, hydroxychloroquine, 200 mg BID, cinq jours sur sept, calcium 500 DIE, Pantoloc 40 DIE, Ativan 1 HS, Synthroid 75 microgrammes, Polia",
       "tokens": [
+        {
+          "idx": 105,
+          "token": "elle",
+          "in_region": false,
+          "conf": 0.999937891960144
+        },
+        {
+          "idx": 106,
+          "token": "prend",
+          "in_region": false,
+          "conf": 0.9998906850814819
+        },
+        {
+          "idx": 107,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9967924952507019
+        },
+        {
+          "idx": 108,
+          "token": "la",
+          "in_region": false,
+          "conf": 0.9948732256889343
+        },
+        {
+          "idx": 109,
+          "token": "vitamine",
+          "in_region": false,
+          "conf": 0.9999412298202515
+        },
+        {
+          "idx": 110,
+          "token": "D,",
+          "in_region": false,
+          "conf": 0.934683233499527
+        },
+        {
+          "idx": 111,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 112,
+          "token": "000",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 113,
+          "token": "UI",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 114,
+          "token": "Q1SEM,",
+          "in_region": false,
+          "conf": null
+        },
         {
           "idx": 115,
           "token": "methotrexate,",
@@ -369,17 +429,137 @@
           "token": "DIE,",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 156,
+          "token": "Pantoloc",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 157,
+          "token": "40",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 158,
+          "token": "DIE,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 159,
+          "token": "Ativan",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 160,
+          "token": "1",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 161,
+          "token": "HS,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 162,
+          "token": "Synthroid",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 163,
+          "token": "75",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 164,
+          "token": "microgrammes,",
+          "in_region": false,
+          "conf": 0.998405122756958
+        },
+        {
+          "idx": 165,
+          "token": "Polia",
+          "in_region": false,
+          "conf": 0.8516228199005127
         }
       ]
     },
     {
       "token_start": 153,
       "token_end": 165,
-      "context_start": 143,
-      "context_end": 175,
+      "context_start": 133,
+      "context_end": 185,
       "region_text": "calcium 500 DIE, Pantoloc 40 DIE, Ativan 1 HS, Synthroid 75 microgrammes, Polia",
-      "full_text": "QID PRN, hydroxychloroquine, 200 mg BID, cinq jours sur sept, calcium 500 DIE, Pantoloc 40 DIE, Ativan 1 HS, Synthroid 75 microgrammes, Polia 60 mg S/C au 6 mois. Elle habite avec son",
+      "full_text": "acide folique, 5 mg deux fois Q1SEM, phylénol, 1 g, QID PRN, hydroxychloroquine, 200 mg BID, cinq jours sur sept, calcium 500 DIE, Pantoloc 40 DIE, Ativan 1 HS, Synthroid 75 microgrammes, Polia 60 mg S/C au 6 mois. Elle habite avec son conjoint à domicile. Elle a 7 ans de scolarité. Elle",
       "tokens": [
+        {
+          "idx": 133,
+          "token": "acide",
+          "in_region": false,
+          "conf": 0.9997920989990234
+        },
+        {
+          "idx": 134,
+          "token": "folique,",
+          "in_region": false,
+          "conf": 0.994843324025472
+        },
+        {
+          "idx": 135,
+          "token": "5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 136,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9870528876781464
+        },
+        {
+          "idx": 137,
+          "token": "deux",
+          "in_region": false,
+          "conf": 0.999880313873291
+        },
+        {
+          "idx": 138,
+          "token": "fois",
+          "in_region": false,
+          "conf": 0.9999656677246094
+        },
+        {
+          "idx": 139,
+          "token": "Q1SEM,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 140,
+          "token": "phylénol,",
+          "in_region": false,
+          "conf": 0.8254377663135528
+        },
+        {
+          "idx": 141,
+          "token": "1",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 142,
+          "token": "g,",
+          "in_region": false,
+          "conf": 0.9994431138038635
+        },
         {
           "idx": 143,
           "token": "QID",
@@ -577,6 +757,66 @@
           "token": "son",
           "in_region": false,
           "conf": 0.9998533725738525
+        },
+        {
+          "idx": 176,
+          "token": "conjoint",
+          "in_region": false,
+          "conf": 0.9999636809031168
+        },
+        {
+          "idx": 177,
+          "token": "à",
+          "in_region": false,
+          "conf": 0.9999885559082031
+        },
+        {
+          "idx": 178,
+          "token": "domicile.",
+          "in_region": false,
+          "conf": 0.9610625356435776
+        },
+        {
+          "idx": 179,
+          "token": "Elle",
+          "in_region": false,
+          "conf": 0.999937891960144
+        },
+        {
+          "idx": 180,
+          "token": "a",
+          "in_region": false,
+          "conf": 0.9999885559082031
+        },
+        {
+          "idx": 181,
+          "token": "7",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 182,
+          "token": "ans",
+          "in_region": false,
+          "conf": 0.9997075200080872
+        },
+        {
+          "idx": 183,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9967924952507019
+        },
+        {
+          "idx": 184,
+          "token": "scolarité.",
+          "in_region": false,
+          "conf": 0.971533864736557
+        },
+        {
+          "idx": 185,
+          "token": "Elle",
+          "in_region": false,
+          "conf": 0.999937891960144
         }
       ]
     }

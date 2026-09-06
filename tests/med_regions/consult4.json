@@ -8,11 +8,71 @@
     {
       "token_start": 317,
       "token_end": 322,
-      "context_start": 307,
-      "context_end": 332,
+      "context_start": 297,
+      "context_end": 342,
       "region_text": "d'apaglyflosine 10 mg d'illés. Hamelot d'épine,",
-      "full_text": "escaliers. Quoi connu du CLSC? Au niveau de la médication, d'apaglyflosine 10 mg d'illés. Hamelot d'épine, 5 mg dillé déjeuner. Vitamine D, 10 000 unités Q",
+      "full_text": "de champ visuel. Vie au deuxième étage, autonome pour les escaliers. Quoi connu du CLSC? Au niveau de la médication, d'apaglyflosine 10 mg d'illés. Hamelot d'épine, 5 mg dillé déjeuner. Vitamine D, 10 000 unités Q semaine. Val Sartan 320 mg dyés AM. Hydrochloroxia 12.5 mg",
       "tokens": [
+        {
+          "idx": 297,
+          "token": "de",
+          "in_region": false,
+          "conf": 0.9988652467727661
+        },
+        {
+          "idx": 298,
+          "token": "champ",
+          "in_region": false,
+          "conf": 0.897721529006958
+        },
+        {
+          "idx": 299,
+          "token": "visuel.",
+          "in_region": false,
+          "conf": 0.8730272849400839
+        },
+        {
+          "idx": 300,
+          "token": "Vie",
+          "in_region": false,
+          "conf": 0.9137835502624512
+        },
+        {
+          "idx": 301,
+          "token": "au",
+          "in_region": false,
+          "conf": 0.7054939866065979
+        },
+        {
+          "idx": 302,
+          "token": "deuxième",
+          "in_region": false,
+          "conf": 0.9974820216496786
+        },
+        {
+          "idx": 303,
+          "token": "étage,",
+          "in_region": false,
+          "conf": 0.9617631038029989
+        },
+        {
+          "idx": 304,
+          "token": "autonome",
+          "in_region": false,
+          "conf": 0.9993038376172384
+        },
+        {
+          "idx": 305,
+          "token": "pour",
+          "in_region": false,
+          "conf": 0.916630208492279
+        },
+        {
+          "idx": 306,
+          "token": "les",
+          "in_region": false,
+          "conf": 0.9930753707885742
+        },
         {
           "idx": 307,
           "token": "escaliers.",
@@ -168,17 +228,137 @@
           "token": "Q",
           "in_region": false,
           "conf": 0.39772751927375793
+        },
+        {
+          "idx": 333,
+          "token": "semaine.",
+          "in_region": false,
+          "conf": 0.8825389742851257
+        },
+        {
+          "idx": 334,
+          "token": "Val",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 335,
+          "token": "Sartan",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 336,
+          "token": "320",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 337,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9909262359142303
+        },
+        {
+          "idx": 338,
+          "token": "dyés",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 339,
+          "token": "AM.",
+          "in_region": false,
+          "conf": 0.6704776386419932
+        },
+        {
+          "idx": 340,
+          "token": "Hydrochloroxia",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 341,
+          "token": "12.5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 342,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9909262359142303
         }
       ]
     },
     {
       "token_start": 335,
       "token_end": 354,
-      "context_start": 325,
-      "context_end": 364,
+      "context_start": 315,
+      "context_end": 374,
       "region_text": "Sartan 320 mg dyés AM. Hydrochloroxia 12.5 mg dié. Atorvastatin quarante quatre vingt milligrammes HS. Citagliptine, 50 mg BID, oméprazole,",
-      "full_text": "dillé déjeuner. Vitamine D, 10 000 unités Q semaine. Val Sartan 320 mg dyés AM. Hydrochloroxia 12.5 mg dié. Atorvastatin quarante quatre vingt milligrammes HS. Citagliptine, 50 mg BID, oméprazole, 20 mg dié. Тризиба. Neuf unités HS plus échelles. Prescrite",
+      "full_text": "la médication, d'apaglyflosine 10 mg d'illés. Hamelot d'épine, 5 mg dillé déjeuner. Vitamine D, 10 000 unités Q semaine. Val Sartan 320 mg dyés AM. Hydrochloroxia 12.5 mg dié. Atorvastatin quarante quatre vingt milligrammes HS. Citagliptine, 50 mg BID, oméprazole, 20 mg dié. Тризиба. Neuf unités HS plus échelles. Prescrite le 26 juin 2026, qui ne semble pas avoir été",
       "tokens": [
+        {
+          "idx": 315,
+          "token": "la",
+          "in_region": false,
+          "conf": 0.9996902942657471
+        },
+        {
+          "idx": 316,
+          "token": "médication,",
+          "in_region": false,
+          "conf": 0.916952446103096
+        },
+        {
+          "idx": 317,
+          "token": "d'apaglyflosine",
+          "in_region": false,
+          "conf": 0.7456210404634476
+        },
+        {
+          "idx": 318,
+          "token": "10",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 319,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9909262359142303
+        },
+        {
+          "idx": 320,
+          "token": "d'illés.",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 321,
+          "token": "Hamelot",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 322,
+          "token": "d'épine,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 323,
+          "token": "5",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 324,
+          "token": "mg",
+          "in_region": false,
+          "conf": 0.9909262359142303
+        },
         {
           "idx": 325,
           "token": "dillé",
@@ -418,6 +598,66 @@
           "token": "Prescrite",
           "in_region": false,
           "conf": null
+        },
+        {
+          "idx": 365,
+          "token": "le",
+          "in_region": false,
+          "conf": 0.9987229704856873
+        },
+        {
+          "idx": 366,
+          "token": "26",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 367,
+          "token": "juin",
+          "in_region": false,
+          "conf": 0.99998939037323
+        },
+        {
+          "idx": 368,
+          "token": "2026,",
+          "in_region": false,
+          "conf": null
+        },
+        {
+          "idx": 369,
+          "token": "qui",
+          "in_region": false,
+          "conf": 0.9967139959335327
+        },
+        {
+          "idx": 370,
+          "token": "ne",
+          "in_region": false,
+          "conf": 0.9672754406929016
+        },
+        {
+          "idx": 371,
+          "token": "semble",
+          "in_region": false,
+          "conf": 0.9998043477535248
+        },
+        {
+          "idx": 372,
+          "token": "pas",
+          "in_region": false,
+          "conf": 0.1891648769378662
+        },
+        {
+          "idx": 373,
+          "token": "avoir",
+          "in_region": false,
+          "conf": 0.9998076558113098
+        },
+        {
+          "idx": 374,
+          "token": "été",
+          "in_region": false,
+          "conf": 0.9998832941055298
         }
       ]
     }

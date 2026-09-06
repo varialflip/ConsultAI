@@ -1,0 +1,110 @@
+{
+  "4": {
+    "text": "Voici la liste exacte des médicaments avec leurs doses, sans correction des erreurs STT :\n\nd'apaglyflosine 10 mg d'illés.\nHamelot d'épine, 5 mg dillé déjeuner.\nVitamine D, 10 000 unités Q semaine.\nVal Sartan 320 mg dyés AM.\nHydrochloroxia 12.5 mg dié.\nAtorvastatin quarante quatre vingt milligrammes HS.\nCitagliptine, 50 mg BID, oméprazole, 20 mg dié.\nТризиба.\nNeuf unités HS plus échelles.",
+    "time_s": 4.43,
+    "prompt_tokens": 2897,
+    "completion_tokens": 138
+  },
+  "8": {
+    "text": "Risperdal 2 et Pival 500 mg deux fois par jour, ainsi que Trasodone 150 au coucher et Sipradex 20 au coucher.\nAinsi que neurontin 400 mg trois fois par jour.",
+    "time_s": 2.8,
+    "prompt_tokens": 1052,
+    "completion_tokens": 54
+  },
+  "10": {
+    "text": "Péros Q2 jours HS.\nEliquice 2,5 mg BID.\nLipitor 20 mg HS.\nBisoprolol 2,5 mg d'ye.\nAmlodipine 7,5 mg Péros AM.\nSynthroïde 50 mg Péros AM.\nPantoloque 40 mg Péros d'ye.\nCalcium 500 mg Péros d'ye.\nVitamine D 10 000 unités Q semaine.\nPérin de prille, 1 mg per os lié à M. Scande cérébrale du 10 juillet 2026 pour confusion avec aphasie.",
+    "time_s": 4.75,
+    "prompt_tokens": 3569,
+    "completion_tokens": 139
+  },
+  "11": {
+    "text": "Voici la liste exacte des médicaments avec leurs doses, sans correction des erreurs STT :\n\n---\nData Glyphlosine, 10 mg DIE.\namLODIPine, 5 mg DIE.\nDéjeuner.\nVitamine D, 10 000\n\nUI Q1SEM.\nvalsartan, 320 mg DIE AM.\nHydrochlorothiadide, 12,5 mg DIE.\natorvastatin, 80 mg DIE HS, citaglyptine, 50 mg, BID, omeprazole, 20 mg, dillé, Tresiba, 9 UI HS plus échelle, prescrite le 26 juin 2026, qui ne semble pas\n\navoir été servie, point d'interrogation.\n---",
+    "time_s": 6.69,
+    "prompt_tokens": 2975,
+    "completion_tokens": 164
+  },
+  "12": {
+    "text": "Voici la liste exacte des médicaments avec leurs doses :\n\n\"sertraline 75 au souper, vitamine B12 1200 microgrammes trois fois par semaine.\nQui tapine 25 000 grammes BID.\nmetformine 1 g BID, Diamicron MR90,\n\naspirine 80, Crestor\n\n10.\"",
+    "time_s": 4.22,
+    "prompt_tokens": 1799,
+    "completion_tokens": 77
+  },
+  "15": {
+    "text": "En ces médicaments, à domicile, il prend un phézothérodine, 4 000 g PO DIE, Celexa, 20 000 g PO DIE, Antoloch, 40 000 g PO DIE, vitamine B12, 1200 microgram PO DIE.\nMotilium, 10 mg PO BID.\nEsétrol, 10 mg PO dillé HS.\nMirapex, 0,5 mg deux heures avant le coucher.\nlevodopa carbidopa 100 plus 25, 2,5 comprimés TID.\nPoumadin, 4 mg au souper.\nThe Piclone, 7,5 mg.\nHS PRN.\nLipitard, 80 mg HS.\namantadine, 100 mg au déjeuner.\nImdur, 60 mg 1,5 comprimé.\nbisoprolol, 1,25 mg.\nIci, on a ajouté du Dilaudid 0,25 aux trois heures, PRN S/C, qui est changé pour 0,5 mg QID régulier à partir d'aujourd'hui.\nEn plus de la même dose aux besoins en entredose, on a aussi ajouté du Tylenol 650 mg à QID et des laxatifs aux besoins.\nDepuis hier, il y a eu ajout de kitsapine 12,5 à 25 mg TID aux besoins.",
+    "time_s": 8.2,
+    "prompt_tokens": 1540,
+    "completion_tokens": 314
+  },
+  "16": {
+    "text": "du Lirica 75 BID, Norvasque 5, Crestor 5, Aricept 10, Zoloft 50, Tylenol\n\nTID.",
+    "time_s": 2.76,
+    "prompt_tokens": 843,
+    "completion_tokens": 41
+  },
+  "21": {
+    "text": "Dans ses médicaments, il prend de l'Aldactone 6,25, la Six 20, Norvasc 10, Doxazocin.\n4.\nCalcium vitamine D 1 comprimé par jour.\nLipar 10.\nAricepte 10.\nAvapro 150.\nSerpaline 50.",
+    "time_s": 2.05,
+    "prompt_tokens": 2193,
+    "completion_tokens": 71
+  },
+  "22": {
+    "text": "Insuline, admelogue en auto-ajustement.\nCalcium, 500, deux fois par jour.\nFer, 300, d'yé.\nPantoloque, 40 d'yé.\nTorinef, 0,1 mg d'yé.\nKepra, 500 mg d'yé.\nAspirine, 80 mg d'yé.\nHydrocortisone, 10 mg, deux fois par jour.\nPancré-lipase, Vitamine D, 20 000 unités une fois par semaine.\nPuis insuline très bas, 17 unités au coucher.",
+    "time_s": 5.5,
+    "prompt_tokens": 1327,
+    "completion_tokens": 133
+  },
+  "24": {
+    "text": "Solifumacine 10HS.\nMethformine 250BID.\nNon.\nC'est Methformine 250DIE.\nFlomax 0.4DIE.\nCoversile 2 dié, vitamine D 10 000 une fois par semaine, Posamax 70 une fois par semaine, Calcium 500 dié, Crestor 5 dié, Gabapentin 100 HS, Crestor 5 HS.",
+    "time_s": 3.87,
+    "prompt_tokens": 1450,
+    "completion_tokens": 96
+  },
+  "25": {
+    "text": "Dans sa liste de médicaments, elle prend myrtazapine 7,5 mg au coucher, risperidone 0,25 mg deux fois par jour, vitamine D 10 000 unités une fois par semaine, pantoloque 40, acide folique 5, bisoprolol.\n5 deux fois par jour, Restore 5, Aspirine 80.",
+    "time_s": 3.91,
+    "prompt_tokens": 2006,
+    "completion_tokens": 85
+  },
+  "26": {
+    "text": "Comme médicament, présentement, elle prend du prégabalin, 25 mg deux fois par jour.\nFamotidine, 20 mg deux fois par jour au besoin.\nSénocote, 8,6 mg au coucher.\nUne fois par jour, citagliptine 100 mg une fois par jour, simvastatine 10 mg au coucher, donépésil 5 mg le matin, vitamine D 10 000 unités une fois par jour, une fois par semaine, dexylant 60 mg, tilénol au besoin.",
+    "time_s": 4.1,
+    "prompt_tokens": 2126,
+    "completion_tokens": 123
+  },
+  "28": {
+    "text": "Un Coversil 4, un Dapamide 1,25, Flomax, 0.4, l'Anzoprazole 30, Finastéride 5.",
+    "time_s": 2.6,
+    "prompt_tokens": 1355,
+    "completion_tokens": 42
+  },
+  "29": {
+    "text": "Sa liste de médicaments : sodium, un comprimé deux fois par jour, vitamine B12, 1200 microgrammes trois fois par semaine.\nAmatine, 5 mg trois fois par jour en plus de 2,5.\nNon, en fait, c'est amatine, 7,5 mg trois fois par jour.\nPère, en 50 mg une fois par jour.\nZyprexa, 1,25 mg au coucher.\nAricept, 5 mg une fois par jour.\nFludrocortisone, 0,1 mg une fois par jour.\n500, deux fois par jour.\nVitamine D, 400 unités, deux fois par jour.\nAfexor, 75 mg, une fois par jour.\nApixaban, 2,5 mg, deux fois par jour.\nLanzoprazole, 30 mg, une fois par jour.",
+    "time_s": 7.41,
+    "prompt_tokens": 859,
+    "completion_tokens": 190
+  },
+  "31": {
+    "text": "Voici le texte exact de la liste des médicaments avec leurs doses, sans correction des erreurs STT :\n\n---\nde la vitamine D, 10 000 unités par semaine, méthotrexate, 10 mg une fois par semaine, vitamine B, 12 200 microgrammes trois fois par semaine, trigabalin, 200 mg deux fois par jour, acide folique, 5 mg deux fois par semaine, phylénol, 1 g, quatre fois par jour au besoin, hydroxychloroquine, 200 mg deux fois par jour, cinq jours sur sept, Calcium 500 d'yé, pantoloque 40 d'yé, Mativan 1 au coucher, Synthroïde 75 microgrammes, Polia 60 mg sous-cutané au 6 mois.\n---",
+    "time_s": 5.73,
+    "prompt_tokens": 1443,
+    "completion_tokens": 177
+  },
+  "38": {
+    "text": "Voici la liste exacte des médicaments avec leurs doses, sans correction des erreurs STT :\n\n---\nde épival 500 mg deux fois par jour, myrtazapine 30 mg au coucher, clonazépam 0,5 mg au coucher, crestor 10 mg.\nPantoloque, 40 mg.\nApplique, ça bande 5 mg deux fois par jour.\n---",
+    "time_s": 4.72,
+    "prompt_tokens": 1977,
+    "completion_tokens": 88
+  },
+  "39": {
+    "text": "Sa liste de médicaments aujourd'hui : Cinémette, un comprimé quatre fois par jour, Pantoprazole 40, Galantamine 16, ER, Synthroïde 25 microgrammes, Risidronate 35, Par semaine, vitamine D 10 000 unités par semaine, calcium 500 mg deux fois par jour.",
+    "time_s": 3.79,
+    "prompt_tokens": 794,
+    "completion_tokens": 78
+  },
+  "43": {
+    "text": "Voici la liste exacte des médicaments avec leurs doses, sans correction des erreurs STT :\n\n---\nCinémète, un comprimé quatre fois par jour.\nPantoprazole 40.\nGalantamine 16.\nER.\nSynthroïde, vingt-cinq microgrammes.\nRisée de renate, trente-cinq par semaine.\nVitamine D, dix mille.\nUnité par semaine, calcium 500 mg deux fois par jour.\n---",
+    "time_s": 4.09,
+    "prompt_tokens": 805,
+    "completion_tokens": 99
+  }
+}

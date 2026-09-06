@@ -173,12 +173,27 @@ def matcher_profils(
     profils = liste_profils(langue)
     # Pré-filtres par probe, calculés une fois (le G2P est le vrai goulot :
     # un appel ~0,2 ms — on n'y soumet que les fenêtres PLAUSIBLES).
-    filtres = []  # (canonical, contexte, require_score, [(fn, seuil, bigrammes, ...)])
+    # Désignations valides du profil : le canonique ET les réécritures sûres du
+    # canal inline qui convergent vers lui (le fichier listé dans
+    # ``deterministic_replacements``). Une fenêtre qui colle à l'une de ces
+    # formes n'est PAS un garble (pas de suggestion) — les SONDES phonétiques
+    # sont des déformations à capturer, pas des façons valides d'écrire.
+    inline_par_canon: dict = {}
+    for entree in liste_remplacements(langue) or []:
+        if entree.get("correct"):
+            inline_par_canon.setdefault(entree.get("correct"), []).append(entree)
+    filtres = []  # (canonical, contexte, require_score, désignations valides, [(fn, seuil, bigrammes)])
     for profil in profils:
         canon = profil.get("canonical") or ""
         canon_norm = _normaliser(canon)
         if not canon_norm:
             continue
+        desigs_plain = {
+            _normaliser("".join(_purge_ponct(m) for m in s.split()))
+            for s in [canon]
+            + [e.get("garble") or "" for e in inline_par_canon.get(canon, [])]
+            if _normaliser("".join(_purge_ponct(m) for m in s.split()))
+        }
         for probe in profil.get("probes") or []:
             forme = probe.get("forme") or ""
             fn = _normaliser(_purge_ponct(forme))
@@ -186,6 +201,7 @@ def matcher_profils(
                 filtres.append((
                     canon, profil.get("contexte"),
                     profil.get("require_score"), canon_norm,
+                    tuple(sorted(desigs_plain)),
                     fn, float(probe.get("min_sim") or _MIN_SIM_DEF),
                     _bigrammes(fn),
                 ))
@@ -201,11 +217,14 @@ def matcher_profils(
             if not win_norm:
                 continue
             larg = len(win_norm)
+            win_plain = _normaliser("".join(e for e in win if e != " "))
             for (canon, contexte, req_score, canon_norm,
-                 fn, seuil, fn_bigr) in filtres:
-                if canon_norm in win_norm:
-                    # La forme canonique est déjà écrite dans la fenêtre (ou un
-                    # score englobant) : pas de no-op, pas de suggestion.
+                 desigs_plain, fn, seuil, fn_bigr) in filtres:
+                # La fenêtre écrit déjà le canonique ou UNE désignation valide
+                # du profil (sans sa ponctuation interne — « ISO-SMAF » ≈
+                # « isosmaf », « mini mental » ≈ « minimental ») : pas de no-op,
+                # pas de suggestion.
+                if canon_norm in win_norm or win_plain in desigs_plain:
                     continue
                 # Triple filtre orthographique avant le G2P :
                 #   1) longueur proche (un garble garde la taille de la cible) ;

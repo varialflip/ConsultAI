@@ -227,17 +227,14 @@ def _marque(s: str) -> str:
     )
 
 
-def _bloc_confiance(confiance: List[dict], libelle: str) -> Optional[str]:
-    """Bloc ``CONFIANCE_MOTS`` : mots entendus avec incertitude, mêmes clés
-    que ``build_user_prompt`` pour garder un seul libellé par langue."""
-    items = [
-        f"{d.get('mot', '?')} → {round(float(d['conf']) * 100, 0):.0f} %"
-        for d in confiance
-        if d.get("mot") and d.get("conf") is not None
-    ]
-    if not items:
+def _bloc_confiance(confiance: List[str], libelle: str) -> Optional[str]:
+    """Bloc ``CONFIANCE_MOTS`` : lignes déjà prêtes (mots isolés ou extraits
+    de prose marqués ``*…*``, voir
+    ``med_grounding.grouper_doutes_pour_prompt``), mêmes clés que
+    ``build_user_prompt`` pour garder un seul libellé par langue."""
+    if not confiance:
         return None
-    return _bloc(libelle, "CONFIANCE_MOTS", [" | ".join(items)])
+    return _bloc(libelle, "CONFIANCE_MOTS", confiance)
 
 
 def _bloc_meds(med_hints: List[dict], libelles: dict) -> List[str]:
@@ -311,7 +308,7 @@ def build_user_prompt(
     context_lines: Optional[List[str]] = None,
     extra_instructions: str = "",
     language: Optional[str] = None,
-    confiance: Optional[List[dict]] = None,
+    confiance: Optional[List[str]] = None,
     med_hints: Optional[List[dict]] = None,
     geriatric_hints: Optional[List[dict]] = None,
 ) -> str:
@@ -2418,7 +2415,7 @@ def generate_note_stream(
     on_stream_started: Optional[Callable[[], None]] = None,
     on_thought: Optional[Callable[[str], None]] = None,
     system_override: Optional[str] = None,
-    confiance: Optional[List[dict]] = None,
+    confiance: Optional[List[str]] = None,
     med_hints: Optional[List[dict]] = None,
     conf_map: Optional[dict] = None,
 ):
@@ -3035,7 +3032,7 @@ def generate_note(
     model: Optional[str] = None,
     language: Optional[str] = None,
     audio: Optional[Tuple[bytes, str]] = None,
-    confiance: Optional[List[dict]] = None,
+    confiance: Optional[List[str]] = None,
     med_hints: Optional[List[dict]] = None,
 ) -> dict:
     """

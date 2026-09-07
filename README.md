@@ -259,7 +259,7 @@ confiance est capturée aussi bien pour les **dictées en
 direct** (tranche par tranche) que pour les **enregistrements importés**
 (segment fusionné au brouillon) dès que le service STT fournit
 `words[].confidence` — les deux voies nourrissent le même
-`transcript_conf` et le même bloc <CONFIANCE_MOTS>.
+`transcript_conf` et le même bloc <CONFIANCE_MOTS>. Les doutes voisins y sont regrouper par proximité en extraits du texte, les mots douteux marqués d'astérisques — le contexte qui les entoure localise chaque passage dans la dictée, et un garble multi-mots reste identifiable d'un bloc.
 
 > **⚡ Préparation de l'audio pendant la dictée.** L'audio joint au modèle de
 > langage (plafonnement des silences + encodage) coûte ~0,9× le temps réel —

@@ -2813,7 +2813,7 @@ def _generate_and_publish(
     generation_seq: int,
     origin_tab: str,
     system_prompt: str,
-    confiance_mots: Optional[List[dict]] = None,
+    confiance_mots: Optional[List[str]] = None,
     med_hints: Optional[List[dict]] = None,
     n_transcript: Optional[str] = None,
     conf_map: Optional[dict] = None,
@@ -3171,7 +3171,7 @@ async def api_generate(
     # concentrer son effort de correction là où il est utile et prévenir toute
     # sur-correction du reste.
     conf_map: dict = {}
-    confiance_mots: Optional[List[dict]] = None
+    confiance_mots: Optional[List[str]] = None
     consultation = None
     if payload.consultation_id:
         try:
@@ -3301,10 +3301,18 @@ async def api_generate(
     if audio_payload is None and payload.transcript and conf_map:
         t_doutes = time.monotonic()
         try:
-            confiance_mots = med_grounding.doutes_pour_texte(
+            doutes = med_grounding.doutes_pour_texte(
                 payload.transcript, conf_map, ignores=inline_fixed,
             )
-            compute["confiance_words"] = len(confiance_mots or [])
+            compute["confiance_words"] = len(doutes or [])
+            # Regroupement en spans de prose pour le bloc <CONFIANCE_MOTS> :
+            # les doutes voisins sont rendus en extraits verbatim (position
+            # exacte et vérifiable dans la dictée, multi-words garbles
+            # conservés), les coïncidences de mots courants sans signal sont
+            # élaguées (voir ``med_grounding.grouper_doutes_pour_prompt``).
+            confiance_mots = med_grounding.grouper_doutes_pour_prompt(
+                doutes, payload.transcript,
+            )
         except Exception:
             logger.exception("Confiance mot-à-mot indisponible — génération sans signal")
         compute["doutes_ms"] = round((time.monotonic() - t_doutes) * 1000, 1)

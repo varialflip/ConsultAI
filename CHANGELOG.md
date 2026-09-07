@@ -1,6 +1,21 @@
 # Changelog
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
+
+## 2026-09-07 — Bloc CONFIANCE_MOTS : regroupement en spans de prose
+
+- **Problème** : le bloc listait chaque mot douteux un à un, jusqu'à 152–193 entrées par dictée, surtout des mots courants répétés. L'ordre du texte localisait chaque doute mais le modèle ne peut pas fiablement compter des jetons dans un mur de texte — et un garble multi-mots comme « deux nez persil » ou « Applique, ça bande » vers apixaban était éclaté en entrées séparées sans lien.
+
+- **Règle** : `med_grounding.grouper_doutes_pour_prompt` regroupe les doutes par proximité, écart de 2 jetons maximum, le même seuil que la fusion des candidats de posologie. Puis :
+  - un span sans aucun mot non-courant, coïncidence de mots courants et zéro signal de garble, est supprimé ;
+  - un span mono-jeton garde la forme `mot → XX %` ;
+  - un span multi-jetons devient un **extrait verbatim** du texte avec un mot de contexte de chaque côté, les mots douteux marqués de `*astérisques*`, et la confiance du minimum du span. L'extrait localise le doute exactement dans la dictée, sans index numérique fragile.
+
+- **`llm._bloc_confiance`** simplifié : il reçoit des lignes déjà prêtes au lieu de reformater des dictionnaires — le formatage vit dans `med_grounding`, ce qui évite à `llm` d'importer le moteur complet. Le compteur `confiance_words` continue de compter les doutes bruts.
+- **Consignes §2.7** : précisé dans les deux langues que certaines entrées du bloc sont un extrait, avec `*…*` pour les mots douteux, le reste étant du contexte de localisation.
+
+- **Déploiement** : commit simple et recréation du conteneur de test, sans tag.
+
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
 ## 2026-09-07 — Rapatriement de `main` + copie « Aligné » : tableaux en boîte Unicode pleine largeur

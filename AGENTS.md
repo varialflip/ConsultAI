@@ -182,6 +182,9 @@ même commit** :
   `m.exact[nspace]` (clé avec espace) ne trouvait jamais un composé de
   marque. Toute modification de ce chemin doit être testée sur les
   consultations 38 (apixaban) et 12 (diamicron MR 90).
+- **Bloc `CONFIANCE_MOTS` en spans de prose** (2026-09-07, cf. `med_grounding.grouper_doutes_pour_prompt`) : le bloc ne liste plus chaque mot douteux un à un. Les doutes sont regrouper par proximité dans le texte, écart de 2 jetons maximum, le même seuil que la fusion des candidats de posologie. Un span sans aucun mot non-courant est supprimé ; un span mono-jeton garde `mot → XX %` ; un span multi-jetons devient un **extrait verbatim** du texte avec un mot de contexte de chaque côté, les mots douteux marqués de `*astérisques*`, et la confiance du minimum du span. L'extrait localise le doute exactement dans la dictée, sans index numérique fragile — un multi-mots garble comme « Applique, ça bande » vers apixaban reste identifiable d'un bloc. Le formatage vit dans `med_grounding`; `llm._bloc_confiance` reçoit des lignes déjà prêtes. Toute évolution de ce regroupement doit être re-validée sur la consultation 38 (apixaban) et sur les transcripts de référence.
+
+
 - Le texte normalisé envoyé au LLM est **pré-calculé au « Terminer »** et mis
   en cache par consultation (`normalized_transcript` + `inline_fixed_json`).
   Toute modification de la chaîne inline (médicaments **ou** gériatrique) doit

@@ -4123,7 +4123,85 @@ def _extend_medlist_bare(words, medlist, resolve):
             if p in FRENCH_STOP or p in ANCHOR_WORDS or p in PROTOCOL_WORDS:
                 continue
             cand = resolve(w)
-            if cand and not cand[4] and not cand[3] and not cand[5]:
+            if cand and not cand[4]and not cand[3]and not cand[5]:
                 if norm_orth(w).replace(" ", "") not in LAB_ION:
                     out[i] = True
     return out
+
+
+def grouper_doutes_pour_prompt(
+    doutes: list,
+    texte: str,
+    gap: int = 2,
+    ctx: int = 1,
+) -> list:
+    """Regroupe les doutes pour le bloc ``CONFIANCE_MOTS`` en spans de prose.
+
+    Le bloc historique listait chaque mot douteux plat. Sur une dictée longue,
+    les mots courants répétés(« au », « la »…) noient la liste et l'ordre des
+    entrées ne permet au modèle de localiser un doute que par un décompte de
+    jetons fragile. Ici, on regroupe les doutes par **proximité dans le texte**
+    (écart ≤ ``gap`` jetons, même seuil que la fusion de candidats de
+    posologie), puis :
+
+    - span **sans aucun mot non-courant** (coïncidence de mots courants,
+      zéro signal de garble)→ supprimé ;
+    - span **mono-jeton** → ``mot → XX %`` (format historique) ;
+    - span **multi-jetons** → un **extrait verbatim** du texte (± ``ctx``
+      mots de contexte), les jetons douteux marqués ``*…*``, une seule
+      confiance (le minimum du span, plancher du garble).
+
+    L'extrait est un sous-texte exact et vérifiable de la dictée — le modèle
+    localise le doute par l'extrait lui-même, sans index numérique fragile.
+
+
+    ``doutes`` : la liste retournée par ``doutes_pour_texte`` (ordre par position croissante, items ``{mot, conf, position}``).
+    Retourne la liste ``List[str]`` de lignes prêtes à intégrer au bloc,
+    dans l'ordre du texte. Les spans mono-jeton reprennent la forme
+    ``mot → XX %`` ; les spans multi-jetons la forme
+    ``« extrait » → XX %`` (les ``*…*`` marquant les jetons douteux).
+    """
+    lines: list = []
+    if not doutes or not texte:
+        return lines
+    try:
+        gap = int(gap)
+        ctx = int(ctx)
+    except (TypeError, ValueError):
+        return lines
+    gap = max(1, gap)
+    ctx = max(0, ctx)
+    toks = texte.split()
+    pos_to_dout = {d["position"]: d for d in doutes}
+    spans = []
+    positions = sorted(pos_to_dout)
+    cur = [positions[0]] if positions else []
+    for p in positions[1:]:
+        if p - cur[-1] <= gap:
+            cur.append(p)
+        else:
+            spans.append(cur)
+            cur = [p]
+    if cur:
+        spans.append(cur)
+    n_toks = len(toks)
+    for s in spans:
+        if not any(norm_phon(pos_to_dout[p]["mot"]) not in FRENCH_STOP for p in s):
+            continue
+        if len(s) == 1:
+            dado = pos_to_dout[s[0]]
+            lines.append(f"{dado['mot']} → {round(float(dado['conf']) * 100):.0f} %")
+            continue
+        lo, hi = s[0], s[-1]
+        clo = max(0, lo - ctx)
+        chi = min(n_toks, hi + ctx + 1)
+        parts = []
+        for i in range(clo, chi):
+            w = toks[i]
+            if i in pos_to_dout:
+                w = f"*{w}*"
+            parts.append(w)
+        excerpt = " ".join(parts)
+        min_conf = min(float(pos_to_dout[p]["conf"]) for p in s)
+        lines.append(f"« {excerpt} » → {round(min_conf * 100):.0f} %")
+    return lines

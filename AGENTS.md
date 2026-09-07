@@ -170,6 +170,18 @@ même commit** :
   sur retranscription/import/édition manuelle ; redétectée paresseusement par
   `_apply_grounding()`. `clearSecondPassView()` appelle `renderMedRegion(null)`
   au début de chaque génération.
+- **`_RELEASE_FUSED_RE`** (2026-09-07) : le STT fusionne parfois les codes de
+  formulation (MR, SR, XR, XL, CD, PB) avec le chiffre de dose (« MR90 »).
+  Le regex `_RELEASE_FUSED_RE` sépare ces combinaisons (« MR 90 ») dans
+  `normalize()`, `phonetiques_texte()` et `suggestions_texte()`. Les vrais
+  suffixes numériques (« B12 », « D5W », « Q1SEM ») ne sont pas touchés.
+  Tout ajout de code de formulation doit vérifier ce regex.
+- **`_lookup_exact` composés de marque** (2026-09-07) : les noms multi-mots
+  de marque dans `exact` (clé `norm_phon`, concatené sans espace) sont
+  résolus via `norm_phon(nspace)` dans le chemin bigramme. Avant ce fix,
+  `m.exact[nspace]` (clé avec espace) ne trouvait jamais un composé de
+  marque. Toute modification de ce chemin doit être testée sur les
+  consultations 38 (apixaban) et 12 (diamicron MR 90).
 - Le texte normalisé envoyé au LLM est **pré-calculé au « Terminer »** et mis
   en cache par consultation (`normalized_transcript` + `inline_fixed_json`).
   Toute modification de la chaîne inline (médicaments **ou** gériatrique) doit

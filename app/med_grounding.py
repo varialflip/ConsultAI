@@ -416,6 +416,13 @@ BAN_ORTH = {
     "vitamine",          # English leaf "vitamin e" -> affichage "vitamine e" évité
 }
 
+# Jetons STT fusionnant un code de formulation et une dose (« MR90 » → « MR 90 »).
+# Le STT colle parfois le code (MR, SR, XR, XL, CD) au chiffre de dose :
+# sans découpe, norm_phon avale le nombre et _dose_posology ne voit pas la dose.
+# On ne FRAPPE que les combinaisons connues — jamais « B12 », « D5W », « Q1SEM ».
+_RELEASE_FUSED_RE = re.compile(
+    r"(?i)\b(MR|SR|XR|XL|CD|PB)(?=\d)")
+
 # Electrolytes / lab-ion single-word generics. These appear constantly in the
 # lab section of a dictation ("Sodium 141", "Calcium 2,35") AND, for a few (e.g.
 # calcium), as a genuine oral supplement in the medication list. They are only
@@ -1611,6 +1618,7 @@ class Matcher:
         """
         if not self.use_phonetic:
             return []
+        texte = _RELEASE_FUSED_RE.sub(r"\1 ", texte)
         words = texte.split()
         n = len(words)
         dose_unit, num_token = _drapeaux_dose(words)
@@ -2000,6 +2008,7 @@ class Matcher:
         sans lui, ``SUGGEST_CONF_MAX`` ne peut alimenter le canal doute — seuls
         les jetons portés par une dose sont alors suggérés (prudence).
         """
+        texte = _RELEASE_FUSED_RE.sub(r"\1 ", texte)
         words = texte.split()
         n = len(words)
         dose_unit, num_token = _drapeaux_dose(words)
@@ -2425,6 +2434,11 @@ class Matcher:
         # bien transcrit par un voisin orthographique lointain de la base BDP
         # (« Monocore » -> « nitrate de miconazole », note 15) : ajouter une
         # exception par faux positif devient intenable.
+        # Découpe les codes de formulation fusionnés avec la dose (« MR90 » →
+        # « MR 90 ») avant toute normalisation : sans quoi norm_phon élimine le
+        # chiffre et le fuzzy ortho réécrit le span entier en canonique,
+        # effaçant la dose.
+        text = _RELEASE_FUSED_RE.sub(r"\1 ", text)
         # accent-folded copy for signal detection so "médicament" matches "medicament"
         flat = unicodedata.normalize("NFD", text)
         flat = "".join(c for c in flat if unicodedata.category(c) != "Mn").lower()
@@ -3340,9 +3354,14 @@ def _lookup_exact(token: str) -> dict | None:
             if entry and entry[0] in ("BASE_GENERIC", "FULL_GENERIC"):
                 return {"level": entry[0], "base": entry[1], "brand": entry[2]}
             return {"level": "BASE_GENERIC", "base": nspace, "brand": None}
-        if nspace in m.exact and m.exact[nspace][0] == "BASE_GENERIC":
-            level, base, brand, _leaf, _otc = m.exact[nspace]
-            return {"level": level, "base": base, "brand": brand}
+        # Composé de marque (« Diamicron MR », « Effexor XR ») :
+        # norm_orth garde l'espace mais les clés exact sont en norm_phon
+        # (concatené, sans espace).
+        nkey = norm_phon(nspace)
+        if nkey in m.exact:
+            level, base, brand, _leaf, _otc = m.exact[nkey]
+            if level in ("BRAND", "BASE_GENERIC") and not _leaf:
+                return {"level": level, "base": base, "brand": brand}
         return None   # bigramme non composé : ni nom+dose, ni feuille
     if t in m.exact_garble:
         level, base, brand, _leaf, _otc = m.exact_garble[t]

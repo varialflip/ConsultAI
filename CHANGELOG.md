@@ -3,6 +3,32 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-07 — Fix grounding : Diamicron MR 90, Vitamine B12, import manquant `time`/`settings`
+
+- **`diamicron MR90` → `Diamicron MR 90 mg`** (consultation 12) : le STT fusionne
+  le code de formulation MR (Modified Release) au chiffre de dose `90` en un
+  seul jeton « MR90 ». `norm_phon` avale le chiffre, le fuzzy ortho réécrit
+  le span en « Diamicron Mr » et la dose 90 mg disparaît. Fix :
+  `_RELEASE_FUSED_RE` coupe les codes MR/SR/XR/XL/CD/PB du chiffre qui suit
+  (« MR90 » → « MR 90 ») dans `normalize()`, `phonetiques_texte()` et
+  `suggestions_texte()` — « B12 », « D5W », « Q1SEM » ne sont pas touchés.
+  `norm_phon` ne résout plus « MR » seul → `_lookup_exact` bigramme marche
+  via la clé `norm_phon(nspace)`.
+- **`_lookup_exact` composés de marque** (bug historique) : les composés de
+  marque à espaces (« Diamicron MR », « Effexor XR ») ne se résolvent plus
+  via le chemin bigramme — `m.exact[nspace]` utilisait une clé orthographique
+  alors que les clés exact sont en `norm_phon` (concatené). Fix : lookup via
+  `norm_phon(nspace)` + vérification `BRAND` / `BASE_GENERIC` non-leaf.
+- **`Vitamine B12`** (common_meds.json) : `norm_orth("Vitamin B12")` = `"vitamin b"`
+  (anglais, jamais matché) → remplacé par `"Vitamine B12"` (français). Le
+  `_lookup_exact` compound cherche maintenant le vrai base (avec chiffres) dans
+  `exact` via `norm_phon(nspace)` au lieu de retourner le normalisé tronqué.
+- **`import time` manquant** : `detect_med_region()` crashait sur `NameError: name 'time' is not defined` — attrapé par `except Exception: pass` → fallback silencieux.
+- **`from app import settings`** : `settings` vit dans `app.config`, pas `app.__init__` — 4 occurrences dans `_call_openrouter_region`, `_call_gemini_region`, `_call_http_region` corrigées.
+- **Réponses HTTP + SSE** : `med_region` ajouté aux réponses HTTP (retranscribe, import), à `to_dict()`, et à `loadDraft()` côté JS — la carte violette s'affiche maintenant au retranscribe, import, et rechargement de page.
+- **`clearSecondPassView()`** : `renderMedRegion(null)` efface la carte au début de chaque génération.
+- **i18n** : clé `validation.med_region` ajoutée (fr/en).
+
 ## 2026-09-07 — Zone médicaments (LLM) : détection de la région par le modèle actif
 
 - **Nouvelle fonctionnalité** : le modèle LLM actif (OpenRouter/Gemini/Cohere/Mistral/Custom/Qwen Omni) identifie la zone médicaments dans la transcription brute. La région est persistée (`med_region_json`), affichée dans l'onglet Validation (carte violette), et utilisée pour cibler le scan phonétique (`extract_validation_items` et `precompute_normalization`).

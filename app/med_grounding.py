@@ -385,13 +385,17 @@ def tallman(s):
     return TALLMAN.get(key, s)
 
 
+_RELEASE_CODES = {"MR", "SR", "XR", "XL", "CD", "PB"}
+
 def title_brand(s):
     """Capitalize each word of a brand name, de-ALL-CAPS'ing DB-stored brands
     (e.g. 'TRESIBA' -> 'Tresiba', 'ELIQUIS' -> 'Eliquis'). Preserves the words
     that already read like Trademark-styled labels; intended solely to stop
-    shouting ALL-CAPS output."""
+    shouting ALL-CAPS output. Les codes de formulation (MR, SR, XR, XL, CD, PB)
+    restent en MAJUSCULES — ce sont des abrévations standard, pas des noms."""
     return " ".join(
-        w[:1].upper() + w[1:].lower() if w and w.isupper() else w
+        w if w in _RELEASE_CODES
+        else (w[:1].upper() + w[1:].lower() if w and w.isupper() else w)
         for w in s.split()
     )
 

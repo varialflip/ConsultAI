@@ -17,14 +17,18 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   sortent encadrés de filets simples (`┌┬┐│├┼┤└┴┘`), une colonne par glyphe en
   monospace, et s'étalent sur **toute la largeur de la note** — même nombre de
   caractères par ligne que les listes alignées (89 colonnes, la marge du DME).
-  La dernière colonne absorbe le surplus de colonnes pour que le cadre arrive
-  exactement à la marge ; un tableau plus large que la note n'est jamais
-  rétréci. Les **alignements de colonnes du Markdown sont respectés** :
-  « `|:---:|` » → centré, « `|---:|` » → droite (lu sur la ligne de la
-  séparatrice), gauche par défaut. Le remplissage reste sur des espaces
-  insécables — un champ riche du DME les préserve. « Texte » et la copie riche
-  gardent le rendu ASCII/NBSP d'origine (`renderPlainTable` inchangé) ; les
-  listes de la rubrique Médicaments restent sur deux colonnes.
+  Un tableau plus étroit que la page est étiré (la dernière colonne pompe le
+  surplus jusqu'à la marge) ; un tableau plus large voit sa colonne la plus
+  large rabotée, puis la suivante, et ses cellules **repliées** (`wrapText`,
+  comme les listes) pour que le cadre tienne toujours en 89 — plus aucun
+  dépassement (le tableau de médication à double colonne du DME, par ex.,
+  qui s'étalait à ~108 caractères, rentre désormais). Les **alignements de
+  colonnes du Markdown sont respectés** : « `|:---:|` » → centré,
+  « `|---:|` » → droite (lu sur la ligne de la séparatrice), gauche par
+  défaut. Le remplissage reste sur des espaces insécables — un champ riche
+  du DME les préserve. « Texte » et la copie riche gardent le rendu
+  ASCII/NBSP d'origine (`renderPlainTable` inchangé) ; les listes de la
+  rubrique Médicaments restent sur deux colonnes.
 - Redéploiement : commit simple + `--force-recreate consultai-test` (aucun
   tag — source servie par le bind mount).
 

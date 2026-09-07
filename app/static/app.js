@@ -3984,12 +3984,15 @@
 
   //: Boîte Unicode pleine largeur : les caractères de filet (┌ ┬ ┐ │ ├ ┼ ┤
   //: └ ┴ ┘) comptent une colonne en monospace. Le tableau s'étale sur TOUTE la
-  //: largeur de la note, comme les lignes du rendu aligné (LINE_WIDTH) : la
-  //: dernière colonne absorbe l'éventuel surplus de colonnes pour que le cadre
-  //: arrive exactement à la marge ; un tableau plus large n'est jamais
-  //: rétréci. Les espaces de remplissage restent des NBSP — un champ riche du
-  //: DME les préserve, comme dans renderPlainTable. L'alignement de chaque
-  //: colonne honore la ligne séparatrice Markdown (gauche par défaut).
+  //: largeur de la note, comme les lignes du rendu aligné (LINE_WIDTH) :
+  //:   - plus étroit que 89 → la dernière colonne pompe le surplus (le cadre
+  //:     arrive pile à la marge) ;
+  //:   - plus large que 89 → les colonnes les plus larges sont rabotées (la
+  //:     PLUS LARGE d'abord, puis la suivante) et leurs cellules repliées avec
+  //:     wrapText (comme les listes) : aucune ligne ne dépasse la marge.
+  //: Les espaces de remplissage restent des NBSP — un champ riche du DME les
+  //: préserve, comme dans renderPlainTable. L'alignement de chaque colonne
+  //: honore la ligne de séparatrice Markdown (gauche par défaut).
   function renderUnicodeTable(rows, aligns) {
     if (!rows.length) return [];
     const columns = Math.max(...rows.map((r) => r.length));
@@ -3997,36 +4000,66 @@
     for (let c = 0; c < columns; c += 1) {
       widths.push(Math.max(...rows.map((r) => (r[c] || '').length)));
     }
-    const pad = (cell, c) => {
-      const t = cell || '';
+    //: Largeur intérieure d'une ligne : « NBSP│NBSP » entre colonnes et
+    //: bords « │NBSP » / « NBSP│ » — soit Σ(largeurs) + 3 × nb_colonnes + 1.
+    const overhead = 3 * columns + 1;
+    const cible = LINE_WIDTH - overhead;
+
+    //: Étalage ou rabotage pour coller exactement à `cible`.
+    let somme = widths.reduce((acc, w) => acc + w, 0);
+    if (somme < cible) {
+      widths[columns - 1] += cible - somme;
+    } else if (somme > cible) {
+      const ordre = widths.map((w, i) => [i, w]).sort((a, b) => b[1] - a[1]);
+      let surplus = somme - cible;
+      for (const [i, w] of ordre) {
+        const rabotable = Math.max(0, w - 1);
+        const reduit = Math.min(rabotable, surplus);
+        widths[i] -= reduit;
+        surplus -= reduit;
+        if (surplus <= 0) break;
+      }
+    }
+
+    //: Repli de chaque cellule à la largeur de sa colonne (wrapText, sans
+    //: retrait : les continuations restent pleine largeur de colonne). Une
+    //: cellule vide produit une ligne d'espaces pour garder la rangée carrée.
+    const découper = (cell) => {
+      const lignes = wrapText(cell || '', widths[c]);
+      return lignes.length ? lignes : [''];
+    };
+    //: Alignement PAR LIGNE physique (gauche / centré / droite).
+    const pad = (ligneTexte, c) => {
       const w = widths[c];
       if (aligns && aligns[c] === 'center') {
-        const avant = Math.floor((w - t.length) / 2);
-        return NBSP.repeat(avant) + t + NBSP.repeat(w - t.length - avant);
+        const avant = Math.floor((w - ligneTexte.length) / 2);
+        return NBSP.repeat(avant) + ligneTexte + NBSP.repeat(w - ligneTexte.length - avant);
       }
       if (aligns && aligns[c] === 'right') {
-        return NBSP.repeat(w - t.length) + t;
+        return NBSP.repeat(w - ligneTexte.length) + ligneTexte;
       }
-      return t + NBSP.repeat(w - t.length);
+      return ligneTexte + NBSP.repeat(w - ligneTexte.length);
     };
-    //: Largeur intérieure d'une ligne de données : « │ » de bord + NBSP,
-    //: cellules, séparateurs « NBSP│NBSP » entre colonnes, NBSP + « │ » final
-    //: — soit Σ(largeurs) + 3 × nb_colonnes + 1. On étale ensuite la dernière
-    //: colonne jusqu'à LINE_WIDTH pour que le filet horizontal de même largeur
-    //: tombe pile à la marge.
-    const interieur = widths.reduce((somme, w) => somme + w, 0)
-      + 3 * columns + 1;
-    widths[columns - 1] += Math.max(0, LINE_WIDTH - interieur);
-
-    const ligne = (cells) => `│${NBSP}${cells
-      .map((cell, c) => pad(cell, c))
-      .join(`${NBSP}│${NBSP}`)}${NBSP}│`;
+    //: Une rangée logique (une ligne de cellules du Markdown) peut s'étendre
+    //: sur plusieurs lignes physiques : les cellules sont découpées chacune,
+    //: la hauteur est la plus grande, les autres sont complétées par des
+    //: lignes d'espaces.
+    const rangéeText = (cells) => {
+      const grille = Array.from({ length: columns }, (_, c) => découper(cells[c] || ''));
+      const hauteur = Math.max(...grille.map((g) => g.length));
+      return Array.from({ length: hauteur }, (_, j) => `│${NBSP}${grille
+        .map((g, c) => pad(g[j] || '', c))
+        .join(`${NBSP}│${NBSP}`)}${NBSP}│`);
+    };
     const filet = (gauche, centre, droite) => gauche + widths
       .map((w) => '─'.repeat(w + 2)).join(centre) + droite;
 
-    const out = [filet('┌', '┬', '┐'), ligne(rows[0])];
-    if (rows.length > 1) out.push(filet('├', '┼', '┤'));
-    rows.slice(1).forEach((r) => out.push(ligne(r)));
+    //: Filets recalculés sur les largeurs rabotées → toujours exactement
+    //: `LINE_WIDTH` caractères par ligne.
+    const out = [filet('┌', '┬', '┐'), ...rangéeText(rows[0])];
+    for (let i = 1; i < rows.length; i += 1) {
+      out.push(filet('├', '┼', '┤'), ...rangéeText(rows[i]));
+    }
     out.push(filet('└', '┴', '┘'));
     return out;
   }

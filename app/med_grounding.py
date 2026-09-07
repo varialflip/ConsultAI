@@ -25,6 +25,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 import unicodedata
 
 #: Levenshtein accéléré en C (rapidfuzz). Optionnel au démarrage : l'image doit

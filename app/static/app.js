@@ -1259,6 +1259,9 @@
         state.medGroundingOn = true;
         renderMedItems(data.med_items, data.geriatric);
       }
+      if (data.med_region) {
+        renderMedRegion(data.med_region);
+      }
       state.transcriptLanguage = data.stt_language || (tpl ? tpl.language : '');
       // Le serveur a déjà écrit ce texte en base. On force malgré tout une
       // sauvegarde : elle emporte aussi le gabarit qui vient de changer, et
@@ -2554,6 +2557,10 @@
       if (result.med_items) {
         state.medGroundingOn = true;
         renderMedItems(result.med_items, result.geriatric);
+      }
+
+      if (result.med_region) {
+        renderMedRegion(result.med_region);
       }
 
       if (result.stt_language) state.transcriptLanguage = result.stt_language;
@@ -4595,6 +4602,16 @@
         renderMedItems(medItemsPersistés, draft.geriatric);
       } else {
         renderMedItems([], draft.geriatric);
+      }
+      // Zone médicaments (LLM) : restaurer la région persistée.
+      if (draft.med_region_json) {
+        try {
+          renderMedRegion(JSON.parse(draft.med_region_json));
+        } catch (_) {
+          renderMedRegion(null);
+        }
+      } else {
+        renderMedRegion(null);
       }
 
       if (draft.template_id) {

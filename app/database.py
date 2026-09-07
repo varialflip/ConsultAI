@@ -391,6 +391,7 @@ class Consultation(Base):
                     "verification_json": self.verification_json,
                     "corrections_markdown": self.corrections_markdown,
                     "med_grounding_json": self.med_grounding_json,
+                    "med_region_json": self.med_region_json,
                     "compute_stats_json": self.compute_stats_json,
                 }
             )

@@ -2416,6 +2416,11 @@ async def api_transcribe(
                     origin_tab=request.headers.get("x-consultai-tab", ""),
                 )
                 result["geriatric"] = _geriatric_items(consultation)
+                try:
+                    if consultation.med_region_json:
+                        result["med_region"] = json.loads(consultation.med_region_json)
+                except (ValueError, TypeError):
+                    pass
 
         # Le fichier importé est conservé au même titre qu'une dictée, qu'il
         # ait ou non gagné la course ci-dessus : il sert à trancher un doute
@@ -4052,6 +4057,11 @@ async def retranscribe_consultation(
             origin_tab=request.headers.get("x-consultai-tab", ""),
         )
         reponse["geriatric"] = _geriatric_items(consultation)
+        try:
+            if consultation.med_region_json:
+                reponse["med_region"] = json.loads(consultation.med_region_json)
+        except (ValueError, TypeError):
+            pass
     return reponse
 
 

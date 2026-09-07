@@ -863,6 +863,17 @@ alimentés** : la ligne qui les porte est retirée de la note — l'identité du
 patient n'est pas collectée, voir § 11.) Une ligne dont le champ reste inconnu
 est retirée du document.
 
+**Copier la note.** Quatre boutons groupés réexportent la note générée :
+
+| Bouton | Contenu |
+|---|---|
+| **Mise en forme** | HTML + texte, pour Word ou un DME qui accepte le HTML |
+| **Texte** | Texte seul, rendu linéaire simple (sections soulignées, tableaux en ASCII) |
+| **Aligné** | Texte seul avec listes alignées : puces et numérotées au retrait suspendu, numéros élargis à une colonne, indentation conservée en champ riche (espaces insécables) — idéal pour le dossier électronique. Les tableaux Markdown y sont rendus en boîte Unicode monospace, alignements de colonnes (centré/droite via les « : ») respectés |
+| **Markdown** | Le Markdown brut, tel qu'il est dans l'éditeur |
+
+**PDF** reste à part : impression navigateur, puis « Enregistrer au format PDF ».
+
 ### 7.5 La langue du gabarit pilote la chaîne
 
 Le champ **Langue** d'un gabarit n'est pas une étiquette : il décide des
@@ -1581,6 +1592,12 @@ comme n'importe quel fournisseur hébergé.
 > autoritaire, le texte sert de filet anti-omission (éléments dictés oubliés
 > d'un audio seul). Désactivé (défaut) : aucun appel vocal pendant
 > l'enregistrement, la note vient de l'audio seul.
+>
+> **Partout où l'audio est envoyé avec la transcription** (« Joindre aussi
+> l'audio », mode guide, contournement), **l'audio fait foi** : il corrige un
+> terme mal transcrit et récupère ce que la transcription aurait omis ; un
+> élément porté par la transcription seule mais que l'audio ne confirme pas est
+> signalé « à confirmer » en Corrections et éléments à valider.
 
 Vérification en une commande — ce qui est **réellement** en service, et non ce que
 dit le `.env` (le panneau le surcharge) :

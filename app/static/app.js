@@ -1780,6 +1780,51 @@
     }, 1200);
   }
 
+  /** Clic mécanique organique (on/off) via Web Audio. Plutôt qu'un bip
+   *  sinusoïdal (syntonique, vite fatigant), on synthétise un court transitoire
+   *  de bruit filtré — l'équivalent d'un interrupteur physique : attaque
+   *  quasi instantanée, corps bref, décroissance rapide. « haut » est plus
+   *  brillant (filtre plus aigu), « bas » plus sourd (filtre plus grave). */
+  const CLICK_DUR = 0.035;         // 35 ms : un « tick » sec, pas un son tenu
+  const CLICK_ON_FILTER = 2200;    // clic « on » : filtre passe-bande brillant
+  const CLICK_OFF_FILTER = 1300;   // clic « off » : filtre plus grave
+  let _clickCtx = null;
+  let _clickNoiseBuffer = null;
+  function _clickNoise() {
+    const ctx = _clickCtx;
+    if (_clickNoiseBuffer && _clickNoiseBuffer.sampleRate === ctx.sampleRate) return _clickNoiseBuffer;
+    const len = Math.max(1, Math.ceil(ctx.sampleRate * CLICK_DUR));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) data[i] = Math.random() * 2 - 1;
+    _clickNoiseBuffer = buf;
+    return buf;
+  }
+  function playClick(bright) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!_clickCtx || _clickCtx.state === 'closed') _clickCtx = new AC();
+      if (_clickCtx.state === 'suspended') _clickCtx.resume();
+      const now = _clickCtx.currentTime;
+      const src = _clickCtx.createBufferSource();
+      src.buffer = _clickNoise();
+      // Filtre passe-bande : façonne la « couleur » du clic (aigu = on).
+      const bp = _clickCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = bright ? CLICK_ON_FILTER : CLICK_OFF_FILTER;
+      bp.Q.value = 1.1;
+      // Enveloppe : attaque instantanée, chute exponentielle rapide en 2 temps
+      // (un peu de corps puis éteint) pour le caractère « switch ».
+      const gain = _clickCtx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.35, now + 0.002);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + CLICK_DUR);
+      src.connect(bp).connect(gain).connect(_clickCtx.destination);
+      src.start(now);
+      src.stop(now + CLICK_DUR);
+    } catch (_) { /* audio feedback is cosmetic — never block */ }
+  }
+
   /** Waveform du micro — confirme visuellement que le micro capte bien. */
   function startWaveform(stream) {
     try {
@@ -2196,6 +2241,9 @@
 
     // Un fragment toutes les quelques secondes : c'est l'unité de
     // téléversement, donc aussi le pire cas de perte sur une panne franche.
+    // Le clic de démarrage (mode dictaphone uniquement) passe par les
+    // haut-parleurs AVANT le start(): il ne peut pas entrer dans l'enregistrement.
+    if (dphone.active) playClick(true);
     recorder.mediaRecorder.start(dictationConfig.chunkSeconds * 1000);
 
     state.recording = true;
@@ -2215,10 +2263,15 @@
   function togglePause() {
     if (!recorder.mediaRecorder || !state.recording) return;
     if (state.paused) {
+      if (dphone.active) playClick(true);   // reprise = « clic on »
       recorder.mediaRecorder.resume();
       state.paused = false;
       resetVad();  // la pause a interrompu le signal : on repart de zéro
     } else {
+      // Mise en pause = « clic off », joué avant pause() tant que le micro
+      // enregistre encore côté navigateur — il sort par les haut-parleurs,
+      // jamais capturé (le pause() survient juste après).
+      if (dphone.active) playClick(false);
       recorder.mediaRecorder.pause();
       state.paused = true;
       resetVad();
@@ -2235,6 +2288,12 @@
    */
   function stopMicrophone() {
     return new Promise((resolve) => {
+      const stopTracks = () => {
+        if (recorder.stream) {
+          recorder.stream.getTracks().forEach((track) => track.stop());
+          recorder.stream = null;
+        }
+      };
       const cleanup = () => {
         state.recording = false;
         state.paused = false;
@@ -2243,10 +2302,11 @@
         releaseWakeLock();
         updateRecordingUI();
         window.removeEventListener('beforeunload', warnBeforeUnload);
-        if (recorder.stream) {
-          recorder.stream.getTracks().forEach((track) => track.stop());
-          recorder.stream = null;
-        }
+        // Clic d'arrêt (dictaphone uniquement) : joué après mediaRecorder.stop()
+        // (l'enregistrement est clos, le clic ne peut pas y entrer) mais tant
+        // que les pistes du micro sont encore vivantes.
+        if (dphone.active) playClick(false);
+        stopTracks();
         resolve();
       };
 
@@ -3820,8 +3880,9 @@
             'text/html': new Blob([html], { type: 'text/html' }),
             // Version texte : la structure par la seule disposition, jamais
             // du Markdown brut — c'est ce que reçoit un champ qui refuse
-            // le HTML, et « ## » en clair n'y aide personne.
-            'text/plain': new Blob([markdownToPlainText(markdown)], { type: 'text/plain' }),
+            // le HTML, et « ## » en clair n'y aide personne. Version alignée
+            // (NBSP) : survit au champ riche comme les tableaux.
+            'text/plain': new Blob([markdownToAligned(markdown)], { type: 'text/plain' }),
           }),
         ]);
       } else {
@@ -3883,6 +3944,19 @@
       .split('|').map((c) => stripInlineMarkdown(c.trim()));
   }
 
+  //: Alignements de colonnes annoncés par la ligne séparatrice Markdown
+  //: (« |:---:| » → centré, « | ---: | » → droite, sinon gauche). Le remplissage
+  //: se fera sur des NBSP, comme tout l'alignement de la copie alignée.
+  function splitTableAligns(line) {
+    return line.replace(/^\s*\|/, '').replace(/\|\s*$/, '')
+      .split('|').map((cell) => {
+        const c = cell.trim();
+        if (c.startsWith(':') && c.endsWith(':')) return 'center';
+        if (c.endsWith(':')) return 'right';
+        return 'left';
+      });
+  }
+
   const TABLE_SEPARATOR = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 
   //: Alignement par espaces INSÉCABLES (U+00A0) : un champ de DME riche aplatit
@@ -3905,6 +3979,42 @@
 
     const out = [ligne(rows[0]), widths.map((w) => '-'.repeat(w)).join(`${NBSP}${NBSP}`).trimEnd()];
     rows.slice(1).forEach((r) => out.push(ligne(r)));
+    return out;
+  }
+
+  //: Boîte Unicode (filets simples) : « │ » et « ─ » comptent une colonne en
+  //: monospace. Les espaces de remplissage restent des NBSP — un champ riche du
+  //: DME les préserve, comme dans renderPlainTable. L'alignement de chaque
+  //: colonne honore la ligne séparatrice Markdown (gauche par défaut).
+  function renderUnicodeTable(rows, aligns) {
+    if (!rows.length) return [];
+    const columns = Math.max(...rows.map((r) => r.length));
+    const widths = [];
+    for (let c = 0; c < columns; c += 1) {
+      widths.push(Math.max(...rows.map((r) => (r[c] || '').length)));
+    }
+    const pad = (cell, c) => {
+      const t = cell || '';
+      const w = widths[c];
+      if (aligns && aligns[c] === 'center') {
+        const avant = Math.floor((w - t.length) / 2);
+        return NBSP.repeat(avant) + t + NBSP.repeat(w - t.length - avant);
+      }
+      if (aligns && aligns[c] === 'right') {
+        return NBSP.repeat(w - t.length) + t;
+      }
+      return t + NBSP.repeat(w - t.length);
+    };
+    const ligne = (cells) => `│${NBSP}${cells
+      .map((cell, c) => pad(cell, c))
+      .join(`${NBSP}│${NBSP}`)}${NBSP}│`;
+    const filet = (gauche, centre, droite) => gauche + widths
+      .map((w) => '─'.repeat(w + 2)).join(centre) + droite;
+
+    const out = [filet('┌', '┬', '┐'), ligne(rows[0])];
+    if (rows.length > 1) out.push(filet('├', '┼', '┤'));
+    rows.slice(1).forEach((r) => out.push(ligne(r)));
+    out.push(filet('└', '┴', '┘'));
     return out;
   }
 
@@ -3991,6 +4101,185 @@
     return lignes;
   }
 
+  //: Largeur de ligne du texte simple (monospace, comme les colonnes
+  //: Médicaments). Les items de liste trop longs y sont repliés avec un
+  //: retrait suspendu : les lignes de continuation s'alignent sous le texte
+  //: après la puce/le numéro, jamais sous la puce elle-même. 89 = marge du DME
+  //: (il restait ~10 caractères avant la limite).
+  const LINE_WIDTH = 89;
+
+  /**
+   * Replie un item de liste avec un retrait suspendu : la première ligne porte
+   * l'en-tête (« • » ou « N. »), les continuations s'alignent SOUS le texte de
+   * la première ligne sur des NBSP — jamais le marqueur répété ni un retour à
+   * la marge.
+   */
+  function alignerRepli(texte, entete) {
+    const retrait = NBSP.repeat(entete.length);
+    const wrap = wrapText(texte, LINE_WIDTH, retrait);
+    if (!wrap.length) return [entete];
+    return wrap.map((l, i) => (i === 0 ? `${entete}${l}` : l));
+  }
+
+  /**
+   * Rend une liste numérotée en un bloc.
+   * Les étiquettes « N. » sont élargies à la largeur de la plus large pour que
+   * le texte des items s'aligne verticalement entre eux (1., 10., 100.), sur
+   * des NBSP comme partout ailleurs (le champ riche du DME aplatit les espaces
+   * ordinaires). Le repli porte le retrait suspendu qui aligne les
+   * continuations sous le texte, après le numéro.
+   */
+  function renderNumberedList(items) {
+    const largeurEtiquette = Math.max(...items.map((it) => it.label.length + 2));
+    return items.flatMap((it) => {
+      const etiquette = `${it.label}.`.padEnd(largeurEtiquette, NBSP);
+      return alignerRepli(it.texte, `${it.creux}${etiquette}`);
+    });
+  }
+
+  function markdownToAligned(markdown) {
+    const lignes = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+    const out = [];
+    let tableau = [];
+    //: Alignements de colonnes du tableau en attente, lus sur la ligne
+    //: séparatrice Markdown (rendus d'un bloc avec en-tête, voir renderUnicodeTable).
+    let tableauAligns = [];
+    //: Cellules « Médicaments » en attente de mise en colonnes, et indicateur
+    //: de rubrique. On ne peut pas décider de l'alignement ligne à ligne : il
+    //: faut d'abord voir toute la liste pour la couper en deux moitiés.
+    const meds = [];
+    let inMeds = false;
+    //: Items d'une liste numérotée en attente : on doit voir toute la liste
+    //: pour élargir les étiquettes à la largeur du plus grand numéro.
+    const numList = [];
+
+    const viderTableau = () => {
+      if (tableau.length) {
+        out.push(...renderUnicodeTable(tableau, tableauAligns));
+        tableau = [];
+        tableauAligns = [];
+      }
+    };
+
+    const viderMeds = () => {
+      if (meds.length) {
+        out.push(...renderMedsColumns(meds));
+        meds.length = 0;
+      }
+    };
+
+    const viderNum = () => {
+      if (numList.length) {
+        out.push(...renderNumberedList(numList));
+        numList.length = 0;
+      }
+    };
+
+    lignes.forEach((brute) => {
+      const ligne = brute.replace(/\s+$/, '');
+
+      // --- Tableaux : accumulés puis alignés d'un bloc ---
+      if (/^\s*\|/.test(ligne)) {
+        viderMeds();
+        viderNum();
+        if (TABLE_SEPARATOR.test(ligne)) tableauAligns = splitTableAligns(ligne);
+        else tableau.push(splitTableRow(ligne));
+        return;
+      }
+      viderTableau();
+      viderNum();
+
+      const titre = ligne.match(/^(#{1,6})\s+(.*)$/);
+      if (titre) {
+        const niveau = titre[1].length;
+        const texte = stripInlineMarkdown(titre[2]).replace(/[:\s]+$/, '');
+        viderMeds();
+        //: Rubrique « Médicaments » de niveau 2 → rendue sur deux colonnes.
+        inMeds = niveau === 2 && MEDS_HEADING_RE.test(texte);
+        if (out.length) out.push('');
+        if (niveau === 1) {
+          out.push(texte, '═'.repeat(Math.max(texte.length, 3)));
+        } else if (niveau === 2) {
+          out.push(texte, '─'.repeat(Math.max(texte.length, 3)));
+        } else {
+          // Au-delà du deuxième niveau, un filet de plus nuirait à la
+          // lisibilité : la position et le deux-points suffisent.
+          out.push(`${texte} :`);
+        }
+        return;
+      }
+
+      // --- Filet horizontal ---
+      if (/^\s*([-*_])\1{2,}\s*$/.test(ligne)) {
+        viderMeds();
+        viderNum();
+        out.push('', '─'.repeat(60), '');
+        return;
+      }
+
+      // --- Listes ---
+      const puce = ligne.match(/^(\s*)[-*+]\s+(.*)$/);
+      if (puce) {
+        const creux = NBSP.repeat(Math.floor(puce[1].length / 2));
+        const contenu = stripInlineMarkdown(puce[2]);
+        if (inMeds && puce[1].length === 0) {
+          //: Puces de premier niveau de la rubrique : accumulées, elles seront
+          //: rendues deux par rangée (lecture verticale) à la fin de la rubrique.
+          meds.push(contenu);
+        } else {
+          if (inMeds) viderMeds();
+          viderNum();
+          //: Retrait suspendu via alignerRepli : les continuations d'une puce
+          //: longue s'alignent sous le texte, pas sous « • » ni à la marge.
+          out.push(...alignerRepli(contenu, `${creux}• `));
+        }
+        return;
+      }
+      const numero = ligne.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
+      if (numero) {
+        //: On ne rejette rien ici : l'étiquette élargie demande de voir toute
+        //: la liste. Les items s'accumulent et seront rendus d'un bloc.
+        viderMeds();
+        numList.push({
+          creux: NBSP.repeat(Math.floor(numero[1].length / 2)),
+          label: numero[2],
+          texte: stripInlineMarkdown(numero[3]),
+        });
+        return;
+      }
+
+      // --- Citation ---
+      const citation = ligne.match(/^\s*>\s?(.*)$/);
+      if (citation) {
+        viderMeds();
+        viderNum();
+        out.push(`  | ${stripInlineMarkdown(citation[1])}`);
+        return;
+      }
+
+      //: Dans la rubrique Médicaments, les lignes vides ne coupent pas la
+      //: liste : on continue d'accumuler jusqu'au prochain contenu réel.
+      if (inMeds && ligne === '') return;
+
+      viderMeds();
+      viderNum();
+      out.push(stripInlineMarkdown(ligne));
+    });
+
+    viderTableau();
+    viderMeds();
+    viderNum();
+
+    // Deux sauts de ligne consécutifs au maximum : au-delà, le DME étire la
+    // note sur des écrans inutiles.
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\s+$/g, '') + '\n';
+  }
+
+  /**
+   * Version « Texte » historique : listes sans alinéa renforcé, ni repli aligné
+   * ni numérotées élargies — rendu linéaire simple (espaces ordinaires). C'est
+   * le comportement d'origine ; la version alignée vit dans markdownToAligned.
+   */
   function markdownToPlainText(markdown) {
     const lignes = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
     const out = [];
@@ -4109,6 +4398,20 @@
     try {
       await navigator.clipboard.writeText(markdownToPlainText(markdown));
       toast(T('copy.plain_done'), 'success');
+    } catch (err) {
+      toast(T('copy.failed', { error: err.message }), 'error');
+    }
+  }
+
+  async function copyAlignedText() {
+    const markdown = $('markdownEditor').value;
+    if (!markdown.trim()) {
+      toast(T('copy.nothing'), 'warning');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(markdownToAligned(markdown));
+      toast(T('copy.aligned_done'), 'success');
     } catch (err) {
       toast(T('copy.failed', { error: err.message }), 'error');
     }
@@ -7822,6 +8125,7 @@
     // --- Export ---
     $('btnCopyRich').addEventListener('click', copyRichText);
     $('btnCopyPlain').addEventListener('click', copyPlainText);
+    $('btnCopyAligned').addEventListener('click', copyAlignedText);
     $('btnCopyMd').addEventListener('click', copyMarkdown);
     $('btnPdf').addEventListener('click', exportPdf);
 

@@ -3,6 +3,27 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-07 — Rapatriement de `main` + copie « Aligné » : tableaux en boîte Unicode monospace
+
+- **Merge de `origin/main`** (7 commits, 2026-08-28 → 09-04) dans `selfhosted` :
+  bouton de copie « **Aligné** » (listes à puces et numérotées au retrait
+  suspendu, étiquettes « N. » élargies, repli à 89 colonnes pour la marge du
+  DME), « Texte » redevenu linéaire, clics mécaniques « on/off » du
+  dictaphone, texte simple à l'alinéa, audio comme référence lors des
+  lectures douteuses.
+- **Tableaux rendus en boîte Unicode monospace dans « Aligné »** (`renderUnicodeTable`) :
+  les tableaux Markdown (ex. la « Médication actuelle » de la révision de
+  pharmacothérapie, `| Médicament | Dose et posologie | Indication | Commentaire |`)
+  sortent encadrés de filets simples (`┌┬┐│├┼┤└┴┘`), une colonne par glyphe en
+  monospace. Les **alignements de colonnes du Markdown sont respectés** :
+  « `|:---:|` » → centré, « `|---:|` » → droite (lu sur la ligne séparatrice),
+  gauche par défaut. Le remplissage reste sur des espaces insécables — un
+  champ riche du DME les préserve. « Texte » et la copie riche gardent le
+  rendu ASCII/NBSP d'origine (`renderPlainTable` inchangé) ; les listes de la
+  rubrique Médicaments restent sur deux colonnes.
+- Redéploiement : commit simple + `--force-recreate consultai-test` (aucun
+  tag — source servie par le bind mount).
+
 ## 2026-09-07 — Fix grounding : Diamicron MR 90, Vitamine B12, import manquant `time`/`settings`
 
 - **`diamicron MR90` → `Diamicron MR 90 mg`** (consultation 12) : le STT fusionne
@@ -734,6 +755,32 @@ repérage de liste exigeait une dose juste après chaque nom.*
   candidats phonétiques, eux, gardent le nom dicté + flèche vers la cible
   (« l'Aldactone » → ALDACTONE), qu'ils servent de piste à confirmer.
 
+## 2026-09-02 — Copie « Aligné » : les listes respectent l'alinéa
+
+*Coller la note dans le champ riche du DME aplatissait l'indentation des listes
+(pointées et numérotées) et ne repliait pas le texte long : les items partaient
+à la marge gauche et leurs lignes de continuation repartaient sous la puce/le
+numéro.*
+
+- **Nouveau bouton « Aligné »** (4e bouton de copie, entre « Texte » et
+  « Markdown ») : texte simple avec listes alignées, fait pour le champ riche
+  du DME —
+  - **Alinea d'entrée conservé** : l'indentation des puces et des listes
+    numérotées utilise des espaces insécables (comme les tableaux et les
+    colonnes Médicaments) — elle survit à un champ riche qui aplatit les
+    espaces ordinaires.
+  - **Repli avec retrait suspendu** : les items trop longs sont repliés à
+    ~89 colonnes (marge du DME : il restait ~10 caractères de marge) ; les
+    lignes de continuation s'alignent sous le texte après la
+    puce/le numéro, jamais sous la puce ni à la marge.
+  - **Numérotées alignées verticalement** : les étiquettes « N. » sont élargies
+    à la largeur du plus grand numéro (1., 10., 100.) pour que le texte des
+    items commence à la même colonne.
+- **Le bouton « Texte » retrouve son comportement d'origine** (rendu linéaire
+  simple) ; la copie riche (« Mise en forme ») garde la version alignée pour
+  son repli texte.
+- Redéploiement : commit simple (source servie par le bind mount).
+
 ## 2026-09-01 — G2P : la règle « gu+voyelle » répare admelogue / proguanil
 
 *« admelogue » (STT) restait hors des pistes phonétiques : le G2P français
@@ -1006,6 +1053,20 @@ budget de sortie commun (pensée + texte) et renvoie une note vide ET tronquée
   garder `openrouter_llm_reasoning_effort` sur **low** et la note reste courte
   (la borne de 4096 jetons coupe la réflexion bien avant l'épuisement).
 
+## 2026-09-01 — Dictaphone : clics mécaniques « on/off » (hors de l'enregistrement)
+
+- Le dictaphone (seul, pas le bouton principal) émet désormais de brefs clics
+  mécaniques pour confirmer l'état d'enregistrement sans regarder l'écran :
+  - **clic on** — démarrage et reprise après pause : plus brillant ;
+  - **clic off** — mise en pause **et** arrêt : plus sourd (même « interrupteur »).
+- Cliquetis organique (pas un bip sinusoïdal) : court transitoire de bruit
+  filtré par un passe-bande, ~35 ms, attaque quasi instantanée et chute rapide
+  — l'équivalent d'un bouton physique, sans être fatigant.
+- Le clic on passe par les haut-parleurs **avant** `mediaRecorder.start()` /
+  `resume()` ; le clic off avant `pause()` et après `stop()` : aucun clic
+  n'entre jamais dans l'enregistrement.
+- Aucun clic sur le bouton d'enregistrement principal (comportement inchangé).
+- Redéploiement : commit simple (source servie par le bind mount).
 ## 2026-08-31 — Grounding : le générique écrase la marque-leaf homonyme (Trasodone → trazodone)
 
 *La dictée « Trasodone » affichait la marque parasite **NU-TRAZODONE** au lieu du
@@ -1440,6 +1501,19 @@ transcription conservée les contenait.*
   comportement historique (audio seul) est inchangé.
 - `transcript_used` devient vrai dans ce mode (la transcription a pris part à
   la note) : `stt_used` s'affiche alors comme avant.
+- **L'audio fait foi partout où audio et transcription sont envoyés ensemble** :
+  le `_AUDIO_CROSSCHECK_NOTE` (« Joindre aussi l'audio », sans contournement)
+  disait auparavant « ne t'en sers jamais pour ajouter un contenu absent de la
+  transcription » — l'inverse de la conduite voulue. Unifié : l'audio corrige un
+  terme mal transcrit ET récupère ce que la transcription aurait omis.
+- **« Réellement entendu » s'entend de l'AUDIO** quand un extrait audio est
+  joint (consigne générale § 1) : un élément présent dans la transcription mais
+  que l'audio ne confirme pas reste douteux → lecture la plus probable dans le
+  corps + « à confirmer » en Corrections (jamais rejeté sans trace, jamais pris
+  pour acquis). Appliqué à la consigne générale FR/EN en base.
+- Textes d'aide mis à jour : « Joindre aussi l'audio » (générique et
+  personnalisé), « Conserver une transcription… » (générique et personnalisé),
+  notice du pied de dictée.
 - Appliqué aux deux chemins (`generate_note` et `generate_note_stream`) ; texte
   d'aide du réglage « Conserver une transcription… » mis à jour.
 

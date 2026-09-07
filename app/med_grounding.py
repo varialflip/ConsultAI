@@ -3332,6 +3332,13 @@ def _lookup_exact(token: str) -> dict | None:
             return None   # nom + dose : chiffre = posologie, pas le nom
         nspace = norm_orth(tok)
         if nspace in m._generic_compound:
+            # Retrouver le vrai base (avec chiffres) via exact si possible :
+            # norm_orth("vitamine b12") = "vitamine b" mais le base doit
+            # rester "Vitamine B12", pas "vitamine b".
+            nkey = norm_phon(nspace)
+            entry = m.exact.get(nkey)
+            if entry and entry[0] in ("BASE_GENERIC", "FULL_GENERIC"):
+                return {"level": entry[0], "base": entry[1], "brand": entry[2]}
             return {"level": "BASE_GENERIC", "base": nspace, "brand": None}
         if nspace in m.exact and m.exact[nspace][0] == "BASE_GENERIC":
             level, base, brand, _leaf, _otc = m.exact[nspace]

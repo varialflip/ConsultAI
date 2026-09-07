@@ -190,11 +190,15 @@ même commit** :
   Toute modification de la chaîne inline (médicaments **ou** gériatrique) doit
   être vérifiée contre ce cache : invalidable (édition/retranscription/import)
   et re-persisté à chaque génération. La course « Terminer » → « Générer » est
-  coordonnée par `dictation._grounding_events` (la génération attend le scan de
-  fond au lieu d'en lancer un second) — ne pas contourner ce garde-fou sans
-  rétablir l'équivalent. Les durées réelles se mesurent dans
-  `compute_stats_json` (scan plein texte, pré-calcul, passes déterministes,
-  TTFT) : y revenir avant de régler les seuils de performance.
+  coordonnée par `dictation._grounding_events` : la génération attend le scan
+  de fond au lieu d'en lancer un second, par **paliers** jusqu'au budget
+  total `_GROUNDING_WAIT_TOTAL_SECONDS` (60 s, cf. `main._GROUNDING_WAIT_SECONDS`)
+  — le filet synchrone `_apply_grounding` ne prend le relais que si le job de
+  fond est terminé (événement retiré du registre sans liste posée) ou a
+  dépassé le budget. Ne pas contourner ce garde-fou sans rétablir
+  l'équivalent. Les durées réelles se mesurent dans `compute_stats_json`
+  (scan plein texte, pré-calcul, passes déterministes, TTFT) : y revenir avant
+  de régler les seuils de performance.
 
 Le déploiement de référence tourne sur la machine `/opt/dictai` : tout réglage
 de production y est vérifiable par `sudo docker exec consultai python3 -c …`

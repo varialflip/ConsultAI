@@ -2,6 +2,22 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 
+## 2026-09-07 — Course « Terminer → Générer » : attente par paliers au lieu du double scan
+
+- **Problème** : si l'usager clique « Générer » pendant que le scan de fond du
+  « Terminer » cherche encore (détection de région LLM + scan phonétique, pire
+  cas ~46 s), l'attente initiale de 30 s pouvait expirer et le filet synchrone
+  `_apply_grounding` **re-détectait la région et re-scannait le plein texte**
+  dans la fenêtre de clic — plusieurs dizaines de secondes de travail en double
+  avant le premier jeton.
+- **Règle** : la génération attend l'événement du scan de fond **par paliers**,
+  jusqu'au budget total `_GROUNDING_WAIT_TOTAL_SECONDS` (60 s,
+  `main._GROUNDING_WAIT_SECONDS` reste le pas de 30 s). Le filet synchrone ne
+  prend le relais que si le job de fond est réellement terminé (événement
+  retiré du registre sans liste posée) ou a dépassé le budget — plus jamais de
+  double travail pendant que le fond travaille encore.
+- **Déploiement** : commit simple et recréation du conteneur de test, sans tag.
+
 ## 2026-09-07 — Bloc CONFIANCE_MOTS : regroupement en spans de prose
 
 - **Problème** : le bloc listait chaque mot douteux un à un, jusqu'à 152–193 entrées par dictée, surtout des mots courants répétés. L'ordre du texte localisait chaque doute mais le modèle ne peut pas fiablement compter des jetons dans un mur de texte — et un garble multi-mots comme « deux nez persil » ou « Applique, ça bande » vers apixaban était éclaté en entrées séparées sans lien.

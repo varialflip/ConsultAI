@@ -445,9 +445,18 @@ def _med_grounding_on() -> bool:
 
 
 #: Marge d'attente du scan plein texte de fond au cours « Terminer → Générer ».
-#: Le scan final prend ~10-17 s ; cette borne le laisse aboutir sans bloquer la
-#: génération au-delà du raisonnable (au-delà, on retombe sur le scan synchrone).
+#: Le scan final prend ~10-17 s (plus la détection de région LLM, jusqu'à 30 s
+#: de timeout HTTP) ; on attend l'événement du job de fond PAR PALIERS plutôt
+#: que de re-scanner en synchrone pendant que le fond travaille encore (le
+#: filet synchrone re-détecterait la région ET re-scannerait le plein texte :
+#: pire cas ~46 s de double travail dans la fenêtre de clic).
 _GROUNDING_WAIT_SECONDS = 30.0
+#: Budget TOTAL d'attente du scan de fond (depuis le premier palier). Si le job
+#: n'a rien posé dans ce budget alors qu'il était encore actif, le filet
+#: synchrone ``_apply_grounding`` prend le relais ; un job TERMINÉ (succès ou
+#: échec) retire l'événement du registre, donc la boucle s'arrête dès qu'il a
+#: fini, sans attendre ce budget.
+_GROUNDING_WAIT_TOTAL_SECONDS = 60.0
 
 
 # ---------------------------------------------------------------------------
@@ -3194,11 +3203,32 @@ async def api_generate(
         try:
             event = dictation.grounding_event(consultation.id)
             if event is not None:
-                t_wait = time.monotonic()
-                await run_in_threadpool(event.wait, _GROUNDING_WAIT_SECONDS)
-                db.refresh(consultation)
-                compute["grounding_wait_ms"] = round(
-                    (time.monotonic() - t_wait) * 1000, 1)
+                # Attente PAR PALIERS du scan de fond, jusqu'au budget total.
+                # Tant que le job cherche encore (détection région LLM + scan
+                # phonétique), on retombe JAMAIS sur le filet synchrone
+                # ``_apply_grounding`` : il re-détecterait la région ET
+                # re-scannerait le plein texte dans la fenêtre de clic (double
+                # travail). Le job pose ``grounding_finalized_at`` puis retire
+                # l'événement du registre quand il est terminé (succès ou
+                # échec ``finally``) : ``grounding_event`` vaut alors ``None``
+                # et la boucle s'arrête aussitôt, sans atteindre le budget.
+                _wait_total = 0.0
+                while (event is not None
+                       and consultation.grounding_finalized_at is None
+                       and _wait_total < _GROUNDING_WAIT_TOTAL_SECONDS):
+                    _chunk = min(_GROUNDING_WAIT_SECONDS,
+                                 _GROUNDING_WAIT_TOTAL_SECONDS - _wait_total)
+                    t_wait = time.monotonic()
+                    await run_in_threadpool(event.wait, _chunk)
+                    _delta = time.monotonic() - t_wait
+                    db.refresh(consultation)
+                    compute["grounding_wait_ms"] = (
+                        compute.get("grounding_wait_ms", 0.0)
+                        + round(_delta * 1000, 1))
+                    _wait_total += _delta
+                    if consultation.grounding_finalized_at is not None:
+                        break
+                    event = dictation.grounding_event(consultation.id)
         except Exception:
             logger.exception("Attente du scan de fond indisponible — chemin synchrone")
 

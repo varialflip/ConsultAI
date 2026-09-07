@@ -869,7 +869,7 @@ est retirée du document.
 |---|---|
 | **Mise en forme** | HTML + texte, pour Word ou un DME qui accepte le HTML |
 | **Texte** | Texte seul, rendu linéaire simple (sections soulignées, tableaux en ASCII) |
-| **Aligné** | Texte seul avec listes alignées : puces et numérotées au retrait suspendu, numéros élargis à une colonne, indentation conservée en champ riche (espaces insécables) — idéal pour le dossier électronique. Les tableaux Markdown y remplissent toute la largeur de la note (séparateurs « ─ » / « │ », comme les listes), alignements de colonnes (centré/droite via les « : ») respectés |
+| **Aligné** | Texte seul avec listes alignées : puces et numérotées au retrait suspendu, numéros élargis à une colonne, indentation conservée en champ riche (espaces insécables) — idéal pour le dossier électronique. Les tableaux Markdown y sont rendus en boîte Unicode pleine largeur de note, alignements de colonnes (centré/droite via les « : ») respectés |
 | **Markdown** | Le Markdown brut, tel qu'il est dans l'éditeur |
 
 **PDF** reste à part : impression navigateur, puis « Enregistrer au format PDF ».

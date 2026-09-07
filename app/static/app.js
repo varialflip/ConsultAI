@@ -3982,15 +3982,14 @@
     return out;
   }
 
-  //: Boîte Unicode : « │ » et « ─ » comptent une colonne en monospace. Le
-  //: tableau occupe TOUTE la largeur de la note, comme les listes alignées
-  //: (LINE_WIDTH) : les séparateurs horizontaux sont des « ─ » pleine largeur —
-  //: mêmes caractères que les filets et les listes du rendu aligné — sans coins
-  //: de boîte. La dernière colonne absorbe l'éventuel surplus de colonnes pour
-  //: que le cadre arrive exactement à la marge. Les espaces de remplissage
-  //: restent des NBSP — un champ riche du DME les préserve, comme dans
-  //: renderPlainTable. L'alignement de chaque colonne honore la ligne
-  //: séparatrice Markdown (gauche par défaut).
+  //: Boîte Unicode pleine largeur : les caractères de filet (┌ ┬ ┐ │ ├ ┼ ┤
+  //: └ ┴ ┘) comptent une colonne en monospace. Le tableau s'étale sur TOUTE la
+  //: largeur de la note, comme les lignes du rendu aligné (LINE_WIDTH) : la
+  //: dernière colonne absorbe l'éventuel surplus de colonnes pour que le cadre
+  //: arrive exactement à la marge ; un tableau plus large n'est jamais
+  //: rétréci. Les espaces de remplissage restent des NBSP — un champ riche du
+  //: DME les préserve, comme dans renderPlainTable. L'alignement de chaque
+  //: colonne honore la ligne séparatrice Markdown (gauche par défaut).
   function renderUnicodeTable(rows, aligns) {
     if (!rows.length) return [];
     const columns = Math.max(...rows.map((r) => r.length));
@@ -4010,9 +4009,11 @@
       }
       return t + NBSP.repeat(w - t.length);
     };
-    //: Largeur intérieure : « │ » de bord + NBSP, cellules, séparateurs
-    //: « NBSP│NBSP » entre colonnes, NBSP + « │ » final. On étale ensuite la
-    //: dernière colonne jusqu'à LINE_WIDTH pour que le cadre remplisse la ligne.
+    //: Largeur intérieure d'une ligne de données : « │ » de bord + NBSP,
+    //: cellules, séparateurs « NBSP│NBSP » entre colonnes, NBSP + « │ » final
+    //: — soit Σ(largeurs) + 3 × nb_colonnes + 1. On étale ensuite la dernière
+    //: colonne jusqu'à LINE_WIDTH pour que le filet horizontal de même largeur
+    //: tombe pile à la marge.
     const interieur = widths.reduce((somme, w) => somme + w, 0)
       + 3 * columns + 1;
     widths[columns - 1] += Math.max(0, LINE_WIDTH - interieur);
@@ -4020,12 +4021,13 @@
     const ligne = (cells) => `│${NBSP}${cells
       .map((cell, c) => pad(cell, c))
       .join(`${NBSP}│${NBSP}`)}${NBSP}│`;
-    const filet = '─'.repeat(LINE_WIDTH);
+    const filet = (gauche, centre, droite) => gauche + widths
+      .map((w) => '─'.repeat(w + 2)).join(centre) + droite;
 
-    const out = [filet, ligne(rows[0])];
-    if (rows.length > 1) out.push(filet);
+    const out = [filet('┌', '┬', '┐'), ligne(rows[0])];
+    if (rows.length > 1) out.push(filet('├', '┼', '┤'));
     rows.slice(1).forEach((r) => out.push(ligne(r)));
-    out.push(filet);
+    out.push(filet('└', '┴', '┘'));
     return out;
   }
 

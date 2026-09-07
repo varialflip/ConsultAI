@@ -3551,7 +3551,7 @@ def _call_openrouter_region(model: str, prompt: str) -> dict | None:
     """Appel OpenRouter pour la détection de région (openai SDK)."""
     try:
         import openai as openai_sdk
-        from app import settings
+        from app.config import settings
         key = settings.openrouter_api_key
         if not key:
             return None
@@ -3582,7 +3582,7 @@ def _call_gemini_region(model: str, prompt: str) -> dict | None:
     """Appel Gemini pour la détection de région."""
     try:
         from google import genai
-        from app import settings
+        from app.config import settings
         key = settings.google_api_key
         if not key:
             return None
@@ -3723,7 +3723,7 @@ def detect_med_region(text: str) -> dict | None:
         elif provider == "gemini":
             result = _call_gemini_region(model, prompt)
         elif provider in ("cohere", "mistral"):
-            from app import settings
+            from app.config import settings
             if provider == "cohere":
                 base = settings.cohere_base_url or "https://api.cohere.com"
                 key = settings.cohere_api_key
@@ -3733,7 +3733,7 @@ def detect_med_region(text: str) -> dict | None:
             if base and key:
                 result = _call_http_region(base, key, model, prompt)
         elif provider in ("custom", "qwen_omni"):
-            from app import settings
+            from app.config import settings
             if provider == "custom":
                 base = settings.custom_llm_base_url
                 key = settings.custom_llm_api_key

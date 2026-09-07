@@ -157,8 +157,19 @@ même commit** :
   troncature), la plus courte en sim égale. Tout ajout dans
   `geriatric_terms.json` (canal, sonde, `min_sim`) doit être re-validé
   sur les transcripts de référence `med_grounding/*-cohere.txt` et la
-  consultation n° 37, et `compute_stats_json` doit confirmer le budget
-  de scan (≤ ~500 ms sur 12 k caractères).
+    consultation n° 37, et `compute_stats_json` doit confirmer le budget
+    de scan (≤ ~500 ms sur 12 k caractères).
+- **Zone médicaments (LLM)** (2026-09-07, cf. `detect_med_region` dans
+  `med_grounding.py`) : le modèle LLM actif (`llm.active_model()`) identifie
+  la région médicaments dans la transcription brute. Le résultat est persisté
+  (`med_region_json` sur `Consultation`), affiché dans l'onglet Validation
+  (carte violette), et utilisé pour cibler le scan phonétique. Si le modèle a
+  le thinking activé (`_openrouter_reasoning_effort() != "none"`), le chemin
+  LLM est annulé et le fallback local `_medlist_regions` s'exécute. Timeout
+  HTTP : 30 s. Toute erreur → `None` → fallback local. La région est effacée
+  sur retranscription/import/édition manuelle ; redétectée paresseusement par
+  `_apply_grounding()`. `clearSecondPassView()` appelle `renderMedRegion(null)`
+  au début de chaque génération.
 - Le texte normalisé envoyé au LLM est **pré-calculé au « Terminer »** et mis
   en cache par consultation (`normalized_transcript` + `inline_fixed_json`).
   Toute modification de la chaîne inline (médicaments **ou** gériatrique) doit

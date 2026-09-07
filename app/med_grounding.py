@@ -910,6 +910,7 @@ def load_common_json(path: str | None = None) -> tuple[set, dict]:
 class Matcher:
     def __init__(self, db=DB, use_phonetic=False):
         self.use_phonetic = use_phonetic
+        self._external_medlist = None  # override Gemma/LLM pour _medlist_regions
         self.conn = sqlite3.connect(db)
         rows = self.conn.execute("""
             SELECT a.alias_name, a.alias_type, m.level, m.base_generic, m.brand_name, m.is_otc
@@ -1191,6 +1192,9 @@ class Matcher:
         l'orientation"), whose 'names' are stopwords or non-med laboratory
         values. Returns a per-token bool array marking the confirmed spans.
         """
+        # Override LLM si présent (detect_med_region a pré-rempli le tableau)
+        if self._external_medlist is not None:
+            return self._external_medlist
         n = len(words)
         BRIDGE = {"de", "du", "des", "d", "à", "au", "aux", "le", "la",
                   "les", "l", "un", "une", "et"}
@@ -1245,6 +1249,55 @@ class Matcher:
         # résolu en prose 2 mots plus loin reste du médicament, pas du bruit.
         medlist = _extend_medlist_bare(words, medlist, self._resolve_single)
         return medlist
+
+    def set_med_region(self, region_text: str, full_text: str) -> None:
+        """Pré-remplace ``_medlist_regions`` avec la zone détectée par le LLM.
+
+        Convertit le texte de la région en tableau booléen par token (basé sur
+        ``full_text.split()``) et le stocke dans ``_external_medlist``.
+        ``_medlist_regions`` retournera ce tableau au lieu de calculer les
+        régions par règles. Appeler ``clear_med_region()`` après usage.
+        """
+        tokens = full_text.split()
+        n = len(tokens)
+        # Trouver la région dans le texte complet par substring match
+        # (on cherche les 50 premiers caractères pour tolérer les variations
+        # de ponctuation en fin de région).
+        needle = region_text[:50]
+        start_char = full_text.find(needle)
+        if start_char < 0:
+            # Fallback : essayer sans le premier token (parfois un préfixe
+            # comme « Comme médicament, elle prend de… » est inclus par le LLM)
+            words_r = region_text.split()
+            if len(words_r) > 2:
+                start_char = full_text.find(" ".join(words_r[1:3]))
+                if start_char >= 0:
+                    start_char = max(0, start_char - len(words_r[0]) - 1)
+        if start_char < 0:
+            return
+        end_char = start_char + len(region_text)
+        # Convertir positions char → index token
+        char_pos = 0
+        t_start = t_end = None
+        for i, tok in enumerate(tokens):
+            if char_pos >= start_char and t_start is None:
+                t_start = i
+            if char_pos >= end_char and t_end is None:
+                t_end = i
+                break
+            char_pos += len(tok) + 1  # +1 pour l'espace
+        if t_start is None:
+            return
+        if t_end is None:
+            t_end = n - 1
+        medlist = [False] * n
+        for i in range(t_start, min(t_end + 1, n)):
+            medlist[i] = True
+        self._external_medlist = medlist
+
+    def clear_med_region(self) -> None:
+        """Annule l'override de ``_medlist_regions``."""
+        self._external_medlist = None
 
     def _dose_suffix_phrase(self, words, i, n, dose_unit, num_token, proactive,
                             medlist):
@@ -3450,6 +3503,266 @@ def _region_medlist(fixed: str) -> set:
             fragile[i] = True
     medlist = matcher()._medlist_regions(words, fragile, num_token, dose_unit)
     return {i for i, v in enumerate(medlist) if v}
+
+
+# ---------------------------------------------------------------------------
+# Détection de la zone médicaments par le LLM configuré
+# ---------------------------------------------------------------------------
+
+#: Prompt envoyé au LLM pour identifier la zone médicaments. Identique pour
+#: tous les providers — le texte est retourné tel quel, les indices de tokens
+#: sont dérivés côté serveur par substring match.
+_REGION_PROMPT = (
+    "Transcription brute (ne corrige AUCUNE erreur STT) :\n"
+    "---\n{}\n---\n\n"
+    "Dans cette transcription, identifie la liste de medicaments avec leurs "
+    "doses. Retourne le texte EXACT depuis le premier medicament de la liste "
+    "jusqu a la dose du dernier. Ne depasse pas la liste, ne corrige pas les "
+    "erreurs STT. S il y a PLUSIEURS listes de medicaments separees par du "
+    "texte narratif (ex: \"Rajouter dans la liste des medicaments...\"), "
+    "retourne les listes concatenees sans le texte narratif entre elles. "
+    "Retourne uniquement le texte."
+)
+
+#: Timeout (secondes) pour l'appel LLM de détection de région.
+_REGION_TIMEOUT = 30
+
+
+def _is_thinking_model(provider: str) -> bool:
+    """Vérifie si le modèle LLM actif utilise du thinking/raisonnement.
+
+    Si c'est le cas, on n'appelle PAS le LLM pour la détection de région :
+    le thinking consommerait tout le budget de tokens sans produire de texte.
+    """
+    if provider == "openrouter":
+        try:
+            from app.llm import _openrouter_reasoning_effort
+            effort = _openrouter_reasoning_effort()
+            return effort is not None and effort != "none"
+        except Exception:
+            return False
+    # Gemini, Cohere, Mistral : pas de thinking par défaut
+    # Custom : on tente (le param reasoning est ignoré si non supporté)
+    return False
+
+
+def _call_openrouter_region(model: str, prompt: str) -> dict | None:
+    """Appel OpenRouter pour la détection de région (openai SDK)."""
+    try:
+        import openai as openai_sdk
+        from app import settings
+        key = settings.openrouter_api_key
+        if not key:
+            return None
+        client = openai_sdk.OpenAI(
+            api_key=key,
+            base_url="https://openrouter.ai/api/v1",
+            timeout=_REGION_TIMEOUT,
+        )
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=500,
+            extra_body={"reasoning": {"effort": "none"}},
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        usage = resp.usage
+        return {
+            "content": content,
+            "prompt_tokens": usage.prompt_tokens if usage else 0,
+            "completion_tokens": usage.completion_tokens if usage else 0,
+        }
+    except Exception:
+        return None
+
+
+def _call_gemini_region(model: str, prompt: str) -> dict | None:
+    """Appel Gemini pour la détection de région."""
+    try:
+        from google import genai
+        from app import settings
+        key = settings.google_api_key
+        if not key:
+            return None
+        client = genai.Client(api_key=key)
+        resp = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config={"temperature": 0, "max_output_tokens": 500},
+        )
+        content = (resp.text or "").strip()
+        usage = getattr(resp, "usage_metadata", None)
+        return {
+            "content": content,
+            "prompt_tokens": getattr(usage, "prompt_token_count", 0) or 0,
+            "completion_tokens": getattr(usage, "candidates_token_count", 0) or 0,
+        }
+    except Exception:
+        return None
+
+
+def _call_http_region(base_url: str, api_key: str, model: str,
+                      prompt: str) -> dict | None:
+    """Appel HTTP direct (Cohere, Mistral, Custom, Qwen Omni)."""
+    import json as _json
+    import urllib.request
+    import urllib.error
+    body = _json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": 500,
+    }).encode()
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    req = urllib.request.Request(url, data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=_REGION_TIMEOUT) as resp:
+            result = _json.loads(resp.read())
+        content = (result["choices"][0]["message"]["content"] or "").strip()
+        usage = result.get("usage", {})
+        return {
+            "content": content,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+        }
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
+            KeyError, Exception):
+        return None
+
+
+def _parse_region_response(content: str, full_text: str) -> dict | None:
+    """Parse la réponse LLM et dérive les indices de tokens.
+
+    Retourne ``{"region_text": str, "token_start": int, "token_end": int}``
+    ou ``None`` si le texte n'est pas trouvé dans ``full_text``.
+    """
+    if not content or len(content) < 10:
+        return None
+    # Nettoyer les préfixes/intros éventuels du LLM
+    # (ex: "Voici la liste :", "Sa liste de médicaments aujourd'hui :")
+    for prefix in ["Voici ", "Sa liste ", "Dans ", "Comme ", "En "]:
+        idx = content.find(prefix)
+        if idx == 0:
+            # Trouver le premier « : » ou « — » et couper après
+            for sep in [": ", "— ", "– "]:
+                si = content.find(sep)
+                if 0 < si < 80:
+                    content = content[si + len(sep):]
+                    break
+            break
+    # Substring match dans le texte complet
+    needle = content[:50]
+    start_char = full_text.find(needle)
+    if start_char < 0:
+        # Fallback : essayer sans le premier token
+        words_r = content.split()
+        if len(words_r) > 2:
+            start_char = full_text.find(" ".join(words_r[1:3]))
+            if start_char >= 0:
+                start_char = max(0, start_char - len(words_r[0]) - 1)
+    if start_char < 0:
+        return None
+    end_char = start_char + len(content)
+    # Convertir positions char → index token
+    tokens = full_text.split()
+    char_pos = 0
+    t_start = t_end = None
+    for i, tok in enumerate(tokens):
+        if char_pos >= start_char and t_start is None:
+            t_start = i
+        if char_pos >= end_char and t_end is None:
+            t_end = i
+            break
+        char_pos += len(tok) + 1
+    if t_start is None:
+        return None
+    if t_end is None:
+        t_end = len(tokens) - 1
+    return {
+        "region_text": content,
+        "token_start": t_start,
+        "token_end": t_end,
+    }
+
+
+def detect_med_region(text: str) -> dict | None:
+    """Identifie la zone médicaments via le LLM configuré.
+
+    Retourne un dict ``{"region_text", "token_start", "token_end", "model",
+    "provider", "time_s", "prompt_tokens", "completion_tokens"}`` ou ``None``
+    si le LLM n'est pas disponible, utilise du thinking, échoue, ou si le
+    texte retourné n'est pas trouvé dans ``text``.
+    """
+    try:
+        from app import llm as llm_mod
+    except ImportError:
+        return None
+
+    provider = llm_mod.active_provider()
+    model = llm_mod.active_model()
+    if not model:
+        return None
+
+    # Thinking → annuler (le thinking consommerait tout le budget)
+    if _is_thinking_model(provider):
+        return None
+
+    prompt = _REGION_PROMPT.format(text)
+    t0 = time.monotonic()
+    result = None
+
+    try:
+        if provider == "openrouter":
+            result = _call_openrouter_region(model, prompt)
+        elif provider == "gemini":
+            result = _call_gemini_region(model, prompt)
+        elif provider in ("cohere", "mistral"):
+            from app import settings
+            if provider == "cohere":
+                base = settings.cohere_base_url or "https://api.cohere.com"
+                key = settings.cohere_api_key
+            else:
+                base = settings.mistral_base_url or "https://api.mistral.ai"
+                key = settings.mistral_api_key
+            if base and key:
+                result = _call_http_region(base, key, model, prompt)
+        elif provider in ("custom", "qwen_omni"):
+            from app import settings
+            if provider == "custom":
+                base = settings.custom_llm_base_url
+                key = settings.custom_llm_api_key
+            else:
+                base = settings.qwen_omni_base_url
+                key = settings.qwen_omni_api_key
+            if base and key:
+                result = _call_http_region(base, key, model, prompt)
+    except Exception:
+        pass
+
+    elapsed = round(time.monotonic() - t0, 2)
+
+    if not result or not result.get("content"):
+        return None
+
+    parsed = _parse_region_response(result["content"], text)
+    if not parsed:
+        return None
+
+    return {
+        "region_text": parsed["region_text"],
+        "token_start": parsed["token_start"],
+        "token_end": parsed["token_end"],
+        "model": model,
+        "provider": provider,
+        "time_s": elapsed,
+        "prompt_tokens": result.get("prompt_tokens", 0),
+        "completion_tokens": result.get("completion_tokens", 0),
+    }
 
 
 def extract_med_items(text: str, conf=None) -> list:

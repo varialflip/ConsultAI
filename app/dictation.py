@@ -1766,24 +1766,36 @@ def _finalize_grounding(session_id: str, username: str) -> None:
                         conf_map = {}
                     items = None
             if items is None:
-                # Scan plein texte — chronométré pour les statistiques de la
-                # consultation (``compute_stats_json``) : c'est la mesure de la
-                # fenêtre « Terminer → Générer » qui disparaît de l'attente.
-                t_scan = time.monotonic()
-                items = med_grounding.extract_validation_items(
-                    text, conf=conf_map or None)
-                grounding_scan_ms = round((time.monotonic() - t_scan) * 1000, 1)
-                # Pré-calcul du texte DÉJÀ normalisé (inline sûr médicamenteux +
-                # termes gériatriques) : la génération le réutilisera au lieu de
-                # re-résoudre ~5-14 s dans la fenêtre d'attente de l'usager. La
-                # langue du gabarit est celle de la dictée (document).
-                t_norm = time.monotonic()
-                from app import preferences
-                n_transcript, inline_fixed = geriatric_terms.precompute_normalization(
-                    text, conf=conf_map or None,
-                    langue=preferences.document_language(),
-                )
-                precompute_ms = round((time.monotonic() - t_norm) * 1000, 1)
+                # 0) Détection de la zone médicaments par le LLM configuré.
+                #    Le résultat pré-remplace ``_medlist_regions`` pour que le
+                #    pipeline de grounding se concentre sur cette zone.
+                t_region = time.monotonic()
+                med_region = med_grounding.detect_med_region(text)
+                region_ms = round((time.monotonic() - t_region) * 1000, 1)
+                m = med_grounding.matcher()
+                if med_region and med_region.get("region_text"):
+                    m.set_med_region(med_region["region_text"], text)
+                try:
+                    # 1) Scan plein texte — chronométré pour les statistiques de la
+                    #    consultation (``compute_stats_json``) : c'est la mesure de la
+                    #    fenêtre « Terminer → Générer » qui disparaît de l'attente.
+                    t_scan = time.monotonic()
+                    items = med_grounding.extract_validation_items(
+                        text, conf=conf_map or None)
+                    grounding_scan_ms = round((time.monotonic() - t_scan) * 1000, 1)
+                    # Pré-calcul du texte DÉJÀ normalisé (inline sûr médicamenteux +
+                    # termes gériatriques) : la génération le réutilisera au lieu de
+                    # re-résoudre ~5-14 s dans la fenêtre d'attente de l'usager. La
+                    # langue du gabarit est celle de la dictée (document).
+                    t_norm = time.monotonic()
+                    from app import preferences
+                    n_transcript, inline_fixed = geriatric_terms.precompute_normalization(
+                        text, conf=conf_map or None,
+                        langue=preferences.document_language(),
+                    )
+                    precompute_ms = round((time.monotonic() - t_norm) * 1000, 1)
+                finally:
+                    m.clear_med_region()
                 # 2) Persistance (court verrou de nouveau ; reverrouillage au
                 #    commit au cas où la garde synchrone aurait gagné entre-
                 #    temps — le calcul est idempotent et déterministe).
@@ -1798,18 +1810,35 @@ def _finalize_grounding(session_id: str, username: str) -> None:
                         consultation.normalized_transcript = n_transcript
                         consultation.inline_fixed_json = (
                             json.dumps(sorted(inline_fixed), ensure_ascii=False))
+                        consultation.med_region_json = (
+                            json.dumps(med_region, ensure_ascii=False)
+                            if med_region else None)
                         consultation.compute_stats_json = merge_compute_stats(
                             consultation.compute_stats_json,
                             {"grounding_scan_ms": grounding_scan_ms,
                              "precompute_normalize_ms": precompute_ms,
+                             "region_detect_ms": region_ms,
+                             "region_model": (med_region or {}).get("model", ""),
                              "precompute_lang": preferences.document_language()},
                         )
                         db.commit()
+            else:
+                med_region = None
+            # Charger la zone persistée si le scan n'a pas été refait
+            # (grounding_finalized_at était déjà posé).
+            if med_region is None:
+                try:
+                    mr = consultation.med_region_json if consultation else None
+                    if mr:
+                        med_region = json.loads(mr)
+                except Exception:
+                    pass
             live.publish(owner, "med_grounding_result", {
                 "consultation_id": session.consultation_id,
                 "session_id": session.id,
                 "items": items,
                 "geriatric": _geriatric_corrections(text),
+                "med_region": med_region,
             })
     except Exception:
         logger.exception("Grounding final impossible (dictée %s)", session_id)

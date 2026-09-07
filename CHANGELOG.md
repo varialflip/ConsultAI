@@ -3,6 +3,17 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-07 — Zone médicaments (LLM) : détection de la région par le modèle actif
+
+- **Nouvelle fonctionnalité** : le modèle LLM actif (OpenRouter/Gemini/Cohere/Mistral/Custom/Qwen Omni) identifie la zone médicaments dans la transcription brute. La région est persistée (`med_region_json`), affichée dans l'onglet Validation (carte violette), et utilisée pour cibler le scan phonétique (`extract_validation_items` et `precompute_normalization`).
+- **Implémentation** : `detect_med_region()` dans `med_grounding.py` — appel HTTP synchrone (30 s timeout), prompt identique pour tous les fournisseurs, sortie texte brut. Le `token_start`/`token_end` sont dérivés côté serveur par correspondance de sous-chaîne sur `full_text.split()`.
+- **Modèle** : `llm.active_model()` + `llm.active_provider()` — jamais de modèle en dur. Si le modèle a le thinking activé (`_openrouter_reasoning_effort() != "none"`), le chemin LLM est annulé et le fallback local `_medlist_regions` s'exécute.
+- **Persistance** : `med_region_json` sur `Consultation` (colonne ajoutée, migration automatique). Effacé sur retranscription/import/édition manuelle ; redétecté paresseusement par `_apply_grounding()`.
+- **Affichage** : carte violette distincte dans l'onglet Validation (`#secondPassMedRegion`), effacée au début de chaque génération (`clearSecondPassView()` appelle `renderMedRegion(null)`).
+- **Fallback** : toute erreur → `None` → `_medlist_regions` (règle locale) s'exécute normalement.
+- **i18n** : clé `validation.med_region` ajoutée (fr/en).
+- **Tests** : 6 modèles testés sur 18 consultations (Ministral-8B, Gemma-4-31b, DS v4 flash, Qwen3.5-9B, DS v3) — résultats dans `tests/med_regions/`.
+
 ## 2026-09-06 — Med_grounding : fusion des candidats phonétiques portés par une même posologie
 
 - **Bug rapporté (consultation n° 38)** : « apixaban » dicté est éclaté par le

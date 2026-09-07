@@ -345,6 +345,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "In the note, but absent from the source",
     ),
     "secondpass.confidence": ("Confiance de l'audit", "Audit confidence"),
+    "validation.med_region": (
+        "Zone médicaments (LLM)",
+        "Medication region (LLM)",
+    ),
     "secondpass.unavailable": (
         "Indisponible : le fournisseur actif ne transmet pas d'audio.",
         "Unavailable: the active provider does not send audio.",

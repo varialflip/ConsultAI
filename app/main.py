@@ -351,6 +351,31 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
         conf_map = json.loads(consultation.transcript_conf) if consultation.transcript_conf else {}
     except (ValueError, TypeError):
         conf_map = {}
+    # Zone médicaments : réutiliser la zone persistée ou détecter via le LLM.
+    med_region = None
+    try:
+        if consultation.med_region_json:
+            med_region = json.loads(consultation.med_region_json)
+    except (ValueError, TypeError):
+        med_region = None
+    if med_region is None:
+        try:
+            t_region = time.monotonic()
+            med_region = med_grounding.detect_med_region(text)
+            region_ms = round((time.monotonic() - t_region) * 1000, 1)
+            if med_region:
+                consultation.med_region_json = json.dumps(med_region, ensure_ascii=False)
+            consultation.compute_stats_json = merge_compute_stats(
+                consultation.compute_stats_json,
+                {"region_detect_ms": region_ms,
+                 "region_model": (med_region or {}).get("model", "")})
+        except Exception:
+            logger.debug("Détection zone médicaments échouée (consultation %s)",
+                         consultation.id, exc_info=True)
+    # Override Matcher avec la zone LLM (si disponible).
+    m = med_grounding.matcher()
+    if med_region and med_region.get("region_text"):
+        m.set_med_region(med_region["region_text"], text)
     try:
         t_scan = time.monotonic()
         items = med_grounding.extract_validation_items(text, conf=conf_map or None)
@@ -358,6 +383,8 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     except Exception:
         logger.exception("Grounding méds impossible (consultation %s)", consultation.id)
         return []
+    finally:
+        m.clear_med_region()
     consultation.med_grounding_json = json.dumps(items, ensure_ascii=False)
     # Scan PLEIN TEXTE = liste autoritaire : on pose la marque de finalisation.
     # La génération ne doit proposer au LLM que cette version (jamais une liste
@@ -386,6 +413,7 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
         "origin_tab": origin_tab,
         "items": items,
         "geriatric": geriatric,
+        "med_region": med_region,
     })
     return items
 
@@ -2381,6 +2409,8 @@ async def api_transcribe(
                 p for p in (consultation.stt_provider, consultation.stt_model) if p
             )
             if _med_grounding_on():
+                # La zone médicaments est invalide si le transcript a changé.
+                consultation.med_region_json = None
                 result["med_items"] = _apply_grounding(
                     db, consultation,
                     origin_tab=request.headers.get("x-consultai-tab", ""),
@@ -3739,6 +3769,7 @@ def patch_consultation(
             # mort traîner dans le brouillon).
             consultation.normalized_transcript = None
             consultation.inline_fixed_json = None
+            consultation.med_region_json = None
 
     consultation.updated_at = utcnow()
     db.commit()
@@ -3992,6 +4023,7 @@ async def retranscribe_consultation(
     # au besoin à la prochaine génération, même source que ``_apply_grounding``).
     consultation.normalized_transcript = None
     consultation.inline_fixed_json = None
+    consultation.med_region_json = None
     db.commit()
     live.publish(user.owner_key, "consultation_patched", {
         "consultation_id": consultation.id,

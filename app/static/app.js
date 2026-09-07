@@ -860,13 +860,46 @@
        if (lignes.length) {
          vueValidation.innerHTML = markdownToHtml(lignes.join('\n'));
          vueValidation.classList.remove('hidden');
-       } else {
-         vueValidation.classList.add('hidden');
-       }
+        } else {
+          vueValidation.classList.add('hidden');
+        }
+      }
+    }
+
+   /** Affiche ou efface la carte « Zone médicaments (LLM) » dans l'onglet
+    *  Validation. ``region`` = null/undefined pour effacer. */
+   function renderMedRegion(region) {
+     state.medRegion = region || null;
+     const container = $('secondPassMedRegion');
+     if (!container) return;
+     container.innerHTML = '';
+     if (!region || !region.region_text) {
+       container.classList.add('hidden');
+       return;
      }
+     const card = document.createElement('div');
+     card.className = 'rounded-lg border border-violet-200 bg-violet-50 p-3 mb-3';
+     const title = document.createElement('div');
+     title.className = 'text-xs font-semibold text-violet-600 uppercase tracking-wide mb-1';
+     title.textContent = T('validation.med_region') || 'Zone médicaments (LLM)';
+     const text = document.createElement('div');
+     text.className = 'text-sm text-violet-900 leading-relaxed';
+     text.textContent = region.region_text;
+     const meta = document.createElement('div');
+     meta.className = 'text-xs text-violet-400 mt-1';
+     const parts = [];
+     if (region.model) parts.push(region.model.split('/').pop());
+     if (region.time_s) parts.push(region.time_s.toFixed(2) + 's');
+     if (region.token_start != null) parts.push('tokens ' + region.token_start + '–' + region.token_end);
+     meta.textContent = parts.join(' · ');
+     card.appendChild(title);
+     card.appendChild(text);
+     card.appendChild(meta);
+     container.appendChild(card);
+     container.classList.remove('hidden');
    }
 
-  const state = {
+   const state = {
     templates: [],
     isTemplateAdmin: true,
     //: Nom d'utilisateur courant, lu dans /api/config — sert à reconnaître
@@ -2798,6 +2831,7 @@
       audit.classList.add('hidden');
       audit.innerHTML = '';
     }
+    renderMedRegion(null);
   }
 
   /** Fin de génération + « Validation » : la vérification COMMENCE — roue et filet. */
@@ -6905,6 +6939,9 @@
       state.medGroundingOn = true;
       renderMedItems(payload.items, payload.geriatric);
     }
+    if (payload.med_region) {
+      renderMedRegion(payload.med_region);
+    }
   }
 
   function onMedGroundingResult(evt) {
@@ -6920,6 +6957,9 @@
     if (payload.items) {
       state.medGroundingOn = true;
       renderMedItems(payload.items, payload.geriatric);
+    }
+    if (payload.med_region) {
+      renderMedRegion(payload.med_region);
     }
   }
 

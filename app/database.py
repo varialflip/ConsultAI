@@ -334,6 +334,10 @@ class Consultation(Base):
     #: à ``api_generate`` à éviter toute re-suggestion au LLM et à construire
     #: ``inline_fixed`` sans re-résoudre. JSON. Nullable : voir ci-dessus.
     inline_fixed_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Zone médicaments détectée par le LLM configuré (texte brut, indices
+    #: tokens, modèle, latence). Persistée tant que le transcript existe ;
+    #: invalidée par retranscription, import ou édition manuelle. JSON.
+    med_region_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -2859,6 +2863,7 @@ _ADDED_COLUMNS = {
         ("compute_stats_json", "TEXT"),
         ("normalized_transcript", "TEXT"),
         ("inline_fixed_json", "TEXT"),
+        ("med_region_json", "TEXT"),
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),

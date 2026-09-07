@@ -849,6 +849,9 @@
            note seule. -->
 <div id="secondPassView" class="hidden flex flex-col flex-1 min-h-0 overflow-y-auto thin-scroll
                                         p-4 sm:p-6 text-[13px] leading-relaxed text-slate-700 space-y-4">
+        <!-- ZONE MÉDICAMENTS DÉTECTÉE PAR LE LLM — carte violette affichée
+             après « Terminer », effacée au début de la génération. -->
+        <div id="secondPassMedRegion" class="hidden"></div>
         <!-- LISTE POINTÉE DES MÉDICAMENTS (grounding) — présentée EN HAUT de
              l'onglet Validation : noms normalisés + posologies, puces listes
              plutôt que pointillés. Remplie en direct (``med_grounding``) puis

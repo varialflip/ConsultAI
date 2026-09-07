@@ -229,10 +229,11 @@ class Consultation(Base):
 
     title: Mapped[str] = mapped_column(String(300), default="Consultation sans titre", nullable=False)
 
-    # --- Métadonnées d'identification ------------------------------------
-    # Renseignées automatiquement à partir de la dictée (voir llm.extract_metadata) :
-    # ce sont elles qui permettent de reconnaître une consultation dans la
-    # liste des brouillons, sans avoir à en lire le contenu.
+    # --- Champs d'identification -----------------------------------------
+    # Saisie manuelle uniquement (plus aucune extraction LLM des métadonnées
+    # depuis 2026-09-07) : ce sont eux, avec ``title``, qui permettent de
+    # reconnaître une consultation dans la liste des brouillons. ``title``
+    # est alimenté par la détection de région (libellé court du modèle).
     patient_name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
     patient_ref: Mapped[str] = mapped_column(String(120), default="", nullable=False)   # n° de dossier
     reason: Mapped[str] = mapped_column(String(300), default="", nullable=False)

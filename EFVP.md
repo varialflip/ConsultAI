@@ -384,15 +384,23 @@ et n'y accède jamais :
 L'application ne collecte plus l'identité du patient :
 
 - Les champs `patient_name` (nom) et `patient_ref` (numéro de dossier) ont été retirés
-  de l'interface, de l'extraction automatique (métadonnées lues dans la dictée) et des
-  en-têtes de note. Les gabarits livrés ne contiennent plus les champs `{{PATIENT}}` /
-  `{{DOSSIER}}` (les gabarits personnels qui les gardent produisent une ligne retirée).
+  de l'interface et des en-têtes de note. Les gabarits livrés ne contiennent plus les
+  champs `{{PATIENT}}` / `{{DOSSIER}}` (les gabarits personnels qui les gardent
+  produisent une ligne retirée).
+- **Plus aucune extraction automatique des métadonnées dans la dictée**
+  (2026-09-07) : l'appel séparé au « petit modèle » qui relisait la raison,
+  le demandeur, l'accompagnant et la date a été supprimé. Les champs
+  `consultation_date`, `reason`, `requester`, `accompanied_by` sont désormais
+  **saisis manuellement** uniquement.
+- Le **titre du brouillon** condition de l'application provient d'un libellé
+  court produit par la détection de la région médicaments (une seule ligne
+  `TITRE:` dans la réponse de ce même appel, ≤ 8 mots) — ou de la raison tapée
+  au clavier, ou du nom du gabarit. Ce libellé ne contient ni nom ni numéro de
+  dossier : la dénominalisation reste totale.
 - Les valeurs déjà stockées ont été **effacées** à la migration (les colonnes sont
   conservées, vides).
 - Les notes générées sont donc dénominalisées à la source ; l'identification du patient
   se fait au moment du versement au dossier médical, en dehors de l'application.
-- Les métadonnées restantes (`consultation_date`, `reason`, `requester`,
-  `accompanied_by`) ne permettent pas d'identifier un patient.
 
 ### 7.8 Droits des personnes (Loi 25)
 

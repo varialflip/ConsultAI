@@ -2,6 +2,26 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 
+## 2026-09-07 — Titre du brouillon via la détection de région ; fin de l'appel « petit modèle » de métadonnées
+
+- **Problème** : la génération faisait un **appel LLM séparé** (modèle rapide)
+  juste pour relire les métadonnées d'identification (date, raison, demandeur,
+  accompagnant) dont la seule utilité reconnaissable était le `title` pour
+  retrouver un brouillon. Cet appel ajoutait une latence complète au wall clock,
+  et rien n'était changé au fait que ces champs étaient rarement complétés.
+- **Règle** : l'appel séparé (`llm.extract_metadata`) est **supprimé**. La
+  détection de la région médicaments — déjà en tâche de fond au « Terminer » —
+  rapporte en plus un **libellé de titre** (ligne finale `TITRE:`, ≤ 8 mots,
+  `_parse_region_response` → `med_region_json.titre`). Le titre du brouillon
+  est désormais : **raison tapée au clavier > titre de région > nom du gabarit**
+  (posé par `_finalize_grounding` et `_apply_grounding`, sans écraser une raison
+  ou un titre existants). Les champs `reason`, `requester`, `accompanied_by`,
+  `consultation_date` sont passés en saisie manuelle stricte. Le prompt de
+  région reste court : une seule ligne `TITRE:` en plus du texte de région.
+- **Gain** : un aller-retour LLM de moins au « Terminer », sans perte de
+  fonctionnalité (le titre suffit à retrouver un brouillon).
+- **Déploiement** : commit simple et recréation du conteneur de test, sans tag.
+
 ## 2026-09-07 — Course « Terminer → Générer » : attente par paliers au lieu du double scan
 
 - **Problème** : si l'usager clique « Générer » pendant que le scan de fond du

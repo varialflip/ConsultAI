@@ -1813,6 +1813,16 @@ def _finalize_grounding(session_id: str, username: str) -> None:
                         consultation.med_region_json = (
                             json.dumps(med_region, ensure_ascii=False)
                             if med_region else None)
+                        # Titre du brouillon ramené par la même détection de
+                        # région (libellé court demandé au modèle). Une raison
+                        # tapée au clavier fait autorité ; sinon le libellé
+                        # sert à retrouver le brouillon dans la liste.
+                        if (med_region is not None and med_region.get("titre")
+                                and not (consultation.reason or "").strip()
+                                and str(med_region["titre"]).strip()[:300]
+                                != consultation.title):
+                            consultation.title = (
+                                str(med_region["titre"]).strip()[:300])
                         consultation.compute_stats_json = merge_compute_stats(
                             consultation.compute_stats_json,
                             {"grounding_scan_ms": grounding_scan_ms,

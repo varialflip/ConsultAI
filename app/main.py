@@ -105,7 +105,7 @@ from app.database import (
     utcnow,
 )
 from app.dictation import DictationError, SequenceMismatch, SessionNotFound, _merge_conf_into
-from app.llm import GenerationError, extract_metadata, list_available_models
+from app.llm import GenerationError, list_available_models
 from app.stt import TranscriptionError, list_available_stt_models, transcribe
 
 configure_logging()
@@ -395,6 +395,15 @@ def _apply_grounding(db: Session, consultation, origin_tab: str = "") -> list:
     # autres champs de ``compute_stats_json`` survivent au merge).
     consultation.compute_stats_json = merge_compute_stats(
         consultation.compute_stats_json, {"grounding_scan_ms": grounding_scan_ms})
+    # Titre du brouillon, ramené par la même détection de région (libellé
+    # court demandé au modèle). Une raison tapée au clavier fait autorité
+    # (``consultation.title`` la porte déjà via le JS) ; sinon le libellé
+    # sert de titre pour retrouver le brouillon.
+    if med_region is not None and med_region.get("titre"):
+        titre = str(med_region["titre"]).strip()[:300]
+        if (titre and not (consultation.reason or "").strip()
+                and titre != consultation.title):
+            consultation.title = titre
     db.commit()
     # Termes gériatriques (module À PART) : réécritures inline sûres + candidats
     # phonétiques du profil (ex. MMS→MMSE, isosnaphe→ISO-SMAF), pour le
@@ -945,41 +954,28 @@ _retranscribe_guard = _SequenceGuard()  # /api/consultations/{id}/retranscribe
 _transcribe_guard = _SequenceGuard()    # /api/transcribe (import de fichier)
 
 
-# Correspondance entre les champs renvoyés par l'extraction et les colonnes.
-# Volontairement sans « patient_name » ni « record_number » : l'identité du
-# patient (nom, numéro de dossier) n'est plus collectée ni stockée.
-_METADATA_TO_COLUMN = {
-    "consultation_date": "consultation_date",
-    "reason": "reason",
-    "requester": "requester",
-    "accompanied_by": "accompanied_by",
-}
+def _titre_region(consultation: Consultation) -> str:
+    """Libellé de brouillon ramené par la détection de région médicaments.
 
-
-def _apply_metadata(consultation: Consultation, extracted: dict) -> dict:
+    C'est le seul usage conservé des métadonnées : un titre pour retrouver le
+    brouillon dans la liste. La détection de région (``med_region_json``)
+    demande au modèle, dans la même réponse que la zone, un libellé court.
     """
-    Écrit les métadonnées relues dans la dictée, SANS écraser une saisie.
-
-    Une valeur tapée au clavier par le médecin fait toujours autorité sur une
-    valeur reconnue à l'oreille : un numéro de dossier mal entendu par le
-    moteur de reconnaissance vocale ne doit pas remplacer celui qu'il a
-    lui-même vérifié. Retourne l'état final des champs, tel que l'interface
-    doit l'afficher.
-    """
-    for source, column in _METADATA_TO_COLUMN.items():
-        value = (extracted.get(source) or "").strip()
-        if value and not (getattr(consultation, column) or "").strip():
-            setattr(consultation, column, value)
-
-    return {
-        source: getattr(consultation, column) or ""
-        for source, column in _METADATA_TO_COLUMN.items()
-    }
+    try:
+        mr = json.loads(consultation.med_region_json or "null")
+    except (ValueError, TypeError):
+        mr = None
+    if isinstance(mr, dict):
+        return (mr.get("titre") or "").strip()
+    return ""
 
 
 def _build_title(consultation: Consultation, template_name: str) -> str:
-    """Libellé lisible du brouillon, reconstruit après extraction."""
-    parts = [consultation.reason or template_name]
+    """Libellé lisible du brouillon : la raison tapée au clavier fait autorité,
+    sinon le libellé ramené par la détection de région, sinon le nom du
+    gabarit."""
+    parts = [consultation.reason or _titre_region(consultation)
+             or template_name]
     return " — ".join(part for part in parts if part)[:300]
 
 
@@ -3507,14 +3503,11 @@ async def api_generate(
         if value:
             setattr(consultation, column, value)
 
-    # Puis on complète les champs restés vides à partir de la dictée. Cet
-    # appel est délibérément tolérant : la note est déjà produite et enregistrée
-    # juste après, une métadonnée manquante ne justifie pas de la perdre.
-    extracted = await run_in_threadpool(
-        extract_metadata, payload.transcript, result["markdown"]
-    )
-    metadata = _apply_metadata(consultation, extracted)
-
+    # Puis le titre du brouillon, pour le retrouver dans la liste : la raison
+    # tapée au clavier fait autorité, sinon le libellé court ramené par la
+    # détection de région médicaments (même réponse LLM que la zone), sinon le
+    # nom du gabarit. Plus d'appel LLM séparé pour les métadonnées : le titre
+    # est la seule information utile et il coûte plus rien (déjà payé).
     consultation.title = _build_title(consultation, template_row.name)
     consultation.model_used = result["model"]
     consultation.llm_provider = result["provider"]

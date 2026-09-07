@@ -3552,7 +3552,9 @@ _REGION_PROMPT = (
     "erreurs STT. S il y a PLUSIEURS listes de medicaments separees par du "
     "texte narratif (ex: \"Rajouter dans la liste des medicaments...\"), "
     "retourne les listes concatenees sans le texte narratif entre elles. "
-    "Retourne uniquement le texte."
+    "Retourne uniquement le texte de la liste, puis une ligne 'TITRE:' "
+    "suivie d un libelle COURT (8 mots max) pour retrouver ce brouillon "
+    "dans une liste (ex: 'TITRE: Suivi post-operatoire')."
 )
 
 #: Timeout (secondes) pour l'appel LLM de détection de région.
@@ -3669,11 +3671,25 @@ def _call_http_region(base_url: str, api_key: str, model: str,
 def _parse_region_response(content: str, full_text: str) -> dict | None:
     """Parse la réponse LLM et dérive les indices de tokens.
 
-    Retourne ``{"region_text": str, "token_start": int, "token_end": int}``
-    ou ``None`` si le texte n'est pas trouvé dans ``full_text``.
+    Retourne ``{"region_text": str, "token_start": int, "token_end": int,
+    "titre": str}`` ou ``None`` si le texte n'est pas trouvé dans
+    ``full_text``. Le libellé ``TITRE:`` demandé en fin de réponse sert au
+    titre du brouillon ; il est retiré du texte région (hors ligne).
     """
     if not content or len(content) < 10:
         return None
+    # Libellé de brouillon demandé en fin de réponse (« TITRE: »), sur sa
+    # propre ligne : on le retire du texte région et on le renvoie à part.
+    titre = ""
+    marqueurs = list(reversed(list(re.finditer(
+        r"\n?^TITRE:\s*(?P<titre>.*)$", content, re.MULTILINE))))
+    if marqueurs:
+        m = marqueurs[0].group("titre")
+        stop = marqueurs[0].start()
+        titre = m.strip()
+        content = content[:stop].rstrip()
+        if len(content) < 10:
+            return None
     # Nettoyer les préfixes/intros éventuels du LLM
     # (ex: "Voici la liste :", "Sa liste de médicaments aujourd'hui :")
     for prefix in ["Voici ", "Sa liste ", "Dans ", "Comme ", "En "]:
@@ -3718,16 +3734,19 @@ def _parse_region_response(content: str, full_text: str) -> dict | None:
         "region_text": content,
         "token_start": t_start,
         "token_end": t_end,
+        "titre": titre,
     }
 
 
 def detect_med_region(text: str) -> dict | None:
     """Identifie la zone médicaments via le LLM configuré.
 
-    Retourne un dict ``{"region_text", "token_start", "token_end", "model",
-    "provider", "time_s", "prompt_tokens", "completion_tokens"}`` ou ``None``
-    si le LLM n'est pas disponible, utilise du thinking, échoue, ou si le
-    texte retourné n'est pas trouvé dans ``text``.
+    Retourne un dict ``{"region_text", "token_start", "token_end", "titre",
+    "model", "provider", "time_s", "prompt_tokens", "completion_tokens"}`` ou
+    ``None`` si le LLM n'est pas disponible, utilise du thinking, échoue, ou
+    si le texte retourné n'est pas trouvé dans ``text``. ``titre`` est un
+    libellé court (8 mots max) pour retrouver le brouillon, demandé au modèle
+    en fin de la même réponse que la région.
     """
     try:
         from app import llm as llm_mod
@@ -3788,6 +3807,7 @@ def detect_med_region(text: str) -> dict | None:
         "region_text": parsed["region_text"],
         "token_start": parsed["token_start"],
         "token_end": parsed["token_end"],
+        "titre": parsed.get("titre", ""),
         "model": model,
         "provider": provider,
         "time_s": elapsed,

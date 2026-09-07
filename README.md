@@ -207,7 +207,7 @@ OPENROUTER_API_KEY=            # openrouter.ai → Keys ; note + STT
 # Cohere et Mistral : pas de variable propre, COHERE_API_KEY / MISTRAL_API_KEY
 # ci-dessus servent aux deux usages
 # Budget de raisonnement Cohere (thinking.token_budget) à la mise en forme —
-# 0 = défaut du modèle ; non envoyé à la relecture des métadonnées
+# 0 = défaut du modèle
 COHERE_LLM_THINKING_BUDGET=1024
 ```
 
@@ -557,10 +557,10 @@ prévient que la transcription (ou la mise en forme) échouera.
 > réponse vide (« motif : length ») déclenche une relance automatique au budget
 > doublé, et un **chien de garde** coupe un flux qui réfléchirait seul trop
 > longtemps (sans le moindre texte) — le panneau explique comment ajuster.
-> Le raisonnement ne s'applique qu'à la **mise en forme de la note** :
-> l'extraction des métadonnées (tâche mécanique en JSON) ne le reçoit jamais,
-> un modèle reflexif y renvoyant du texte hors JSON. Pour l'extraction, un
-> **modèle rapide non raisonneur** (field « Modèle rapide ») est recommandé.
+> Le raisonnement ne s'applique qu'à la **mise en forme de la note** : la
+> détection de la région médicaments (qui rapporte aussi le titre du brouillon,
+> cf. plus bas) est annulée lorsque le modèle actif réfléchit, et remplacée
+> par un découpage local — aucun format JSON à protéger de la pensée.
 >
 > **OpenRouter** expose les **mêmes capacités** que le point de terminaison
 > personnalisé (Budget de sortie `openrouter_llm_max_tokens`, Raisonnement
@@ -1076,6 +1076,16 @@ Seroquel, n° 42) ; le scan complet les retrouve tous et écrase le brouillon,
    « Informations techniques » du brouillon et, par ligne, dans l'onglet admin
    « Statistiques » (journal de génération) — chaque génération garde SES
    durées figées sur son événement d'usage (`usage_events.compute_stats_json`).
+- **Région médicaments ciblée par le modèle, et titre du brouillon**
+  (2026-09-07) : au « Terminer », le modèle language actif délimite la **région
+  médicaments** de la transcription (persistée dans `med_region_json`, carte
+  violette de l'onglet « Validation ») ; le scan phonétique est ciblé dessus.
+  Depuis le même appel, la même détection renvoie un **libellé de titre** court
+  (≤ 8 mots) qui **remplace l'ancien appel séparé d'extraction des métadonnées**
+  (« petit modèle ») : le titre du brouillon est désormais la raison tapée au
+  clavier si présente, sinon ce libellé, sinon le nom du gabarit. Le prompt de
+  région reste une consigne courte et formatée en une ligne `TITRE:` — aucun
+  champ supplémentaire n'est relu, l'identité du patient est toujours exclue.
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`). S'y ajoutent les
   **candidats phonétiques** (bloc `MEDICAMENTS_PHONETIQUES`) : le G2P français

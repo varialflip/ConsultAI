@@ -169,7 +169,17 @@ même commit** :
   HTTP : 30 s. Toute erreur → `None` → fallback local. La région est effacée
   sur retranscription/import/édition manuelle ; redétectée paresseusement par
   `_apply_grounding()`. `clearSecondPassView()` appelle `renderMedRegion(null)`
-  au début de chaque génération.
+  au début de chaque génération. Depuis 2026-09-07, cette même détection
+  rapporte un **libellé de titre** (ligne `TITRE:` en fin de réponse, ≤ 8 mots,
+  parse par `_parse_region_response`, clé `titre`) qui alimente `consultation.title`
+  — l'ancien appel séparé d'extraction des métadonnées (`llm.extract_metadata`,
+  « petit modèle ») a été **supprimé** : plus aucune raison/demandeur/
+  accompagnant/date relus dans la dictée, les champs d'identification sont
+  saisis manuellement, et la priorité du titre est raison tapée > titre de
+  région > nom du gabarit (posé dans `_finalize_grounding` (tâche de fond) et
+  `_apply_grounding` (filet synchrone) sans écraser une raison au clavier).
+  Le prompt de région doit rester court et efficace (une réponse d'une seule
+  ligne `TITRE:` en plus du texte de région).
 - **`_RELEASE_FUSED_RE`** (2026-09-07) : le STT fusionne parfois les codes de
   formulation (MR, SR, XR, XL, CD, PB) avec le chiffre de dose (« MR90 »).
   Le regex `_RELEASE_FUSED_RE` sépare ces combinaisons (« MR 90 ») dans

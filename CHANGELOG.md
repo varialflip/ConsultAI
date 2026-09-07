@@ -3,7 +3,7 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-07 — Rapatriement de `main` + copie « Aligné » : tableaux en boîte Unicode monospace
+## 2026-09-07 — Rapatriement de `main` + copie « Aligné » : tableaux Unicode pleine largeur
 
 - **Merge de `origin/main`** (7 commits, 2026-08-28 → 09-04) dans `selfhosted` :
   bouton de copie « **Aligné** » (listes à puces et numérotées au retrait
@@ -11,15 +11,19 @@ voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
   DME), « Texte » redevenu linéaire, clics mécaniques « on/off » du
   dictaphone, texte simple à l'alinéa, audio comme référence lors des
   lectures douteuses.
-- **Tableaux rendus en boîte Unicode monospace dans « Aligné »** (`renderUnicodeTable`) :
+- **Tableaux pleine largeur dans « Aligné »** (`renderUnicodeTable`) :
   les tableaux Markdown (ex. la « Médication actuelle » de la révision de
   pharmacothérapie, `| Médicament | Dose et posologie | Indication | Commentaire |`)
-  sortent encadrés de filets simples (`┌┬┐│├┼┤└┴┘`), une colonne par glyphe en
-  monospace. Les **alignements de colonnes du Markdown sont respectés** :
-  « `|:---:|` » → centré, « `|---:|` » → droite (lu sur la ligne séparatrice),
-  gauche par défaut. Le remplissage reste sur des espaces insécables — un
-  champ riche du DME les préserve. « Texte » et la copie riche gardent le
-  rendu ASCII/NBSP d'origine (`renderPlainTable` inchangé) ; les listes de la
+  occupent **toute la largeur de la note** — même bord que les listes alignées
+  (89 colonnes) — avec les **mêmes caractères** : séparateurs horizontaux
+  « ─ » pleine largeur et colonnes « │ » (plus de coins de boîte). La dernière
+  colonne absorbe le surplus de colonnes pour que le cadre arrive exactement à
+  la marge ; un tableau plus large que la note n'est jamais rétréci. Les
+  **alignements de colonnes du Markdown sont respectés** : « `|:---:|` » →
+  centré, « `|---:|` » → droite (lu sur la ligne de la séparatrice), gauche
+  par défaut. Le remplissage reste sur des espaces insécables — un champ riche
+  du DME les préserve. « Texte » et la copie riche gardent le rendu
+  ASCII/NBSP d'origine (`renderPlainTable` inchangé) ; les listes de la
   rubrique Médicaments restent sur deux colonnes.
 - Redéploiement : commit simple + `--force-recreate consultai-test` (aucun
   tag — source servie par le bind mount).

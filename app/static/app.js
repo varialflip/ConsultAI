@@ -4024,7 +4024,7 @@
     //: Repli de chaque cellule à la largeur de sa colonne (wrapText, sans
     //: retrait : les continuations restent pleine largeur de colonne). Une
     //: cellule vide produit une ligne d'espaces pour garder la rangée carrée.
-    const découper = (cell) => {
+    const découper = (cell, c) => {
       const lignes = wrapText(cell || '', widths[c]);
       return lignes.length ? lignes : [''];
     };
@@ -4045,7 +4045,7 @@
     //: la hauteur est la plus grande, les autres sont complétées par des
     //: lignes d'espaces.
     const rangéeText = (cells) => {
-      const grille = Array.from({ length: columns }, (_, c) => découper(cells[c] || ''));
+      const grille = Array.from({ length: columns }, (_, c) => découper(cells[c] || '', c));
       const hauteur = Math.max(...grille.map((g) => g.length));
       return Array.from({ length: hauteur }, (_, j) => `│${NBSP}${grille
         .map((g, c) => pad(g[j] || '', c))

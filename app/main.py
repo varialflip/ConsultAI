@@ -3522,6 +3522,15 @@ async def api_generate(
     compute["llm_ttft_ms"] = result.get("ttft_ms")
     compute["llm_total_ms"] = round(
         (result.get("elapsed_seconds") or 0.0) * 1000, 1)
+    # Backfill ``precompute_lang`` (2026-09-07) : la langue du pré-calcul doit
+    # égaler celle du gabarit COURANT. Sans ça, une génération qui devait
+    # re-résoudre (langue changée, cache absent) persistait le cache MANQUANT
+    # de ``precompute_lang`` — mais l'ancienne valeur du « Terminer » (ou son
+    # absence) restait gravée dans ``compute_stats_json``, et la génération
+    # suivante re-résolvait ENCORE (~2,5-7 s à chaque clic). Re-persister la
+    # langue de la présente génération arme la cache pour les suivantes : on ne
+    # re-normalise qu'UNE fois après un changement de langue ou d'import.
+    compute["precompute_lang"] = template_row.language or "fr"
     compute["total_deterministic_ms"] = round(
         (compute.get("audio_prep_ms") or 0.0)
         + (compute.get("normalize_ms") or 0.0)

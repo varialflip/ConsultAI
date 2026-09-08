@@ -206,7 +206,12 @@ même commit** :
   `med_grounding.normalize`) et `precompute_normalization(deja_normalise=...)`
   n'applique plus que la passe gériatrique (~0 s) — `normalize` ne tourne donc
   QU'UNE fois par « Terminer ». Résultats strictement identiques (vérifié sur
-  les consultations 4/10/11/21/25/26). La course « Terminer » → « Générer » est
+  les consultations 4/10/11/21/25/26). Depuis 2026-09-07, la langue du
+  pré-calcul est **re-persistée à chaque génération** (`precompute_lang` =
+  langue du gabarit courant, backfill) : sans elle, une génération qui devait
+  re-résoudre (langue changée après « Terminer », cache absent sur import)
+  laissait l'ancienne valeur gravée dans `compute_stats_json` et re-résolvait
+  ENCORE à la génération suivante (~2,5-7 s à chaque clic). La course « Terminer » → « Générer » est
   coordonnée par `dictation._grounding_events` : la génération attend le scan
   de fond au lieu d'en lancer un second, par **paliers** jusqu'au budget
   total `_GROUNDING_WAIT_TOTAL_SECONDS` (60 s, cf. `main._GROUNDING_WAIT_SECONDS`)

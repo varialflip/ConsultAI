@@ -29,6 +29,16 @@ Changements livrés, entrées datées. À maintenir à chaque version publiée �
   et un état d'instance se volait la fenêtre de focus entre threads (une
   génération pouvait hériter de la région d'un « Terminer » concurrent). Les
   setters doivent rester dans le thread des passes qui consomment la région.
+- **Backfill `precompute_lang`** (génération) : une génération qui devait
+  re-résoudre (langue de gabarit changée, cache absent — import, cache effacé)
+  persistait bien `normalized_transcript` + `inline_fixed_json`… mais JAMAIS
+  `precompute_lang` : l'ancienne valeur du « Terminer » (ou son absence)
+  restait gravée dans `compute_stats_json`, et la génération suivante du même
+  brouillon re-résolvait ENCORE (~2,5-7 s à chaque clic, `normalize_source`
+  resté `compute`). La génération re-persiste désormais `precompute_lang`
+  (= langue du gabarit courant) : après un changement de langue ou un import,
+  on ne re-normalise qu'UNE fois, les re-générations repassent en
+  `precomputed` (~0 s).
 - **Gain mesuré** : pire cas de la chaîne « Terminer → Générer » ~19 s →
   ~12 s sur les longues dictées, sans aucun changement de résultats ni de
   prompt.

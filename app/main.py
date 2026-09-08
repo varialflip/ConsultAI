@@ -3623,7 +3623,6 @@ async def api_generate(
         "compute_stats": compute,
         "consultation_id": consultation.id,
         "template_name": template_row.name,
-        "metadata": metadata,
     }
 
 

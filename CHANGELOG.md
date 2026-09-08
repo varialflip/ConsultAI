@@ -2,6 +2,13 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 
+## 2026-09-08 — Correction de la réponse finale de génération
+
+- **Correction** : après la suppression de la relecture séparée des métadonnées,
+  la génération pouvait afficher la note en continu puis répondre `500` à cause
+  d'une variable résiduelle. La note est maintenant renvoyée normalement ; en
+  cas d'erreur ultérieure, elle reste récupérable dans le brouillon.
+
 ## 2026-09-07 — « Terminer » : une seule passe de normalisation (scan ⇄ pré-calcul partagés) ; région médicaments isolée par thread
 
 - **Problème** : la chaîne du « Terminer » exécutait `normalize(inline_safe=True)`

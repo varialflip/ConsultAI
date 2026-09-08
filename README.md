@@ -1086,6 +1086,9 @@ Seroquel, n° 42) ; le scan complet les retrouve tous et écrase le brouillon,
   clavier si présente, sinon ce libellé, sinon le nom du gabarit. Le prompt de
   région reste une consigne courte et formatée en une ligne `TITRE:` — aucun
   champ supplémentaire n'est relu, l'identité du patient est toujours exclue.
+- **Réponse de génération fiable** : la note affichée en continu est confirmée
+  par la réponse finale de `/api/generate`, sans dépendre de l'ancien retour de
+  métadonnées supprimé.
 - **Hints au modèle** : la liste sûre des candidats détectés accompagne la
   dictée dans le prompt (`MEDICAMENTS_SOUPCONNES`). S'y ajoutent les
   **candidats phonétiques** (bloc `MEDICAMENTS_PHONETIQUES`) : le G2P français

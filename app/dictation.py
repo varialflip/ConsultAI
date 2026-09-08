@@ -1779,21 +1779,34 @@ def _finalize_grounding(session_id: str, username: str) -> None:
                     # 1) Scan plein texte — chronométré pour les statistiques de la
                     #    consultation (``compute_stats_json``) : c'est la mesure de la
                     #    fenêtre « Terminer → Générer » qui disparaît de l'attente.
+                    #    Depuis 2026-09-07, ``_detail`` renvoie en plus la dictée
+                    #    DÉJÀ normalisée (les deux phases de la chaîne partageaient
+                    #    la MÊME passe ``normalize(inline_safe=True)`` ~3-6 s sur les
+                    #    longues dictées — une seule suffit, voir plus bas).
                     t_scan = time.monotonic()
-                    items = med_grounding.extract_validation_items(
-                        text, conf=conf_map or None)
-                    grounding_scan_ms = round((time.monotonic() - t_scan) * 1000, 1)
-                    # Pré-calcul du texte DÉJÀ normalisé (inline sûr médicamenteux +
-                    # termes gériatriques) : la génération le réutilisera au lieu de
-                    # re-résoudre ~5-14 s dans la fenêtre d'attente de l'usager. La
-                    # langue du gabarit est celle de la dictée (document).
+                    items, fixed_inline, inline_med = (
+                        med_grounding.extract_validation_items(
+                            text, conf=conf_map or None, _detail=True))
+                    grounding_scan_ms = round(
+                        (time.monotonic() - t_scan) * 1000, 1)
+                    # Pré-calcul du texte DÉJÀ normalisé (inline sûr médicamenteux) :
+                    # on ne re-normalise PAS le texte — ``fixed_inline`` vient de la
+                    # passe du scan — seuls les termes gériatriques restent à
+                    # appliquer (``deja_normalise`` saute la passe 1 de
+                    # ``precompute_normalization``). La langue du gabarit est celle
+                    # de la dictée (document) ; la génération réutilisera le cache
+                    # au lieu de re-résoudre ~5-14 s dans sa fenêtre d'attente.
                     t_norm = time.monotonic()
                     from app import preferences
-                    n_transcript, inline_fixed = geriatric_terms.precompute_normalization(
-                        text, conf=conf_map or None,
-                        langue=preferences.document_language(),
-                    )
-                    precompute_ms = round((time.monotonic() - t_norm) * 1000, 1)
+                    n_transcript, inline_fixed = (
+                        geriatric_terms.precompute_normalization(
+                            text, conf=conf_map or None,
+                            langue=preferences.document_language(),
+                            deja_normalise=fixed_inline,
+                            inline_med=inline_med,
+                        ))
+                    precompute_ms = round(
+                        (time.monotonic() - t_norm) * 1000, 1)
                 finally:
                     m.clear_med_region()
                 # 2) Persistance (court verrou de nouveau ; reverrouillage au

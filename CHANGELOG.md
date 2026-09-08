@@ -2,6 +2,38 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 
+## 2026-09-07 — « Terminer » : une seule passe de normalisation (scan ⇄ pré-calcul partagés) ; région médicaments isolée par thread
+
+- **Problème** : la chaîne du « Terminer » exécutait `normalize(inline_safe=True)`
+  DEUX fois sur le même texte — le scan (dans `extract_med_items`) jetait le
+  texte corrigé qu'il venait de produire, et le pré-calcul de
+  `normalized_transcript` re-normalisait tout depuis zéro (~3-6 s de plus sur
+  les longues dictées, mesuré sur les consultations 4/10/11/21/26). La
+  parallélisation par fils d'exécution (levier envisagé au départ) a été
+  **mesurée à ~0 s de gain** dans le conteneur : les passes sont liées au GIL,
+  lancer scan et pré-calcul en parallèle ne fait que ralentir chacune.
+- **Règle** : le scan récupère désormais son texte déjà corrigé —
+  `extract_validation_items(..., _detail=True)` (et `extract_med_items(...,
+  _detail=True)`) renvoient `(items, fixed, inline_fixed)` de la MÊME passe
+  `normalize`, et `precompute_normalization(deja_normalise=..., inline_med=...)`
+  saute sa passe 1 pour n'appliquer que les termes gériatriques (~0 s).
+  `inline_fixed` est filtré comme `med_grounding.normalize` (auto-
+  correspondances exclues) : les caches `normalized_transcript` et
+  `inline_fixed_json` sont **strictement identiques** à l'ancien chemin
+  (vérifié sur les consultations 4/10/11/21/25/26). `grounding_scan_ms`
+  inclut désormais la passe `normalize` ; `precompute_normalize_ms` ne mesure
+  plus que le tail gériatrique.
+- **Sûreté** : la zone médicaments (`set_med_region`/`clear_med_region`/
+  `_medlist_regions`) passe en **thread-local** (`matcher()._region_tls`) —
+  le `Matcher` est un singleton de processus partagé entre plusieurs dictées,
+  et un état d'instance se volait la fenêtre de focus entre threads (une
+  génération pouvait hériter de la région d'un « Terminer » concurrent). Les
+  setters doivent rester dans le thread des passes qui consomment la région.
+- **Gain mesuré** : pire cas de la chaîne « Terminer → Générer » ~19 s →
+  ~12 s sur les longues dictées, sans aucun changement de résultats ni de
+  prompt.
+- **Déploiement** : commit simple et recréation du conteneur de test, sans tag.
+
 ## 2026-09-07 — Titre du brouillon via la détection de région ; fin de l'appel « petit modèle » de métadonnées
 
 - **Problème** : la génération faisait un **appel LLM séparé** (modèle rapide)

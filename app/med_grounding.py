@@ -922,7 +922,14 @@ def load_common_json(path: str | None = None) -> tuple[set, dict]:
 class Matcher:
     def __init__(self, db=DB, use_phonetic=False):
         self.use_phonetic = use_phonetic
-        self._external_medlist = None  # override Gemma/LLM pour _medlist_regions
+        # Override LLM/Gemma pour ``_medlist_regions``, en thread-local : le
+        # ``Matcher`` est un singleton de processus partagé entre plusieurs
+        # dictées (le « Terminer » d'une dictée, la génération d'une autre).
+        # Un état d'instance se volerait la fenêtre de focus entre threads ;
+        # un état par thread isole chaque scan. ``set_med_region`` /
+        # ``clear_med_region`` doivent tourner dans le MÊME thread que la
+        # passe qui consomme la région.
+        self._region_tls = threading.local()
         self.conn = sqlite3.connect(db)
         rows = self.conn.execute("""
             SELECT a.alias_name, a.alias_type, m.level, m.base_generic, m.brand_name, m.is_otc
@@ -1205,8 +1212,9 @@ class Matcher:
         values. Returns a per-token bool array marking the confirmed spans.
         """
         # Override LLM si présent (detect_med_region a pré-rempli le tableau)
-        if self._external_medlist is not None:
-            return self._external_medlist
+        override = getattr(self._region_tls, "external_medlist", None)
+        if override is not None:
+            return override
         n = len(words)
         BRIDGE = {"de", "du", "des", "d", "à", "au", "aux", "le", "la",
                   "les", "l", "un", "une", "et"}
@@ -1305,11 +1313,11 @@ class Matcher:
         medlist = [False] * n
         for i in range(t_start, min(t_end + 1, n)):
             medlist[i] = True
-        self._external_medlist = medlist
+        self._region_tls.external_medlist = medlist
 
     def clear_med_region(self) -> None:
-        """Annule l'override de ``_medlist_regions``."""
-        self._external_medlist = None
+        """Annule l'override de ``_medlist_regions`` (thread-local)."""
+        self._region_tls.external_medlist = None
 
     def _dose_suffix_phrase(self, words, i, n, dose_unit, num_token, proactive,
                             medlist):
@@ -3816,7 +3824,7 @@ def detect_med_region(text: str) -> dict | None:
     }
 
 
-def extract_med_items(text: str, conf=None) -> list:
+def extract_med_items(text: str, conf=None, _detail: bool = False):
     """Liste pointée des médicaments détectés dans ``text`` (texte corrigé).
 
     Chaque item : ``{"name", "posology", "score", "level"}``. Déterministe et
@@ -3831,6 +3839,13 @@ def extract_med_items(text: str, conf=None) -> list:
     folique »…) dont la concaténation normalisée existe en base, puis repasse
     token-à-token pour les simples.
     """
+    # ``_detail`` : out-paramètre de performance interne (pas une API publique)
+    # — renvoie ``(items, fixed, inline_fixed)``, où ``fixed`` est le TEXTE DÉJÀ
+    # normalisé (inline sûr) de la MÊME passe ``normalize`` qui a servi aux
+    # items, et ``inline_fixed`` les clés ``norm_phon`` des corrections inline.
+    # ``fixed`` évite au pré-calcul du « Terminer » de re-normaliser tout le
+    # texte pour produire ``normalized_transcript`` (une seconde passe
+    # coûteuse) : seuls les termes gériatriques restent à appliquer dessus.
     fixed, changes = matcher().normalize((text or "").strip(), conf=conf,
                                          inline_safe=True)
     # Cartographie norm_phon(corrigé) -> jeton dicté d'origine : la correction
@@ -3912,10 +3927,21 @@ def extract_med_items(text: str, conf=None) -> list:
                      is_common=_is_common_u,
                      conf_val=_conf_u,
                      garble=garble_map.get(norm_phon(jeton)))
+    if _detail:
+        # Même filtre que ``med_grounding.normalize`` (le module filtre les
+        # auto-correspondances, la méthode brute ne le fait pas) : ``inline_fixed``
+        # doit être rigoureusement identique à celui de l'ancien chemin du
+        # pré-calcul pour ne rien changer au cache ``normalized_transcript``.
+        inline_fixed = {
+            norm_phon(repl)
+            for _span, repl, _sc, _sim in changes
+            if _span and repl and norm_phon(_span) != norm_phon(repl)}
+        return items, fixed, inline_fixed
     return items
 
 
-def extract_validation_items(text: str, conf=None, maxi_phon: int = 40) -> list:
+def extract_validation_items(text: str, conf=None, maxi_phon: int = 40,
+                             _detail: bool = False):
     """Items de la liste « Validation » : médicaments résolus + candidats phonétiques.
 
     Rejoint les items déterministes de ``extract_med_items`` (noms normalisés,
@@ -3938,10 +3964,18 @@ def extract_validation_items(text: str, conf=None, maxi_phon: int = 40) -> list:
     « agressive » qui alimente le prompt du modèle de langage. Prières sur les
     deux listes par ``norm_phon(base)`` pour ne jamais afficher deux fois le
     même médicament.
+
+    ``_detail`` (out-paramètre de performance interne, pas une API publique) :
+    renvoie le triplet ``(items, fixed, inline_fixed)`` — ``fixed`` étant la
+    dictée DÉJÀ normalisée (inline sûr) de la passe ``normalize`` des items, et
+    ``inline_fixed`` ses corrections — pour que le « Terminer » enchaîne le
+    pré-calcul sans re-normaliser le texte (voir ``extract_med_items``).
     """
-    items = extract_med_items(text, conf=conf)
+    items = extract_med_items(text, conf=conf, _detail=_detail)
+    if _detail:
+        items, fixed, inline_med = items
     if not _RAPIDFUZZ_OK:
-        return items
+        return items if not _detail else (items, fixed, inline_med)
     conf_keys = set()
     if conf:
         try:
@@ -3966,6 +4000,8 @@ def extract_validation_items(text: str, conf=None, maxi_phon: int = 40) -> list:
             continue
         vus.add(cle)
         items.append(h)
+    if _detail:
+        return items, fixed, inline_med
     return items
 
 

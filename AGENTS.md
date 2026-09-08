@@ -199,7 +199,14 @@ même commit** :
   en cache par consultation (`normalized_transcript` + `inline_fixed_json`).
   Toute modification de la chaîne inline (médicaments **ou** gériatrique) doit
   être vérifiée contre ce cache : invalidable (édition/retranscription/import)
-  et re-persisté à chaque génération. La course « Terminer » → « Générer » est
+  et re-persisté à chaque génération. Depuis 2026-09-07, le pré-calcul n'opère
+  PLUS une seconde `normalize(inline_safe=True)` (identique à celle du scan)
+  : `extract_validation_items(..., _detail=True)` renvoie le texte DÉJÀ
+  normalisé de la passe unique du scan (+ `inline_fixed` filtré comme
+  `med_grounding.normalize`) et `precompute_normalization(deja_normalise=...)`
+  n'applique plus que la passe gériatrique (~0 s) — `normalize` ne tourne donc
+  QU'UNE fois par « Terminer ». Résultats strictement identiques (vérifié sur
+  les consultations 4/10/11/21/25/26). La course « Terminer » → « Générer » est
   coordonnée par `dictation._grounding_events` : la génération attend le scan
   de fond au lieu d'en lancer un second, par **paliers** jusqu'au budget
   total `_GROUNDING_WAIT_TOTAL_SECONDS` (60 s, cf. `main._GROUNDING_WAIT_SECONDS`)
@@ -207,8 +214,18 @@ même commit** :
   fond est terminé (événement retiré du registre sans liste posée) ou a
   dépassé le budget. Ne pas contourner ce garde-fou sans rétablir
   l'équivalent. Les durées réelles se mesurent dans `compute_stats_json`
-  (scan plein texte, pré-calcul, passes déterministes, TTFT) : y revenir avant
-  de régler les seuils de performance.
+  (`grounding_scan_ms` inclut désormais la passe `normalize` autrefois
+  recomptée dans `precompute_normalize_ms`, qui ne mesure plus que le tail
+  gériatrique ; région, TTFT, passes déterministes) : y revenir avant de régler
+  les seuils de performance.
+- **Région médicaments en thread-local** (`matcher()._region_tls`, 2026-09-07) :
+  `set_med_region` / `clear_med_region` et la lecture de `_medlist_regions`
+  passent par un `threading.local()` — le `Matcher` est un singleton de
+  processus partagé entre plusieurs dictées (« Terminer » d'une dictée,
+  génération/live-list d'une autre), et un état d'instance se volerait la
+  fenêtre de focus entre threads. Les setters DOIVENT tourner dans le MÊME
+  thread que les passes qui consomment la région (jamais traverser une
+  frontière de thread avec une région posée).
 
 Le déploiement de référence tourne sur la machine `/opt/dictai` : tout réglage
 de production y est vérifiable par `sudo docker exec consultai python3 -c …`

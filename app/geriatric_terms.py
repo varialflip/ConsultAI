@@ -394,6 +394,8 @@ def precompute_normalization(
     texte: str,
     conf: Optional[dict] = None,
     langue: str = "fr",
+    deja_normalise: Optional[str] = None,
+    inline_med: Optional[set] = None,
 ) -> Tuple[str, set]:
     """Normalisation déterministe COMPLÈTE d'un transcrit → ``(texte, inline_fixed)``.
 
@@ -404,6 +406,14 @@ def precompute_normalization(
        déterministes/auditées (exact + garbles seedés) des médicaments ;
     2. ``apply_inline_replacements`` — termes gériatriques québécois, avec
        ``protect`` = formes déjà corrigées par la passe 1 (le médicament gagne).
+
+    Depuis 2026-09-07, le « Terminer » fournit ``deja_normalise`` (texte déjà
+    corrigé par la passe ``normalize(inline_safe=True)`` qui a servi aux items
+    de la Validation, avec ``inline_med`` = protection ``norm_phon`` de ses
+    corrections) : la passe 1 coûteuse est alors SAUTÉE, seuls les termes
+    gériatriques restent à appliquer. Hors de ce chemin (génération sans cache,
+    import), ``deja_normalise`` reste ``None`` et les deux passes s'exécutent
+    comme avant.
 
     ``inline_fixed`` : clés ``norm_phon`` des formes corrigées (médicaments ET
     termes gériatriques) — le LLM doit rester aveugle à ces corrections, et les
@@ -417,16 +427,20 @@ def precompute_normalization(
     from app import med_grounding
     fixed = texte or ""
     inline_fixed: set = set()
-    try:
-        lowercase, changes = med_grounding.normalize(fixed, conf=conf, inline_safe=True)
-        if lowercase and lowercase.strip():
-            fixed = lowercase
-        inline_fixed = {
-            med_grounding.norm_phon(repl)
-            for _span, repl, _score, _sim in changes if repl
-        }
-    except Exception:
-        inline_fixed = set()
+    if deja_normalise is None:
+        try:
+            lowercase, changes = med_grounding.normalize(fixed, conf=conf, inline_safe=True)
+            if lowercase and lowercase.strip():
+                fixed = lowercase
+            inline_fixed = {
+                med_grounding.norm_phon(repl)
+                for _span, repl, _score, _sim in changes if repl
+            }
+        except Exception:
+            inline_fixed = set()
+    else:
+        fixed = deja_normalise
+        inline_fixed = set(inline_med or ())
     try:
         fixed, changements = apply_inline_replacements(
             fixed, langue=langue, protect=inline_fixed, conf=conf,

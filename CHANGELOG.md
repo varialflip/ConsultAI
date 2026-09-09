@@ -19,6 +19,26 @@ Changements livrés, entrées datées. À maintenir à chaque version publiée
   modifiables déjà en service sont migrées au démarrage, les versions
   personnalisées des consignes/gabarits sont laissées intactes.
 
+## 2026-09-09 — Fusion des candidats phonétiques : un fragment fort n'est jamais fusionné
+
+- **Correction** : la fusion des candidats qui se disputent une même posologie
+  (apixaban → « Applique, ça bande » → Eliquis) fusionnait par erreur DEUX
+  médicaments légitimes dictés à la suite quand ils partageaient la dose
+  (« télénol, l'irrita 100 mg trois fois par jour ») : la « name » soudait
+  « l'irrita télénol » → Tylenol et **Lyrica disparaissait** de la liste des
+  suggestions (note : « Tylenol 100 mg tid », jamais de Lyrica). Même
+  re-soudage « Lexilan Privacide » → Prevacid pour Dexilant (!) + Prevacid.
+- **Garde** `_FUSION_FRAG_FORT = 0.80` : deux voisins ne sont fusionnés QUE si
+  AUCUN fragment ne résout à ≥ 0.80 — un fragment fort est un nom de
+  médicament autonome (le STT l'a presque écrit), donc deux voisins forts à
+  même dose sont deux médicaments distincts. Un nom scindé n'a que des
+  fragments faibles (apixaban, calibré sur la consultation 38 : Eliquis 0.71,
+  Banzel 0.67).
+- Re-validé sur la consultation 38 (toujours fusionné : « Applique bande » →
+  Eliquis), sur les 4 transcripts de référence (aucun couple à fusionner) et
+  sur la consultation 48 (Lyrica réapparaît, Dexilant/Prevacid distincts) ;
+  tests dédiés `tests/test_fusion_candidats.py`.
+
 ## 2026-09-08 — Fenêtre glissante : mesures, croissance et fin de dictée sans relecture complète
 
 - **Mesures** (`tests/simul_sliding_window.py`, balayage sur deux dictées

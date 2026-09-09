@@ -193,6 +193,18 @@ COMMON_INLINE_MINLEN = 5   # longueur phonétique minimale d'un jeton réécrit 
 CONF_SUGGEST      = 0.95   # (conservé) confiance STT de référence du canal doute
 SUGGEST_CONF_MAX  = 0.72   # confiance COMBINÉE max d'une piste sans dose voisine
 CONF_SUGGEST_SIM  = 0.60   # similarité phonétique minimale d'une piste à proposer
+#: Seuil « fragment fort » de la FUSION des candidats phonétiques
+#: (``_fusionner_candidats_posologie``) : deux candidats adjacents partageant
+#: une même posologie ne sont fusionnés QUE si NONE d'entre eux résout fort
+#: (score >= ce seuil). Un fragment qui colle à >= 0.80 est un NOM DE
+#: MÉDICAMENT autonome que le STT a presque écrit (« télénol » → Tylenol,
+#: « Lexilan » → Dexilant) : deux voisins forts partageant une dose sont DEUX
+#: médicaments légitimes dictés l'un après l'autre (consult 48, 2026-09-09 :
+#: « télénol, l'irrita 100 tid » → Tylenol AVEC Lyrica, jamais fusionnés), pas
+#: un nom scindé. Un VRAI nom scindé a ses DEUX fragments faibles
+#: (« Applique, ça bande » → apixaban : Eliquis 0.71, Banzel 0.67), calibré
+#: sur la consultation 38 : aucun fragment n'atteint 0.80.
+_FUSION_FRAG_FORT = 0.80
 #: Plancher de SIMILARITÉ propre au CANAL DOUTE (nom NU sans dose voisine).
 #: Sans lui, un mot de prose flou (ou un nom propre) à faible label pouvait
 #: passer : coupe→copper (0.667), Godette→MODECATE (0.625), section→pectin
@@ -2240,6 +2252,15 @@ class Matcher:
                     continue
                 jj = jt.get("_i")
                 if jj is None or abs(jj - ii) > 2:
+                    continue
+                # Fragment FORT (>= _FUSION_FRAG_FORT) : le jeton est un NOM DE
+                # MÉDICAMENT autonome (le STT l'a presque écrit), pas un fragment
+                # d'un nom scindé — deux voisins forts à même dose sont DEUX
+                # médicaments légitimes dictés à la suite (« télénol, l'irrita
+                # 100 tid »), on ne les fusionne pas. Un nom scindé n'a que des
+                # fragments faibles (apixaban 71/67, c38).
+                if max(it.get("score") or 0, jt.get("score") or 0) >= (
+                        _FUSION_FRAG_FORT * 100):
                     continue
                 groupe.append(jt)
             if len(groupe) == 1:

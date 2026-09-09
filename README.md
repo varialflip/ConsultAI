@@ -1362,9 +1362,15 @@ coûteux à manquer. Ils bénéficient de deux traitement privilégiés (constan
   `posology` (strictement identique, non vide, positions `_i` à écart ≤ 2
   jetons) sont FUSIONNÉS : le MÉDICAMENT COURANT l'emporte (sinon le score le
   plus haut), et la `name` regroupe les fragments (« Applique bande » → Eliquis
-  conf 0.595). Deux médicaments légitimes à même dose mais à positions éloignées
-  restent distincts (gap > 2), et les items déterministes ne sont jamais
-  fusionnés.
+  conf 0.595). **Garde « fragment fort »** (`_FUSION_FRAG_FORT = 0.80`) : la
+  fusion ne s'applique QUE si aucun des deux fragments ne colle à ≥ 0.80 — un
+  fragment fort est un nom de médicament AUTONOME que le STT a presque écrit
+  (« télénol » → Tylenol), et deux voisins forts à même dose sont DEUX
+  médicaments légitimes dictés à la suite (« télénol, l'irrita 100 mg tid » →
+  Tylenol + Lyrica, jamais fusionnés) ; un nom scindé n'a que des fragments
+  faibles (apixaban 0.71/0.67). Deux médicaments légitimes à même dose mais à
+  positions éloignées restent distincts (gap > 2), et les items déterministes
+  ne sont jamais fusionnés.
 
 ### Règles produit 2026-09-05 : zone englobante, nombres en lettres, privilège « common med »
 

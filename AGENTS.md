@@ -141,6 +141,13 @@ même commit** :
   portant la même `posology` (strictement identique, non vide, positions à
   écart ≤ 2 jetons), sont FUSIONNÉS : le MÉDICAMENT COURANT l'emporte
   (sinon la sim la plus haute), et la `name` concatène les fragments.
+  **Garde « fragment fort »** (`_FUSION_FRAG_FORT = 0.80`, 2026-09-09) : la
+  fusion ne s'applique QUE si AUCUN fragment ne résout à ≥ 0.80 — un fragment
+  fort est un nom de médicament AUTONOME (le STT l'a presque écrit), donc
+  deux voisins forts à même dose (« télénol, l'irrita 100 mg tid » → Tylenol
+  + Lyrica, consult 48) sont DEUX médicaments légitimes dictés à la suite,
+  jamais fusionnés ; un nom scindé n'a que des fragments faibles (apixaban :
+  Eliquis 0.71, Banzel 0.67).
   Deux médicaments légitimes à même dose mais à positions éloignées
   (gap > 2) ne sont JAMAIS fusionnés, ni les items déterministes
   (`source` absent). Toute évolution de ce regroupement doit être

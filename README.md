@@ -844,7 +844,7 @@ actuelle ; le gabarit « Suivi - Gériatrie » nomme explicitement les
 hospitalisations antérieures dans sa règle du Résumé. Une hospitalisation
 antérieure dictée dans l'énumération des antécédents reste dans la rubrique
 Antécédents (contexte et synthèse dictés compris), jamais déplacée vers
-l'HMA — qui ne couvre que le motif actuel de la consultation (§ 1). Les modifications de
+l'HMA — qui ne couvre que le motif actuel de la consultation (§ 1). Il en va de même pour les tests et scores dictés (MoCA, MMSE…) : **le placement suit la dictée** — un test énoncé pendant la portion examen physique figure dans l'Examen avec sa date, dicté dans les antécédents ou l'HMA il y reste, jamais déplacé ni dupliqué ; un score douteux reste dans sa rubrique ET est signalé « à confirmer » (§ 3, 2026-09-09). Les modifications de
 traitement d'une visite antérieure (médicament débuté, cessé, renouvelé, dose
 modifiée) sont portées dans la note, dans leur rubrique (Résumé ou HMA selon
 le gabarit), distinctes du plan de traitement actuel. Dans **l'Impression**,

@@ -2675,6 +2675,176 @@ def migrate_template_antecedents_hospitalisation_placement(db: Session) -> int:
     return touches
 
 
+#: Ancres pour le placement des tests dictés (2026-09-09). La règle de l'Examen
+#: récoltait vers cette rubrique TOUT test ou score dicté — MMSE, MoCA, MIS…
+#: — même les scores ANCIENS énoncés pendant l'énumération des antécédents ou
+#: le récit de l'HMA. Le placement suit désormais la dictée : un test dicté
+#: dans les antécédents y reste comme antécédent, un test évoqué dans l'HMA ou
+#: le Résumé y reste, et l'Examen ne reçoit que ce qui a été dicté pendant la
+#: portion examen physique de la dictée. Les consignes générale et gabarits
+#: sont éditables et vivent en base : on ne remplace que la phrase livrée
+#: EXACTEMENT — une version retravaillée est laissée intacte et signalée.
+_PLACEMENT_TESTS_OLD_FR = (
+    "- **Examen** : liste pointée (une puce « - » par ligne), jamais un "
+    "paragraphe suivi. Aucun libellé interne devant les items — jamais « État "
+    "général : Calme, collabore, orientée », mais directement « - Calme, "
+    "collabore et orientée ». **Aucun score dicté n'est omis** : MMSE, MoCA, "
+    "MIS et tout test ou score dicté figurent dans la liste avec leur date — "
+    "y compris les scores ANCIENS dictés dans la même dictée (ils servent à "
+    "comparer l'évolution). Un score douteux reste dans la liste ET est "
+    "signalé « à confirmer » en Corrections et éléments à valider."
+)
+_PLACEMENT_TESTS_NEW_FR = (
+    "- **Examen** : liste pointée (une puce « - » par ligne), jamais un "
+    "paragraphe suivi. Aucun libellé interne devant les items — jamais « État "
+    "général : Calme, collabore, orientée », mais directement « - Calme, "
+    "collabore et orientée ». **Le placement des tests suit la dictée** : un "
+    "test ou score (MMSE, MoCA, MIS, tout test cognitif ou score dicté) "
+    "figure dans la rubrique où il a été dicté — un test énoncé pendant la "
+    "portion examen physique de la dictée figure dans l'Examen avec sa date ; "
+    "un test dicté pendant l'énumération des antécédents y reste comme "
+    "antécédent ; un test évoqué dans l'HMA ou le Résumé y reste. Jamais "
+    "déplacé vers l'Examen, jamais dupliqué. **Aucun score dicté n'est omis** "
+    ": un score douteux reste dans sa rubrique ET est signalé « à confirmer » "
+    "en Corrections et éléments à valider."
+)
+_PLACEMENT_TESTS_OLD_EN = (
+    '- **Examination**: bulleted list (one "- " per line), never a flowing '
+    'paragraph. No internal labels before the items — never "General '
+    'appearance: Calm, cooperative, oriented", but directly "- Calm, '
+    'cooperative and oriented". **Never omit any dictated score**: MMSE, '
+    "MoCA, MIS and any dictated test or score appear in the list with their "
+    "date — including OLD scores dictated in the same dictation (they serve "
+    'to compare the evolution). A doubtful score stays in the list AND is '
+    'flagged "to be confirmed" in the corrections section.'
+)
+_PLACEMENT_TESTS_NEW_EN = (
+    '- **Examination**: bulleted list (one "- " per line), never a flowing '
+    'paragraph. No internal labels before the items — never "General '
+    'appearance: Calm, cooperative, oriented", but directly "- Calm, '
+    'cooperative and oriented". **Test placement follows the dictation**: a '
+    "test or score (MMSE, MoCA, MIS, any cognitive test or dictated score) "
+    "appears in the section where it was dictated — a test stated during the "
+    "physical-exam part of the dictation appears in the Examination with its "
+    "date; a test dictated during the past-history listing stays there as a "
+    "history item; a test mentioned in the HPI or the Summary stays there. "
+    "Never moved to the Examination, never duplicated. **Never omit any "
+    "dictated score**: a doubtful score stays in its section AND is flagged "
+    '"to be confirmed" in the corrections section.'
+)
+
+
+def migrate_general_prompt_test_placement(db: Session) -> int:
+    """
+    Porte dans la consigne générale EN BASE le placement des tests selon la
+    dictée (2026-09-09 : un test dicté dans les antécédents ou l'HMA était
+    récolté par le modèle vers l'Examen).
+
+    Même mécanique que les migrations précédentes : la consigne générale est
+    éditée par le médecin et vit en base, la clause n'est remplacée que si la
+    phrase livrée y figure encore EXACTEMENT. Une phrase retravaillée est
+    laissée intacte et signalée au journal.
+    """
+    touches = 0
+    for cle, ancienne, nouvelle in (
+        ("general_prompt_fr", _PLACEMENT_TESTS_OLD_FR, _PLACEMENT_TESTS_NEW_FR),
+        ("general_prompt_en", _PLACEMENT_TESTS_OLD_EN, _PLACEMENT_TESTS_NEW_EN),
+    ):
+        row = db.get(AppSetting, cle)
+        if row is None or not row.value.strip():
+            continue
+        if nouvelle in row.value:
+            continue  # déjà en place — idempotent
+        if ancienne not in row.value:
+            logger.info(
+                "Consigne « %s » : règle de l'Examen modifiée, placement des "
+                "tests laissé au panneau.",
+                cle,
+            )
+            continue
+        row.value = row.value.replace(ancienne, nouvelle)
+        row.updated_by = "migration"
+        touches += 1
+        logger.info(
+            "Consigne « %s » : règle de placement des tests dictés appliquée.",
+            cle,
+        )
+    if touches:
+        db.commit()
+    return touches
+
+
+#: Version gabarit de la même règle — l'ancienne clause figure à l'identique
+#: dans les trois gabarits français verrouillés (Consultation Médicale
+#: Générale, Consultation - Gériatrie, Suivi - Gériatrie) ; le gabarit anglais
+#: a sa propre traduction.
+_PLACEMENT_TESTS_TMPL_OLD_FR = (
+    "**Tous les scores dictés figurent dans la liste, avec leur date — y "
+    "compris les scores ANCIENS dictés dans la même dictée, pour comparer "
+    "l'évolution ; un score douteux reste dans la liste ET est signalé « à "
+    "confirmer » en Corrections.**"
+)
+_PLACEMENT_TESTS_TMPL_NEW_FR = (
+    "**Le placement des tests suit la dictée : un test ou score dicté "
+    "(MMSE, MoCA…) figure dans la rubrique où il a été dicté — énoncé "
+    "pendant l'examen physique (la portion de dictée qui nourrit cette "
+    "rubrique), il figure ici avec sa date ; dicté dans les antécédents ou "
+    "l'HMA, il y reste, jamais déplacé ni dupliqué. Un score douteux reste "
+    "dans sa rubrique ET est signalé « à confirmer » en Corrections.**"
+)
+_PLACEMENT_TESTS_TMPL_OLD_EN = (
+    '**Every dictated score appears in the list with its date — including '
+    'OLD scores dictated in the same dictation, to compare the evolution; a '
+    'doubtful score stays in the list AND is flagged "to be confirmed" in '
+    "the corrections.**"
+)
+_PLACEMENT_TESTS_TMPL_NEW_EN = (
+    "**Test placement follows the dictation: a test or score dictated "
+    "(MMSE, MoCA…) appears in the section where it was dictated — stated "
+    "while dictating the physical examination (the portion of the dictation "
+    "that feeds this section), it appears here with its date; dictated in "
+    "the past history or the HPI, it stays there, never moved or duplicated. "
+    "A doubtful score stays in its section AND is flagged \"to be "
+    "confirmed\" in the corrections.**"
+)
+
+
+def migrate_template_test_placement(db: Session) -> int:
+    """
+    Porte dans les copies modifiables des gabarits la même règle de placement
+    des tests (2026-09-09).
+
+    Les gabarits verrouillés sont déjà rafraîchis depuis ``default_templates``
+    par ``seed_locked_templates`` : cette migration ne concerne donc que les
+    copies dupliquées avant la reformulation. On ne remplace la clause que si
+    elle y est encore EXACTEMENT le texte livré d'origine — une règle de
+    l'Examen déjà retravaillée autrement est laissée intacte et signalée au
+    journal.
+    """
+    touches = 0
+    for row in db.scalars(select(Template)).all():
+        inst = row.system_instructions or ""
+        for ancienne, nouvelle in (
+            (_PLACEMENT_TESTS_TMPL_OLD_FR, _PLACEMENT_TESTS_TMPL_NEW_FR),
+            (_PLACEMENT_TESTS_TMPL_OLD_EN, _PLACEMENT_TESTS_TMPL_NEW_EN),
+        ):
+            if nouvelle in inst:
+                continue  # déjà en place — idempotent
+            if ancienne in inst:
+                row.system_instructions = inst.replace(ancienne, nouvelle)
+                touches += 1
+                logger.info(
+                    "Gabarit « %s » : placement des tests selon la dictée "
+                    "appliqué (un test dicté reste dans sa rubrique d'origine, "
+                    "l'Examen ne reçoit que la portion examen physique).",
+                    row.name,
+                )
+                break
+    if touches:
+        db.commit()
+    return touches
+
+
 #: Groupes livrés. « admins » ouvre le panneau d'administration, « users » ne
 #: donne accès qu'à ses propres consultations.
 _SYSTEM_GROUPS = (
@@ -2967,10 +3137,12 @@ def init_db() -> None:
         migrate_general_prompt_meds_favor_suggestions(db)
         migrate_general_prompt_phonetic_origin(db)
         migrate_general_prompt_localisation_corrections(db)
+        migrate_general_prompt_test_placement(db)
         migrate_template_med_grouping(db)
         migrate_template_suivi_resume_stays(db)
         migrate_template_suivi_resume_treatment_stays(db)
         migrate_template_antecedents_hospitalisation_placement(db)
+        migrate_template_test_placement(db)
         seed_groups(db)
         # Import local : évite un cycle (pricing.py importe PricingRate d'ici).
         from app.pricing import seed_default_rates

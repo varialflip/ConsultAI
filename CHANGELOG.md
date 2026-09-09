@@ -2,6 +2,23 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 
+## 2026-09-09 — Les tests dictés restent dans leur rubrique d'origine
+
+- **Correction** : un test cognitif dicté (MoCA, MMSE…) finissait toujours
+  dans l'Examen, même énoncé pendant l'énumération des antécédents ou dans
+  l'HMA — les consignes exigeaient en gras que « tous les scores dictés »
+  figurent dans la liste de l'Examen, « y compris les scores ANCIENS dictés
+  dans la même dictée ». La règle s'inverse : **le placement des tests suit
+  la dictée** — un test énoncé pendant la portion examen physique figure dans
+  l'Examen avec sa date ; dicté dans les antécédents il y reste comme
+  antécédent ; évoqué dans l'HMA ou le Résumé il y reste. Jamais déplacé,
+  jamais dupliqué, et aucun score dicté n'est omis (un score douteux reste
+  dans sa rubrique ET est signalé « à confirmer »).
+- Appliqué à la consigne générale FR/EN (module + valeur en base) et aux
+  quatre gabarits verrouillés (source rafraîchie au démarrage) ; les copies
+  modifiables déjà en service sont migrées au démarrage, les versions
+  personnalisées des consignes/gabarits sont laissées intactes.
+
 ## 2026-09-08 — Correction de la réponse finale de génération
 
 - **Correction** : après la suppression de la relecture séparée des métadonnées,

@@ -193,6 +193,17 @@ même commit** :
   marque. Toute modification de ce chemin doit être testée sur les
   consultations 38 (apixaban) et 12 (diamicron MR 90).
 - **Bloc `CONFIANCE_MOTS` en spans de prose** (2026-09-07, cf. `med_grounding.grouper_doutes_pour_prompt`) : le bloc ne liste plus chaque mot douteux un à un. Les doutes sont regrouper par proximité dans le texte, écart de 2 jetons maximum, le même seuil que la fusion des candidats de posologie. Un span sans aucun mot non-courant est supprimé ; un span mono-jeton garde `mot → XX %` ; un span multi-jetons devient un **extrait verbatim** du texte avec un mot de contexte de chaque côté, les mots douteux marqués de `*astérisques*`, et la confiance du minimum du span. L'extrait localise le doute exactement dans la dictée, sans index numérique fragile — un multi-mots garble comme « Applique, ça bande » vers apixaban reste identifiable d'un bloc. Le formatage vit dans `med_grounding`; `llm._bloc_confiance` reçoit des lignes déjà prêtes. Toute évolution de ce regroupement doit être re-validée sur la consultation 38 (apixaban) et sur les transcripts de référence.
+- **Placement des tests dictés selon la dictée** (2026-09-09, cf. consigne
+  générale § 3 « Examen », les 4 gabarits verrouillés et les migrations
+  `migrate_general_prompt_test_placement` / `migrate_template_test_placement`
+  de `database.py`) : un test ou score dicté (MoCA, MMSE…) figure dans la
+  rubrique où il a été dicté — énoncé pendant la portion examen physique de la
+  dictée → Examen ; dicté dans les antécédents → il y reste comme antécédent ;
+  évoqué dans l'HMA ou le Résumé → il y reste. Jamais déplacé vers l'Examen,
+  jamais dupliqué ; aucun score dicté n'est omis et un score douteux reste
+  dans sa rubrique ET est signalé « à confirmer ». Cette règle s'inverse
+  l'ancienne (« tous les scores ANCIENS dictés dans la même dictée dans
+  l'Examen ») : toute évolution doit préserver le placement dicté.
 
 
 - Le texte normalisé envoyé au LLM est **pré-calculé au « Terminer »** et mis

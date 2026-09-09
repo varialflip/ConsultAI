@@ -1907,6 +1907,66 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "speech (over-strict VAD, failed segment). Since the full audio is "
         "kept, nothing is lost.",
     ),
+    "set.stt_sweep_max_seconds.label": (
+        "Budget du filet de fin (secondes)", "Finish gap-sweep budget (seconds)",
+    ),
+    "set.stt_sweep_max_seconds.help": (
+        "Nombre maximal de secondes d'audio re-transcrites au « Terminer » par "
+        "le filet de fin. Une dictée à longues pauses peut révéler beaucoup de "
+        "trous : ce plafond borne la durée du « Terminer ». Au-delà, les trous "
+        "restants exigent une retranscription manuelle. 0 = illimité.",
+        "Maximum audio seconds re-transcribed on “Finish” by the gap sweep. A "
+        "dictation with long pauses may reveal many gaps: this cap bounds how "
+        "long “Finish” takes. Beyond it, remaining gaps need a manual "
+        "re-transcription. 0 = unlimited.",
+    ),
+    "set.stt_sliding_window.label": (
+        "Fenêtre glissante (live)", "Sliding window (live)",
+    ),
+    "set.stt_sliding_window.help": (
+        "Transcrit la dictée live par fenêtres de 45 s (pas 15 s, recouvrement "
+        "30 s) au lieu de tranches de 10 s isolées : le modèle gagne du "
+        "contexte et le texte live converge vers la retranscription complète "
+        "(nombres, accords, noms propres). Coût : ~3× l'audio envoyé au "
+        "service vocal. Inapplicable au mode « sse » (Mistral).",
+        "Transcribes live dictation in 45 s windows (15 s step, 30 s overlap) "
+        "instead of isolated 10 s slices: the model gains context and the live "
+        "text converges toward the full re-transcription (numbers, agreements, "
+        "proper names). Cost: ~3× the audio sent to the speech service. Not "
+        "applicable to “sse” mode (Mistral).",
+    ),
+    "set.stt_window_seconds.label": (
+        "Fenêtre glissante (secondes)", "Sliding window (seconds)",
+    ),
+    "set.stt_window_seconds.help": (
+        "Durée d'audio par fenêtre. Plus longue = plus de contexte pour le "
+        "modèle, mais texte live plus retardé et appels plus lourds.",
+        "Audio length per window. Longer = more context for the model, but a "
+        "more delayed live text and heavier calls.",
+    ),
+    "set.stt_window_step_seconds.label": (
+        "Pas de la fenêtre (secondes)", "Window step (seconds)",
+    ),
+    "set.stt_window_step_seconds.help": (
+        "Nouvel audio ajouté à chaque passe. Le recouvrement vaut fenêtre − "
+        "pas (75 s pour une fenêtre de 90 s) : c'est ce qui est re-transcrit "
+        "pour se corriger. Latence live ≈ pas.",
+        "New audio added per pass. The overlap equals window − step (75 s for "
+        "a 90 s window): that is what gets re-transcribed to self-correct. "
+        "Live latency ≈ step.",
+    ),
+    "set.stt_verify_max_seconds.label": (
+        "Vérification résiduelle (secondes)", "Residual verify budget (seconds)",
+    ),
+    "set.stt_verify_max_seconds.help": (
+        "Budget d'audio re-écouté au « Terminer » pour fiabiliser les zones "
+        "douteuses (garbles de médicaments, frontières d'alignement "
+        "incertaines) — en UNE passe à plein contexte par plage, sans "
+        "retranscription complète. 0 = désactivé.",
+        "Audio seconds re-listened on “Finish” to firm up risky spans "
+        "(medication garbles, uncertain alignment frontiers) — one "
+        "full-context pass each, never a full re-transcription. 0 = off.",
+    ),
 
     # Pas de clé propre : voir set.openai_api_key, sous Modèle de langage,
     # dont le champ est répété ici (voir app.js, PROVIDER_KEY_FIELD).

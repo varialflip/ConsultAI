@@ -262,6 +262,20 @@ class Settings:
     #: Filet de fin : au « Terminer », re-parcourt l'audio brut et re-transcrit
     #: les zones de parole non couvertes (VAD raté, tranche échouée).
     stt_vad_finish_sweep: bool = True
+    #: Fenêtre glissante : la dictée live transcrit des fenêtres de 90 s (pas
+    #: 15 s, recouvrement 75 s) au lieu de tranches de 10 s isolées — le
+    #: modèle ASR gagne du contexte, le texte live converge vers la
+    #: retranscription complète. Coût : ~6× l'audio envoyé au STT (recouvrement).
+    #: 45 s atteint le même plateau de qualité (92 %) pour 3× ; 120 s dégrade
+    #: (mesures 2026-09-08, tests/simul_sliding_window.py).
+    stt_sliding_window: bool = False
+    stt_window_seconds: int = 90
+    stt_window_step_seconds: int = 15
+    #: Budget (secondes d'audio) de la re-vérification RÉSIDUELLE au
+    #: « Terminer » (garbles de médicaments, frontières d'alignement
+    #: marginales) : zéro retranscription complète, éventuellement plafonnées
+    #: au prorata. Env `STT_VERIFY_MAX_SECONDS`.
+    stt_verify_max_seconds: float = 60.0
 
     #: Correction médicaments : stabilisation audio par l'arrière pendant la
     #: dictée + liste pointée des médicaments (moteur déterministe, base BDP
@@ -482,6 +496,10 @@ class Settings:
             stt_vad_speech_ms=_env_int("STT_VAD_SPEECH_MS", 150),
             stt_vad_silence_ms=_env_int("STT_VAD_SILENCE_MS", 450),
             stt_vad_finish_sweep=_env_bool("STT_VAD_FINISH_SWEEP", True),
+            stt_sliding_window=_env_bool("STT_SLIDING_WINDOW", False),
+            stt_window_seconds=_env_int("STT_WINDOW_SECONDS", 90),
+            stt_window_step_seconds=_env_int("STT_WINDOW_STEP_SECONDS", 15),
+            stt_verify_max_seconds=_env_float("STT_VERIFY_MAX_SECONDS", 60.0),
             dictation_grounding=_env_bool("DICTATION_GROUNDING", False),
 
             gemini_api_key=_env("GEMINI_API_KEY"),

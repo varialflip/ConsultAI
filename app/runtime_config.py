@@ -553,7 +553,36 @@ SETTINGS: Tuple[Setting, ...] = (
         "stt_vad_finish_sweep", "choice", "group.dictation",
         default=lambda: "true" if settings.stt_vad_finish_sweep else "false",
         choices=ON_OFF,
-        section="sect.realtime", visible_if=(("stt_realtime_mode", "vad"),),
+        section="sect.realtime",
+    ),
+    Setting(
+        "stt_sweep_max_seconds", "number", "group.dictation",
+        default=lambda: "300",
+        section="sect.realtime",
+    ),
+    Setting(
+        "stt_sliding_window", "choice", "group.dictation",
+        default=lambda: "true" if settings.stt_sliding_window else "false",
+        choices=ON_OFF,
+        section="sect.realtime",
+    ),
+    Setting(
+        "stt_window_seconds", "number", "group.dictation",
+        default=lambda: str(settings.stt_window_seconds),
+        section="sect.realtime", visible_if=(("stt_sliding_window", "true"),),
+        advanced=True,
+    ),
+    Setting(
+        "stt_window_step_seconds", "number", "group.dictation",
+        default=lambda: str(settings.stt_window_step_seconds),
+        section="sect.realtime", visible_if=(("stt_sliding_window", "true"),),
+        advanced=True,
+    ),
+    Setting(
+        "stt_verify_max_seconds", "number", "group.dictation",
+        default=lambda: str(int(settings.stt_verify_max_seconds)),
+        section="sect.realtime", visible_if=(("stt_sliding_window", "true"),),
+        advanced=True,
     ),
 
     # --- Correction medicaments (liste pointée sous la dictée) ---------------

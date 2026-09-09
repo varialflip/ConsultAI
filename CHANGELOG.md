@@ -1,6 +1,6 @@
 # Changelog
 
-Changements livrés, entrées datées. À maintenir à chaque version publiée —
+Changements livrés, entrées datées. À maintenir à chaque version publiée
 
 ## 2026-09-09 — Les tests dictés restent dans leur rubrique d'origine
 
@@ -18,6 +18,64 @@ Changements livrés, entrées datées. À maintenir à chaque version publiée �
   quatre gabarits verrouillés (source rafraîchie au démarrage) ; les copies
   modifiables déjà en service sont migrées au démarrage, les versions
   personnalisées des consignes/gabarits sont laissées intactes.
+
+## 2026-09-08 — Fenêtre glissante : mesures, croissance et fin de dictée sans relecture complète
+
+- **Mesures** (`tests/simul_sliding_window.py`, balayage sur deux dictées
+  réelles de 5-7 min) : plateau de similarité face à la transcription
+  complète — tranches 10 s : 81 %, fenêtres 60 s/90 s : **91,7-92 %**, 120 s
+  **dégrade** (81 %, 8 rattrapages). Le résiduel est de la variance du
+  modèle, dans les deux sens (la passe complète a aussi ses garbles).
+- **Réglage retenu** : fenêtre 90 s, pas 15 s (6× l'audio) — paramétrable
+  (45 s/pas 30 s = 3×, qualité identique) ; 120 s explicitement déconseillé.
+- **Premier texte à ~15 s** : les fenêtres CROISSENT (15→90 s) au début de la
+  dictée au lieu d'attendre la fenêtre pleine avant tout affichage.
+- **« Terminer » sans retranscription complète** : la queue restante part en
+  UNE passe à plein contexte (≤ 90 s) ; **vérification résiduelle bornée**
+  (`stt_verify_max_seconds`, 60 s d'audio) : seules les plages à risque
+  (parts portant un garble de médicament, frontières d'alignement marginales
+  — pic < 0.87, plages rattrapées) sont re-écoutées en une passe à plein
+  contexte, et remplacées en place si la lecture diffère. Fin de dictée ~
+  quelques secondes.
+- **Fiabilité de la fusion durcie** : l'alignement renvoie désormais le RATIO
+  du pic ; une frontière douteuse (0.75-0.87) marque la plage pour la
+  vérification résiduelle au lieu de passer inaperçue.
+- **Régressions** (`tests/test_sliding_window.py`, STT moqué) : croissance,
+  conservation exacte (0 jeton perdu sur 450 s simulées), frontière
+  marginale, rattrapage, budget de vérification.
+ —
+
+## 2026-09-08 — Détection de la zone médicaments et du titre fiables
+
+- **Correction** : le réglage « Raisonnement » du panneau (minimal, low…) annulait
+  silencieusement la détection LLM de la zone médicaments ET du libellé de titre —
+  l'onglet Validation perdait sa carte violette et le brouillon son titre. Le gate
+  « modèle à thinking » est retiré : l'appel de région désactive lui-même le
+  raisonnement (`reasoning.effort=none`, vérifié sur DeepSeek v4 — 0 jeton de
+  pensée), donc la détection reste courte quels que soient les réglages du modèle
+  principal.
+- **Diagnostic** : tout échec de détection est désormais journalisé (clé absente,
+  réponse vide, région non retrouvée dans la transcription) au lieu d'un repli
+  local muet.
+
+
+## 2026-09-08 — Connexions de dictée résilientes
+
+- **Correction** : des écritures concurrentes de l'état JSON d'une dictée
+  pouvaient entrelacer le fichier de session et faire répondre `500` aux
+  fragments suivants. Les sauvegardes sont maintenant sérialisées, écrites
+  dans un fichier temporaire propre à chaque opération, puis remplacées
+  atomiquement ; les fragments en attente peuvent reprendre après une coupure.
+
+## 2026-09-08 — Fiabilité de la dictée live : récupération des fenêtres perdues
+
+- **Correction** : une fenêtre lue comme silencieuse pendant l'écriture d'un
+  WebM pouvait faire avancer définitivement le curseur alors que le fichier
+  complet contenait de la parole. Ces fenêtres sont maintenant re-vérifiées à
+  la passe suivante et réinsérées à leur position chronologique.
+- **Sécurité** : le filet de fin est disponible dans tous les modes, avec un
+  budget configurable (`stt_sweep_max_seconds`, 300 secondes par défaut), et
+  les trous récupérés ne sont plus ajoutés en fin de transcription.
 
 ## 2026-09-08 — Correction de la réponse finale de génération
 

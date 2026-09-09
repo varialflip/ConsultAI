@@ -50,8 +50,10 @@ import logging
 import os
 import re
 import shutil
+import tempfile
 import threading
 import time
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -65,6 +67,8 @@ from app.stt import (
     MistralRealtimeTranscription,
     TranscriptionError,
     _decode_pcm16,
+    _run_ffmpeg,
+    _SILENCE_RE,
     detect_speech_ranges,
     extract_segment,
     find_cut_point,
@@ -183,6 +187,30 @@ class DictationSession:
     #: Sert au filet de fin (``_sweep_uncovered``) à retrouver les trous
     #: laissés par un VAD trop strict ou une tranche échouée.
     covered_ranges: List[Tuple[float, float]] = field(default_factory=list)
+    #: Fenêtres qu'une passe a classées « sans parole » en plein fichier —
+    #: donc suspectes. Sur un WebM encore en croissance, ffmpeg peut lire une
+    #: fenêtre comme silencieuse (cluster partiel, course lecture/écriture)
+    #: alors que l'audio contient de la parole : on re-vérifie ces plages à la
+    #: passe suivante, une fois l'audio arrivé, avant de les accepter comme
+    #: silencieuses. Intervalles [début, fin] dans l'horloge mesurée.
+    unverified: List[Tuple[float, float]] = field(default_factory=list)
+    #: Fenêtre glissante (mode ``stt_sliding_window``) : texte PROVISOIRE de la
+    #: fenêtre en cours, couvrant ``[window_start, offset_seconds]``. Chaque
+    #: nouvelle fenêtre (45 s, pas 15 s) re-transcrit les 30 dernières secondes
+    #: : l'alignement textuel du recouvrement confirme le préfixe (il rejoint
+    #: ``parts``) et le provisoire est REMPLACÉ par la lecture la plus récente
+    #: — plus de contexte, meilleure lecture des nombres et des accords. Vide =
+    #: mode par tranches historique.
+    window_text: str = ""
+    #: Confiance mot-à-mot accumulée du provisoire (``norm_phon → conf``, min).
+    #: Fusionnée dans ``transcript_conf`` à chaque engagement du provisoire.
+    window_conf: dict = field(default_factory=dict)
+    #: Début AUDIO du provisoire (horloge mesurée du fichier brut).
+    window_start: float = 0.0
+    #: Plages audio à re-vérifier à la fin de dictée (frontières d'alignement
+    #: marginales, plages rattrapées en mini-tranche, région médicaments) —
+    #: la vérification résiduelle ne réécoute QUE ces plages, jamais tout.
+    verify_ranges: List[Tuple[float, float]] = field(default_factory=list)
     #: Un énoncé vient de se terminer côté navigateur (signal VAD) : la
     #: prochaine passe découpe et transcrit immédiatement, sans attendre le
     #: cadencement batch.
@@ -227,6 +255,11 @@ class DictationSession:
             "status": self.status,
             "last_error": self.last_error,
             "covered_ranges": list(self.covered_ranges),
+            "unverified": [list(p) for p in self.unverified],
+            "window_text": self.window_text,
+            "window_conf": self.window_conf,
+            "window_start": self.window_start,
+            "verify_ranges": [list(p) for p in self.verify_ranges],
             "flush_requested": self.flush_requested,
             "utterance_seq": self.utterance_seq,
             "stt_available": self.stt_available,
@@ -241,6 +274,10 @@ class DictationSession:
             "next_seq": self.next_seq,
             "parts": self.parts,
             "part_count": len(self.parts),
+            # Fenêtre glissante : texte provisoire (dernières secondes, encore
+            # révisable par la fenêtre suivante). Le navigateur l'affiche À LA
+            # SUITE des parts confirmées et le remplace à chaque passe.
+            "window_text": self.window_text,
             "stt_available": self.stt_available,
             "transcribed_seconds": int(round(self.offset_seconds)),
             "received_seconds": int(round(self.received_seconds)),
@@ -259,11 +296,27 @@ class DictationSession:
         }
 
     def save(self) -> None:
-        self.updated_at = time.time()
-        temporary = f"{self.state_path}.tmp"
-        with open(temporary, "w", encoding="utf-8") as handle:
-            json.dump(self.to_state(), handle, ensure_ascii=False)
-        os.replace(temporary, self.state_path)
+        # Les scrutations du navigateur, les uploads et la transcription de
+        # fond peuvent sauver la même session en parallèle. Un nom temporaire
+        # partagé permettait à deux écrivains de se mélanger avant ``replace``
+        # et de produire un state.json invalide au fragment suivant.
+        with _lock_for(self.id):
+            self.updated_at = time.time()
+            directory = os.path.dirname(self.state_path)
+            fd, temporary = tempfile.mkstemp(
+                dir=directory, prefix=".state-", suffix=".tmp",
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(self.to_state(), handle, ensure_ascii=False)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, self.state_path)
+            finally:
+                try:
+                    os.unlink(temporary)
+                except FileNotFoundError:
+                    pass
 
 
 # ---------------------------------------------------------------------------
@@ -273,14 +326,16 @@ class DictationSession:
 # même temps, et une seule passe de découpage doit tourner à la fois. Les
 # verrous vivent en mémoire : ils ne protègent qu'à l'intérieur d'un
 # processus, ce qui suffit — ConsultAI tourne en un seul worker uvicorn.
-_locks: Dict[str, threading.Lock] = {}
+_locks: Dict[str, threading.RLock] = {}
 _locks_guard = threading.Lock()
 _processing: set = set()
 
 
-def _lock_for(session_id: str) -> threading.Lock:
+def _lock_for(session_id: str) -> threading.RLock:
     with _locks_guard:
-        return _locks.setdefault(session_id, threading.Lock())
+        # ``save()`` peut être appelé depuis une section qui tient déjà le
+        # verrou de session : il doit donc être réentrant.
+        return _locks.setdefault(session_id, threading.RLock())
 
 
 def _forget_lock(session_id: str) -> None:
@@ -385,6 +440,15 @@ def load_session(session_id: str, username: str) -> DictationSession:
         last_error=data.get("last_error", ""),
         covered_ranges=[
             (float(a), float(b)) for a, b in data.get("covered_ranges", [])
+        ],
+        unverified=[
+            (float(a), float(b)) for a, b in data.get("unverified", [])
+        ],
+        window_text=str(data.get("window_text", "") or ""),
+        window_conf=data.get("window_conf") or {},
+        window_start=float(data.get("window_start", 0.0) or 0.0),
+        verify_ranges=[
+            (float(a), float(b)) for a, b in data.get("verify_ranges", [])
         ],
         flush_requested=bool(data.get("flush_requested", False)),
         utterance_seq=int(data.get("utterance_seq", 0)),
@@ -1213,11 +1277,12 @@ def _contexte_tranche(session: DictationSession, caracteres: int = 1500) -> Opti
 
     La dictée découpe l'audio en tranches sans chevauchement ; une tranche
     transcrit la fin d'une phrase sans savoir son début. On renvoie la fin du
-    texte ASSEMBLÉ (``session.parts[-1]`` = tranche en cours de stabilisation,
-    sinon la dernière tranche stable) pour servir de ``prompt`` au modèle ASR —
-    il maintient la continuité au lieu de réinventer la phrase coupée.
+    texte ASSEMBLÉ (``window_text`` = provisoire de la fenêtre glissante, le
+    plus récent ; sinon la dernière tranche stable) pour servir de ``prompt``
+    au modèle ASR — il maintient la continuité au lieu de réinventer la
+    phrase coupée.
     """
-    texte = (session.parts[-1] if session.parts else "") or ""
+    texte = session.window_text or (session.parts[-1] if session.parts else "") or ""
     if not texte:
         return None
     corps = texte[-(caracteres + 1):]
@@ -1522,6 +1587,7 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
     low, target, high = _window()
     nouveaux: List[str] = []
     nouveaux_conf: List[dict] = []
+    nouvelles_couvertures: List[Tuple[float, float]] = []
     curseur = start
     while end - curseur > 0.05:
         restant = end - curseur
@@ -1553,6 +1619,12 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
                 conf_map = {}
             nouveaux.append(texte)
             nouveaux_conf.append(conf_map)
+            # Une couverture PAR morceau, comme en cours de dictée : les
+            # parts et ``covered_ranges`` restent en verrou (indices alignés),
+            # ce que l'insertion positionnelle de ``_inserer_part`` exige.
+            nouvelles_couvertures.append(
+                (curseur - payload.duration_seconds, curseur)
+            )
         if texte:
             logger.info(
                 "Dictée %s : stabilisation [%.1f-%.1f s] (%d caractères)",
@@ -1564,8 +1636,7 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
     # Redites dans la tranche réécrite : le STT ressort parfois la même phrase
     # deux fois à la suite (reformulée au second passage). On déduplique le
     # bloc réécrit sur le texte ORIGINAL (casse conservée) et on replie sur
-    # une part propre — la couverture audio du bloc est de toute façon
-    # remplacée par un seul intervalle ci-dessous.
+    # une part propre — sa couverture couvre tout le bloc réécrit.
     texte_bloc = " ".join(nouveaux)
     nouveau = _norm_spaces(texte_bloc)
     dedup = _dedupe_adjacent(texte_bloc)
@@ -1576,6 +1647,7 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
                 conflits.update(c)
         nouveaux = [dedup]
         nouveaux_conf = [conflits]
+        nouvelles_couvertures = [(start, curseur)]
         nouveau = _norm_spaces(" ".join(nouveaux))
 
     ancien = _norm_spaces(" ".join(session.parts[a:b + 1]))
@@ -1584,7 +1656,7 @@ def _rewrite_boundary(session: DictationSession, a: int, b: int) -> DictationSes
 
     session.parts[a:b + 1] = nouveaux
     session.parts_conf[a:b + 1] = nouveaux_conf
-    session.covered_ranges[a:b + 1] = [(start, end if curseur > start else end)]
+    session.covered_ranges[a:b + 1] = nouvelles_couvertures
     session.save()
 
     # Persistance durable du transcript remplacé.
@@ -1927,6 +1999,707 @@ def _signal_stt_unavailable(session: DictationSession, message: str) -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# Fenêtre glissante (mode ``stt_sliding_window``)
+# ---------------------------------------------------------------------------
+# Motivation : le transcript LIVE divergeait fort de la retranscription
+# complète (76 % de similarité mesuré sur la consultation 46) — tranches de
+# 10 s transcrites isolément, chiffres de dossier éclatés token par token,
+# accords perdus faute de contexte, audio partiel aux frontières. Une fenêtre
+# glissante de 45 s (pas 15 s, recouvrement 30 s) donne au modèle ASR le
+# contexte qui lui manque : chaque fenêtre re-transcrit les 30 dernières
+# secondes et le provisoire est remplacé par la lecture la plus récente.
+#
+# Sans timestamps (Cohere Transcribe n'en fournit pas), la fusion est
+# TEXTUELLE : la queue du provisoire et la tête de la nouvelle fenêtre
+# décrivent le MÊME audio — on aligne les deux en jetons normalisés (casse,
+# accents, ponctuation ignorés) ; le préfixe du provisoire avant
+# l'alignement est CONFIRMÉ (il rejoint ``parts``), et le provisoire devient
+# la nouvelle fenêtre EN ENTIER (sa tête re-transcrite remplace l'ancienne
+# lecture du recouvrement). En cas d'alignement ambigu : rien n'est
+# confirmé, l'audio neuf est ajouté au provisoire en mini-tranche, et le
+# filet de fin (``_sweep_uncovered``) reste la sécurité ultime.
+
+#: Jetons minimum d'un recouvrement pour oser confirmer le préfixe.
+_FUSION_MIN_JETONS = 8
+
+#: Similarité minimale (jetons normalisés) d'un recouvrement fiable.
+_FUSION_SIM_MIN = 0.75
+
+#: Au-delà de ce ratio de pic, la frontière d'alignement est jugée solide ; en
+#: deçà (mais au-dessus du seuil d'acceptation), la plage est marquée pour la
+#: re-vérification résiduelle de fin de dictée.
+_FUSION_RATIO_FIABLE = 0.87
+
+#: Plafond de jetons comparés d'un côté (la queue du provisoire suffit).
+_FUSION_PLAFOND_JETONS = 160
+
+#: Au-delà de ce nombre de jetons, un provisoire qui n'arrive plus à s'aligner
+#: est engagé en bloc (soupape anti-croissance, ~2 fenêtres et demie).
+_FUSION_ENGAGEMENT_MAX_JETONS = 280
+
+
+def fenetrage_actif() -> bool:
+    """Fenêtre glissante active ? Réglage + compatibilité temps réel.
+
+    Le mode ``sse`` (Mistral, énoncé par énoncé en streaming) possède son
+    propre chemin : la fenêtre glissante ne s'y applique pas.
+    """
+    if runtime_config.value("stt_sliding_window") != "true":
+        return False
+    return realtime_mode() != "sse"
+
+
+def _fenetre_secondes() -> float:
+    """Durée de la fenêtre glissante (``stt_window_seconds``, 45 s)."""
+    try:
+        valeur = float(runtime_config.value("stt_window_seconds") or 45)
+    except (TypeError, ValueError):
+        valeur = 45.0
+    return max(20.0, min(120.0, valeur))
+
+
+def _fenetre_pas() -> float:
+    """Nouvel audio ajouté par passe (``stt_window_step_seconds``, 15 s).
+
+    Le recouvrement vaut ``fenêtre - pas`` (30 s par défaut) : c'est la plage
+    re-transcrite à chaque passe, bornée pour laisser toujours du neuf.
+    """
+    try:
+        valeur = float(runtime_config.value("stt_window_step_seconds") or 15)
+    except (TypeError, ValueError):
+        valeur = 15.0
+    return max(5.0, min(_fenetre_secondes() - 5.0, valeur))
+
+
+def should_process_fenetres(session: DictationSession) -> bool:
+    """Assez d'audio neuf pour une nouvelle fenêtre ?"""
+    disponible = session.received_seconds - session.offset_seconds
+    if not session.window_text:
+        return disponible >= _fenetre_secondes()
+    return disponible >= _fenetre_pas()
+
+
+def _jeton_norm(s: str) -> str:
+    """Jeton de comparaison : casse, accents et ponctuation ignorés."""
+    s = unicodedata.normalize("NFKD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^0-9a-z]", "", s.lower())
+
+
+def _jetons_norm(texte: str) -> List[str]:
+    return [j for j in (_jeton_norm(m) for m in (texte or "").split()) if j]
+
+
+def _recouvrement_attendu(session: DictationSession, texte: str,
+                          debut: float, fin: float) -> int:
+    """Taille attendue du recouvrement, en jetons, depuis la géométrie audio.
+
+    Le recouvrement AUDIO est connu exactement : ``[debut, offset]`` (la
+    fenêtre commence ``taille - pas`` avant le curseur). Sa part dans le
+    provisoire (``[window_start, offset]``) et dans la fenêtre (``[debut,
+    fin]``) donne deux estimations du nombre de jetons à appareiller ; leur
+    minimum borne la bande de recherche de ``_aligner_chevauchement``.
+    """
+    span_provisoire = max(1e-6, session.offset_seconds - session.window_start)
+    span_fenetre = max(1e-6, fin - debut)
+    recouvrement = min(session.offset_seconds, fin) - debut
+    if recouvrement <= 0:
+        return 0
+    est_provisoire = int(len(_jetons_norm(session.window_text))
+                         * recouvrement / span_provisoire)
+    est_fenetre = int(len(_jetons_norm(texte)) * recouvrement / span_fenetre)
+    return max(0, min(est_provisoire, est_fenetre))
+
+
+def _aligner_chevauchement(ancien: str, nouveau: str,
+                           m_attendu: Optional[int] = None
+                           ) -> Tuple[int, float]:
+    """Jetons de la QUEUE d'``ancien`` retrouvés en TÊTE de ``nouveau``.
+
+    Les deux textes décrivent le même audio (recouvrement de fenêtres) : la
+    similarité de jetons normalisés (casse, accents, ponctuation ignorés)
+    présente un PIC net au vrai recouvrement — en deçà, les deux tranches
+    décrivent des portions audio différentes ; au-delà, elles s'étendent
+    chacune vers de l'audio distinct. On cherche donc l'ARGMAX du ratio dans
+    une bande autour du recouvrement ATTENDU (``m_attendu``, dérivé de la
+    géométrie audio par l'appelant) : un glouton « plus grand m d'abord »
+    s'arrêtait sur des correspondances étirées (ratio 0.75 tout juste) qui
+    confirmaient presque tout le provisoire et perdaient le texte neuf.
+    Retourne ``(m, ratio_du_pic)`` — ``(0, meilleur_ratio)`` si rien n'est
+    fiable : le pic sous le seuil signale une frontière incertaine (plage à
+    re-vérifier à la fin).
+    """
+    ta = _jetons_norm(ancien)
+    tb = _jetons_norm(nouveau)
+    if not ta or not tb:
+        return 0, 0.0
+    if m_attendu and m_attendu > 0:
+        maximum = min(len(ta), len(tb), int(m_attendu * 1.4) + 4,
+                      _FUSION_PLAFOND_JETONS)
+        minimum = max(_FUSION_MIN_JETONS, int(m_attendu * 0.45))
+    else:
+        maximum = min(len(ta), len(tb), _FUSION_PLAFOND_JETONS)
+        minimum = _FUSION_MIN_JETONS
+    if maximum < minimum:
+        return 0, 0.0
+    meilleur, meilleur_ratio = 0, 0.0
+    for m in range(maximum, minimum - 1, -1):
+        ratio = difflib.SequenceMatcher(None, ta[-m:], tb[:m]).ratio()
+        if ratio > meilleur_ratio:
+            meilleur, meilleur_ratio = m, ratio
+    if meilleur and meilleur_ratio >= _FUSION_SIM_MIN:
+        return meilleur, meilleur_ratio
+    return 0, meilleur_ratio
+
+
+def _decoupe_fusion(ancien: str, nouveau: str,
+                    m_attendu: Optional[int] = None) -> Tuple[str, int, float]:
+    """Scinde l'ancien provisoire en (confirmé, jetons recouverts, ratio).
+
+    ``confirmé`` = texte de l'ancien provisoire AVANT le recouvrement — il
+    rejoint les parts durables. ``ratio`` : qualité du pic d'alignement ; un
+    pic marginal (< ``_FUSION_RATIO_FIABLE``) signale une frontière
+    incertaine — l'appelant marque alors la plage pour re-vérification.
+    Recouvrement insuffisant → ("", 0, ratio) : rien n'est confirmé.
+    """
+    m, ratio = _aligner_chevauchement(ancien, nouveau, m_attendu)
+    jetons = (ancien or "").split()
+    if m < _FUSION_MIN_JETONS or len(jetons) <= m:
+        return "", 0, ratio
+    return " ".join(jetons[:len(jetons) - m]).strip(), m, ratio
+
+
+def _fusionner_fenetre(session: DictationSession, texte: str, conf: dict,
+                       debut: float, fin: float, moteur: tuple,
+                       confirme: Optional[str] = None) -> None:
+    """Intègre la transcription d'une fenêtre ``[debut, fin]`` au transcript.
+
+    ``confirme`` : préfixe du provisoire AVANT le recouvrement, déjà
+    déterminé par l'appelant (``_decoupe_fusion``) — il rejoint ``parts``
+    (avec sa plage audio interpolée au prorata des jetons — pas de
+    timestamps), et le provisoire devient le texte nouveau EN ENTIER. Le
+    confirmé porte la confiance accumulée de la fenêtre (clé-dépendante, min)
+    — fusionnée en base par ``_store_part`` via ``_merge_conf_into``.
+    """
+    if not session.window_text:
+        # Première fenêtre : tout reste provisoire, rien à confirmer.
+        session.window_text = texte
+        session.window_start = debut
+        for cle, valeur in (conf or {}).items():
+            try:
+                valeur = float(valeur)
+            except (TypeError, ValueError):
+                continue
+            precedent = session.window_conf.get(cle)
+            if precedent is None or valeur < float(precedent):
+                session.window_conf[cle] = valeur
+        return
+
+    if confirme is None:
+        confirme, m, _ratio = _decoupe_fusion(session.window_text, texte)
+    else:
+        m = len(session.window_text.split()) - len(confirme.split())
+    if confirme:
+        jetons = session.window_text.split()
+        total = len(jetons)
+        duree = max(0.0, session.offset_seconds - session.window_start)
+        ratio = (len(confirme.split()) / total) if total else 0.0
+        fin_confirmee = session.window_start + duree * ratio
+        _store_part(session, confirme, moteur, duration_seconds=0.0, words=None)
+        session.covered_ranges.append((session.window_start, fin_confirmee))
+        logger.info(
+            "Dictée %s : fenêtre fusionnée — %d jetons confirmés "
+            "[%.1f-%.1f s], recouvrement %d jetons",
+            session.id, len(confirme.split()), session.window_start,
+            fin_confirmee, m,
+        )
+
+    # Le provisoire devient la lecture la plus récente, recouvrement inclus.
+    session.window_text = texte
+    session.window_start = debut
+    for cle, valeur in (conf or {}).items():
+        try:
+            valeur = float(valeur)
+        except (TypeError, ValueError):
+            continue
+        precedent = session.window_conf.get(cle)
+        if precedent is None or valeur < float(precedent):
+            session.window_conf[cle] = valeur
+
+
+def _engager_provisoire(session: DictationSession) -> None:
+    """Engage le provisoire en part durable (fin de dictée, ou soupape).
+
+    La plage audio est exacte : le provisoire couvre ``[window_start,
+    offset_seconds]`` par construction (tout l'audio intermédiaire a été
+    inclus dans une fenêtre). La confiance accumulée est fusionnée en base.
+    """
+    if not session.window_text:
+        return
+    texte = session.window_text
+    debut, fin = session.window_start, session.offset_seconds
+    conf = session.window_conf
+    session.window_text = ""
+    session.window_start = 0.0
+    session.window_conf = {}
+    _store_part(session, texte, ("", ""), duration_seconds=0.0, words=None)
+    session.covered_ranges.append((debut, fin))
+    try:
+        with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
+            consultation = db.get(Consultation, session.consultation_id)
+            if consultation is not None:
+                _merge_conf_into(consultation, conf)
+                db.commit()
+    except Exception:
+        logger.exception("Dictée %s : confiance du provisoire non fusionnée", session.id)
+    logger.info(
+        "Dictée %s : provisoire engagé (%d caractères, [%.1f-%.1f s])",
+        session.id, len(texte), debut, fin,
+    )
+
+
+def _usage_fenetre(session: DictationSession, moteur: tuple,
+                   secondes: float) -> None:
+    """Facture l'audio réellement envoyé pour CETTE fenêtre (une ligne)."""
+    if not moteur[0] or secondes <= 0:
+        return
+    try:
+        owner = _session_owner(session)
+        with SessionLocal() as db:
+            usage.log_stt_usage(
+                db, owner=owner, consultation_id=session.consultation_id,
+                provider=moteur[0], model=moteur[1],
+                audio_seconds=int(round(secondes)),
+            )
+            db.commit()
+    except Exception:
+        logger.exception("Dictée %s : usage STT (fenêtre) non journalisé", session.id)
+
+
+def _transcribe_fenetre(session: DictationSession, hints: str,
+                        flush: bool = False) -> Optional[float]:
+    """Transcrit une fenêtre glissante et fusionne le résultat.
+
+    Retourne la durée d'audio consommée (curseur avancé), ou ``None`` s'il
+    n'y a pas assez d'audio neuf ou si la passe n'a rien pu consommer.
+    Fenêtre muette : le curseur avance, rien n'est écrit — le filet de fin
+    couvrira la plage si elle contient de la parole. Alignement raté : la
+    fenêtre est JETÉE (pas de frontière sûre pour découper le texte), l'audio
+    neuf est rattrapé en mini-tranche ajoutée au provisoire, et le curseur
+    n'avance que du rattrapage — la prochaine fenêtre (recouvrement porté à
+    ~45 s) retentera l'alignement.
+    """
+    taille = _fenetre_secondes()
+    pas = _fenetre_pas()
+    recouvrement = taille - pas
+
+    if not session.window_text:
+        # Première fenêtre en CROISSANCE : déclenchée dès ``pas`` secondes
+        # d'audio (premier texte à ~15 s), la fenêtre grandit à chaque passe
+        # (elle recouvre alors tout le provisoire, qui ne fausse rien) jusqu'à
+        # atteindre la taille de confirmation.
+        debut = session.offset_seconds
+        if session.received_seconds - debut < pas:
+            return None
+        fin_prevu = min(session.received_seconds, debut + taille)
+    else:
+        debut = max(0.0, session.offset_seconds - recouvrement)
+        if session.received_seconds - session.offset_seconds < pas:
+            return None
+        fin_prevu = (session.received_seconds if flush
+                     else session.offset_seconds + pas)
+
+    longueur = fin_prevu - debut
+    if longueur < _MIN_SEGMENT_SECONDS:
+        return None
+    try:
+        payload = extract_segment(session.audio_path, debut, longueur, longueur)
+    except TranscriptionError as exc:
+        logger.debug("Dictée %s : fenêtre non extractible (%s)", session.id, exc)
+        return None
+    if payload.duration_seconds < _MIN_SEGMENT_SECONDS:
+        return None
+    fin = debut + payload.duration_seconds
+
+    contexte = _contexte_tranche(session)
+    resultat = transcribe_payload(payload, hints, contexte_precedent=contexte)
+    texte = (resultat.get("transcript") or "").strip()
+    moteur = (resultat.get("provider") or "", resultat.get("model") or "")
+    words = resultat.get("words") or None
+    _usage_fenetre(session, moteur, payload.duration_seconds)
+
+    if texte:
+        conf = {}
+        if words:
+            try:
+                conf = med_grounding.conf_par_token(texte, words)
+            except Exception:
+                conf = {}
+        if not session.window_text:
+            # Croissance (premières fenêtres) : tout reste provisoire.
+            _fusionner_fenetre(session, texte, conf, debut, fin, moteur)
+            session.offset_seconds = fin
+            session.save()
+            return payload.duration_seconds
+        if debut <= session.window_start + 0.01:
+            # La fenêtre couvre ENTIÈREMENT le provisoire existant (phase de
+            # croissance) : le provisoire devient simplement la nouvelle
+            # lecture, sans alignement (rien à confirmer, rien à perdre).
+            _fusionner_fenetre(session, texte, conf, debut, fin, moteur,
+                               confirme=None)
+            session.offset_seconds = fin
+            session.save()
+            return payload.duration_seconds
+        confirme, m, ratio = _decoupe_fusion(
+            session.window_text, texte,
+            m_attendu=_recouvrement_attendu(session, texte, debut, fin))
+        if m >= _FUSION_MIN_JETONS:
+            _fusionner_fenetre(session, texte, conf, debut, fin, moteur,
+                               confirme=confirme)
+            if ratio < _FUSION_RATIO_FIABLE:
+                # Frontière incertaine (pic faible) : plage à re-vérifier.
+                session.verify_ranges.append((session.offset_seconds, fin))
+                logger.info(
+                    "Dictée %s : alignement marginal (%.2f) sur [%.1f-%.1f s] "
+                    "— plage marquée pour vérification",
+                    session.id, ratio, session.offset_seconds, fin,
+                )
+            session.offset_seconds = fin
+            session.save()
+            return payload.duration_seconds
+        logger.warning(
+            "Dictée %s : alignement de fenêtre raté (recouvrement < %d jetons) "
+            "— fenêtre jetée, rattrapage de [%.1f-%.1f s] en mini-tranche",
+            session.id, _FUSION_MIN_JETONS, session.offset_seconds, fin_prevu,
+        )
+        # Le curseur NE bouge pas : le rattrapage consomme l'audio neuf depuis
+        # l'ancien curseur. La fenêtre jetée a coûté son audio (journalisé
+        # ci-dessus) — le prix d'une frontière incertaine, rare et borné par
+        # la soupape d'engagement du provisoire.
+        if _rattraper_fenetre(session, hints):
+            return payload.duration_seconds
+        return None
+
+    logger.info(
+        "Dictée %s : fenêtre [%.1f-%.1f s] sans parole (reçu %.1f s)",
+        session.id, debut, fin, session.received_seconds,
+    )
+    session.offset_seconds = fin
+    session.save()
+    return payload.duration_seconds
+
+
+def _rattraper_fenetre(session: DictationSession, hints: str) -> bool:
+    """Alignement impossible : ajoute l'audio neuf au provisoire en mini-tranche.
+
+    Jamais d'engagement direct : le provisoire couvre déjà ``[window_start,
+    offset]`` — une part engagée maintenant se retrouverait AVANT le
+    provisoire dans l'ordre final. On étend donc le provisoire ; la prochaine
+    fenêtre (recouvrement porté à ~45 s) retentera l'alignement. Retourne
+    ``False`` si l'audio n'a pas pu être consommé (fin de fichier) —
+    l'appelant stoppe la passe sans avancer le curseur. Une erreur de
+    transport se propage : c'est un échec réel de transcription.
+    """
+    pas = _fenetre_pas()
+    try:
+        payload = extract_segment(session.audio_path, session.offset_seconds,
+                                  pas, pas)
+    except TranscriptionError as exc:
+        logger.debug("Dictée %s : rattrapage non extractible (%s)", session.id, exc)
+        return False
+    if payload.duration_seconds < _MIN_SEGMENT_SECONDS:
+        return False
+    fin = session.offset_seconds + payload.duration_seconds
+    resultat = transcribe_payload(
+        payload, hints, contexte_precedent=_contexte_tranche(session))
+    texte = (resultat.get("transcript") or "").strip()
+    moteur = (resultat.get("provider") or "", resultat.get("model") or "")
+    words = resultat.get("words") or None
+    _usage_fenetre(session, moteur, payload.duration_seconds)
+    if texte:
+        # Plage rattrapée (frontière ratée) : à re-vérifier à la fin.
+        session.verify_ranges.append((fin - payload.duration_seconds, fin))
+        conf = {}
+        if words:
+            try:
+                conf = med_grounding.conf_par_token(texte, words)
+            except Exception:
+                conf = {}
+        if not session.window_text:
+            session.window_start = fin - payload.duration_seconds
+        session.window_text = (
+            f"{session.window_text} {texte}".strip() if session.window_text else texte)
+        for cle, valeur in conf.items():
+            try:
+                valeur = float(valeur)
+            except (TypeError, ValueError):
+                continue
+            precedent = session.window_conf.get(cle)
+            if precedent is None or valeur < float(precedent):
+                session.window_conf[cle] = valeur
+        logger.info(
+            "Dictée %s : rattrapage +%d jetons (provisoire %d jetons, "
+            "[%.1f-%.1f s])",
+            session.id, len(texte.split()), len(session.window_text.split()),
+            session.window_start, fin,
+        )
+    if len(session.window_text.split()) > _FUSION_ENGAGEMENT_MAX_JETONS:
+        logger.warning(
+            "Dictée %s : provisoire non alignable (%d jetons) — engagement forcé",
+            session.id, len(session.window_text.split()),
+        )
+        _engager_provisoire(session)
+    session.offset_seconds = fin
+    session.save()
+    return True
+
+
+def _finir_fenetre(session: DictationSession, hints: str) -> Optional[float]:
+    """Queue finale de la dictée (mode fenêtres) : UNE passe, plein contexte.
+
+    À la fin, il ne reste que ``[offset, reçu]`` — quelques secondes à ~1,5
+    fois ``pas``. La transcriter en UNE fenêtre (jamais en tranches de 10 s :
+    la fin de dictée est la partie la plus sensible — plan, prescriptions) et
+    engager le texte directement : le provisoire est déjà engagé, l'ordre des
+    parts reste chronologique. Retourne la durée consommée, ``None`` quand
+    tout l'audio est traité.
+    """
+    debut = session.offset_seconds
+    longueur = min(session.received_seconds - debut, _fenetre_secondes())
+    if longueur < _MIN_SEGMENT_SECONDS:
+        return None
+    try:
+        payload = extract_segment(session.audio_path, debut, longueur, longueur)
+    except TranscriptionError as exc:
+        logger.debug("Dictée %s : queue non extractible (%s)", session.id, exc)
+        return None
+    if payload.duration_seconds < _MIN_SEGMENT_SECONDS:
+        return None
+    fin = debut + payload.duration_seconds
+    resultat = transcribe_payload(
+        payload, hints, contexte_precedent=_contexte_tranche(session))
+    texte = (resultat.get("transcript") or "").strip()
+    moteur = (resultat.get("provider") or "", resultat.get("model") or "")
+    words = resultat.get("words") or None
+    _usage_fenetre(session, moteur, payload.duration_seconds)
+    session.offset_seconds = fin
+    if texte:
+        try:
+            conf = med_grounding.conf_par_token(texte, words) if words else {}
+        except Exception:
+            conf = {}
+        _store_part(session, texte, moteur,
+                    duration_seconds=0.0, words=None)
+        session.covered_ranges.append((debut, fin))
+        if conf:
+            try:
+                with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
+                    consultation = db.get(Consultation, session.consultation_id)
+                    if consultation is not None:
+                        _merge_conf_into(consultation, conf)
+                        db.commit()
+            except Exception:
+                logger.exception("Dictée %s : confiance de queue non fusionnée", session.id)
+    session.save()
+    return payload.duration_seconds
+
+
+def _parts_pour_plage(session: DictationSession, r0: float, r1: float,
+                      contexte_parts: int = 1) -> Optional[Tuple[int, int]]:
+    """Indices (a, b) des parts couvrant la plage audio ``[r0, r1]`` (±contexte).
+
+    ``None`` si parts et ``covered_ranges`` ne sont pas alignés (le fold de
+    fin de dictée peut désaxer) — on renonce alors à cibler cette plage.
+    """
+    if not session.parts or len(session.parts) != len(session.covered_ranges):
+        return None
+    idx = [i for i, (c0, c1) in enumerate(session.covered_ranges)
+           if c0 < r1 and c1 > r0]
+    if not idx:
+        return None
+    return (max(0, min(idx) - contexte_parts),
+            min(len(session.parts) - 1, max(idx) + contexte_parts))
+
+
+def _reecouter_plage(session: DictationSession, a: int, b: int,
+                     hints: str) -> bool:
+    """Re-transcrit la plage des parts ``[a, b]`` en UNE passe, puis remplace.
+
+    À l'inverse du découpage 10 s de ``_rewrite_boundary`` : l'audio part en
+    UN SEUL appel (contexte maximal — c'est précisément ce que la dictée par
+    tranches lui a manqué) et le remplacement porte les parts entières. Le
+    texte d'origine est conservé si le service ne renvoie rien ou renvoie le
+    même texte. Persistance + rediffusion ``transcript_correct`` incluses.
+    """
+    if a < 0 or b < a or b >= len(session.parts):
+        return False
+    if len(session.parts) != len(session.covered_ranges):
+        return False
+    debut = session.covered_ranges[a][0]
+    end = session.covered_ranges[b][1]
+    longueur = end - debut
+    if longueur < _MIN_SEGMENT_SECONDS:
+        return False
+    try:
+        payload = extract_segment(session.audio_path, debut, longueur, longueur)
+    except TranscriptionError as exc:
+        logger.debug("Dictée %s : plage [%d-%d] non extractible (%s)",
+                     session.id, a, b, exc)
+        return False
+    resultat = transcribe_payload(
+        payload, hints,
+        contexte_precedent=" ".join(session.parts[:a]).strip() or None)
+    texte = (resultat.get("transcript") or "").strip()
+    moteur = (resultat.get("provider") or "", resultat.get("model") or "")
+    words = resultat.get("words") or None
+    _usage_fenetre(session, moteur, payload.duration_seconds)
+    if not texte:
+        return False
+    texte = _norm_spaces(texte)
+    ancien = _norm_spaces(" ".join(session.parts[a:b + 1]))
+    if ancien == texte:
+        logger.info(
+            "Dictée %s : re-écoute [%.1f-%.1f s] identique — rien à changer",
+            session.id, debut, end,
+        )
+        return False
+    logger.info(
+        "Dictée %s : re-écoute [%.1f-%.1f s] (%d jetons remplacés par %d) — "
+        "ancien %r, nouveau %r",
+        session.id, debut, end, len(ancien.split()), len(texte.split()),
+        ancien[:80], texte[:80],
+    )
+    conf: dict = {}
+    if words:
+        try:
+            conf = med_grounding.conf_par_token(texte, words)
+        except Exception:
+            conf = {}
+    session.parts[a:b + 1] = [texte]
+    session.parts_conf[a:b + 1] = [conf]
+    session.covered_ranges[a:b + 1] = [(debut, end)]
+    session.save()
+    # Persistance durable + rediffusion aux onglets (mêmes canaux que la
+    # stabilisation de frontière).
+    try:
+        owner = _session_owner(session)
+        with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
+            consultation = db.get(Consultation, session.consultation_id)
+            if consultation is not None:
+                consultation.raw_transcript = " ".join(session.parts).strip()
+                for cmap in session.parts_conf:
+                    _merge_conf_into(consultation, cmap)
+                consultation.updated_at = utcnow()
+                db.commit()
+    except Exception:
+        logger.exception("Dictée %s : persistance de la re-écoute impossible", session.id)
+    try:
+        live.publish(_session_owner(session), "transcript_correct", {
+            "consultation_id": session.consultation_id,
+            "session_id": session.id,
+            "parts": list(session.parts),
+        })
+    except Exception:
+        logger.exception("Dictée %s : rediffusion de la re-écoute impossible", session.id)
+    return True
+
+
+def _verifier_residuel(session: DictationSession, hints: str) -> None:
+    """Re-vérification RÉSIDUELLE de fin — jamais de retranscription complète.
+
+    Au « Terminer » (mode fenêtres), ne sont re-écoutées que les zones qui
+    ont raisonnablement pu se tromper :
+      1. les parts portant un garble de médicament (terme dicté douteux,
+         candidat phonétique) — priorité clinique ;
+      2. les plages marquées pendant la dictée : frontières d'alignement
+         marginales (pic de ratio < ``_FUSION_RATIO_FIABLE``) et plages
+         rattrapées en mini-tranche ;
+    chacune avec une part de contexte de chaque côté, en UNE passe à plein
+    contexte (``_reecouter_plage``). Budget ``stt_verify_max_seconds`` secondes
+    d'audio (0 = désactivé) ; les dépassements sont journalisés. Le texte
+    d'origine reste en place si la re-écoute n'apporte rien.
+    """
+    cibles: List[Tuple[int, int]] = []
+
+    def _cible(a: Optional[int], b: Optional[int]) -> None:
+        if a is None or b is None or a > b:
+            return
+        if b >= len(session.parts):
+            return
+        for (fa, fb) in cibles:
+            if not (b < fa or a > fb):
+                return  # chevauche une cible déjà retenue
+        cibles.append((a, b))
+
+    def _pour_part(i: int) -> None:
+        if 0 <= i < len(session.parts) \
+                and len(session.parts) == len(session.covered_ranges):
+            _cible(max(0, i - 1), min(len(session.parts) - 1, i + 1))
+
+    # 1) Garbles de médicaments : la part qui porte le terme douteux.
+    items = _grounding_meds.get(session.id) or []
+    for item in items:
+        jetons = [t for t in str(item.get("garble") or "").split() if t]
+        if not jetons and item.get("source") == "phonetic":
+            jetons = [t for t in str(item.get("name") or "").split() if t]
+        cles = [_jeton_norm(j) for j in jetons]
+        cles = [c for c in cles if c]
+        if not cles:
+            continue
+        for i, part in enumerate(session.parts):
+            mots = set(_jetons_norm(part))
+            if all(c in mots for c in cles):
+                _pour_part(i)
+                break
+
+    # 2) Plages marquées pendant la dictée (frontières marginales, rattrapage).
+    for (r0, r1) in list(session.verify_ranges):
+        if r1 - r0 < _SWEEP_MIN_REGION:
+            continue
+        plage = _parts_pour_plage(session, r0, r1)
+        if plage is not None:
+            _cible(*plage)
+
+    if not cibles:
+        session.verify_ranges = []
+        return
+
+    budget = _verifier_budget()
+    restant = budget
+    for (a, b) in cibles:
+        if len(session.covered_ranges) < b + 1:
+            continue
+        duree = session.covered_ranges[b][1] - session.covered_ranges[a][0]
+        if duree > restant:
+            logger.warning(
+                "Dictée %s : vérification des parts [%d-%d] hors budget "
+                "(%.0f s > %.0f s restants) — retranscription manuelle si besoin",
+                session.id, a, b, duree, restant,
+            )
+            continue
+        restant -= duree
+        logger.info(
+            "Dictée %s : vérification résiduelle des parts %d-%d "
+            "(%.0f s, %d s restants)",
+            session.id, a, b, duree, restant,
+        )
+        try:
+            _reecouter_plage(session, a, b, hints)
+        except Exception:
+            logger.exception("Dictée %s : re-écoute [%d-%d] impossible",
+                             session.id, a, b)
+    session.verify_ranges = []
+
+
+def _verifier_budget() -> float:
+    """Secondes d'audio maximaux dépensés par la vérification résiduelle."""
+    try:
+        return max(0.0, runtime_config.value_float("stt_verify_max_seconds", 60.0))
+    except Exception:
+        return 60.0
+
+
 def _transcribe_one(session: DictationSession, hints: str, final: bool,
                     flush: bool = False) -> Optional[float]:
     """
@@ -1981,16 +2754,39 @@ def _transcribe_one(session: DictationSession, hints: str, final: bool,
     text = (result.get("transcript") or "").strip()
     if text:
         # Couverture : cette plage est transcrite — le filet de fin n'y
-        # repassera pas. Une tranche muette ne laisse rien à rattraper (elle
-        # n'apparaît de toute façon pas dans les régions de parole).
+        # repassera pas. Une tranche muette reste volontairement non couverte
+        # : elle est soit confirmée silencieuse, soit récupérée plus tard.
         session.covered_ranges.append(
             (session.offset_seconds - payload.duration_seconds, session.offset_seconds)
         )
     if not text:
         # Tranche muette : le curseur avance quand même, sinon la boucle
-        # repasserait indéfiniment sur le même silence.
-        logger.info("Dictée %s : tranche de %.1f s sans parole",
-                    session.id, payload.duration_seconds)
+        # repasserait indéfiniment sur le même silence. Mais une fenêtre
+        # « sans parole » décidée pendant la dictée est SUSPECTE : sur un
+        # WebM encore en croissance, ffmpeg peut lire un cluster partiel
+        # comme du silence alors que l'audio contient de la parole (course
+        # lecture/écriture, observée sur l'instance de test — la moitié du
+        # texte d'une dictée partait ainsi en fumée). On la marque pour
+        # re-vérification à la passe suivante (``_reverify_silences``) : si
+        # elle redevient « parlante » une fois l'audio arrivé, elle est
+        # retranscrite et insérée à sa place, au lieu de rester perdue.
+        if not final:
+            session.unverified.append(
+                (session.offset_seconds - payload.duration_seconds,
+                 session.offset_seconds)
+            )
+        try:
+            taille_brut = os.path.getsize(session.audio_path)
+        except OSError:
+            taille_brut = -1
+        logger.info(
+            "Dictée %s : tranche de %.1f s sans parole "
+            "(reçu %.1f s, brut %d octets, %d fenêtre(s) suspecte(s))",
+            session.id, payload.duration_seconds,
+            session.received_seconds,
+            taille_brut,
+            len(session.unverified),
+        )
     _store_part(session, text,
                 (result.get("provider") or "", result.get("model") or ""),
                 duration_seconds=payload.duration_seconds,
@@ -2090,6 +2886,220 @@ def _subtract_ranges(base, cuts: List[Tuple[float, float]]) -> List[Tuple[float,
     return result
 
 
+# ---------------------------------------------------------------------------
+# Récupération des fenêtres « sans parole » (WebM en croissance)
+# ---------------------------------------------------------------------------
+# Une tranche découpée dans un WebM encore en cours d'écriture peut être lue
+# comme silencieuse alors que l'audio contient de la parole : ffmpeg se fie
+# aux graines/bordures de clusters, et la course lecture/écriture sur le
+# fichier brut rend la découpe non déterministe (observé sur l'instance de
+# test : 32 fenêtres de 10 s perdues sur 644 s de dictée, ~3 700 caractères
+# avalés en silence, puis retrouvés intégralement par la retranscription du
+# fichier complet). Trois lignes de défense :
+#   1. ``_reverify_silences`` — chaque fenêtre « sans parole » est re-vérifiée
+#      à la passe suivante, une fois l'audio arrivé, via silencedetect local
+#      (aucun appel STT) : parole présente → retranscription et insertion à
+#      sa place chronologique (``_inserer_part``), silence réel → acceptée ;
+#   2. ``_sweep_uncovered`` — le filet de fin re-transcrit au « Terminer »
+#      tout ce qui reste non couvert, dans la limite de
+#      ``stt_sweep_max_seconds`` ;
+#   3. la retranscription manuelle, filet ultime inchangé.
+# L'insertion se fait TOUJOURS à la position chronologique : une part
+# récupérée rejoint le transcript entre les parts adjacentes, jamais en fin
+# de liste (le filet historique appendait les trous à la fin, ce qui
+# mélangeait l'ordre de la note).
+
+
+def _inserer_part(session: DictationSession, texte: str, conf: dict,
+                  start: float, end: float) -> None:
+    """Insère une part récupérée à sa position CHRONOLOGIQUE.
+
+    ``parts``, ``parts_conf`` et ``covered_ranges`` avancent en verrou (une
+    part transcrite a toujours sa couverture, et une fenêtre muette aucune).
+    La position = nombre de plages dont la fin précède le début de la fenêtre.
+    """
+    position = 0
+    for (c0, c1) in session.covered_ranges:
+        if c1 <= start + 0.05:
+            position += 1
+        else:
+            break
+    session.parts.insert(position, texte)
+    session.parts_conf.insert(position, conf or {})
+    session.covered_ranges.insert(position, (start, end))
+
+
+def _persiste_et_diffuse(session: DictationSession) -> None:
+    """Écrit le transcript assemblé (parts) en base et le re-diffuse."""
+    try:
+        with _lock_for_consultation(session.consultation_id), SessionLocal() as db:
+            consultation = db.get(Consultation, session.consultation_id)
+            if consultation is not None:
+                consultation.raw_transcript = " ".join(session.parts).strip()
+                for cmap in session.parts_conf:
+                    _merge_conf_into(consultation, cmap)
+                consultation.updated_at = utcnow()
+                db.commit()
+        live.publish(_session_owner(session), "transcript_correct", {
+            "consultation_id": session.consultation_id,
+            "session_id": session.id,
+            "parts": list(session.parts),
+        })
+    except Exception:
+        logger.exception("Persistance du transcript récupéré impossible")
+
+
+def _range_a_parole(path: str, start: float, duree: float) -> bool:
+    """Y a-t-il une vraie parole dans ``[start, start+duree[`` du brut ?
+
+    Détection LOCALE (silencedetect ffmpeg, aucun appel STT — gratuit), sur
+    la même sensibilité que le reste de la chaîne. Une région de parole ≥
+    ``_SWEEP_MIN_REGION`` compte. Indécis (échec réseau/ffmpeg) → ``True`` :
+    on préfère payer une re-transcription plutôt que de perdre du contenu.
+    """
+    if duree <= 0:
+        return False
+    if not stt._ffmpeg_available():
+        return True
+    try:
+        log = _run_ffmpeg(
+            [
+                "-loglevel", "info", "-ss", f"{start:.3f}", "-t", f"{duree:.3f}",
+                "-i", path, "-vn",
+                "-af", (
+                    f"silencedetect=noise={settings.stt_silence_threshold_db}dB"
+                    f":duration=0.25"
+                ),
+                "-f", "null", "-",
+            ],
+            timeout=60,
+        )
+    except Exception:
+        return True
+    events = [(kind, float(value)) for kind, value in _SILENCE_RE.findall(log)]
+    curseur = 0.0
+    silence_en_cours = False
+    for kind, value in events:
+        if kind == "start":
+            if value - curseur >= _SWEEP_MIN_REGION:
+                return True
+            silence_en_cours = True
+        else:
+            curseur = value
+            silence_en_cours = False
+    if not silence_en_cours and duree - curseur >= _SWEEP_MIN_REGION:
+        return True
+    return False
+
+
+def _recuperer_span(session: DictationSession, start: float, end: float,
+                    hints: str) -> bool:
+    """Re-transcrit ``[start, end[`` et insère le texte à sa position.
+
+    Retourne ``True`` si au moins un morceau a été récupéré. La passe de
+    lecture est fraîche : le fichier a grandi depuis la fenêtre perdue, la
+    gravure est stable (course lecture/écriture résolue).
+    """
+    low, target, high = _window()
+    curseur = start
+    recupere = False
+    while end - curseur > 0.05:
+        restant = end - curseur
+        if restant <= high:
+            longueur = restant
+            real = restant
+        else:
+            longueur, real = find_cut_point(
+                session.audio_path, curseur, target, low, high)
+        try:
+            payload = extract_segment(session.audio_path, curseur, longueur, real)
+        except TranscriptionError:
+            break
+        if payload.duration_seconds < _MIN_SEGMENT_SECONDS:
+            break
+        curseur += payload.duration_seconds
+        try:
+            resultat = transcribe_payload(
+                payload, hints, contexte_precedent=_contexte_tranche(session),
+            )
+        except TranscriptionError as exc:
+            logger.warning(
+                "Dictée %s : récupération [%.1f-%.1f s] écartée — %s",
+                session.id, curseur - payload.duration_seconds, curseur, exc,
+            )
+            continue
+        texte = (resultat.get("transcript") or "").strip()
+        if not texte:
+            continue
+        conf = {}
+        if resultat.get("words"):
+            try:
+                conf = med_grounding.conf_par_token(
+                    texte, resultat.get("words") or [],
+                )
+            except Exception:
+                conf = {}
+        _inserer_part(session, texte, conf,
+                      curseur - payload.duration_seconds, curseur)
+        recupere = True
+        logger.info(
+            "Dictée %s : fenêtre [%.1f-%.1f s] récupérée (%d caractères)",
+            session.id, curseur - payload.duration_seconds, curseur, len(texte),
+        )
+    return recupere
+
+
+def _reverify_silences(session: DictationSession, hints: str) -> None:
+    """Re-vérifie les fenêtres « sans parole » une fois l'audio arrivé.
+
+    Appelée au début de chaque passe non finale (sous ``_lock_for``). Une
+    fenêtre encore près du bord reçu est reportée (l'audio peut n'être pas
+    encore là) ; les autres sont tranchées localement et gratuitement
+    (silencedetect) : parole présente → retranscrite et insérée à sa place,
+    silence réel → acceptée et oubliée. Les lointaines qui restent (never
+    confirmé) sont laissées au filet de fin (``_sweep_uncovered``).
+    """
+    if not session.unverified:
+        return
+    marge = _SWEEP_OVERLAP_SECONDS + 1.0
+    restants: List[Tuple[float, float]] = []
+    a_persiste = False
+    for start, end in session.unverified:
+        if end > session.received_seconds - marge:
+            restants.append((start, end))
+            continue
+        if _range_a_parole(session.audio_path, start, end - start):
+            if _recuperer_span(session, start, end, hints):
+                a_persiste = True
+        else:
+            logger.info(
+                "Dictée %s : fenêtre [%.1f-%.1f s] confirmée silencieuse",
+                session.id, start, end,
+            )
+    session.unverified = restants
+    session.save()
+    if a_persiste:
+        _persiste_et_diffuse(session)
+        maybe_schedule_grounding(session.id, session.username)
+
+
+def _sweep_budget() -> float:
+    """Secondes d'audio maximaux re-transcrits par le filet de fin.
+
+    ``stt_sweep_max_seconds`` (0 = illimité). Une dictée à longues pauses peut
+    révéler des dizaines de trous : le balayage complet retarderait le
+    « Terminer » de minutes. Passé le budget, les trous restants sont signalés
+    au journal — la retranscription manuelle (ou un second passage) les
+    récupérera.
+    """
+    try:
+        return max(0.0, runtime_config.value_float(
+            "stt_sweep_max_seconds", 300.0,
+        ))
+    except Exception:
+        return 300.0
+
+
 def _sweep_uncovered(session: DictationSession, hints: str) -> None:
     """
     Filet de fin : re-transcrit les zones de parole non couvertes.
@@ -2097,7 +3107,10 @@ def _sweep_uncovered(session: DictationSession, hints: str) -> None:
     Au « Terminer », on re-parcourt le fichier brut avec silencedetect
     (détection SERVEUR, indépendante du VAD du navigateur) et on compare aux
     plages déjà transcrites (``covered_ranges``). Tout trou — énoncé que le
-    VAD a manqué, tranche qui avait échoué — est re-extraite et re-transcrite.
+    VAD a manqué, tranche qui avait échoué ou fenêtre lue comme silencieuse
+    pendant la dictée — est re-extraite et re-transcrite, insérée à sa
+    position chronologique (``_transcribe_region``), dans la limite de
+    ``stt_sweep_budget``.
 
     L'audio brut est resté complet tout du long : c'est ce qui rend cette
     reprise possible sans avoir rien gardé d'autre. Une région qui échoue est
@@ -2113,21 +3126,39 @@ def _sweep_uncovered(session: DictationSession, hints: str) -> None:
         (c0 - _SWEEP_OVERLAP_SECONDS, c1 + _SWEEP_OVERLAP_SECONDS)
         for c0, c1 in session.covered_ranges
     ]
+    budget = _sweep_budget()
+    depense = 0.0
     trous = _subtract_ranges(regions, couvert)
+    pour_suite = 0.0
     for start, end in trous:
         if end - start < _SWEEP_MIN_REGION:
+            continue
+        depense += end - start
+        if budget and depense > budget:
+            pour_suite += end - start
             continue
         logger.info(
             "Dictée %s : trou de %.1f s détecté en fin (%.1f-%.1f s), re-transcription",
             session.id, end - start, start, end,
         )
         _transcribe_region(session, start, end, hints)
+    if pour_suite > 0:
+        logger.warning(
+            "Dictée %s : %d trou(s) hors budget du filet (%.0f s d'audio) — "
+            "retranscrivez manuellement ou relancez la passe",
+            session.id, pour_suite,
+        )
 
 
 def _transcribe_region(session: DictationSession, start: float, end: float, hints: str) -> None:
     """Transcrit l'intervalle [start, end[ du fichier brut, en découpant si
     nécessaire (un trou long repasse par les coupes au silence, comme le
-    découpage en cours de dictée)."""
+    découpage en cours de dictée).
+
+    Chaque morceau est INSÉRÉ à sa position chronologique (``_inserer_part``),
+    jamais appendé : un trou au milieu de la dictée doit retrouver sa place
+    dans la note, pas sa fin.
+    """
     low, target, high = _window()
     curseur = start
     while end - curseur > 0.05:
@@ -2157,15 +3188,20 @@ def _transcribe_region(session: DictationSession, start: float, end: float, hint
             )
             continue
         text = (result.get("transcript") or "").strip()
-        if text:
-            session.covered_ranges.append(
-                (curseur - payload.duration_seconds, curseur)
-            )
-        _store_part(session, text,
-                    (result.get("provider") or "", result.get("model") or ""),
-                    duration_seconds=payload.duration_seconds,
-                    words=result.get("words") or None)
+        if not text:
+            continue
+        conf = {}
+        if result.get("words"):
+            try:
+                conf = med_grounding.conf_par_token(
+                    text, result.get("words") or [],
+                )
+            except Exception:
+                conf = {}
+        _inserer_part(session, text, conf,
+                      curseur - payload.duration_seconds, curseur)
     session.save()
+    _persiste_et_diffuse(session)
 
 
 def process_pending(session_id: str, username: str, final: bool = False) -> DictationSession:
@@ -2201,6 +3237,17 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
         _bind_template_language(session.template_id)
         hints = _phrase_hints(session.template_id)
         _, _, high = _window()
+        fenetres = fenetrage_actif()
+
+        # Les fenêtres « sans parole » de la passe précédente sont re-vérifiées
+        # maintenant que l'audio a grandi (voix récupérée et insérée à sa
+        # place, silence confirmé accepté) — avant de découper la suite.
+        # EN MODE FENÊTRES, la re-vérification est écartée : une insertion
+        # positionnelle au milieu d'un provisoire non encore engagé briserait
+        # l'ordre des parts ; les plages muettes sont couvertes par le filet
+        # de fin (``_sweep_uncovered``), qui travaille sur le fichier complet.
+        if not final and not fenetres:
+            _reverify_silences(session, hints)
 
         # Fin d'énoncé signalée par le navigateur : la première tranche de
         # cette passe part immédiatement, coupée au premier silence après un
@@ -2208,6 +3255,11 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
         # réellement transcrite — s'il n'y a pas encore assez d'audio reçu
         # (le fragment portant la fin de l'énoncé n'est pas arrivé), il
         # reste posé pour la prochaine passe.
+        if final:
+            # Le provisoire rejoint les parts AVANT la passe finale : la
+            # queue restante (``[offset, reçu]``) est ensuite transcrite par
+            # le chemin historique, dans l'ordre.
+            _engager_provisoire(session)
         flush = session.flush_requested
 
         while True:
@@ -2215,10 +3267,25 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
                 if flush:
                     if not should_flush(session):
                         break
+                elif fenetres:
+                    if not should_process_fenetres(session):
+                        break
                 elif not should_process(session):
                     break
             try:
-                duration = _transcribe_one(session, hints, final, flush)
+                if not final and fenetres:
+                    duration = _transcribe_fenetre(session, hints, flush)
+                    if duration is not None and flush:
+                        flush = False
+                        session.flush_requested = False
+                        session.save()
+                elif final and fenetres:
+                    # Queue finale en UNE passe à plein contexte (la partie
+                    # la plus sensible — plan et prescriptions — ne passe pas
+                    # par le découpage 10 s).
+                    duration = _finir_fenetre(session, hints)
+                else:
+                    duration = _transcribe_one(session, hints, final, flush)
             except TranscriptionError as exc:
                 session.last_error = str(exc)
                 session.save()
@@ -2235,7 +3302,7 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
             # fin du fichier : inutile de refaire un tour pour rien.
             if final and duration < high - 0.5:
                 break
-            if flush:
+            if flush and not fenetres:
                 # Un énoncé suffit : le cadencement batch reprend ensuite. Le
                 # drapeau est persisté — ``_transcribe_one`` a déjà sauvé la
                 # session AVANT ce point, il faut repersister l'effacement.
@@ -2244,6 +3311,11 @@ def process_pending(session_id: str, username: str, final: bool = False) -> Dict
                 session.save()
 
         if final:
+            # Vérification résiduelle AVANT le filet : elle réécrit des parts
+            # et leur couverture ; le filet ne couvre ensuite que les trous
+            # restants. Zéro retranscription complète par construction.
+            if fenetres:
+                _verifier_residuel(session, hints)
             if runtime_config.value("stt_vad_finish_sweep") != "false":
                 _sweep_uncovered(session, hints)
             # Redites de la reconnaissance vocale retirées du transcript final

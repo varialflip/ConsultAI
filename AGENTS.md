@@ -163,10 +163,18 @@ même commit** :
   `med_grounding.py`) : le modèle LLM actif (`llm.active_model()`) identifie
   la région médicaments dans la transcription brute. Le résultat est persisté
   (`med_region_json` sur `Consultation`), affiché dans l'onglet Validation
-  (carte violette), et utilisé pour cibler le scan phonétique. Si le modèle a
-  le thinking activé (`_openrouter_reasoning_effort() != "none"`), le chemin
-  LLM est annulé et le fallback local `_medlist_regions` s'exécute. Timeout
-  HTTP : 30 s. Toute erreur → `None` → fallback local. La région est effacée
+  (carte violette), et utilisé pour cibler le scan phonétique. **Plus aucun
+  gate « thinking » depuis le 2026-09-08** : l'ancien test
+  (`_openrouter_reasoning_effort() != "none"`) annulait la détection dès que
+  le panneau réglait un effort ≠ none (ex. minimal sur DeepSeek v4) alors
+  que l'appel de région désactive LUI-MÊME le raisonnement
+  (`reasoning.effort=none`, vérifié 0 jeton de pensée) — la détection
+  disparaissait silencieusement (repli local sans carte ni titre). Le
+  réglage d'effort du panneau n'influence plus la détection de région.
+  Timeout HTTP : 30 s. Toute erreur → `None` → fallback local, désormais
+  JOURNALISÉE en WARNING (clé absente, réponse vide, réponse non retrouvée
+  dans la transcription) : toute évolution doit préserver cette visibilité.
+  La région est effacée
   sur retranscription/import/édition manuelle ; redétectée paresseusement par
   `_apply_grounding()`. `clearSecondPassView()` appelle `renderMedRegion(null)`
   au début de chaque génération. Depuis 2026-09-07, cette même détection
@@ -180,6 +188,37 @@ même commit** :
   `_apply_grounding` (filet synchrone) sans écraser une raison au clavier).
   Le prompt de région doit rester court et efficace (une réponse d'une seule
   ligne `TITRE:` en plus du texte de région).
+- **Fenêtre glissante live** (`stt_sliding_window`, 2026-09-08, cf.
+  `_transcribe_fenetre` / `_fusionner_fenetre` / `_aligner_chevauchement` dans
+  `dictation.py`) : mode optionnel — fenêtres 90 s, pas 15 s (60 s se vaut,
+  120 s DÉGRADE — mesures `tests/simul_sliding_window.py` : plateau 92 %,
+  tranches 81 %). Croissance initiale : la fenêtre part de ~15 s et grandit
+  (premier texte ~15 s, `fin_prevu = min(reçu, debut+taille)` + embranche
+  croissance quand la fenêtre couvre tout le provisoire). Le provisoire
+  (`window_text`/`window_conf`/`window_start` sur la session, exposé
+  `to_public.window_text`) couvre ``[window_start, offset_seconds]`` ;
+  l'alignement TEXTUEL du recouvrement (pas de timestamps chez Cohere)
+  cherche l'ARGMAX du ratio dans la bande ``attendu±40 %``
+  (``_recouvrement_attendu``, depuis la géométrie audio) — un glouton « plus
+  grand m d'abord » trouvait des correspondances étirées (ratio 0.75 tout
+  juste) qui confirmaient quasi tout le provisoire et PERDAIENT ~15 s de
+  texte par passe (61 % de similarité avant correctif, 92 % après). Le
+  RATIO du pic est conservé : pic < ``_FUSION_RATIO_FIABLE`` (0.87) → plage
+  marquée ``verify_ranges`` pour la vérification résiduelle. Alignement
+  raté → fenêtre jetée, audio neuf en mini-tranche AU provisoire (jamais
+  d'engagement direct : l'ordre des parts doit rester chronologique),
+  soupape ~280 jetons. À la fin de dictée : ``_engager_provisoire`` AVANT la
+  passe finale ; queue restante transcrit en UNE passe (``_finir_fenetre``,
+  ≤ 90 s, NOMBRE de passes perçu minimum) ; **``_verifier_residuel``** =
+  re-écoute RÉSIDUELLE bornée (garbles de médicaments via ``_grounding_meds`,
+  plages marginales/rattrapées) en UNE passe à plein contexte par plage
+  (``_reecouter_plage``, remplacement en place + SSE), budget
+  ``stt_verify_max_seconds`` (60 s, 0 = off) — JAMAIS de retranscription
+  complète ; ``_reverify_silences`` est écarté en mode fenêtres (l'insertion
+  positionnelle briserait l'ordre) — le filet de fin couvre. Toute évolution
+  doit être re-simulée avec ``tests/simul_sliding_window.py`` (seuil ≥ 90 %
+  de similarité jetons face à la passe complète) et passer les régressions
+  ``tests/test_sliding_window.py`` (STT moqué, conservation exacte).
 - **`_RELEASE_FUSED_RE`** (2026-09-07) : le STT fusionne parfois les codes de
   formulation (MR, SR, XR, XL, CD, PB) avec le chiffre de dose (« MR90 »).
   Le regex `_RELEASE_FUSED_RE` sépare ces combinaisons (« MR 90 ») dans
@@ -241,7 +280,15 @@ même commit** :
   génération/live-list d'une autre), et un état d'instance se volerait la
   fenêtre de focus entre threads. Les setters DOIVENT tourner dans le MÊME
   thread que les passes qui consomment la région (jamais traverser une
-  frontière de thread avec une région posée).
+   frontière de thread avec une région posée).
+- **Fenêtres STT live en WebM croissant** (2026-09-08) : une tranche classée
+  silencieuse pendant l'append du fichier brut est conservée comme fenêtre
+  suspecte, re-vérifiée à la passe suivante par `silencedetect`, puis
+  retranscrite et insérée à sa position si de la parole est retrouvée. Le
+  filet `stt_vad_finish_sweep` reste actif par défaut dans tous les modes,
+  borné par `stt_sweep_max_seconds` (300 s par défaut, 0 illimité) ; toute
+  modification de ce budget doit être re-mesurée sur une dictée pausée, car
+  le « Terminer » est bloquant pendant cette récupération.
 
 Le déploiement de référence tourne sur la machine `/opt/dictai` : tout réglage
 de production y est vérifiable par `sudo docker exec consultai python3 -c …`

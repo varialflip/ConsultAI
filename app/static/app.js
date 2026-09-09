@@ -568,7 +568,13 @@
    * petit flash signale le « le texte se corrige par l'arrière ».
    */
   function rebuildCommittedText({ pulse = false } = {}) {
-    committedText = formatSentences(committedParts.join(' ').replace(/\s+/g, ' '));
+    // Fenêtre glissante : le provisoire (dictation.windowText) s'affiche À LA
+    // SUITE des parts confirmées et est REMPLACÉ à chaque passe — les
+    // dernières secondes restent révisables par la fenêtre suivante.
+    const base = committedParts.join(' ').replace(/\s+/g, ' ');
+    const avecProvisoire = (dictation.windowText && dictation.active)
+      ? `${base} ${dictation.windowText}`.replace(/\s+/g, ' ') : base;
+    committedText = formatSentences(avecProvisoire);
     transcriptReveal.set(committedText);
     if (pulse) flashElement('transcript');
   }
@@ -995,6 +1001,7 @@
     appliedParts: 0,      // tranches déjà recopiées dans la transcription
     pollHandle: null,
     active: false,
+    windowText: '',       // fenêtre glissante : texte provisoire (révisable)
   };
 
   /** Cadences réglées par le serveur (/api/config), avec des valeurs de repli. */
@@ -1487,8 +1494,20 @@
   /** Recopie dans la transcription les tranches que le serveur vient de rendre. */
   function applyDictationParts(session) {
     if (!session || !Array.isArray(session.parts)) return;
+    // Fenêtre glissante : le texte provisoire (window_text) est replacé à
+    // chaque mise à jour — il complète les parts confirmées sans jamais s'y
+    // accumuler. Absent (serveur sans fenêtres) → comportement historique.
+    let provisoireChange = false;
+    if (typeof session.window_text === 'string'
+        && session.window_text !== dictation.windowText) {
+      dictation.windowText = session.window_text;
+      provisoireChange = true;
+    }
     const fresh = session.parts.slice(dictation.appliedParts);
-    if (!fresh.length) return;
+    if (!fresh.length) {
+      if (provisoireChange) rebuildCommittedText();
+      return;
+    }
     dictation.appliedParts = session.parts.length;
 
     // La base est ``committedText``, jamais la valeur live de la boîte (un
@@ -1608,6 +1627,7 @@
     dictation.retryHandle = null;
     dictation.appliedParts = 0;
     dictation.active = false;
+    dictation.windowText = '';
     updateDictationStatus();
   }
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import math
 import os
 import re
@@ -27,6 +28,8 @@ import sqlite3
 import threading
 import time
 import unicodedata
+
+logger = logging.getLogger(__name__)
 
 #: Levenshtein accéléré en C (rapidfuzz). Optionnel au démarrage : l'image doit
 #: être reconstruite avec `rapidfuzz` (voir requirements.txt) pour que la
@@ -3569,31 +3572,21 @@ _REGION_PROMPT = (
 _REGION_TIMEOUT = 30
 
 
-def _is_thinking_model(provider: str) -> bool:
-    """Vérifie si le modèle LLM actif utilise du thinking/raisonnement.
-
-    Si c'est le cas, on n'appelle PAS le LLM pour la détection de région :
-    le thinking consommerait tout le budget de tokens sans produire de texte.
-    """
-    if provider == "openrouter":
-        try:
-            from app.llm import _openrouter_reasoning_effort
-            effort = _openrouter_reasoning_effort()
-            return effort is not None and effort != "none"
-        except Exception:
-            return False
-    # Gemini, Cohere, Mistral : pas de thinking par défaut
-    # Custom : on tente (le param reasoning est ignoré si non supporté)
-    return False
-
-
 def _call_openrouter_region(model: str, prompt: str) -> dict | None:
-    """Appel OpenRouter pour la détection de région (openai SDK)."""
+    """Appel OpenRouter pour la détection de région (openai SDK).
+
+    ``reasoning.effort=none`` est envoyé EXPLICITEMENT : même sur un modèle à
+    raisonnement (DeepSeek v4 notamment), la pensée est désactivée pour CET
+    appel (vérifié : 0 jeton de raisonnement), qui reste donc court et
+    budgété. Un modèle qui ignorerait ce paramètre ne produirait qu'un
+    contenu vide → ``None`` → repli local, sans jamais bloquer la dictée.
+    """
     try:
         import openai as openai_sdk
         from app.config import settings
         key = settings.openrouter_api_key
         if not key:
+            logger.warning("Région médicaments : clé OpenRouter absente, détection annulée")
             return None
         client = openai_sdk.OpenAI(
             api_key=key,
@@ -3615,6 +3608,7 @@ def _call_openrouter_region(model: str, prompt: str) -> dict | None:
             "completion_tokens": usage.completion_tokens if usage else 0,
         }
     except Exception:
+        logger.exception("Région médicaments : appel OpenRouter impossible (%s)", model)
         return None
 
 
@@ -3625,6 +3619,7 @@ def _call_gemini_region(model: str, prompt: str) -> dict | None:
         from app.config import settings
         key = settings.google_api_key
         if not key:
+            logger.warning("Région médicaments : clé Gemini absente, détection annulée")
             return None
         client = genai.Client(api_key=key)
         resp = client.models.generate_content(
@@ -3640,6 +3635,7 @@ def _call_gemini_region(model: str, prompt: str) -> dict | None:
             "completion_tokens": getattr(usage, "candidates_token_count", 0) or 0,
         }
     except Exception:
+        logger.exception("Région médicaments : appel Gemini impossible (%s)", model)
         return None
 
 
@@ -3671,8 +3667,9 @@ def _call_http_region(base_url: str, api_key: str, model: str,
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
         }
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
-            KeyError, Exception):
+    except Exception:
+        logger.exception("Région médicaments : appel HTTP impossible (%s / %s)",
+                         base_url, model)
         return None
 
 
@@ -3751,10 +3748,19 @@ def detect_med_region(text: str) -> dict | None:
 
     Retourne un dict ``{"region_text", "token_start", "token_end", "titre",
     "model", "provider", "time_s", "prompt_tokens", "completion_tokens"}`` ou
-    ``None`` si le LLM n'est pas disponible, utilise du thinking, échoue, ou
-    si le texte retourné n'est pas trouvé dans ``text``. ``titre`` est un
-    libellé court (8 mots max) pour retrouver le brouillon, demandé au modèle
-    en fin de la même réponse que la région.
+    ``None`` si le LLM n'est pas disponible, échoue, ou si le texte retourné
+    n'est pas trouvé dans ``text``. ``titre`` est un libellé court (8 mots
+    max) pour retrouver le brouillon, demandé au modèle en fin de la même
+    réponse que la région.
+
+    Le gate « modèle à thinking » a été retiré (2026-09-08) : l'appel
+    OpenRouter désactive LUI-MÊME le raisonnement (``reasoning.effort=none``,
+    vérifié sur DeepSeek v4 — 0 jeton de pensée), donc le réglage
+    ``openrouter_llm_reasoning_effort`` du panneau (minimal, low, medium…)
+    n'empêche plus la détection de région. Avant, ce gate annulait la
+    détection silencieusement et le repli local ``_medlist_regions`` prenait
+    le relais — sans carte violette ni titre. Tout échec est maintenant
+    journalisé (WARNING) pour rester diagnostiquable.
     """
     try:
         from app import llm as llm_mod
@@ -3764,10 +3770,7 @@ def detect_med_region(text: str) -> dict | None:
     provider = llm_mod.active_provider()
     model = llm_mod.active_model()
     if not model:
-        return None
-
-    # Thinking → annuler (le thinking consommerait tout le budget)
-    if _is_thinking_model(provider):
+        logger.debug("Région médicaments : aucun modèle LLM actif, détection annulée")
         return None
 
     prompt = _REGION_PROMPT.format(text)
@@ -3789,6 +3792,9 @@ def detect_med_region(text: str) -> dict | None:
                 key = settings.mistral_api_key
             if base and key:
                 result = _call_http_region(base, key, model, prompt)
+            else:
+                logger.warning("Région médicaments : %s sans adresse ou clé — détection annulée",
+                               provider)
         elif provider in ("custom", "qwen_omni"):
             from app.config import settings
             if provider == "custom":
@@ -3799,18 +3805,36 @@ def detect_med_region(text: str) -> dict | None:
                 key = settings.qwen_omni_api_key
             if base and key:
                 result = _call_http_region(base, key, model, prompt)
+            else:
+                logger.warning("Région médicaments : %s sans adresse ou clé — détection annulée",
+                               provider)
     except Exception:
-        pass
+        logger.exception("Région médicaments : échec inattendu (%s / %s)", provider, model)
 
     elapsed = round(time.monotonic() - t0, 2)
 
     if not result or not result.get("content"):
+        logger.warning(
+            "Région médicaments : réponse vide (%s / %s, %.1f s) — repli local",
+            provider, model, elapsed,
+        )
         return None
 
     parsed = _parse_region_response(result["content"], text)
     if not parsed:
+        logger.warning(
+            "Région médicaments : réponse non retrouvée dans la transcription "
+            "(%s / %s, %.1f s, %d jetons de sortie) — repli local. Début : %r",
+            provider, model, elapsed, result.get("completion_tokens", 0),
+            result["content"][:120],
+        )
         return None
 
+    logger.info(
+        "Région médicaments : %d-%d jetons, %.1f s, %d jetons LLM (%s / %s), titre %r",
+        parsed["token_start"], parsed["token_end"], elapsed,
+        result.get("completion_tokens", 0), provider, model, parsed.get("titre", ""),
+    )
     return {
         "region_text": parsed["region_text"],
         "token_start": parsed["token_start"],

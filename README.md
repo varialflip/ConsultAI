@@ -969,6 +969,36 @@ Le texte de la transcription s'affiche **progressivement** dans le panneau STT
 (« token par token »), avec la même mécanique que la note structurée — que ce
 soit les segments committés ou la ligne provisoire du mode `sse`.
 
+**Fenêtre glissante (live)** — `STT_SLIDING_WINDOW`, défaut `off` : au lieu
+de tranches de 10 s transcrites isolément, la dictée live transcrit des
+**fenêtres de 90 s** (pas de 15 s, recouvrement de 75 s) et fusionne les
+résultats par **alignement textuel du recouvrement** (les jetons normalisés
+de la queue du provisoire et de la tête de la nouvelle fenêtre décrivent le
+même audio ; la taille attendue du recouvrement est dérivée de la géométrie
+audio, et l'alignement choisit le pic de similarité dans cette bande). Le
+premier texte apparaît après ~15 s (la fenêtre **croît** de 15 à 90 s au
+début de la dictée) ; le préfixe avant le recouvrement devient définitif et
+le provisoire — les 90 dernières secondes — reste révisable à chaque passe.
+Mesuré sur des dictées réelles : similarité live ↔ transcription complète
+passe de **81 % (tranches) à ~92 % (fenêtres 60-90 s)** — un plateau : 60 s
+et 90 s se valent (le résiduel est de la variance du modèle, qui va dans les
+deux sens : la passe complète a aussi ses garbles) et **120 s dégrade**
+(81 %, 8 rattrapages). Le coût vaut ~6× l'audio envoyé au STT (3× à 45 s
+avec pas 30 s, même qualité mesurée). Sans timestamps, un alignement
+incertain ne confirme rien : l'audio neuf rejoint le provisoire en
+mini-tranche, soupape à ~280 jetons. Au **« Terminer »**, il n'y a pas de
+retranscription complète —
+ - la queue restante est transcrite en UNE passe à plein contexte (≤ 90 s) ;
+ - **vérification résiduelle bornée** (`stt_verify_max_seconds`, 60 s
+   d'audio) : re-écoute en une passe de contexte long des plages doutées —
+   parts portant un garble de médicament, frontières d'alignement
+   marginales, plages rattrapées — la plage est remplacée en place si la
+   nouvelle lecture diffère, et rediffusée en SSE ;
+ - le filet de fin (`stt_vad_finish_sweep`) couvre toujours les trous.
+Le mode `sse` (Mistral) n'est pas couvert (son propre chemin). Simulation et
+balayage de paramètres : `tests/simul_sliding_window.py` ; régressions :
+`tests/test_sliding_window.py`.
+
 **Contexte conservé en mode `sse`.** Contrairement à une session par énoncé, le
 mode `sse` garde **une seule session WebSocket par dictée** : chaque énoncé y
 est ajouté, et le modèle de streaming conserve le contexte des énoncés
@@ -998,6 +1028,18 @@ Précisions importantes :
   serveur re-parcourt l'audio brut (détection de parole par ffmpeg, côté
   serveur) et **re-transcrit tout passage manqué** — un énoncé que le VAD
   n'avait pas vu, une tranche qui avait échoué. Rien n'est perdu.
+- **État de session résilient.** Les fragments sont réessayés après une coupure
+  réseau et l'état JSON de la dictée est écrit par remplacement atomique, avec
+  une sauvegarde temporaire propre à chaque opération. Une scrutation, un upload
+  et une transcription de fond simultanés ne peuvent donc plus produire un
+  état partiellement écrit qui interromprait les fragments suivants.
+- **Fenêtres silencieuses re-vérifiées.** Une fenêtre classée silencieuse
+  pendant que le WebM grandit est recontrôlée à la passe suivante par
+  `silencedetect`, sans appel STT si le silence est réel ; si de la parole est
+  retrouvée, elle est retranscrite et réinsérée à sa position. Le filet de fin
+  reste la sécurité ultime. Son budget admin `stt_sweep_max_seconds` vaut 300 s
+  par défaut (`0` = illimité), afin de ne pas bloquer indéfiniment « Terminer »
+  sur une dictée très pausée.
 - **Une seule transcription par plage d'audio.** Le VAD accélère le
   déclenchement de la passe existante ; il n'ajoute pas de seconde passe.
 - **`sse` envoie l'audio à l'API Mistral** (hors de la machine) : engagement
@@ -1086,6 +1128,12 @@ Seroquel, n° 42) ; le scan complet les retrouve tous et écrase le brouillon,
   clavier si présente, sinon ce libellé, sinon le nom du gabarit. Le prompt de
   région reste une consigne courte et formatée en une ligne `TITRE:` — aucun
   champ supplémentaire n'est relu, l'identité du patient est toujours exclue.
+  L'appel de région **désactive lui-même le raisonnement** (`reasoning.effort=none`
+  chez OpenRouter) : le réglage « Raisonnement » du panneau (minimal, low,
+  medium…) n'empêche plus la détection, qui fonctionnait auparavant
+  silencieusement en repli local sans carte ni titre. Tout échec de détection
+  est journalisé (clé absente, réponse vide, région non retrouvée) pour rester
+  diagnostiquable.
 - **Réponse de génération fiable** : la note affichée en continu est confirmée
   par la réponse finale de `/api/generate`, sans dépendre de l'ancien retour de
   métadonnées supprimé.

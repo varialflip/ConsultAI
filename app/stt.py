@@ -536,8 +536,9 @@ def transcribe_payload(
     # importé, l'absence de parole reste une erreur à signaler.
     if payload.allow_silence and payload.effective_seconds < _MIN_SPEECH_SECONDS:
         logger.info(
-            "Tranche de %.1f s sans parole après retrait des silences : aucun appel au service",
-            payload.duration_seconds,
+            "Tranche de %.1f s sans parole après retrait des silences "
+            "(durée envoyée %.2f s) : aucun appel au service",
+            payload.duration_seconds, round(payload.effective_seconds or 0.0, 2),
         )
         return {
             "transcript": "",

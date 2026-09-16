@@ -1302,11 +1302,6 @@ class ThemeIn(BaseModel):
     theme: str = Field("", max_length=32)
 
 
-class SecondPassIn(BaseModel):
-    #: « Validation » : auditer chaque note après génération (audio↔note).
-    enabled: bool
-
-
 @app.put("/api/me/language")
 def put_my_language(payload: LanguageIn, request: Request):
     """
@@ -1348,14 +1343,6 @@ def put_my_theme(payload: ThemeIn, request: Request):
             for tid, label_fr, label_en, hex_color in preferences.THEMES
         ],
     }
-
-
-@app.put("/api/me/second_pass")
-def put_my_second_pass(payload: SecondPassIn, request: Request):
-    """Enregistre la préférence « Validation » de l'usager courant."""
-    user = current_user(request)
-    retenu = preferences.set_second_pass(user.owner_key, payload.enabled)
-    return {"second_pass": retenu}
 
 
 @app.get("/api/me/usage")
@@ -1414,9 +1401,10 @@ async def api_config(request: Request):
         "llm_bypass_stt": audio_opts["bypass_stt"],
         "llm_bypass_stt_keep_transcript": audio_opts["keep_transcript"],
         "gemini_backend": "vertex" if settings.gemini_use_vertex else "api_key",
-        # « Validation » : capable (fournisseur audio) et préférence de l'usager.
+        # « Validation » : capable (fournisseur audio) et interrupteur GLOBAL
+        # du panneau (plus de préférence par usager).
         "verification_capable": llm.verification_capable(),
-        "second_pass": preferences.second_pass_for(user.owner_key),
+        "second_pass": runtime_config.value("second_pass_enabled") == "true",
         "max_audio_mb": settings.max_audio_mb,
         "is_template_admin": user.is_template_admin,
         #: L'utilisateur courant : le client en a besoin pour reconnaître ses
@@ -2938,6 +2926,14 @@ async def api_generate(
 
     model_name = None
 
+    # « Validation » : interrupteur GLOBAL du panneau (plus de préférence par
+    # usager). Le client envoie ``second_pass``, mais c'est ce réglage qui
+    # décide — un client périmé ne peut pas forcer l'audit.
+    second_pass_actif = (
+        payload.second_pass
+        and runtime_config.value("second_pass_enabled") == "true"
+    )
+
     # Consigne système partagée entre la mise en forme et l'audit « Validation »
     # (la MÊME chaîne, pour que [consigne système + audio] soit un préfixe
     # commun réutilisé par le cache implicite de Gemini — voir CHANGELOG
@@ -2969,7 +2965,7 @@ async def api_generate(
     # « Validation » demandée mais aucun audio à croiser : prévenir aussitôt
     # les onglets (évènement « skipped ») plutôt que de laisser la roue
     # tourner jusqu'au filet de 180 s — sans audio, l'audit ne partira jamais.
-    if payload.second_pass and payload.consultation_id and audio_payload is None:
+    if second_pass_actif and payload.consultation_id and audio_payload is None:
         live.publish(user.owner_key, "verification_result", {
             "consultation_id": payload.consultation_id,
             "generation_token": payload.generation_token,
@@ -3107,7 +3103,7 @@ async def api_generate(
     # « Validation » : audit factuel audio↔note en tâche de fond — jamais sur le
     # chemin de la réponse ; le résultat partira en SSE quand il sera prêt.
     if (
-        payload.second_pass
+        second_pass_actif
         and payload.consultation_id
         and audio_payload is not None
         and llm.verification_capable()

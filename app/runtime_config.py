@@ -741,6 +741,16 @@ SETTINGS: Tuple[Setting, ...] = (
         default=lambda: "false", choices=ON_OFF,
     ),
 
+    # « Validation » : audit factuel audio↔note après génération. Interrupteur
+    # GLOBAL (panneau d'administration) — plus de bascule par usager : le
+    # réglage vaut pour tous. Désactivé par défaut, l'audit coûtant un second
+    # appel au modèle (l'audio de la dictée est renvoyé).
+    Setting(
+        "second_pass_enabled", "choice", "group.note",
+        default=lambda: "false", choices=ON_OFF,
+        help_key="set.second_pass_enabled.help",
+    ),
+
     # --- Consigne générale ---------------------------------------------------
     # Une consigne par langue. C'est la LANGUE DU GABARIT qui décide laquelle
     # est employée — voir llm.build_system_prompt. Les valeurs livrées viennent

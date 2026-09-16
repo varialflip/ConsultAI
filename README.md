@@ -274,9 +274,11 @@ COHERE_LLM_THINKING_BUDGET=1024
 > persistés (`usage_events.cached_tokens`), et le coût applique la remise
 > (tarif `token_input_cached_1m`, ~90 %).
 
-> **🔎 « Validation » — audit factuel de la note.** Bascule à côté du bouton
-> « Mettre en forme » (préférence par usager, désactivée par défaut). Quand
-> elle est active, chaque génération est suivie d'un second appel qui
+> **🔎 « Validation » — audit factuel de la note.** Interrupteur GLOBAL dans
+> le panneau d'administration (onglet Note, « Validation (audit de la
+> note) », `second_pass_enabled`, désactivé par défaut) : il vaut pour tous
+> les usagers — il n'y a plus de bascule à côté du bouton « Mettre en forme ».
+> Quand il est actif, chaque génération est suivie d'un second appel qui
 > compare la note à l'AUDIO de la dictée (source de vérité — jamais la
 > transcription Parakeet, trop imprécise) et renvoie deux listes : ce qui
 > fut dicté mais manque à la note, ce que la note affirme sans avoir été
@@ -308,8 +310,8 @@ COHERE_LLM_THINKING_BUDGET=1024
 > Une régénération réinitialise `verification_json` au moment où la nouvelle
 > note est persistée : la base ne porte jamais un audit de l'ancienne note
 > pendant le contrôle en cours.
-> Sans audio joint (note produite à partir de la seule transcription), la
-> bascule active produit immédiatement un « rien à signaler » : l'audit
+> Sans audio joint (note produite à partir de la seule transcription),
+> l'audit activé produit immédiatement un « rien à signaler » : l'audit
 > audio↔note est impossible, pas de roue qui tourne dans le vide.
 > Coût observé : ~60 % d'un appel de génération en plus (l'audio domine),
 > atténué par le cache de préfixe implicite — l'audio et la consigne système
@@ -756,8 +758,8 @@ fichier (§ 7.4) en bénéficie aussi.
 > l'événement SSE `generation_started` (le serveur a fini d'envoyer la
 > requête au fournisseur — ConsultAI n'exécute pas le modèle), « La note se
 > génère… » dès le premier morceau `generation_chunk`, puis « Validation en
-> cours… » à la fin de la génération quand la bascule « Validation » est
-> active (jusqu'à l'arrivée du `verification_result`). Plus aucun voile plein
+> cours… » à la fin de la génération quand l'audit « Validation » est
+> activé (jusqu'à l'arrivée du `verification_result`). Plus aucun voile plein
 > écran bloquant. Sur mobile, tous les toasts tiennent sur une seule ligne
 > (message tronqué avec des points de suspension).
 

@@ -3,7 +3,7 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-16 — Modèle de langage : passage à Gemini 3.5 Flash (Vertex, Montréal)
+## 2026-09-16 — Gemini 3.5 Flash ; Validation pilotée par l'administration
 
 *Gemini 2.5 Pro étant en fin de vie, la mise en forme de la note passe au
 modèle courant de la famille Flash, servi par Vertex AI à Montréal
@@ -26,6 +26,19 @@ n'ajoutait qu'un second nom de modèle, sans équivalent dans la famille 3.5.*
   (tarif « non-global » de Vertex, la région Montréal n'étant pas l'endpoint
   global) ; l'audio entre au tarif du texte.
 - Redéploiement : tag `v2.0.0-rc.3`.
+
+*La « Validation » (audit factuel audio↔note) passe d'une préférence par
+usager à un interrupteur GLOBAL : elle est désactivée pour tous par défaut, et
+seul l'administrateur l'active — la bascule à côté de « Mettre en forme »
+disparaît.*
+
+- **Réglage d'administration « Validation (audit de la note) »**
+  (`second_pass_enabled`, onglet Note), désactivé par défaut. Il vaut pour
+  tous les usagers ; le serveur s'y fie aussi, un client périmé ne peut donc
+  pas forcer l'audit.
+- **Retrait de la bascule par usager** (boutons bureau et mobile) et de la
+  route `PUT /api/me/second_pass` : plus de préférence individuelle.
+- Redéploiement : tag `v2.0.0-rc.4`.
 
 ## 2026-09-02 — Copie « Aligné » : les listes respectent l'alinéa
 

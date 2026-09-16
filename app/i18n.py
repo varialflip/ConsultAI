@@ -303,17 +303,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "pane.dictation": ("Dictée", "Dictation"),
     "pane.note": ("Note structurée", "Structured note"),
     "pane.raw": ("Transcription brute", "Raw transcript"),
-    "secondpass.toggle": ("Validation", "Validation"),
     "secondpass.tab": ("Validation", "Validation"),
     "secondpass.corrections": (
         "Corrections et éléments à valider",
         "Corrections and items to verify",
-    ),
-    "secondpass.title": (
-        "Validation : après chaque note, comparer la note à l'audio et "
-        "signaler les écarts certains (omissions / éléments non dictés).",
-        "Validation: after each note, compare it against the audio "
-        "and flag certain discrepancies (omissions / non-dictated items).",
     ),
     "secondpass.pending": (
         "Vérification en cours — comparaison de la note à l'audio…",
@@ -340,10 +333,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "secondpass.unavailable": (
         "Indisponible : le fournisseur actif ne transmet pas d'audio.",
         "Unavailable: the active provider does not send audio.",
-    ),
-    "secondpass.save_error": (
-        "Préférence « Validation » non enregistrée.",
-        "Could not save the \u201cValidation\u201d preference.",
     ),
     "pane.clear": ("Supprimer", "Delete"),
     "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),
@@ -2014,6 +2003,19 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.show_thinking_users.label": (
         "Montrer le raisonnement — utilisateurs",
         "Show reasoning — users",
+    ),
+    "set.second_pass_enabled.label": (
+        "Validation (audit de la note)",
+        "Validation (note audit)",
+    ),
+    "set.second_pass_enabled.help": (
+        "Après chaque note, comparer la note à l'audio de la dictée et "
+        "signaler les écarts (omissions, inventions). Coûte un second appel "
+        "au modèle (l'audio est renvoyé) ; désactivé par défaut. S'applique "
+        "à tous les usagers.",
+        "After each note, compare it against the dictation audio and flag "
+        "discrepancies (omissions, inventions). Costs a second model call "
+        "(the audio is sent again); off by default. Applies to all users.",
     ),
     "set.show_thinking_users.help": (
         "Même affichage transitoire du raisonnement (thinking), pour les "

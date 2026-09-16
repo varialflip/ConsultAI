@@ -242,17 +242,6 @@
     .accent-btn-bordered { border-color: var(--color-accent); }
     .accent-btn-ghost { border: 1px solid var(--color-accent-border); color: var(--color-accent); }
     .accent-btn-ghost:hover { background-color: var(--color-accent-bg-subtle); }
-    /* Interrupteur « Validation » : piste colorée quand activé. Le goujon est
-       déplacé par Tailwind (translate-x-*), pas par cette règle. */
-    .secondpass-switch.secondpass-on > span:first-child {
-      background-color: var(--color-accent);
-    }
-    /* Variante mobile (bouton-pilule) : état actif en accent discret. */
-    #btnSecondPassMobile.secondpass-on {
-      border-color: var(--color-accent-border);
-      color: var(--color-accent);
-      background-color: var(--color-accent-bg-subtle);
-    }
     .accent-bg-subtle, .hover\:accent-bg-subtle:hover { background-color: var(--color-accent-bg-subtle); }
     .accent-text { color: var(--color-accent); }
     .accent-border { border-color: var(--color-accent-border); }
@@ -720,27 +709,10 @@
                          text-slate-600 disabled:opacity-40">
             {{ t('retranscribe.action') }}
           </button>
-          <!-- « Validation » : audit factuel audio↔note après génération.
-               Préférence par usager (PUT /api/me/second_pass), défaut OFF.
-               Interrupteur classique : piste + goujon coulissant (gauche =
-               hors, droite = en marche), bouton de MÊME hauteur que
-               « Mettre en forme » (h-8), collé à lui. Grisé quand le
-               fournisseur actif ne peut pas auditer (voir refreshClientConfig
-               /updateSecondPassToggle côté JS). -->
-          <button id="btnSecondPass" type="button" role="switch" aria-checked="false"
-                  title="{{ t('secondpass.title') }}"
-                  class="secondpass-switch inline-flex items-center gap-2 shrink-0
-                         h-8 px-2 rounded border border-slate-200 text-xs font-semibold
-                         text-slate-600 hover:bg-slate-50
-                         disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-            <span aria-hidden="true" class="inline-flex items-center w-9 h-5 rounded-full
-                                           bg-slate-300 shrink-0">
-              <span id="secondPassKnob"
-                    class="inline-block h-4 w-4 rounded-full bg-white shadow
-                           translate-x-0.5 transition-transform"></span>
-            </span>
-            <span id="secondPassLabel">{{ t('secondpass.toggle') }}</span>
-          </button>
+          <!-- « Validation » (audit factuel audio↔note) : plus de bascule ici.
+               Le réglage est GLOBAL, dans le panneau d'administration
+               (« Validation (audit de la note) », désactivé par défaut) —
+               voir second_pass_enabled dans app/runtime_config.py. -->
           <button id="btnGenerate" type="button"
                    class="accent-btn px-4 py-1.5 rounded-lg text-sm font-semibold
                           transition shadow-sm disabled:opacity-40">
@@ -1000,13 +972,6 @@
             class="flex-1 h-11 rounded-xl border border-slate-300 text-slate-700 font-semibold text-[15px]
                    hover:bg-slate-50 active:bg-slate-100 transition disabled:opacity-40">
       {{ t('retranscribe.action') }}
-    </button>
-    <button id="btnSecondPassMobile" type="button" aria-pressed="false"
-            title="{{ t('secondpass.title') }}"
-            class="h-11 px-3 rounded-xl border border-slate-300 text-[13px] font-semibold
-                   text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition
-                   disabled:opacity-40">
-      {{ t('secondpass.toggle') }}
     </button>
     <button id="btnGenerateMobile" type="button"
             class="accent-btn flex-1 h-11 rounded-xl font-semibold text-[15px]

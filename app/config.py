@@ -265,9 +265,7 @@ class Settings:
 
     # --- Gemini ---
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
-    gemini_model_pro: str = "gemini-2.5-pro"
-    gemini_use_pro: bool = False
+    gemini_model: str = "gemini-3.5-flash"
     gemini_temperature: float = 0.15
     gemini_thinking_budget: int = 128
     gemini_max_output_tokens: int = 8192
@@ -388,8 +386,8 @@ class Settings:
 
     @property
     def active_gemini_model(self) -> str:
-        """Modèle utilisé par défaut, selon la bascule GEMINI_USE_PRO."""
-        return self.gemini_model_pro if self.gemini_use_pro else self.gemini_model
+        """Modèle Gemini utilisé."""
+        return self.gemini_model
 
     @property
     def max_audio_bytes(self) -> int:
@@ -478,9 +476,7 @@ class Settings:
             stt_vad_finish_sweep=_env_bool("STT_VAD_FINISH_SWEEP", True),
 
             gemini_api_key=_env("GEMINI_API_KEY"),
-            gemini_model=_env("GEMINI_MODEL", "gemini-2.5-flash"),
-            gemini_model_pro=_env("GEMINI_MODEL_PRO", "gemini-2.5-pro"),
-            gemini_use_pro=_env_bool("GEMINI_USE_PRO", False),
+            gemini_model=_env("GEMINI_MODEL", "gemini-3.5-flash"),
             gemini_temperature=_env_float("GEMINI_TEMPERATURE", 0.15),
             gemini_thinking_budget=_env_int("GEMINI_THINKING_BUDGET", 128),
             gemini_max_output_tokens=_env_int("GEMINI_MAX_OUTPUT_TOKENS", 8192),

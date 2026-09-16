@@ -482,8 +482,6 @@ class GenerateIn(BaseModel):
     requester: str = Field("", max_length=200)
     accompanied_by: str = Field("", max_length=200)
     extra_instructions: str = Field("", max_length=4000)
-    # Bascule ponctuelle vers le modèle « pro » pour une dictée difficile.
-    use_pro: bool = False
     # Jeton propre à CETTE demande de génération, généré par l'onglet qui
     # clique sur « Mettre en forme ». Repris tel quel dans les évènements
     # ``generation_chunk`` diffusés en direct, il permet à l'onglet émetteur de
@@ -2938,7 +2936,7 @@ async def api_generate(
     # compteur qui décidera lequel des deux a le droit d'écrire son résultat.
     generation_seq = _generation_guard.begin(payload.consultation_id)
 
-    model_name = settings.gemini_model_pro if payload.use_pro else None
+    model_name = None
 
     # Consigne système partagée entre la mise en forme et l'audit « Validation »
     # (la MÊME chaîne, pour que [consigne système + audio] soit un préfixe

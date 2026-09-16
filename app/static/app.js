@@ -2845,7 +2845,6 @@
           transcript,
           consultation_id: consultationId,
           extra_instructions: $('ctxExtra').value.trim(),
-          use_pro: false,
           generation_token: state.generationToken,
           second_pass: state.secondPass,
         }, readMetadata()),

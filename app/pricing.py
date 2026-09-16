@@ -35,16 +35,20 @@ logger = logging.getLogger(__name__)
 # Placeholders approximatifs — à vérifier/corriger depuis le panneau admin.
 DEFAULT_RATES: Tuple[Tuple[str, str, str, str, float, str], ...] = (
     # --- LLM (texte → note), $ / 1M jetons ---------------------------------
-    ("gemini", "", "llm", "token_input_1m", 1.25),
+    # gemini-3.5-flash servi depuis le point de terminaison régional
+    # (northamerica-northeast1, Montréal) : tarif « non-global » de Vertex —
+    # 1,65 $ l'entrée, 0,165 $ l'entrée servie du cache, 9,90 $ la sortie.
+    # Le tarif « global » (1,50 / 0,15 / 9,00) ne s'applique pas ici, la région
+    # étant fixée à Montréal pour la résidence des données (voir EFVP).
+    ("gemini", "", "llm", "token_input_1m", 1.65),
     # Jetons d'entrée servis depuis le cache de préfixe implicite (Vertex) :
-    # gemini-2.5-pro 0,125 $ ≤200K (0,25 $ >200K) — ~90 % de remise sur
-    # l'entrée fraîche. Tarif unique par modèle, indépendant de la modalité.
-    ("gemini", "", "llm", "token_input_cached_1m", 0.125),
-    ("gemini", "", "llm", "token_output_1m", 5.00),
+    # 0,165 $ — 90 % de remise sur l'entrée fraîche. Tarif unique par modèle,
+    # indépendant de la modalité.
+    ("gemini", "", "llm", "token_input_cached_1m", 0.165),
+    ("gemini", "", "llm", "token_output_1m", 9.90),
     # Jetons d'entrée audio (bypass STT : la dictée part directement au
-    # LLM). Tarif distinct du texte chez Gemini 2.5 Flash comme chez Qwen
-    # Omni — placeholder, à corriger depuis le panneau admin.
-    ("gemini", "", "llm", "token_audio_input_1m", 3.00),
+    # LLM). Chez gemini-3.5-flash l'audio entre au même tarif que le texte.
+    ("gemini", "", "llm", "token_audio_input_1m", 1.65),
     ("anthropic", "", "llm", "token_input_1m", 3.00),
     ("anthropic", "", "llm", "token_output_1m", 15.00),
     ("openai", "", "llm", "token_input_1m", 2.50),
@@ -146,7 +150,7 @@ def _cache_rebate(
     Le cache est facturé à un tarif unique par modèle, indépendamment de la
     modalité, mais on ne connaît pas la ventilation texte/audio du préfixe
     servi. On n'applique donc la remise que lorsque l'entrée fraîche paie le
-    même tarif pour le texte et l'audio (gemini-2.5-pro : 1,25 $ les deux) ;
+    même tarif pour le texte et l'audio (gemini-3.5-flash : 1,65 $ les deux) ;
     ailleurs, le coût reste calculé au frais (l'erreur serait de sous-facturer).
     """
     if not cached_tokens:

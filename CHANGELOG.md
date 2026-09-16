@@ -3,6 +3,30 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-16 — Modèle de langage : passage à Gemini 3.5 Flash (Vertex, Montréal)
+
+*Gemini 2.5 Pro étant en fin de vie, la mise en forme de la note passe au
+modèle courant de la famille Flash, servi par Vertex AI à Montréal
+(`northamerica-northeast1`). La bascule « modèle pro » disparaît : elle
+n'ajoutait qu'un second nom de modèle, sans équivalent dans la famille 3.5.*
+
+- **Modèle par défaut : `gemini-3.5-flash`** (Vertex AI, région Montréal,
+  audio envoyé directement au modèle multimodal — inchangé). Vérifié en réel :
+  génération texte et entrée audio fonctionnelles.
+- **`gemini-3.5-flash` ajouté d'office à la liste des modèles disponibles** :
+  Vertex le sert à Montréal mais ne l'expose pas dans `models.list()` de la
+  région — sans cette injection, le bouton « Modèles disponibles » du panneau
+  le tairait alors qu'il fonctionne.
+- **Suppression de la bascule « pro »** (`GEMINI_MODEL_PRO`, `GEMINI_USE_PRO`,
+  champ `use_pro` de l'API) : un seul modèle, choisi dans le panneau.
+- **Raisonnement** : `gemini-3.5-flash` accepte la coupure réelle (budget 0) et
+  la plage 1 à 32768 ; le minimum de 128 propre à 2.5 Pro est retiré, un budget
+  au-dessus du maximum est ramené au lieu d'échouer.
+- **Tarifs** : entrée 1,65 $/M, entrée en cache 0,165 $/M, sortie 9,90 $/M
+  (tarif « non-global » de Vertex, la région Montréal n'étant pas l'endpoint
+  global) ; l'audio entre au tarif du texte.
+- Redéploiement : tag `v2.0.0-rc.3`.
+
 ## 2026-09-02 — Copie « Aligné » : les listes respectent l'alinéa
 
 *Coller la note dans le champ riche du DME aplatissait l'indentation des listes

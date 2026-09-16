@@ -1976,14 +1976,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Thinking",
     ),
     "set.gemini_thinking.help": (
-        "Désactivé (par défaut) : raisonnement coupé (budget 0). Pris en charge "
-        "par gemini-2.5-flash ; gemini-2.5-pro le refuse — un message le "
-        "signale alors, passez sur « Oui » avec un budget de 128. Activé : le "
+        "Désactivé (par défaut) : raisonnement coupé (budget 0), accepté par "
+        "gemini-3.5-flash. Activé : le "
         "modèle réfléchit avant de répondre ; le champ « Budget de "
         "raisonnement » ci-dessous fixe l'ampleur.",
-        "Off (default): reasoning cut (budget 0). Supported by "
-        "gemini-2.5-flash; gemini-2.5-pro rejects it — you will be told, "
-        "then switch to “On” with a budget of 128. On: the model thinks "
+        "Off (default): reasoning cut (budget 0), supported by "
+        "gemini-3.5-flash. On: the model thinks "
         "before answering; the “Thinking budget” field below sets how much.",
     ),
     "set.gemini_thinking_budget.label": (
@@ -1992,11 +1990,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "set.gemini_thinking_budget.help": (
         "Prise en compte si « Raisonnement » est activé. Jetons de raisonnement "
-        "alloués au modèle avant de répondre. Minimum accepté par "
-        "gemini-2.5-pro sur Vertex : 128 (0 et 1-127 sont refusés). Vide = 128.",
+        "alloués au modèle avant de répondre. Plage acceptée par "
+        "gemini-3.5-flash sur Vertex : 1 à 32768. Vide = 128.",
         "Used when “Thinking” is on. Reasoning tokens allocated to the model "
-        "before answering. Minimum accepted by gemini-2.5-pro on Vertex: 128 "
-        "(0 and 1-127 are rejected). Empty = 128.",
+        "before answering. Range accepted by gemini-3.5-flash on Vertex: 1 to "
+        "32768. Empty = 128.",
     ),
     "set.show_thinking_admin.label": (
         "Montrer le raisonnement — administrateurs",

@@ -52,7 +52,7 @@ Déploiement en production (2026-08-14) :
 | Emplacement | `/opt/dictai` — application et services auxiliaires (proxy sécurisé, reconnaissance vocale locale, fournisseur d'identité, protection réseau) |
 | Accès public | `app.dictai.ca` / `app.loki.casa` (HTTPS TLS) |
 | Fournisseur d'identité | Pocket ID, auto-hébergé : `login.dictai.ca` et `login.loki.casa` (2 instances) |
-| Modèle de langage | **Google Gemini via Vertex AI**, région `northamerica-northeast1` (Montréal, Québec) — modèle `gemini-2.5-pro`, **audio de la dictée envoyé directement au modèle multimodal** ; la transcription locale Parakeet reste configurée en secours. Les requêtes restent dans la région (addendum de politique cloud Google consenti pour les renseignements de santé) |
+| Modèle de langage | **Google Gemini via Vertex AI**, région `northamerica-northeast1` (Montréal, Québec) — modèle `gemini-3.5-flash`, **audio de la dictée envoyé directement au modèle multimodal** ; la transcription locale Parakeet reste configurée en secours. Les requêtes restent dans la région (addendum de politique cloud Google consenti pour les renseignements de santé) |
 | Reconnaissance vocale | Effectuée **au Québec, sur le serveur local** : l'audio n'en sort jamais (**mode par défaut**). Chemin optionnel « streaming » (désactivé par défaut) : l'audio d'un énoncé part à l'API Mistral (Voxtral realtime) — décision de conformité à revalider avant activation, voir § 5 |
 | Base de données | SQLite (`/data/consultai.db`), WAL |
 
@@ -159,7 +159,7 @@ secours (`stt_provider`) : si elle est utilisée, l'audio ne quitte alors pas
 la machine et seul le texte de la transcription part à Gemini.
         │  audio de la dictée (HTTPS, Vertex `northamerica-northeast1`, Montréal)
         ▼
-[Google Vertex AI — Gemini `gemini-2.5-pro`]
+[Google Vertex AI — Gemini `gemini-3.5-flash`]
    (mise en forme de la note ; requêtes dans la région Montréal, addendum de
     politique cloud Google pour les renseignements de santé consenti ; aucune
     donnée utilisée pour entraîner les modèles)
@@ -175,7 +175,7 @@ Autres flux :
 
 | Flux | Données | Destination | Résidence |
 |---|---|---|---|
-| Mise en forme de la note (depuis 2026-08-16) | **Audio de la dictée** (trajet principal) ; texte recoupé par le gabarit | Google Vertex AI — Gemini `gemini-2.5-pro` | Québec (région `northamerica-northeast1`, Montréal) — voir § 7.4 |
+| Mise en forme de la note (depuis 2026-08-16) | **Audio de la dictée** (trajet principal) ; texte recoupé par le gabarit | Google Vertex AI — Gemini `gemini-3.5-flash` | Québec (région `northamerica-northeast1`, Montréal) — voir § 7.4 |
 | Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (Parakeet local, mode par défaut) |
 | Reconnaissance vocale — fournisseur cloud (Modulate, si sélectionné) | Tranches de dictée (~10 s) | API Modulate (Velma STT) | Traitement hébergé par Modulate — **aucun mode par défaut ne l'envoie** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |
 | OpenRouter — modèle de langage **et/ou** STT (si sélectionné) | Audio de la dictée (note directe **ou** transcription), texte | API OpenRouter (modèle multimodal, ex. `thinkingmachines/inkling-small`) | Traitement hébergé par OpenRouter (cloud) — **aucun mode par défaut ne l'utilise** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |
@@ -200,7 +200,7 @@ Autres flux :
 ```
 
 > ⚠️ **Décision documentée (2026-08-16, révisée)** : la mise en forme est
-> confiée à **Google Vertex AI** (Gemini `gemini-2.5-pro`), région
+> confiée à **Google Vertex AI** (Gemini `gemini-3.5-flash`), région
 > **`northamerica-northeast1` (Montréal, Québec)** — le seul choix qui garde le
 > traitement au Québec. L'**audio de la dictée** est envoyé **directement au
 > modèle multimodal** (trajet principal) ; la **transcription locale**
@@ -326,7 +326,7 @@ Autres flux :
 - **Reconnaissance vocale** : effectuée **au Québec, sur le serveur local**
   (Parakeet/speaches) — en mode secours, l'audio ne sort pas de la machine.
 - **Mise en forme (trajet principal)** : l'**audio de la dictée** est envoyé
-  **directement à Google Vertex AI** (Gemini `gemini-2.5-pro`), région
+  **directement à Google Vertex AI** (Gemini `gemini-3.5-flash`), région
   **`northamerica-northeast1` (Montréal, Québec)** — les requêtes restent
   dans la région. Les informations transmises ne sont **jamais utilisées
   pour entraîner des modèles** (addendum de politique cloud Google pour les

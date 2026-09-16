@@ -77,14 +77,14 @@
     <div class="meta">{{ dictation['owner'] }} · {{ dictation['template'] }} · audio {{ dictation['audio_seconds'] }} s</div>
 
     <div class="analysis">
-      <h2>Analyse des différences — Gemini 2.5 Pro vs Qwen 3 Omni</h2>
+      <h2>Analyse des différences — Gemini 3.5 Flash vs Qwen 3 Omni</h2>
 
       <h3>Résumé comparatif (analyse tiers)</h3>
       <div class="summary-md md" id="analysis-summary"></div>
 
       <h3>Métriques</h3>
       <table>
-        <tr><th></th><th>Gemini 2.5 Pro</th><th>Qwen 3 Omni</th></tr>
+        <tr><th></th><th>Gemini 3.5 Flash</th><th>Qwen 3 Omni</th></tr>
         <tr><td>Caractères</td><td>{{ dictation['analysis']['metrics']['gemini']['chars'] }}</td><td>{{ dictation['analysis']['metrics']['omni']['chars'] }}</td></tr>
         <tr><td>Mots</td><td>{{ dictation['analysis']['metrics']['gemini']['words'] }}</td><td>{{ dictation['analysis']['metrics']['omni']['words'] }}</td></tr>
         <tr><td>Coût estimé (USD)</td><td>${{ dictation['analysis']['cost_estimate_usd']['gemini'] }}</td><td>${{ dictation['analysis']['cost_estimate_usd']['omni'] }}</td></tr>

@@ -553,6 +553,13 @@ def get_client(provider: Optional[str] = None):
     return client
 
 
+#: Modèles Gemini que Vertex AI sert sans les exposer dans ``models.list()``
+#: pour toutes les régions. Constaté à Montréal : ``gemini-3.5-flash`` génère
+#: (texte comme audio) mais n'apparaît pas dans la liste régionale — sans cette
+#: injection, le bouton « Modèles disponibles » du panneau le tairait.
+_GEMINI_MODELS_HORS_LISTE = ("gemini-3.5-flash",)
+
+
 def list_available_models(provider: Optional[str] = None) -> List[str]:
     """
     Modèles réellement accessibles avec la clé configurée.
@@ -590,16 +597,17 @@ def list_available_models(provider: Optional[str] = None) -> List[str]:
                     continue
                 # Dernier segment du chemin, et non un simple retrait de
                 # « models/ » : en mode API-key, model.name vaut
-                # « models/gemini-2.5-flash », mais en mode Vertex AI c'est
-                # « publishers/google/models/gemini-2.5-flash ». Un
+                # « models/gemini-3.5-flash », mais en mode Vertex AI c'est
+                # « publishers/google/models/gemini-3.5-flash ». Un
                 # ``replace`` retirait « models/ » du MILIEU de ce second
-                # chemin et produisait « publishers/google/gemini-2.5-flash »
+                # chemin et produisait « publishers/google/gemini-3.5-flash »
                 # — un identifiant que generate_content refuse (404), une
                 # fois réinjecté comme nom de modèle depuis cette liste.
                 brut = getattr(model, "name", "") or ""
                 name = brut.rsplit("/", 1)[-1]
                 if name:
                     names.append(name)
+            names.extend(_GEMINI_MODELS_HORS_LISTE)
         else:
             # Anthropic et OpenAI exposent la même forme : .data[].id
             for model in client.models.list():
@@ -900,21 +908,20 @@ def _est_think_refusee_gemini(exc: Exception) -> bool:
     """
     Vrai si Gemini refuse le ``thinking_config`` demandé (400).
 
-    Certains modèles (gemini-2.5-pro sur Vertex) rejettent
-    ``ThinkingConfig(thinking_budget=…)`` : le message annonce alors « does not
-    support setting thinking_budget ». C'est une erreur de réglage, pas de
-    quota : l'appelant retire le champ et relance.
+    Certains modèles rejettent ``ThinkingConfig(thinking_budget=…)`` : le
+    message annonce alors « does not support setting thinking_budget ». C'est
+    une erreur de réglage, pas de quota : l'appelant retire le champ et relance.
     """
     lowered = str(exc).lower()
     return "thinking_budget" in lowered and "does not support" in lowered
 
 
-#: Budget de raisonnement minimal accepté par gemini-2.5-pro sur Vertex AI : 0
-#: et 1-127 sont refusés (400 INVALID_ARGUMENT « thinking_budget is out of
-#: range; supported values are integers from 128 to 32768 »). 128 = raisonnement
-#: quasi nul, juste de quoi satisfaire l'API. gemini-2.5-flash, lui, accepte 0 :
-#: c'est la « vraie » coupure utilisée quand la bascule est désactivée.
-_GEMINI_THINKING_BUDGET_MIN = 128
+#: Plage de ``thinking_budget`` acceptée par gemini-3.5-flash sur Vertex AI
+#: (vérifié en réel à Montréal) : 1 à 32768. 0 est accepté à part et coupe
+#: réellement le raisonnement (pensée ``None``) ; au-delà de 32768, Vertex
+#: renvoie 400 INVALID_ARGUMENT « thinking_budget is out of range ».
+_GEMINI_THINKING_BUDGET_MIN = 1
+_GEMINI_THINKING_BUDGET_MAX = 32768
 
 
 def _gemini_thinking_budget() -> int:
@@ -922,14 +929,12 @@ def _gemini_thinking_budget() -> int:
     Budget de raisonnement Gemini, selon la bascule « thinking ».
 
     Désactivé : budget 0 — la vraie coupure du raisonnement, acceptée par
-    gemini-2.5-flash (pensée ``None``). gemini-2.5-pro refuse 0 : la requête
-    échoue alors avec un message qui renvoie vers « Raisonnement : Oui,
-    budget 128 » — mieux que de relancer silencieusement avec le raisonnement
-    à plein régime (≈1800 jetons de pensée constatés sans ``thinking_config``).
+    gemini-3.5-flash (pensée ``None``).
 
-    Activé : le budget du panneau s'applique, ramené dans la plage valide —
-    un champ vide ou illisible retombe sur 128, et toute valeur sous le minimum
-    est relevée au minimum pour ne pas faire échouer la requête.
+    Activé : le budget du panneau s'applique, ramené dans la plage valide
+    (1-32768) — un champ vide ou illisible retombe sur 128, une valeur sous le
+    minimum est relevée, une valeur au-dessus du maximum est ramenée, pour ne
+    pas faire échouer la requête.
     """
     if runtime_config.value("gemini_thinking") != "true":
         return 0
@@ -943,6 +948,12 @@ def _gemini_thinking_budget() -> int:
             "ce minimum.", budget, _GEMINI_THINKING_BUDGET_MIN,
         )
         return _GEMINI_THINKING_BUDGET_MIN
+    if budget > _GEMINI_THINKING_BUDGET_MAX:
+        logger.warning(
+            "gemini_thinking_budget=%d au-dessus du maximum accepté (%d) : "
+            "ramené à ce maximum.", budget, _GEMINI_THINKING_BUDGET_MAX,
+        )
+        return _GEMINI_THINKING_BUDGET_MAX
     return budget
 
 
@@ -1165,15 +1176,13 @@ def _verification_requete(
 
     # L'audit est une tâche de CROISEMENT (note ↔ audio) : il a besoin de
     # raisonnement pour ne pas inventer d'écarts. Le budget du panneau
-    # (``gemini_thinking_budget``) s'applique ici comme pour la génération,
-    # pas le plancher 128 qui laisse le modèle halluciner des faux positifs
-    # (observé : des médicaments réellement dictés déclarés « inventions »).
-    # Bascule coupée → budget 0, refusé par gemini-2.5-pro : le repli
-    # ``_est_think_refusee_gemini`` relance alors sans champ, ce qui laisse le
-    # modèle raisonner sur sa valeur par défaut — toujours mieux pour l'audit
-    # qu'un budget au plancher.
+    # (``gemini_thinking_budget``) s'applique ici comme pour la génération.
+    # Bascule coupée → budget 0, accepté par gemini-3.5-flash : si un modèle
+    # le refuse, le repli ``_est_think_refusee_gemini`` relance alors sans
+    # champ, ce qui laisse le modèle raisonner sur sa valeur par défaut —
+    # toujours mieux pour l'audit qu'un budget au plancher.
     # PAS de ``response_mime_type="application/json"`` ni de ``response_schema`` :
-    # vérifié en réel sur gemini-2.5-pro (Vertex), une requête en mode JSON ne
+    # vérifié en réel (Vertex), une requête en mode JSON ne
     # réutilise PAS le cache de préfixe implicite d'une requête hors mode JSON
     # (la mise en forme). Le JSON est donc demandé par instruction (voir
     # ``_AUDITOR_PROMPTS``) et l'extraction est tolérante (voir ``_extraire_json``).
@@ -1525,9 +1534,8 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     # plus rapide, evite de consommer la limite de jetons en pensee, et
     # protege contre les notes et les JSON tronques. La bascule et le budget
     # viennent du panneau : bascule coupee = budget 0 (vraie coupure, acceptee
-    # par gemini-2.5-flash, refusee par gemini-2.5-pro — l'erreur renvoie alors
-    # vers « Raisonnement : Oui, budget 128 ») ; bascule activee = budget du
-    # panneau, releve a 128 au minimum. Un modele qui refuse le champ
+    # par gemini-3.5-flash) ; bascule activee = budget du panneau, ramene dans
+    # la plage valide. Un modele qui refuse le champ
     # ``thinking_config`` avec un budget non nul retombe sur un appel sans lui.
     config_kwargs["thinking_config"] = types.ThinkingConfig(
         thinking_budget=_gemini_thinking_budget()
@@ -1611,8 +1619,7 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     # Même choix que la version non-streaming : le raisonnement (thinking) est
     # inutile pour une tâche de mise en forme. La bascule et le budget viennent
     # du panneau (bascule coupée = budget 0, la vraie coupure — acceptée par
-    # gemini-2.5-flash, refusée par gemini-2.5-pro dont l'erreur renvoie vers
-    # « Raisonnement : Oui, budget 128 ») ; un modèle qui refuse le champ
+    # gemini-3.5-flash) ; un modèle qui refuse le champ
     # ``thinking_config`` avec un budget non nul retombe sur le flux sans lui.
     budget_thinking = _gemini_thinking_budget()
     thinking_kwargs = {"thinking_budget": budget_thinking}

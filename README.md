@@ -315,10 +315,10 @@ COHERE_LLM_THINKING_BUDGET=1024
 > atténué par le cache de préfixe implicite — l'audio et la consigne système
 > étant relus depuis le cache au second passage (cf. ci-dessus).
 > Fiabilité : le « Validation » utilise le budget de raisonnement configuré
-> dans le panneau (`gemini_thinking_budget`) — au plancher 128 il hallucine
-> des écarts inexistants — et un garde-fou déterministe écarte après coup
-> toute « omission » déjà présente dans la note et toute « invention » déjà
-> portée par la transcription (le seuil est conservateur : un vrai écart a
+> dans le panneau (`gemini_thinking_budget`) — un budget trop bas le fait
+> halluciner des écarts inexistants — et un garde-fou déterministe écarte après
+> coup toute « omission » déjà présente dans la note et toute « invention »
+> déjà portée par la transcription (le seuil est conservateur : un vrai écart a
 > toujours un terme absent, il n'est donc jamais effacé).
 
 ---
@@ -458,7 +458,7 @@ Le journal de démarrage résume l'état effectif :
 ```
 Authentification : OIDC chez https://… | retour https://…/auth/callback
                  | 1 compte(s) connu(s) | inscription automatique : non
-Modèle : gemini / gemini-2.5-flash | Reconnaissance vocale : soniox (fr-CA) | Langue : fr
+Modèle : gemini / gemini-3.5-flash | Reconnaissance vocale : soniox (fr-CA) | Langue : fr
 ```
 
 ---
@@ -1058,7 +1058,7 @@ print('vertex:', settings.gemini_use_vertex, '| llm:', llm.active_provider(), '|
 > sur l'API grand public, hors région — sans aucun message.
 
 **Décision de ce déploiement (2026-08-14)** : modèle de langage sur Vertex AI à
-Montréal, et **audio envoyé directement à Gemini** (Vertex AI, `northamerica-northeast1`)
+Montréal (`gemini-3.5-flash`), et **audio envoyé directement à Gemini** (Vertex AI, `northamerica-northeast1`)
 — le seul choix qui garde **les deux trajets** au Québec, couvert par l'addendum
 de politique cloud de Google consenti pour les renseignements de santé. Le
 service de transcription par défaut est un **Whisper local** (`speaches`,

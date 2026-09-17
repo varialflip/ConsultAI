@@ -9,11 +9,16 @@ Unicode se rendaient mal dans le dossier médical. La copie « Aligné » les
 convertit en liste pointée sur deux colonnes, et la largeur de ligne passe de
 89 à 91 caractères.*
 
-- **Tableaux en liste pointée deux colonnes** (`renderBulletTable`) : la rangée
-  d'en-tête est écartée, chaque rangée devient une puce « • cellule :
-  cellule… » (les cellules vides sont omises), et les puces s'écoulent en deux
-  moitiés indépendantes en lecture verticale — même disposition que la rubrique
-  Médicaments. Repli avec retrait suspendu sous la puce.
+- **Tableaux en liste pointée deux colonnes** (`renderBulletTable`) : selon la
+  rangée d'en-tête, le tableau est traité de deux façons. **En-tête à libellé
+  unique ou répété** (grille de médicaments, p. ex. « | Médicaments || », les
+  colonnes ne servant qu'à économiser la hauteur) : le libellé devient un titre
+  de rubrique et CHAQUE cellule non vide une puce, lue colonne par colonne pour
+  retrouver la disposition du tableau. **En-tête à libellés distincts**
+  (rangées de champs, p. ex. « | Médicament | Dose | Indication | Commentaire | ») :
+  chaque rangée devient une puce, ses cellules liées par « : ». Les puces
+  s'écoulent en deux moitiés indépendantes en lecture verticale — même
+  disposition que la rubrique Médicaments —, avec repli et retrait suspendu.
 - **Retrait de la boîte Unicode** : `renderUnicodeTable` et la lecture des
   alignements de colonnes (les « : » du Markdown) sont supprimés — les filets
   (`┌ ┬ ┐ │ ├ ┼ ┤ └ ┴ ┘`) se rendaient mal dans le champ du DME.

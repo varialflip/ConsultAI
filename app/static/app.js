@@ -3660,12 +3660,12 @@
     return lignes;
   }
 
-  //: Largeur de ligne du texte simple (monospace, comme les colonnes
-  //: Médicaments). Les items de liste trop longs y sont repliés avec un
-  //: retrait suspendu : les lignes de continuation s'alignent sous le texte
-  //: après la puce/le numéro, jamais sous la puce elle-même. 89 = marge du DME
-  //: (il restait ~10 caractères avant la limite).
-  const LINE_WIDTH = 89;
+  //: Largeur de ligne du rendu aligné (listes et tableaux, monospace). Les
+  //: items de liste trop longs y sont repliés avec un retrait suspendu : les
+  //: lignes de continuation s'alignent sous le texte après la puce/le numéro,
+  //: jamais sous la puce elle-même. 93 = marge du DME (la limite est à ~99
+  //: caractères ; quatre caractères de plus qu'avant y restent disponibles).
+  const LINE_WIDTH = 93;
 
   /**
    * Replie un item de liste avec un retrait suspendu : la première ligne porte

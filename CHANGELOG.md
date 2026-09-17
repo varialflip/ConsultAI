@@ -11,11 +11,15 @@ colonnes les répartit à parts égales avec repli logique des cellules.*
 
 - **`renderUnicodeTable`** : les tableaux de la copie « Aligné » sont rendus en
   boîte Unicode (`┌ ┬ ┐ │ ├ ┼ ┤ └ ┴ ┘`), une colonne par glyphe en monospace, et
-  s'étalent sur toute la largeur de la note (89 colonnes, la marge du DME) ;
+  s'étalent sur toute la largeur de la note (93 colonnes, la marge du DME) ;
   les cellules trop longues sont repliées (`wrapText`) et le cadre tient
-  toujours exactement en 89 caractères. Le remplissage reste sur des espaces
+  toujours exactement en 93 caractères. Le remplissage reste sur des espaces
   insécables, préservés par un champ riche du DME.
-- **Tableau à deux colonnes : moitiés égales** (41 / 41 sur la largeur
+- **Largeur de ligne portée de 89 à 93 caractères** (`LINE_WIDTH`) : quatre
+  caractères restaient disponibles dans la largeur du dossier médical. Listes
+  alignées et tableaux en profitent ; le repli (retrait suspendu des listes,
+  cellules des tableaux) suit.
+- **Tableau à deux colonnes : moitiés égales** (43 / 43 sur la largeur
   intérieure), avec repli logique des cellules — la disposition attendue pour
   un tableau « libellé / valeur » ou « médicament / posologie ». Au-delà de
   deux colonnes, les largeurs suivent le contenu (le tableau de médication à

@@ -3559,18 +3559,45 @@
 
   /**
    * Rend un tableau Markdown en liste pointée sur deux colonnes (lecture
-   * verticale), comme la rubrique Médicaments. La rangée d'en-tête est
-   * écartée — les valeurs dictées se suffisent —, chaque rangée devient une
-   * puce « • cellule : cellule… » (les cellules vides sont omises), et les
-   * puces s'écoulent en deux moitiés indépendantes. Le cadre et les filets
-   * Unicode ont été retirés : mal rendus dans le dossier médical.
+   * verticale), comme la rubrique Médicaments.
+   *
+   * Deux formes sont reconnues, d'après la rangée d'en-tête :
+   *   - grille de cellules indépendantes — en-tête à libellé unique ou répété
+   *     (« | Médicaments || », les colonnes ne servant qu'à économiser la
+   *     hauteur) : le libellé devient un titre de rubrique et CHAQUE cellule
+   *     non vide une puce, lue colonne par colonne pour retrouver la
+   *     disposition du tableau ;
+   *   - rangées de champs d'une même entrée — en-tête à libellés distincts
+   *     (« | Médicament | Dose | Indication | Commentaire | ») : chaque rangée
+   *     devient une puce, ses cellules liées par « : ».
+   *
+   * Le cadre et les filets Unicode ont été retirés : mal rendus dans le
+   * dossier médical.
    */
   function renderBulletTable(rows) {
-    const items = rows.slice(1)
-      .map((r) => r.filter((c) => c && c.trim()).join(' : '))
-      .filter((s) => s.trim());
-    if (!items.length) return [];
-    return renderMedsColumns(items);
+    if (!rows.length) return [];
+    const entetes = (rows[0] || []).filter((c) => c && c.trim());
+    //: Libellé unique ou répété → grille ; libellés distincts → rangées de champs.
+    const grille = entetes.length > 0 && entetes.every((e) => e === entetes[0]);
+    const titre = grille ? entetes[0] : '';
+    const items = [];
+    if (grille) {
+      const colonnes = Math.max(...rows.map((r) => r.length));
+      for (let c = 0; c < colonnes; c += 1) {
+        for (let r = 1; r < rows.length; r += 1) {
+          const cellule = (rows[r][c] || '').trim();
+          if (cellule) items.push(cellule);
+        }
+      }
+    } else {
+      rows.slice(1).forEach((r) => {
+        const rangee = r.filter((c) => c && c.trim()).join(' : ');
+        if (rangee) items.push(rangee);
+      });
+    }
+    const sortie = items.length ? renderMedsColumns(items) : [];
+    if (!titre) return sortie;
+    return [titre, '─'.repeat(Math.max(titre.length, 3)), ...sortie];
   }
 
   //: Largeur de ligne du rendu aligné (listes et tableaux, monospace). Les

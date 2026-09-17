@@ -546,13 +546,16 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Copie en texte seul avec listes alignées : puces et numérotées au "
         "retrait suspendu, numéros élargis à la même colonne, indentation "
         "conservée dans un champ riche (espaces insécables). Les tableaux "
-        "Markdown sont rendus en liste pointée sur deux colonnes (une puce par "
-        "rangée, « cellule : cellule »), repliées dans la largeur de la note.",
+        "Markdown sont rendus en liste pointée sur deux colonnes : un en-tête "
+        "de rubrique (p. ex. « Médicaments ») est conservé en titre, et selon "
+        "le tableau chaque cellule ou chaque rangée devient une puce, repliée "
+        "dans la largeur de la note.",
         "Plain-text copy with aligned lists: hanging-indent bullets and "
         "numbers, numbers widened to one column, indentation kept in a rich "
         "field (non-breaking spaces). Markdown tables are rendered as a "
-        "two-column bulleted list (one bullet per row, \"cell : cell\"), "
-        "wrapped to the note width.",
+        "two-column bulleted list: a section header (e.g. \"Medications\") is "
+        "kept as a title, and depending on the table each cell or each row "
+        "becomes a bullet, wrapped to the note width.",
     ),
     "copy.aligned_done": (
         "Texte aligné copié — prêt pour le DME.",

@@ -4005,11 +4005,11 @@
   //: Boîte Unicode pleine largeur : les caractères de filet (┌ ┬ ┐ │ ├ ┼ ┤
   //: └ ┴ ┘) comptent une colonne en monospace. Le tableau s'étale sur TOUTE la
   //: largeur de la note, comme les lignes du rendu aligné (LINE_WIDTH) :
-  //:   - plus étroit que 89 → la dernière colonne pompe le surplus (le cadre
-  //:     arrive pile à la marge) ;
-  //:   - plus large que 89 → les colonnes les plus larges sont rabotées (la
-  //:     PLUS LARGE d'abord, puis la suivante) et leurs cellules repliées avec
-  //:     wrapText (comme les listes) : aucune ligne ne dépasse la marge.
+  //:   - plus étroit que LINE_WIDTH → la dernière colonne pompe le surplus (le
+  //:     cadre arrive pile à la marge) ;
+  //:   - plus large que LINE_WIDTH → les colonnes les plus larges sont rabotées
+  //:     (la PLUS LARGE d'abord, puis la suivante) et leurs cellules repliées
+  //:     avec wrapText (comme les listes) : aucune ligne ne dépasse la marge.
   //: Les espaces de remplissage restent des NBSP — un champ riche du DME les
   //: préserve, comme dans renderPlainTable. L'alignement de chaque colonne
   //: honore la ligne de séparatrice Markdown (gauche par défaut).
@@ -4167,12 +4167,12 @@
     return lignes;
   }
 
-  //: Largeur de ligne du texte simple (monospace, comme les colonnes
-  //: Médicaments). Les items de liste trop longs y sont repliés avec un
-  //: retrait suspendu : les lignes de continuation s'alignent sous le texte
-  //: après la puce/le numéro, jamais sous la puce elle-même. 89 = marge du DME
-  //: (il restait ~10 caractères avant la limite).
-  const LINE_WIDTH = 89;
+  //: Largeur de ligne du rendu aligné (listes et tableaux, monospace). Les
+  //: items de liste trop longs y sont repliés avec un retrait suspendu : les
+  //: lignes de continuation s'alignent sous le texte après la puce/le numéro,
+  //: jamais sous la puce elle-même. 93 = marge du DME (la limite est à ~99
+  //: caractères ; quatre caractères de plus qu'avant y restent disponibles).
+  const LINE_WIDTH = 93;
 
   /**
    * Replie un item de liste avec un retrait suspendu : la première ligne porte

@@ -2,6 +2,17 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-09-17 — Copie « Aligné » : largeur portée à 93 caractères
+
+- **Quatre caractères restaient disponibles** dans la largeur du dossier
+  médical : la largeur de ligne du rendu aligné (`LINE_WIDTH`) passe de 89 à
+  93. Les listes à retrait suspendu et les tableaux en boîte Unicode en
+  profitent ; le repli (continuations des listes, cellules des tableaux) suit
+  et le cadre des tableaux tient désormais exactement en 93 caractères.
+- Alignement avec `main`, où la même largeur est appliquée (les tableaux de
+  `main` répartissent de plus les tableaux à deux colonnes en moitiés égales
+  — 43 / 43 sur la largeur intérieure).
+
 ## 2026-09-09 — Les tests dictés restent dans leur rubrique d'origine
 
 - **Correction** : un test cognitif dicté (MoCA, MMSE…) finissait toujours

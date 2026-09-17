@@ -2,16 +2,28 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
-## 2026-09-17 — Copie « Aligné » : largeur portée à 93 caractères
+## 2026-09-17 — Copie « Aligné » : tableaux en liste pointée deux colonnes ; largeur 93
 
-- **Quatre caractères restaient disponibles** dans la largeur du dossier
-  médical : la largeur de ligne du rendu aligné (`LINE_WIDTH`) passe de 89 à
-  93. Les listes à retrait suspendu et les tableaux en boîte Unicode en
-  profitent ; le repli (continuations des listes, cellules des tableaux) suit
-  et le cadre des tableaux tient désormais exactement en 93 caractères.
-- Alignement avec `main`, où la même largeur est appliquée (les tableaux de
-  `main` répartissent de plus les tableaux à deux colonnes en moitiés égales
-  — 43 / 43 sur la largeur intérieure).
+*Les tableaux Markdown de la note ne sortent plus encadrés — les cadres
+Unicode se rendaient mal dans le dossier médical. La copie « Aligné » les
+convertit en liste pointée sur deux colonnes, et la largeur de ligne passe de
+89 à 93 caractères.*
+
+- **Tableaux en liste pointée deux colonnes** (`renderBulletTable`) : la rangée
+  d'en-tête est écartée, chaque rangée devient une puce « • cellule :
+  cellule… » (les cellules vides sont omises), et les puces s'écoulent en deux
+  moitiés indépendantes en lecture verticale — même disposition que la rubrique
+  Médicaments. Repli avec retrait suspendu sous la puce.
+- **Retrait de la boîte Unicode** : `renderUnicodeTable` et la lecture des
+  alignements de colonnes (les « : » du Markdown) sont supprimés — les filets
+  (`┌ ┬ ┐ │ ├ ┼ ┤ └ ┴ ┘`) se rendaient mal dans le champ du DME.
+- **Largeur portée à 93 caractères** (`LINE_WIDTH`) : quatre caractères
+  restaient disponibles dans la largeur du dossier médical ; les listes à
+  retrait suspendu et la liste de tableaux en profitent. Les colonnes de la
+  liste à deux colonnes passent de 44 à 45 (`MEDS_COLUMN_WIDTH`, partagée avec
+  les médicaments).
+- Alignement avec `main`, où la même présentation et la même largeur sont
+  appliquées.
 
 ## 2026-09-09 — Les tests dictés restent dans leur rubrique d'origine
 

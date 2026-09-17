@@ -3,30 +3,26 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-17 — Copie « Aligné » : tableaux en boîte Unicode, deux colonnes égales
+## 2026-09-17 — Copie « Aligné » : tableaux en liste pointée deux colonnes ; largeur 93
 
-*Les tableaux Markdown de la note sortent désormais encadrés dans la copie
-« Aligné » (jusqu'ici identique à « Texte simple »), et un tableau à deux
-colonnes les répartit à parts égales avec repli logique des cellules.*
+*Les tableaux Markdown de la note ne sortent plus encadrés — les cadres
+Unicode se rendaient mal dans le dossier médical. La copie « Aligné » les
+convertit en liste pointée sur deux colonnes, et la largeur de ligne passe de
+89 à 93 caractères.*
 
-- **`renderUnicodeTable`** : les tableaux de la copie « Aligné » sont rendus en
-  boîte Unicode (`┌ ┬ ┐ │ ├ ┼ ┤ └ ┴ ┘`), une colonne par glyphe en monospace, et
-  s'étalent sur toute la largeur de la note (93 colonnes, la marge du DME) ;
-  les cellules trop longues sont repliées (`wrapText`) et le cadre tient
-  toujours exactement en 93 caractères. Le remplissage reste sur des espaces
-  insécables, préservés par un champ riche du DME.
+- **Tableaux en liste pointée deux colonnes** (`renderBulletTable`) : la rangée
+  d'en-tête est écartée, chaque rangée devient une puce « • cellule :
+  cellule… » (les cellules vides sont omises), et les puces s'écoulent en deux
+  moitiés indépendantes en lecture verticale — même disposition que la rubrique
+  Médicaments. Repli avec retrait suspendu sous la puce.
 - **Largeur de ligne portée de 89 à 93 caractères** (`LINE_WIDTH`) : quatre
   caractères restaient disponibles dans la largeur du dossier médical. Listes
-  alignées et tableaux en profitent ; le repli (retrait suspendu des listes,
-  cellules des tableaux) suit.
-- **Tableau à deux colonnes : moitiés égales** (43 / 43 sur la largeur
-  intérieure), avec repli logique des cellules — la disposition attendue pour
-  un tableau « libellé / valeur » ou « médicament / posologie ». Au-delà de
-  deux colonnes, les largeurs suivent le contenu (le tableau de médication à
-  quatre colonnes du gabarit n'est pas rétréci).
-- **Alignements de colonnes respectés** : « `|:---:|` » → centré,
-  « `|---:|` » → droite (lus sur la ligne séparatrice du Markdown), gauche par
-  défaut.
+  alignées et liste de tableaux en profitent ; les colonnes de la liste à deux
+  colonnes passent de 44 à 45 (`MEDS_COLUMN_WIDTH`, partagée avec les
+  médicaments).
+- **Retrait de la boîte Unicode** : `renderUnicodeTable` et la lecture des
+  alignements de colonnes (les « : » du Markdown) sont supprimés — les filets
+  (`┌ ┬ ┐ │ ├ ┼ ┤ └ ┴ ┘`) se rendaient mal dans le champ du DME.
 - **« Texte simple » inchangé** : le rendu ASCII/NBSP d'origine
   (`renderPlainTable`) est conservé ; c'est « Aligné » qui diffère désormais.
 - Documentation : `README.md` (boutons de copie), `app/i18n.py`

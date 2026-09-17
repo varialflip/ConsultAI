@@ -3,23 +3,24 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
-## 2026-09-17 — Copie « Aligné » : tableaux en liste pointée deux colonnes ; largeur 93
+## 2026-09-17 — Copie « Aligné » : tableaux en liste pointée deux colonnes ; largeur 91
 
 *Les tableaux Markdown de la note ne sortent plus encadrés — les cadres
 Unicode se rendaient mal dans le dossier médical. La copie « Aligné » les
 convertit en liste pointée sur deux colonnes, et la largeur de ligne passe de
-89 à 93 caractères.*
+89 à 91 caractères.*
 
 - **Tableaux en liste pointée deux colonnes** (`renderBulletTable`) : la rangée
   d'en-tête est écartée, chaque rangée devient une puce « • cellule :
   cellule… » (les cellules vides sont omises), et les puces s'écoulent en deux
   moitiés indépendantes en lecture verticale — même disposition que la rubrique
   Médicaments. Repli avec retrait suspendu sous la puce.
-- **Largeur de ligne portée de 89 à 93 caractères** (`LINE_WIDTH`) : quatre
-  caractères restaient disponibles dans la largeur du dossier médical. Listes
-  alignées et liste de tableaux en profitent ; les colonnes de la liste à deux
-  colonnes passent de 44 à 45 (`MEDS_COLUMN_WIDTH`, partagée avec les
-  médicaments).
+- **Largeur de ligne portée de 89 à 91 caractères** (`LINE_WIDTH`) : deux
+  caractères restaient disponibles dans la largeur du dossier médical. Les
+  colonnes de la liste pointée deux colonnes restent à 44
+  (`MEDS_COLUMN_WIDTH`, partagée avec les médicaments), pour un total de
+  44 + 2 + 44 = 90 qui tient sous la marge (un total de 92 débordait et
+  cassait la liste des médicaments).
 - **Retrait de la boîte Unicode** : `renderUnicodeTable` et la lecture des
   alignements de colonnes (les « : » du Markdown) sont supprimés — les filets
   (`┌ ┬ ┐ │ ├ ┼ ┤ └ ┴ ┘`) se rendaient mal dans le champ du DME.

@@ -3446,6 +3446,19 @@
       .split('|').map((c) => stripInlineMarkdown(c.trim()));
   }
 
+  //: Alignements de colonnes annoncés par la ligne séparatrice Markdown
+  //: (« |:---:| » → centré, « | ---: | » → droite, sinon gauche). Le remplissage
+  //: se fera sur des NBSP, comme tout l'alignement de la copie alignée.
+  function splitTableAligns(line) {
+    return line.replace(/^\s*\|/, '').replace(/\|\s*$/, '')
+      .split('|').map((cell) => {
+        const c = cell.trim();
+        if (c.startsWith(':') && c.endsWith(':')) return 'center';
+        if (c.endsWith(':')) return 'right';
+        return 'left';
+      });
+  }
+
   const TABLE_SEPARATOR = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 
   //: Alignement par espaces INSÉCABLES (U+00A0) : un champ de DME riche aplatit
@@ -3468,6 +3481,99 @@
 
     const out = [ligne(rows[0]), widths.map((w) => '-'.repeat(w)).join(`${NBSP}${NBSP}`).trimEnd()];
     rows.slice(1).forEach((r) => out.push(ligne(r)));
+    return out;
+  }
+
+  //: Boîte Unicode pleine largeur : les caractères de filet (┌ ┬ ┐ │ ├ ┼ ┤
+  //: └ ┴ ┘) comptent une colonne en monospace. Le tableau s'étale sur TOUTE la
+  //: largeur de la note, comme les lignes du rendu aligné (LINE_WIDTH) : le
+  //: cadre arrive pile à la marge, quitte à raboter puis replier les cellules.
+  //: Les espaces de remplissage restent des NBSP — un champ riche du DME les
+  //: préserve, comme dans renderPlainTable. L'alignement de chaque colonne
+  //: honore la ligne séparatrice Markdown (gauche par défaut).
+  //:
+  //: Un tableau à DEUX colonnes fait exception : ses deux colonnes sont
+  //: ÉGALES (moitié de la largeur intérieure chacune), avec repli logique des
+  //: cellules — c'est la disposition attendue pour un tableau « libellé /
+  //: valeur » ou « médicament / posologie ». Au-delà de deux colonnes, les
+  //: largeurs suivent le contenu (le tableau de médication à quatre colonnes
+  //: du gabarit n'est pas rétréci).
+  function renderUnicodeTable(rows, aligns) {
+    if (!rows.length) return [];
+    const columns = Math.max(...rows.map((r) => r.length));
+    const widths = [];
+    for (let c = 0; c < columns; c += 1) {
+      widths.push(Math.max(...rows.map((r) => (r[c] || '').length)));
+    }
+    //: Largeur intérieure d'une ligne : « NBSP│NBSP » entre colonnes et
+    //: bords « │NBSP » / « NBSP│ » — soit Σ(largeurs) + 3 × nb_colonnes + 1.
+    const overhead = 3 * columns + 1;
+    const cible = LINE_WIDTH - overhead;
+
+    if (columns === 2) {
+      //: Deux colonnes ÉGALES : le reste de la division va à la première.
+      const base = Math.floor(cible / columns);
+      const reste = cible - base * columns;
+      widths[0] = base + reste;
+      widths[1] = base;
+    } else {
+      //: Étalage ou rabotage pour coller exactement à `cible` (content-based).
+      let somme = widths.reduce((acc, w) => acc + w, 0);
+      if (somme < cible) {
+        widths[columns - 1] += cible - somme;
+      } else if (somme > cible) {
+        const ordre = widths.map((w, i) => [i, w]).sort((a, b) => b[1] - a[1]);
+        let surplus = somme - cible;
+        for (const [i, w] of ordre) {
+          const rabotable = Math.max(0, w - 1);
+          const reduit = Math.min(rabotable, surplus);
+          widths[i] -= reduit;
+          surplus -= reduit;
+          if (surplus <= 0) break;
+        }
+      }
+    }
+
+    //: Repli de chaque cellule à la largeur de sa colonne (wrapText, sans
+    //: retrait : les continuations restent pleine largeur de colonne). Une
+    //: cellule vide produit une ligne d'espaces pour garder la rangée carrée.
+    const découper = (cell, c) => {
+      const lignes = wrapText(cell || '', widths[c]);
+      return lignes.length ? lignes : [''];
+    };
+    //: Alignement PAR LIGNE physique (gauche / centré / droite).
+    const pad = (ligneTexte, c) => {
+      const w = widths[c];
+      if (aligns && aligns[c] === 'center') {
+        const avant = Math.floor((w - ligneTexte.length) / 2);
+        return NBSP.repeat(avant) + ligneTexte + NBSP.repeat(w - ligneTexte.length - avant);
+      }
+      if (aligns && aligns[c] === 'right') {
+        return NBSP.repeat(w - ligneTexte.length) + ligneTexte;
+      }
+      return ligneTexte + NBSP.repeat(w - ligneTexte.length);
+    };
+    //: Une rangée logique (une ligne de cellules du Markdown) peut s'étendre
+    //: sur plusieurs lignes physiques : les cellules sont découpées chacune,
+    //: la hauteur est la plus grande, les autres sont complétées par des
+    //: lignes d'espaces.
+    const rangéeText = (cells) => {
+      const grille = Array.from({ length: columns }, (_, c) => découper(cells[c] || '', c));
+      const hauteur = Math.max(...grille.map((g) => g.length));
+      return Array.from({ length: hauteur }, (_, j) => `│${NBSP}${grille
+        .map((g, c) => pad(g[j] || '', c))
+        .join(`${NBSP}│${NBSP}`)}${NBSP}│`);
+    };
+    const filet = (gauche, centre, droite) => gauche + widths
+      .map((w) => '─'.repeat(w + 2)).join(centre) + droite;
+
+    //: Filets recalculés sur les largeurs → toujours exactement `LINE_WIDTH`
+    //: caractères par ligne.
+    const out = [filet('┌', '┬', '┐'), ...rangéeText(rows[0])];
+    for (let i = 1; i < rows.length; i += 1) {
+      out.push(filet('├', '┼', '┤'), ...rangéeText(rows[i]));
+    }
+    out.push(filet('└', '┴', '┘'));
     return out;
   }
 
@@ -3594,6 +3700,10 @@
     const lignes = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
     const out = [];
     let tableau = [];
+    //: Alignements de colonnes du tableau en attente, lus sur la ligne
+    //: séparatrice Markdown (rendus d'un bloc avec l'en-tête, voir
+    //: renderUnicodeTable).
+    let tableauAligns = [];
     //: Cellules « Médicaments » en attente de mise en colonnes, et indicateur
     //: de rubrique. On ne peut pas décider de l'alignement ligne à ligne : il
     //: faut d'abord voir toute la liste pour la couper en deux moitiés.
@@ -3605,8 +3715,9 @@
 
     const viderTableau = () => {
       if (tableau.length) {
-        out.push(...renderPlainTable(tableau));
+        out.push(...renderUnicodeTable(tableau, tableauAligns));
         tableau = [];
+        tableauAligns = [];
       }
     };
 
@@ -3631,7 +3742,8 @@
       if (/^\s*\|/.test(ligne)) {
         viderMeds();
         viderNum();
-        if (!TABLE_SEPARATOR.test(ligne)) tableau.push(splitTableRow(ligne));
+        if (TABLE_SEPARATOR.test(ligne)) tableauAligns = splitTableAligns(ligne);
+        else tableau.push(splitTableRow(ligne));
         return;
       }
       viderTableau();

@@ -3,6 +3,31 @@
 Changements livrés, entrées datées. À maintenir à chaque version publiée —
 voir `/opt/dictai/AGENTS.md` (cycle de déploiement).
 
+## 2026-09-17 — Copie « Aligné » : tableaux en boîte Unicode, deux colonnes égales
+
+*Les tableaux Markdown de la note sortent désormais encadrés dans la copie
+« Aligné » (jusqu'ici identique à « Texte simple »), et un tableau à deux
+colonnes les répartit à parts égales avec repli logique des cellules.*
+
+- **`renderUnicodeTable`** : les tableaux de la copie « Aligné » sont rendus en
+  boîte Unicode (`┌ ┬ ┐ │ ├ ┼ ┤ └ ┴ ┘`), une colonne par glyphe en monospace, et
+  s'étalent sur toute la largeur de la note (89 colonnes, la marge du DME) ;
+  les cellules trop longues sont repliées (`wrapText`) et le cadre tient
+  toujours exactement en 89 caractères. Le remplissage reste sur des espaces
+  insécables, préservés par un champ riche du DME.
+- **Tableau à deux colonnes : moitiés égales** (41 / 41 sur la largeur
+  intérieure), avec repli logique des cellules — la disposition attendue pour
+  un tableau « libellé / valeur » ou « médicament / posologie ». Au-delà de
+  deux colonnes, les largeurs suivent le contenu (le tableau de médication à
+  quatre colonnes du gabarit n'est pas rétréci).
+- **Alignements de colonnes respectés** : « `|:---:|` » → centré,
+  « `|---:|` » → droite (lus sur la ligne séparatrice du Markdown), gauche par
+  défaut.
+- **« Texte simple » inchangé** : le rendu ASCII/NBSP d'origine
+  (`renderPlainTable`) est conservé ; c'est « Aligné » qui diffère désormais.
+- Documentation : `README.md` (boutons de copie), `app/i18n.py`
+  (`copy.aligned_title`).
+
 ## 2026-09-16 — Gemini 3.5 Flash ; Validation pilotée par l'administration
 
 *Gemini 2.5 Pro étant en fin de vie, la mise en forme de la note passe au

@@ -545,10 +545,17 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "copy.aligned_title": (
         "Copie en texte seul avec listes alignées : puces et numérotées au "
         "retrait suspendu, numéros élargis à la même colonne, indentation "
-        "conservée dans un champ riche (espaces insécables).",
+        "conservée dans un champ riche (espaces insécables). Les tableaux "
+        "sont rendus en boîte Unicode (┌ ┬ ┐ ├ ┼ ┤ └ ┴ ┘) pleine largeur de "
+        "note, avec repli des cellules ; un tableau à deux colonnes les "
+        "répartit également. Alignements de colonnes respectés (centré/droite "
+        "via les « : » du Markdown).",
         "Plain-text copy with aligned lists: hanging-indent bullets and "
         "numbers, numbers widened to one column, indentation kept in a rich "
-        "field (non-breaking spaces).",
+        "field (non-breaking spaces). Tables are drawn as Unicode boxes "
+        "(┌ ┬ ┐ ├ ┼ ┤ └ ┴ ┘) on the full note width, with wrapped cells; a "
+        "two-column table splits them evenly. Column alignment is honored "
+        "(centered/right via Markdown « : »).",
     ),
     "copy.aligned_done": (
         "Texte aligné copié — prêt pour le DME.",

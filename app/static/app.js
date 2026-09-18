@@ -3486,9 +3486,9 @@
   // droite — jamais de gauche à droite rangée par rangée. Les colonnes
   // s'écoulent indépendamment (voir renderMedsColumns) : le repli d'une
   // entrée n'y laisse aucune « cellule » vide.
-  //: 44 = (LINE_WIDTH − 2) / 2 : deux colonnes égales et l'écart de 2
-  //: remplissent exactement la largeur du DME (44 + 2 + 44 = 90).
-  const MEDS_COLUMN_WIDTH = 44;
+  //: 43 = (LINE_WIDTH − 2) / 2 arrondi vers le bas : deux colonnes égales et
+  //: l'écart de 2 tiennent sous la marge du DME (43 + 2 + 43 = 88 ≤ 89).
+  const MEDS_COLUMN_WIDTH = 43;
   const MEDS_COLUMN_GAP = 2;
   //: Titre de rubrique (niveau 2) qui déclenche les deux colonnes.
   const MEDS_HEADING_RE = /m[ée]dicaments?|medications?|meds|rx|prescriptions?/i;
@@ -3603,9 +3603,9 @@
   //: Largeur de ligne du rendu aligné (listes et tableaux, monospace). Les
   //: items de liste trop longs y sont repliés avec un retrait suspendu : les
   //: lignes de continuation s'alignent sous le texte après la puce/le numéro,
-  //: jamais sous la puce elle-même. 90 = marge du DME (un caractère de plus
-  //: que les 89 d'origine, sous la limite de la largeur du dossier).
-  const LINE_WIDTH = 90;
+  //: jamais sous la puce elle-même. 89 = marge du DME (largeur d'origine,
+  //: un caractère sous la limite de la largeur du dossier).
+  const LINE_WIDTH = 89;
 
   /**
    * Replie un item de liste avec un retrait suspendu : la première ligne porte

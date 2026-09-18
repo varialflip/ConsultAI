@@ -2,12 +2,12 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
-## 2026-09-17 — Copie « Aligné » : tableaux en liste pointée deux colonnes ; largeur 90
+## 2026-09-17 — Copie « Aligné » : tableaux en liste pointée deux colonnes ; largeur 89
 
 *Les tableaux Markdown de la note ne sortent plus encadrés — les cadres
 Unicode se rendaient mal dans le dossier médical. La copie « Aligné » les
-convertit en liste pointée sur deux colonnes, et la largeur de ligne passe de
-89 à 90 caractères.*
+convertit en liste pointée sur deux colonnes, et la largeur de ligne revient à
+89 caractères (largeur d'origine).*
 
 - **Tableaux en liste pointée deux colonnes** (`renderBulletTable`) : selon la
   rangée d'en-tête, le tableau est traité de deux façons. **En-tête à libellé
@@ -22,11 +22,11 @@ convertit en liste pointée sur deux colonnes, et la largeur de ligne passe de
 - **Retrait de la boîte Unicode** : `renderUnicodeTable` et la lecture des
   alignements de colonnes (les « : » du Markdown) sont supprimés — les filets
   (`┌ ┬ ┐ │ ├ ┼ ┤ └ ┴ ┘`) se rendaient mal dans le champ du DME.
-- **Largeur portée à 90 caractères** (`LINE_WIDTH`) : un caractère de plus que
-  la marge d'origine, sans atteindre la limite du dossier médical. Les colonnes
-  de la liste pointée deux colonnes restent à 44 (`MEDS_COLUMN_WIDTH`, partagée
-  avec les médicaments) : 44 + 2 + 44 = 90 remplit exactement la largeur (un
-  total de 92 débordait et cassait la liste des médicaments).
+- **Largeur ramenée à 89 caractères** (`LINE_WIDTH`) : un caractère sous la
+  limite du dossier médical. Les colonnes de la liste pointée deux colonnes
+  passent à 43 (`MEDS_COLUMN_WIDTH`, partagée avec les médicaments) :
+  43 + 2 + 43 = 88 tient sous la marge (un total de 92 débordait et cassait la
+  liste des médicaments).
 - Alignement avec `main`, où la même présentation et la même largeur sont
   appliquées.
 

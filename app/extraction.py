@@ -131,13 +131,28 @@ est IMPRIMÉ : « cessé le… », « suspendu »)}.
 (``condition`` | ``surgery`` | ``hospitalization`` | ``allergy`` | ``family``)}.
 
 **labs** — un item par analyte : ``text``, ``fields`` = {``analyte``, \
-``value``, ``unit``, ``reference``, ``flag``, ``date``}. Si le tableau donne \
-PLUSIEURS colonnes datées, crée UN item par analyte ET par date : ``date`` \
-porte la date de la colonne, jamais celle du prélèvement global — deux valeurs \
-d'une même analyte à deux dates sont deux faits, pas un.
+``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
+``pertinence`` vaut ``pertinent``, ``routine`` ou ``anormal``.
 
-**imaging** — UN seul item par rapport, ``text`` = le corps du rapport \
-(conclusion comprise), ``fields`` = {``study``, ``date``}.
+Tu n'es pas clinicien et tu ne poses aucun diagnostic — mais tu sais ce qu'est \
+un bilan usuel, et une note de consultation ne recopie pas un panneau entier. \
+``pertinent`` : ce qu'un médecin citerait — hémoglobine, plaquettes, VGM, \
+globules blancs et différentiel d'une formule sanguine ; créatinine et DFGe ; \
+HbA1c ; INR ; TSH ; tout résultat marqué par le laboratoire. ``anormal`` : \
+valeur hors des références imprimées, même sans drapeau. ``routine`` : le \
+reste du panneau — sodium et potassium normaux, chlore, bicarbonates, \
+albumine normale, bilirubine, TIBC et paramètres du fer, sérologies négatives, \
+toute valeur normale qu'un médecin ne citerait pas. Une formule sanguine \
+normale s'écrit en une ligne, pas en trente.
+
+Si le tableau donne PLUSIEURS colonnes datées, crée UN item par analyte ET par \
+date : ``date`` porte la date de la colonne, jamais celle du prélèvement \
+global — deux valeurs d'une même analyte à deux dates sont deux faits, pas un.
+
+**imaging** — UN seul item par rapport : ``text`` = la CONCLUSION du rapport \
+telle qu'imprimée (2 à 4 lignes, c'est ce qui entre dans la note), \
+``fields`` = {``study``, ``date``, ``body`` = le texte intégral des résultats, \
+verbatim}.
 
 **other** — un item par bloc de texte cohérent.
 
@@ -208,13 +223,26 @@ interpretation belongs to the physician.
 ``surgery`` | ``hospitalization`` | ``allergy`` | ``family``)}.
 
 **labs** — one item per analyte: ``text``, ``fields`` = {``analyte``, \
-``value``, ``unit``, ``reference``, ``flag``, ``date``}. If the table gives \
-SEVERAL dated columns, create ONE item per analyte AND per date: ``date`` \
-carries the column's date, never the overall collection date — two values of \
-one analyte at two dates are two facts, not one.
+``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
+``pertinence`` is ``pertinent``, ``routine`` or ``anormal``.
 
-**imaging** — ONE item per report, ``text`` = the report body (impression \
-included), ``fields`` = {``study``, ``date``}.
+You are not a clinician and you make no diagnosis — but you know what a \
+routine panel is, and a consultation note does not copy a whole panel. \
+``pertinent``: what a physician would cite — haemoglobin, platelets, MCV, \
+white cells and differential from a blood count; creatinine and eGFR; HbA1c; \
+INR; TSH; anything the laboratory flagged. ``anormal``: outside the printed \
+reference range even without a flag. ``routine``: the rest of the panel — \
+normal sodium and potassium, chloride, bicarbonate, normal albumin, \
+bilirubin, TIBC and iron studies, negative serologies, any normal value a \
+physician would not cite. A normal blood count is one line, not thirty.
+
+If the table gives SEVERAL dated columns, create ONE item per analyte AND per \
+date: ``date`` carries the column's date, never the overall collection date — \
+two values of one analyte at two dates are two facts, not one.
+
+**imaging** — ONE item per report: ``text`` = the report's CONCLUSION as \
+printed (2 to 4 lines, this is what goes into the note), ``fields`` = \
+{``study``, ``date``, ``body`` = the full findings text, verbatim}.
 
 **other** — one item per coherent block of text.
 
@@ -238,9 +266,120 @@ line break (compact JSON, on a single line):
 """
 
 
+#: Clés de ``fields``, toutes déclarées : le schéma de réponse impose une
+#: forme fixe, et c'est ce qui empêche le modèle de produire un JSON invalide
+#: (observé : un caractère non échappé au milieu d'un objet de 12 000 signes,
+#: une lecture perdue sur trois). Un champ absent est simplement omis.
+_CHAMPS_SCHEMA = (
+    "molecule", "strength", "form", "directions", "din", "last_dispensed",
+    "renewals", "status_printed", "as_printed",
+    "analyte", "value", "unit", "reference", "flag", "date", "pertinence",
+    "study", "body", "year", "category", "partie",
+)
+
+_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "documents": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "id": {"type": "STRING"},
+                    "kind": {"type": "STRING", "enum": list(KINDS)},
+                    "pages": {"type": "ARRAY", "items": {"type": "INTEGER"}},
+                    "title": {"type": "STRING"},
+                    "confidence": {"type": "NUMBER"},
+                },
+                "required": ["id", "kind", "pages"],
+            },
+        },
+        "items": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "document_id": {"type": "STRING"},
+                    "kind": {"type": "STRING", "enum": list(KINDS)},
+                    "text": {"type": "STRING"},
+                    "fields": {
+                        "type": "OBJECT",
+                        "properties": {cle: {"type": "STRING"} for cle in _CHAMPS_SCHEMA},
+                    },
+                    "source_page": {"type": "INTEGER"},
+                },
+                "required": ["document_id", "kind", "text"],
+            },
+        },
+        "coverage": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "input": {"type": "INTEGER"},
+                    "document_id": {"type": "STRING"},
+                    "note": {"type": "STRING"},
+                },
+                "required": ["input"],
+            },
+        },
+        "unreadable": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "input": {"type": "INTEGER"},
+                    "reason": {"type": "STRING"},
+                },
+                "required": ["input"],
+            },
+        },
+        "observations": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "text": {"type": "STRING"},
+                    "pages": {"type": "ARRAY", "items": {"type": "INTEGER"}},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    "required": ["documents", "items", "coverage"],
+}
+
+
 def _prompt(count: int, language: str) -> str:
-    modele = _PROMPT_EN if (language or "fr").lower().startswith("en") else _PROMPT_FR
-    return modele % {"count": count}
+    from app import runtime_config
+
+    anglais = (language or "fr").lower().startswith("en")
+    modele = _PROMPT_EN if anglais else _PROMPT_FR
+    base = modele % {"count": count}
+
+    # Choix de lecture du médecin, dits une fois dans le panneau : la même
+    # phrase revient à chaque bilan (« je ne regarde que Hb, Plt, VGM, GB et
+    # le différentiel »). Sans cela, il décocherait TIBC tous les jours.
+    toujours = (runtime_config.value("labs_always_include") or "").strip()
+    jamais = (runtime_config.value("labs_always_exclude") or "").strip()
+    if not (toujours or jamais):
+        return base
+    lignes = []
+    if toujours:
+        lignes.append(
+            "The physician ALWAYS keeps these, even when normal: " + toujours
+            if anglais else
+            "Le médecin retient TOUJOURS ces paramètres, même normaux : " + toujours
+        )
+    if jamais:
+        lignes.append(
+            "The physician NEVER keeps these by default (mark them `routine`): " + jamais
+            if anglais else
+            "Le médecin ne retient JAMAIS ces paramètres par défaut (marque-les "
+            "`routine`) : " + jamais
+        )
+    titre = "PHYSICIAN'S READING HABITS" if anglais else "HABITUDES DE LECTURE DU MÉDECIN"
+    return base + "\n\n## " + titre + "\n" + "\n".join("- " + l for l in lignes) + "\n"
 
 
 def _parse(raw: str, motif: str = "") -> dict:
@@ -266,6 +405,127 @@ def _parse(raw: str, motif: str = "") -> dict:
         "Réponse illisible du modèle (JSON attendu). Rien n'a été enregistré : "
         "réessayez l'envoi."
     )
+
+
+#: Marques d'un résultat à retenir, telles qu'IMPRIMÉES par le laboratoire.
+#: On ne juge pas la valeur : on lit le drapeau que le laboratoire a posé.
+_FLAGS_ANORMAUX = {
+    "h", "l", "hh", "ll", "haut", "bas", "eleve", "élevé", "bas", "a", "abn",
+    "anormal", "critique", "crit", "high", "low", "↑", "↓", "▲", "▼", "+", "*",
+}
+
+
+#: Groupes d'analytes et leurs noms usuels. Sert à reconnaître ce que le
+#: médecin a écrit au panneau (« na », « creat ») dans ce que la page imprime
+#: (« Sodium », « Créatinine »). Volontairement petit : c'est une correspondance
+#: de confort, pas une base de laboratoire. Un terme inconnu retombe sur une
+#: comparaison de texte directe.
+_GROUPES_ANALYTES = {
+    "globules blancs": ("globules blancs", "leucocytes", "wbc", "gb"),
+    "hémoglobine": ("hémoglobine", "hemoglobine", "hb", "hgb"),
+    "vgm": ("vgm", "mcv", "volume globulaire moyen"),
+    "plaquettes": ("plaquettes", "plt", "thrombocytes"),
+    "sodium": ("sodium", "natrémie", "natremie", "na"),
+    "potassium": ("potassium", "kaliémie", "kaliemie", "k"),
+    "créatinine": ("créatinine", "creatinine", "creat", "clairance"),
+    "calcium": ("calcium", "calcémie", "calcemie", "ca"),
+    "albumine": ("albumine", "albu", "alb"),
+    "tsh": ("tsh", "thyréostimuline", "thyreostimuline"),
+    "b12": ("b12", "vitamine b12", "cobalamine"),
+    "syphilis": ("syphilis", "rpr", "vdrl", "tppa", "tpha"),
+    "vih": ("vih", "hiv", "vih-1", "vih 1"),
+}
+
+
+def _sans_accent(texte: str) -> str:
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texte or "")
+        if unicodedata.category(c) != "Mn"
+    ).lower()
+
+
+def _groupes_demandes(liste: str) -> set:
+    """Traduit « na, k, creat » en groupes canoniques."""
+    groupes = set()
+    for morceau in (liste or "").replace(";", ",").split(","):
+        terme = _sans_accent(morceau).strip()
+        if not terme:
+            continue
+        trouve = None
+        for groupe, alias in _GROUPES_ANALYTES.items():
+            if any(_sans_accent(a) == terme for a in alias):
+                trouve = groupe
+                break
+        groupes.add(trouve or terme)
+    return groupes
+
+
+def _analytes_retenus(analyte: str, liste: str) -> bool:
+    """L'analyte figure-t-il dans la liste (nom complet, abréviation ou alias) ?"""
+    demandes = _groupes_demandes(liste)
+    if not demandes:
+        return False
+    nom = _sans_accent(analyte).strip()
+    if not nom:
+        return False
+    for groupe in demandes:
+        if groupe in _GROUPES_ANALYTES:
+            if any(_sans_accent(a) in nom for a in _GROUPES_ANALYTES[groupe]):
+                return True
+        elif groupe and groupe in nom:
+            return True
+    return False
+
+
+def _inclus_par_defaut(kind: str, champs: dict) -> bool:
+    """
+    Ce qui entre dans la note SANS geste du clinicien.
+
+    Le principe : la note ne recopie pas tout ce qui est lisible. Un bilan de
+    trente analytes dont vingt-huit sont normaux n'a pas sa place dans une
+    consultation — mais un résultat marqué n'a pas non plus le droit de
+    disparaître, et décocher TIBC à chaque fois serait une corvée.
+
+    Deux garde-fous, dans cet ordre : le DRAPEAU imprimé par le laboratoire
+    (H, L, ↑, ↓…) force l'inclusion ; sinon c'est le jugement de pertinence du
+    modèle qui décide (``pertinence`` : pertinent / routine / anormal). Le
+    clinicien voit tout, coche et décoche d'un clic.
+
+    Ce qui est décoché reste visible, éditable, et se coche d'un clic — ou de
+    « Tout cocher ». Rien n'est perdu ; tout n'est pas versé.
+    """
+    if kind == "labs":
+        # Le drapeau imprimé l'emporte toujours : un résultat que le
+        # laboratoire a marqué ne peut pas être écarté par un jugement.
+        from app import runtime_config
+
+        analyte = str(champs.get("analyte") or "").strip()
+        # 1. Ce que le médecin a dit vouloir voir, TOUJOURS : sa liste passe
+        #    avant le jugement du modèle. C'est elle qui évite de recocher
+        #    sodium et TSH à chaque bilan.
+        if _analytes_retenus(analyte, runtime_config.value("labs_always_include") or ""):
+            return True
+        # 2. Drapeau imprimé par le laboratoire : un résultat marqué ne peut
+        #    pas être écarté.
+        flag = str(champs.get("flag") or "").strip().lower()
+        if flag in _FLAGS_ANORMAUX:
+            return True
+        # 3. Ce qu'il ne veut jamais voir : visible et cochable, jamais versé.
+        if _analytes_retenus(analyte, runtime_config.value("labs_always_exclude") or ""):
+            return False
+        # Liste BLANCHE, pas liste noire : sans jugement de pertinence, on
+        # n'a pas d'avis, et le défaut ne doit pas être de tout verser. La
+        # valeur reste visible et se coche d'un clic.
+        return str(champs.get("pertinence") or "").strip().lower() in (
+            "pertinent", "anormal",
+        )
+    if kind == "other":
+        # Là où tombent les en-têtes, les mentions administratives et les
+        # restes de mise en page : jamais versé sans un geste.
+        return False
+    return True
 
 
 def _normalize(payload: dict, count: int) -> dict:
@@ -397,9 +657,31 @@ def _normalize(payload: dict, count: int) -> dict:
             # proposé DÉCOCHÉ : c'est exactement là que tombent les en-têtes
             # administratifs et les restes de mise en page, et rien d'incertain
             # ne doit entrer dans la note sans un geste.
-            "included": kind != "other",
+            "included": _inclus_par_defaut(kind, champs),
             "edited": False,
         })
+
+    # Imagerie : la conclusion entre, le corps du rapport accompagne — décoché.
+    # Coller un compte rendu entier dans une note de consultation la noierait ;
+    # le texte intégral reste à un clic, jamais perdu.
+    enrichis = []
+    for item in propres:
+        enrichis.append(item)
+        if item["kind"] != "imaging":
+            continue
+        corps = str(item["fields"].get("body") or "").strip()
+        if len(corps) < 80 or corps == item["text"]:
+            continue
+        enrichis.append({
+            "document_id": item["document_id"],
+            "kind": "imaging",
+            "text": corps,
+            "fields": {"partie": "corps"},
+            "source_page": item["source_page"],
+            "included": False,
+            "edited": False,
+        })
+    propres = enrichis
 
     # Les pages d'un document sont déduites des lignes réellement lues : le
     # modèle se trompe parfois dans le récapitulatif ``documents[].pages``
@@ -505,6 +787,10 @@ def extract_documents(
         max_output_tokens=plafond,
         safety_settings=llm._safety_settings(),
         response_mime_type="application/json",
+        # Sortie CONTRAINTE : le modèle ne peut plus produire un JSON
+        # syntaxiquement invalide. C'était le vrai mode d'échec — pas la
+        # troncature.
+        response_schema=_SCHEMA,
     )
     try:
         # Réflexion COUPÉE : lire une page ne demande aucune inférence. Le

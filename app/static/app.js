@@ -8163,6 +8163,17 @@
     pages.textContent = `${doc.pages || 1} ${T('doc.pages')}`;
     barre.appendChild(pages);
 
+    // Combien d'éléments entreront réellement dans la note : c'est le chiffre
+    // qui compte, pas le nombre de lignes lues.
+    const compte = document.createElement('span');
+    compte.className = 'text-[11px] font-semibold text-slate-500';
+    const tous = extractionData.items || [];
+    const total = tous.length + observations.length;
+    const retenus = tous.filter((i) => i.included).length
+      + observations.filter((o) => o.included).length;
+    compte.textContent = `${retenus}/${total} ${T('doc.included')}`;
+    barre.appendChild(compte);
+
     const select = document.createElement('select');
     select.className = 'ml-auto rounded border-slate-300 text-[11px] py-0.5';
     ['medications', 'history', 'labs', 'imaging', 'other'].forEach((kind) => {
@@ -8278,7 +8289,14 @@
     // Toute modification (case ou texte) part au serveur après une pause :
     // l'arbitrage survit à la fermeture de l'onglet.
     entete.addEventListener('input', () => scheduleDocumentReview(doc, entete));
-    entete.addEventListener('change', () => scheduleDocumentReview(doc, entete));
+    entete.addEventListener('change', () => {
+      // Le compteur se met à jour tout de suite : c'est lui qui dit si l'on
+      // est en train de verser la page entière ou seulement l'essentiel.
+      const cases = entete.querySelectorAll('[data-role="include"]');
+      const n = Array.from(cases).filter((c) => c.checked).length;
+      if (cases.length) compte.textContent = `${n}/${cases.length} ${T('doc.included')}`;
+      scheduleDocumentReview(doc, entete);
+    });
     return entete;
   }
 

@@ -1521,6 +1521,19 @@ manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers
 sans ligne correspondante tourne à chaque purge. `DOCUMENTS_DIR` (défaut
 `/data/documents`, à laisser sous `/data`) et `MAX_DOCUMENT_MB` (défaut 25).
 
+**Tout n'entre pas.** Une note de consultation ne recopie pas un panneau de
+trente analytes. Chaque valeur de bilan reçoit une `pertinence` du modèle
+(`pertinent`, `anormal`, `routine`) et seule la partie pertinente est cochée
+d'avance. Deux réglages du panneau disent vos habitudes de lecture, une fois
+pour toutes : **« Bilan : valeurs toujours retenues »** (par défaut GB, Hb,
+VGM, plaquettes, sodium, potassium, créatinine, calcium, albumine, TSH, B12,
+syphilis, VIH) et **« valeurs à ne jamais retenir »**. Elles passent avant le
+jugement du modèle ; un drapeau imprimé par le laboratoire (H, L, ↓…) force
+l'inclusion dans tous les cas. Rien n'est perdu : ce qui est décoché reste
+affiché et se coche d'un clic, avec « Tout cocher » par document et un
+compteur « N/M dans la note ». Pour l'imagerie, la **conclusion** entre et le
+corps du rapport accompagne décoché.
+
 **Vitesse.** La lecture emploie le **modèle rapide** du panneau
 (« Modèle rapide (lecture des documents) », `gemini_model_fast`, vide =
 `gemini-2.5-flash`), la réflexion coupée et un JSON compact : ~5 s pour une

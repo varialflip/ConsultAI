@@ -622,6 +622,25 @@ SETTINGS: Tuple[Setting, ...] = (
                help_key="set.cap.model.help"),
     _cap_fast("gemini", "gemini"),
     _cap_verify("gemini", "gemini"),
+    # Choix de LECTURE des bilans : la même phrase revient à chaque
+    # consultation (« je ne regarde que Hb, Plt, VGM, GB et le différentiel »).
+    # La dire une fois ici évite de décocher TIBC à chaque fois.
+    Setting(
+        "labs_always_include", "text", "group.note",
+        # La liste du médecin, telle qu'il l'a donnée : formule sanguine
+        # usuelle, ionogramme et fonction rénale, calcium, albumine, TSH, B12,
+        # et les sérologies qu'il veut voir faites (syphilis, VIH).
+        default=lambda: (
+            "globules blancs, hémoglobine, VGM, plaquettes, sodium, potassium, "
+            "créatinine, calcium, albumine, TSH, B12, syphilis, VIH"
+        ),
+        placeholder="ex. hémoglobine, plaquettes, VGM, globules blancs",
+    ),
+    Setting(
+        "labs_always_exclude", "text", "group.note",
+        default=lambda: "",
+        placeholder="ex. TIBC, fer sérique, saturation de la transferrine",
+    ),
     _cap_temperature("gemini", "gemini", lambda: str(settings.gemini_temperature)),
     Setting(
         "gemini_thinking", "choice", "group.note",

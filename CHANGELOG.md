@@ -40,6 +40,18 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
 - **Identité** : les en-têtes administratifs (nom, NAS, adresse, numéro de
   dossier) ne sont pas extraits ; un bloc que le modèle n'a pas su classer
   (« autre ») arrive **décoché**.
+- **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
+  analytes n'a pas sa place dans une note. Chaque valeur reçoit une
+  `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie
+  pertinente est cochée par défaut ; le reste est lu, affiché, décoché, coché
+  d'un clic. Trois garde-fous, dans cet ordre : la **liste du médecin**
+  (`labs_always_include` — GB, Hb, VGM, plaquettes, Na, K, créatinine,
+  calcium, albumine, TSH, B12, syphilis, VIH par défaut) passe avant tout ;
+  un **drapeau imprimé** par le laboratoire force l'inclusion ; une liste
+  `labs_always_exclude` écarte le reste. Le compteur « N/M dans la note » et
+  « Tout cocher » sont dans l'en-tête de chaque document.
+- **Imagerie** : la **conclusion** entre dans la note, le corps du rapport
+  accompagne décoché — coller un compte rendu entier noierait la note.
 - **Vitesse** : la lecture emploie le **modèle rapide** du panneau
   (« Modèle rapide (lecture des documents) », vide = `gemini-2.5-flash`) et
   non celui de la rédaction, avec la réflexion coupée et un JSON compact :

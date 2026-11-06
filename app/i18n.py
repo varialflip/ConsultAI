@@ -421,6 +421,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Document pas encore lu.",
         "Document not read yet.",
     ),
+    "doc.included": (
+        "dans la note",
+        "in the note",
+    ),
     "doc.check_all": (
         "Tout cocher",
         "Check all",
@@ -1533,6 +1537,28 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "clé configurée et affiche ce à quoi ce compte a réellement droit.",
         "The “Available models” button queries the provider with the "
         "configured key and shows what this account actually has access to.",
+    ),
+    "set.labs_always_include.label": (
+        "Bilan : valeurs toujours retenues",
+        "Lab panel: values always kept",
+    ),
+    "set.labs_always_include.help": (
+        "Paramètres qu'un médecin cite même normaux (séparés par des "
+        "virgules). Le modèle les verse dans la note sans qu'on ait à les "
+        "cocher. Par défaut : la formule sanguine usuelle.",
+        "Parameters a physician cites even when normal (comma-separated). The "
+        "model puts them in the note without any ticking. Default: the usual "
+        "blood count.",
+    ),
+    "set.labs_always_exclude.label": (
+        "Bilan : valeurs à ne jamais retenir",
+        "Lab panel: values never kept",
+    ),
+    "set.labs_always_exclude.help": (
+        "Paramètres laissés de côté par défaut, même hors références — les "
+        "cocher reste possible, ligne par ligne. Vide = aucun.",
+        "Parameters left out by default, even outside the reference range — "
+        "ticking them remains possible, line by line. Empty = none.",
     ),
     "set.cap.model_fast.label": (
         "Modèle rapide (lecture des documents)",

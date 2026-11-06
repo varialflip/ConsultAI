@@ -128,6 +128,74 @@ class TestNormalisation(unittest.TestCase):
         self.assertEqual(item["text"], "Citalopram 20 mg — 1 co PO DIE (Cessé le 2026-03-02)")
         self.assertTrue(item["fields"]["as_printed"].startswith("JAMP-CITALOPRAM"))
 
+    def test_bilan_normal_decoché_bilan_marque_inclus(self):
+        """La note ne recopie pas un bilan entier : le drapeau IMPRIMÉ décide."""
+        charge = _payload(items=[
+            # Chlore : hors de la liste du médecin, normal → pas versé.
+            {"document_id": "d1", "kind": "labs", "text": "Chlore 101 mmol/L",
+             "fields": {"analyte": "Chlore", "flag": None}},
+            # Acide urique : hors liste, mais le laboratoire l'a marqué.
+            {"document_id": "d1", "kind": "labs", "text": "Acide urique 512",
+             "fields": {"analyte": "Acide urique", "flag": "H"}},
+            {"document_id": "d1", "kind": "labs", "text": "Bilirubine 22",
+             "fields": {"analyte": "Bilirubine", "flag": "↓"}},
+        ])
+        items = extraction._normalize(charge, 1)["items"]
+        self.assertFalse(items[0]["included"])   # disponible, pas versé
+        self.assertTrue(items[1]["included"])    # H imprimé = garde-fou
+        self.assertTrue(items[2]["included"])    # ↓ imprimé = garde-fou
+
+    def test_bilan_routine_decoché_pertinent_inclus(self):
+        """Décocher TIBC à chaque fois serait une corvée : le modèle juge."""
+        charge = _payload(items=[
+            {"document_id": "d1", "kind": "labs", "text": "TIBC 62 umol/L",
+             "fields": {"analyte": "TIBC", "pertinence": "routine"}},
+            {"document_id": "d1", "kind": "labs", "text": "Hémoglobine 118 g/L",
+             "fields": {"analyte": "Hémoglobine", "pertinence": "pertinent"}},
+            {"document_id": "d1", "kind": "labs", "text": "Potassium 5,4 mmol/L",
+             "fields": {"analyte": "Potassium", "pertinence": "routine",
+                        "flag": "H"}},
+        ])
+        items = extraction._normalize(charge, 1)["items"]
+        self.assertFalse(items[0]["included"])   # routine, non versé
+        self.assertTrue(items[1]["included"])    # pertinent
+        self.assertTrue(items[2]["included"])    # drapeau imprimé = garde-fou
+
+    def test_liste_du_medecin_reconnue_par_abreviation(self):
+        """« na », « creat », « vih » doivent reconnaître Sodium, Créatinine, VIH."""
+        self.assertTrue(extraction._analytes_retenus("Sodium", "na, k, creat"))
+        self.assertTrue(extraction._analytes_retenus("Créatinine", "na, k, creat"))
+        self.assertTrue(extraction._analytes_retenus("Créatinine (DFGe)", "creat"))
+        self.assertTrue(extraction._analytes_retenus("VIH 1/2", "vih"))
+        self.assertTrue(extraction._analytes_retenus("VGM", "vgm"))
+        self.assertFalse(extraction._analytes_retenus("TIBC", "na, k, creat"))
+        self.assertFalse(extraction._analytes_retenus("Sodium", ""))
+
+    def test_liste_du_medecin_prime_sur_le_jugement(self):
+        """Marqué « routine » par le modèle, mais réclamé par le médecin."""
+        charge = _payload(items=[
+            {"document_id": "d1", "kind": "labs", "text": "Sodium 137 mmol/L",
+             "fields": {"analyte": "Sodium", "pertinence": "routine"}},
+            {"document_id": "d1", "kind": "labs", "text": "TIBC 62 umol/L",
+             "fields": {"analyte": "TIBC", "pertinence": "routine"}},
+        ])
+        items = extraction._normalize(charge, 1)["items"]
+        self.assertTrue(items[0]["included"])   # dans la liste du médecin
+        self.assertFalse(items[1]["included"])  # routine, hors liste
+
+    def test_imagerie_conclusion_incluse_corps_decoché(self):
+        corps = "Les champs pulmonaires montrent un infiltrat basal droit. " * 3
+        charge = _payload(items=[{
+            "document_id": "d1", "kind": "imaging",
+            "text": "Infiltrat lobaire inférieur droit. Cardiomégalie légère.",
+            "fields": {"study": "Radiographie du thorax", "body": corps},
+        }])
+        items = extraction._normalize(charge, 1)["items"]
+        self.assertEqual(len(items), 2)
+        self.assertTrue(items[0]["included"])    # la conclusion entre
+        self.assertFalse(items[1]["included"])   # le corps accompagne
+        self.assertEqual(items[1]["text"].strip(), corps.strip())
+
     def test_observation_decochée_par_defaut(self):
         charge = _payload(observations=[{"text": "Le bilan précède la liste", "pages": [1]}])
         observation = extraction._normalize(charge, 1)["observations"][0]

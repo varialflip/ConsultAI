@@ -23,6 +23,30 @@ montés en lecture seule dans le conteneur `consultai-test` (stack
   `selfhosted` (pipeline JSON de structuration, vérification BDPP) a été
   archivée sous `selfhosted-archive-2026-08-30` (locale + origin).
 
+### État au 2026-11-06 — `main` a été fusionnée dans `selfhosted`
+
+La branche portait **142 commits d'avance** (moteur de grounding médicaments,
+termes gériatriques, tests) et `main` **9** (bascule « Validation » globale,
+Gemini 3.5 Flash, copie « Aligné »). Le 2026-11-06, `main` a été fusionnée dans
+`selfhosted`. Décisions de résolution, à ne pas défaire :
+
+- **`second_pass` est une bascule GLOBALE** (`second_pass_enabled`, panneau
+  d'administration) : la préférence par usager de `selfhosted`
+  (`preferences.second_pass_for`, route `PUT /api/me/second_pass`) est
+  **supprimée**, pas conservée en parallèle.
+- `_verification_requete` de `main` a été **écartée** : sur `selfhosted` la
+  fonction s'appelle `_verification_messages` (audit pour tous les
+  fournisseurs). Ne pas réintroduire la version Gemini-only.
+- `dictation_grounding` et `state.medGroundingOn` sont conservés ;
+  `updateSecondPassToggle()` / `updateSecondPassAvailability()` ont disparu
+  avec la bascule par usager.
+
+⚠ L'instance de test tournait sur le **point de terminaison personnalisé**
+(`custom` → `http://fredericks-mac-studio:8000/v1`) ; elle a été basculée sur
+**`gemini` (Vertex)** pour valider le même chemin que la production
+(`gemini_bypass_stt=true`, température 0,05, budget de réflexion 2 500).
+La reconnaissance vocale, elle, reste sur le point de terminaison personnalisé.
+
 ## Cycle de déploiement
 
 Deux chemins bien distincts. Une release (tag) n'est faite que lorsqu'elle est

@@ -1471,6 +1471,62 @@ redondants doublant un nom correct dicté sortent, le nom correct reste).
 
 ---
 
+### 7.9 Documents photographiés (listes, bilans, rapports)
+
+La revue du dossier précède la consultation : plutôt que de retaper une liste
+de médicaments ou de dicter un bilan, on **photographie la page**. La caméra
+est dans la barre d'outils, à gauche du micro.
+
+**Le flux.** Photographier → « Envoyer » → le modèle lit → on relit à l'écran
+(texte éditable + case à cocher par élément) → on dicte → on génère la note.
+Les prises restent dans le navigateur (IndexedDB) jusqu'à « Envoyer » : rien
+n'est téléversé avant ce geste, et un téléphone qui s'endort ne perd rien.
+
+**Un document, pas une photo.** Les photos d'un même envoi sont assemblées en
+un **PDF multipage** (Python pur, sans dépendance ; un PDF exporté du DME passe
+tel quel). Le modèle reçoit un document cohérent — ordre des pages, en-tête,
+tableau qui continue — et le facture **258 jetons par page**, quel que soit le
+format d'origine. Une photo envoyée seule comme image coûterait ~3 000 jetons
+pour le même contenu.
+
+**Le modèle segmente, le code vérifie.** C'est le modèle qui décide combien de
+documents distincts contiennent les pages, leur type (médicaments, antécédents,
+laboratoire, imagerie, autre) et les pages de chacun. En revanche la
+**couverture** est vérifiée en dur : chaque page envoyée doit être rendue, lue
+ou déclarée illisible. Une page manquante fait échouer l'extraction avec un
+message — une page oubliée en silence serait une ligne de moins dans une liste
+de médicaments.
+
+**Ce que le modèle n'a pas le droit de faire.** Il transcrit, il ne conclut
+pas : « 0 renouvellement » n'est pas « cessé », une date de dernière
+distribution n'est pas une date d'arrêt. Le statut n'est repris que s'il est
+**imprimé** sur la page. Les en-têtes administratifs (nom, NAS, adresse,
+numéro de dossier) ne sont pas extraits ; un bloc que le modèle n'a pas su
+classer arrive **décoché**. Les **observations** (recoupements entre documents)
+ont leur propre bloc, décoché par défaut.
+
+**Le préfixe du distributeur.** `APO-RAMIPRIL`, `TEVA-METFORMINE`,
+`SANDOZ-ATORVASTATINE` : la ligne de la note porte la **molécule**
+(« Ramipril 5 mg — 1 co PO DIE »), la ligne imprimée reste conservée en
+provenance dans `fields.as_printed`.
+
+**Rien ne repart en image à la génération.** Les éléments cochés entrent dans
+la note en texte, avec une consigne qui les exempte de la règle « aucune
+invention » (ils ne figurent pas dans la dictée) — et un garde-fou quand aucune
+dictée n'accompagne les documents. L'audit « Validation » reçoit le même bloc,
+sinon il signalerait la liste du médecin comme une invention.
+
+**Rétention.** Les documents s'effacent avec le brouillon — suppression
+manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers
+sans ligne correspondante tourne à chaque purge. `DOCUMENTS_DIR` (défaut
+`/data/documents`, à laisser sous `/data`) et `MAX_DOCUMENT_MB` (défaut 25).
+
+**Limites assumées.** Le fournisseur de modèle doit savoir lire un document :
+Gemini (Vertex) oui ; les autres sont refusés avec un message explicite plutôt
+que silencieusement ignorés. L'écriture manuscrite est hors périmètre — la
+reconnaître serait une devinette déguisée en transcription, et le mode d'échec
+est le mauvais médicament.
+
 ## 8. Mise à jour
 
 Le code est **inclus dans l'image**, republiée à chaque changement. Seuls

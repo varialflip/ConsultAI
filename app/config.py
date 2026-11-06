@@ -305,6 +305,13 @@ class Settings:
 
     # --- Enregistrements conservés avec les brouillons ---
     audio_dir: str = "/data/audio"
+    #: Documents photographiés (listes de médicaments, rapports, bilans).
+    #: Sous-dossier de /data : aucun nouveau montage docker-compose, et ils
+    #: meurent avec le brouillon comme l'audio.
+    documents_dir: str = "/data/documents"
+    #: Taille maximale d'un document téléversé (une photo redimensionnée pèse
+    #: quelques centaines de kilo-octets ; un PDF de rapport quelques Mo).
+    max_document_mb: int = 25
 
     # --- Sauvegardes (export/import complet de l'application) ---
     # Sous-dossier de /data à dessein : aucun nouveau montage docker-compose,
@@ -484,6 +491,8 @@ class Settings:
             mistral_realtime_delay_ms=_env_int("MISTRAL_REALTIME_DELAY_MS", 1000),
 
             audio_dir=_env("AUDIO_DIR", "/data/audio"),
+            documents_dir=_env("DOCUMENTS_DIR", "/data/documents"),
+            max_document_mb=_env_int("MAX_DOCUMENT_MB", 25),
             backup_dir=_env("BACKUP_DIR", "/data/backups"),
             dictation_dir=_env("DICTATION_DIR", "/data/dictations"),
             audio_cache_dir=_env("AUDIO_CACHE_DIR", "/data/audio-cache"),

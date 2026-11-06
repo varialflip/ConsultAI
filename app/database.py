@@ -440,6 +440,64 @@ class Recording(Base):
         }
 
 
+class Document(Base):
+    """
+    Document photographié joint à un brouillon (liste de médicaments, rapport,
+    bilan, antécédents).
+
+    Distinct de ``Recording`` à dessein : la sémantique n'a rien à voir (le
+    premier est écouté dans une balise ``<audio>``, le second est lu par le
+    modèle), et un document peut porter PLUSIEURS pages dans un seul fichier —
+    un PDF de cinq pages reste UN document. C'est aussi l'unité que le modèle
+    segmente : une photo = un document, un PDF = un document.
+
+    ``extraction_json`` porte la réponse structurée du modèle **et** l'état de
+    la revue (texte édité, cases cochées) : le recalculer à chaque ouverture
+    ferait perdre l'arbitrage du clinicien, qui est le vrai travail humain de
+    cette étape.
+
+    Comme pour ``Recording``, ``owner`` est dupliqué depuis la consultation :
+    le contrôle d'accès est le seul endroit où une jointure oubliée coûterait
+    cher.
+    """
+
+    __tablename__ = "documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    consultation_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)  # relatif à DOCUMENTS_DIR
+    mime_type: Mapped[str] = mapped_column(String(100), default="image/jpeg", nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    pages: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    # medications | history | labs | imaging | other — proposé par le modèle,
+    # corrigeable dans l'onglet Documents.
+    kind: Mapped[str] = mapped_column(String(20), default="other", nullable=False)
+    title: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    # Réponse du modèle + revue (voir app/extraction.py). Vide tant que
+    # l'extraction n'a pas tourné.
+    extraction_json: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    extraction_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "consultation_id": self.consultation_id,
+            "mime_type": self.mime_type,
+            "size_bytes": self.size_bytes,
+            "pages": self.pages,
+            "kind": self.kind,
+            "title": self.title,
+            "extracted_at": _iso(self.extracted_at),
+            "created_at": _iso(self.created_at),
+        }
+
+
 class AppSetting(Base):
     """
     Réglage modifiable depuis le panneau d'administration.

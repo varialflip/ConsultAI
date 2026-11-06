@@ -368,6 +368,98 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Termes gériatriques à valider",
         "Geriatric terms to validate",
     ),
+    # --- Documents photographiés -----------------------------------------
+    "doc.tab": ("Documents", "Documents"),
+    "doc.capture_title": (
+        "Photographier un document (liste de médicaments, bilan, rapport)",
+        "Photograph a document (medication list, lab report, imaging report)",
+    ),
+    "doc.pending_hint": (
+        "en attente d'envoi — rien n'est parti au serveur",
+        "waiting to be sent — nothing has reached the server yet",
+    ),
+    "doc.send": ("Envoyer", "Send"),
+    "doc.sending": ("Envoi…", "Sending…"),
+    "doc.clear": ("Tout retirer", "Clear all"),
+    "doc.send_failed": ("Envoi impossible :", "Could not send:"),
+    "doc.extract_failed": ("Lecture impossible :", "Could not read:"),
+    "doc.save_failed": (
+        "Réglage non enregistré — vérifiez la connexion.",
+        "Setting not saved — check the connection.",
+    ),
+    "doc.empty": (
+        "Aucun document. La caméra, à gauche du micro, photographie une liste "
+        "de médicaments, un bilan ou un rapport.",
+        "No document yet. The camera, left of the microphone, photographs a "
+        "medication list, a lab report or an imaging report.",
+    ),
+    "doc.photo": ("Photo", "Photo"),
+    "doc.pages": ("page(s)", "page(s)"),
+    "doc.page": ("page", "page"),
+    "doc.view": ("Voir", "View"),
+    "doc.reread": ("Relire", "Read again"),
+    "doc.reread_confirm": (
+        "Relire ce document ? Le texte corrigé et les cases cochées de cette "
+        "lecture seront remplacés.",
+        "Read this document again? The corrected text and the ticks from this "
+        "reading will be replaced.",
+    ),
+    "doc.delete": ("Supprimer", "Delete"),
+    "doc.delete_confirm": (
+        "Supprimer ce document et sa lecture ?",
+        "Delete this document and its reading?",
+    ),
+    "doc.observations": (
+        "Observations proposées (décochées : rien n'entre dans la note sans vous)",
+        "Suggested observations (unchecked: nothing enters the note without you)",
+    ),
+    "doc.nothing_kept": (
+        "Aucun élément retenu dans ce document.",
+        "No element kept in this document.",
+    ),
+    "doc.not_read": (
+        "Document pas encore lu.",
+        "Document not read yet.",
+    ),
+    "doc.kind.medications": ("Médicaments", "Medications"),
+    "doc.kind.history": ("Antécédents", "Medical history"),
+    "doc.kind.labs": ("Laboratoire", "Laboratory"),
+    "doc.kind.imaging": ("Imagerie", "Imaging"),
+    "doc.kind.other": ("Autre", "Other"),
+    "err.document_empty": ("Aucun fichier reçu.", "No file received."),
+    "err.document_too_many": (
+        "Trop de fichiers en un seul envoi.",
+        "Too many files in a single upload.",
+    ),
+    "err.document_too_large": (
+        "Document trop volumineux (limite : {limit} Mo).",
+        "Document too large (limit: {limit} MB).",
+    ),
+    "err.document_type": (
+        "Format non accepté : photo JPEG ou PDF.",
+        "Unsupported format: JPEG photo or PDF.",
+    ),
+    "err.document_mixed": (
+        "Envoyez soit des photos, soit un PDF — pas les deux à la fois.",
+        "Send either photos or a PDF, not both at once.",
+    ),
+    "err.document_store": (
+        "Le document n'a pas pu être enregistré.",
+        "The document could not be stored.",
+    ),
+    "err.document_kind": ("Type de document inconnu.", "Unknown document type."),
+    "err.document_not_extracted": (
+        "Ce document n'a pas encore été lu.",
+        "This document has not been read yet.",
+    ),
+    "err.document_missing": (
+        "Fichier introuvable sur le disque.",
+        "File not found on disk.",
+    ),
+    "err.document_extract": (
+        "Lecture impossible : {error}",
+        "Could not read the document: {error}",
+    ),
     "pane.clear": ("Supprimer", "Delete"),
     "pane.clear_title": ("Supprimer la consultation", "Delete the consultation"),
     "pane.generate": ("Mettre en forme", "Format"),

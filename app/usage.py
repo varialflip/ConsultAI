@@ -177,14 +177,19 @@ def compact_old_events() -> None:
             if daily is None:
                 daily = UsageDaily(date=day, owner=owner, kind=kind, provider=provider, model=model)
                 db.add(daily)
-            daily.prompt_tokens += agg["prompt_tokens"]
-            daily.output_tokens += agg["output_tokens"]
-            daily.audio_prompt_tokens += agg["audio_prompt_tokens"]
-            daily.cached_tokens += agg["cached_tokens"]
-            daily.audio_seconds += agg["audio_seconds"]
-            daily.cost += agg["cost"]
+            # Les lignes créées avant l'ajout de ces colonnes les portent à
+            # NULL (ALTER TABLE ADD COLUMN sans défaut) : `+=` sur None lève
+            # et interrompt TOUT le compactage. On repart de zéro.
+            daily.prompt_tokens = (daily.prompt_tokens or 0) + agg["prompt_tokens"]
+            daily.output_tokens = (daily.output_tokens or 0) + agg["output_tokens"]
+            daily.audio_prompt_tokens = (
+                (daily.audio_prompt_tokens or 0) + agg["audio_prompt_tokens"]
+            )
+            daily.cached_tokens = (daily.cached_tokens or 0) + agg["cached_tokens"]
+            daily.audio_seconds = (daily.audio_seconds or 0) + agg["audio_seconds"]
+            daily.cost = (daily.cost or 0.0) + agg["cost"]
             daily.currency = agg["currency"]
-            daily.event_count += agg["event_count"]
+            daily.event_count = (daily.event_count or 0) + agg["event_count"]
 
         for row in rows:
             db.delete(row)

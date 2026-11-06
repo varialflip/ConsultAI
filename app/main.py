@@ -79,7 +79,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 from app import __version__
 
-from app import audio_cache, backup, changelog, dictation, geriatric_terms, i18n, live, llm, med_grounding, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
+from app import audio_cache, backup, changelog, dictation, documents as documents_service, extraction, geriatric_terms, i18n, live, llm, med_grounding, oidc, preferences, recordings, runtime_config, scheduler, stt, usage
 from app import users as users_service
 from app.auth import (
     AuthMiddleware,
@@ -93,6 +93,7 @@ from app.auth import (
 from app.config import configure_logging, settings
 from app.database import (
     Consultation,
+    Document,
     PricingRate,
     SchedulerState,
     SessionLocal,
@@ -2808,6 +2809,7 @@ def _generate_and_publish(
     med_hints: Optional[List[dict]] = None,
     n_transcript: Optional[str] = None,
     conf_map: Optional[dict] = None,
+    documents_block: str = "",
 ) -> dict:
     """
     Génère la note en continu et diffuse les morceaux en direct (SSE).
@@ -2884,6 +2886,7 @@ def _generate_and_publish(
         confiance=confiance_mots,
         med_hints=med_hints,
         conf_map=conf_map,
+        documents_block=documents_block,
     )
 
     raw = ""
@@ -3018,6 +3021,11 @@ async def _run_second_pass(
                 "text": texte,
             })
 
+        # Les documents du brouillon doivent parvenir à l'auditeur : sans eux,
+        # la liste de médicaments du médecin serait signalée comme une
+        # invention (elle n'est ni dans l'audio ni dans la transcription).
+        with SessionLocal() as doc_db:
+            documents_block = _documents_context(doc_db, consultation_id)
         resultat, usage_passe = llm.verify_note_stream(
             note_markdown,
             langue=langue,
@@ -3027,6 +3035,7 @@ async def _run_second_pass(
             model=model_name,
             provider=provider,
             on_chunk=_publier_chunk,
+            documents_block=documents_block,
         )
         if resultat is None:
             return None, usage_passe
@@ -3399,6 +3408,7 @@ async def api_generate(
             med_hints,
             n_transcript,
             conf_map,
+            _documents_context(db, payload.consultation_id),
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -3835,9 +3845,15 @@ def purge_expired_consultations(db: Session) -> int:
     rows = db.scalars(select(Consultation).where(Consultation.updated_at < cutoff)).all()
     for consultation in rows:
         recordings.delete_for_consultation(db, consultation.id)
+        # Les documents photographiés suivent l'audio : un seul geste doit
+        # tout emporter, fichiers compris.
+        documents_service.delete_for_consultation(db, consultation.id)
         db.delete(consultation)
     if rows:
         db.commit()
+        # Fichiers écrits puis transaction perdue : sans ce nettoyage, ils
+        # seraient invisibles à toute suppression (aucune ligne ne les nomme).
+        documents_service.purge_orphans(db)
         logger.info(
             "Purge des dossiers : %d consultation(s) de plus de %d heure(s) supprimée(s)",
             len(rows), hours,
@@ -3855,6 +3871,7 @@ def delete_consultation(consultation_id: int, request: Request, db: Session = De
     user = current_user(request)
     consultation = _get_owned_consultation(db, consultation_id, user)
     removed = recordings.delete_for_consultation(db, consultation_id)
+    documents_service.delete_for_consultation(db, consultation_id)
     db.delete(consultation)
     db.commit()
     logger.info(
@@ -3887,10 +3904,371 @@ def list_recordings(consultation_id: int, request: Request, db: Session = Depend
     }
 
 
+# ===========================================================================
+# Documents photographiés
+# ===========================================================================
+#
+# Le document est l'unité, pas la page : les photos d'un même envoi sont
+# assemblées en UN PDF multipage (voir app/documents.py), puis le modèle
+# segmente ce PDF lui-même et rend un état de couverture vérifié en code
+# (voir app/extraction.py). L'onglet Documents n'est qu'une revue de ce que
+# le modèle a lu : texte éditable, case à cocher par élément.
+#
+# Rien de tout cela n'entre dans la requête de génération sous forme d'image :
+# les éléments cochés y arrivent en TEXTE (voir api_generate).
+
+
+def _owned_document(db: Session, document_id: int, user: Principal) -> Document:
+    document = db.get(Document, document_id)
+    if document is None or document.owner != user.owner_key:
+        raise HTTPException(status_code=404, detail=_t("err.consultation_not_found"))
+    return document
+
+
+def _pdf_pages(data: bytes) -> int:
+    """Nombre de pages approximatif d'un PDF (pour l'affichage seulement)."""
+    return max(1, len(re.findall(rb"/Type\s*/Page[^s]", data)))
+
+
+def _stored_extraction(document: Document) -> dict:
+    """Réponse du modèle + état de revue, ou dictionnaire vide."""
+    if not (document.extraction_json or "").strip():
+        return {}
+    try:
+        return json.loads(document.extraction_json)
+    except ValueError:
+        logger.warning("Document %s : extraction_json illisible", document.id)
+        return {}
+
+
+def _document_payload(document: Document) -> dict:
+    payload = document.to_dict()
+    payload["extraction"] = _stored_extraction(document)
+    return payload
+
+
+def _documents_context(db: Session, consultation_id: Optional[int]) -> str:
+    """
+    Documents du brouillon, en TEXTE, pour la génération de la note.
+
+    Seuls les éléments cochés sont envoyés — c'est l'arbitrage du clinicien qui
+    décide de ce qui entre dans la note, jamais la lecture du modèle. Les
+    observations sont exclues par défaut (elles sont décochées à la source) :
+    une lecture du modèle ne devient pas un fait clinique sans un geste
+    explicite.
+
+    Rien de tout cela ne repart en image : la note se génère à partir de texte,
+    ce qui rend la régénération gratuite et l'audit possible.
+    """
+    if not consultation_id:
+        return ""
+    blocs: List[str] = []
+    for document in documents_service.for_consultation(db, consultation_id):
+        extraction_stockee = _stored_extraction(document)
+        if not extraction_stockee:
+            continue
+        par_document: dict = {}
+        for item in extraction_stockee.get("items", []):
+            if not item.get("included", True):
+                continue
+            par_document.setdefault(item.get("document_id") or "d1", []).append(item["text"])
+        for observation in extraction_stockee.get("observations", []):
+            if not observation.get("included"):
+                continue
+            par_document.setdefault("_obs", []).append(
+                "observation : " + observation["text"]
+            )
+        if not par_document:
+            continue
+        etiquettes = {
+            d.get("id"): d for d in extraction_stockee.get("documents", [])
+        }
+        for doc_id, lignes in par_document.items():
+            if doc_id == "_obs":
+                entete = "Observations proposées par la lecture (retenues par le médecin)"
+            else:
+                meta = etiquettes.get(doc_id) or {}
+                kind = meta.get("kind") or document.kind
+                titre = meta.get("title") or document.title or ""
+                pages = meta.get("pages") or []
+                entete = f"[{kind}] {titre}".strip()
+                if len(pages) > 1:
+                    entete += f" (pages {', '.join(str(p) for p in pages)})"
+            blocs.append(entete)
+            blocs.extend(f"- {ligne}" for ligne in lignes)
+            blocs.append("")
+    return "\n".join(blocs).strip()
+
+
+@app.get("/api/consultations/{consultation_id}/documents")
+def list_documents(consultation_id: int, request: Request, db: Session = Depends(get_db)):
+    user = current_user(request)
+    _get_owned_consultation(db, consultation_id, user)
+    return {
+        "documents": [
+            _document_payload(row)
+            for row in documents_service.for_consultation(db, consultation_id)
+        ]
+    }
+
+
+@app.post("/api/consultations/{consultation_id}/documents", status_code=201)
+async def upload_documents(
+    consultation_id: int,
+    request: Request,
+    files: List[UploadFile] = File(..., description="Photos ou PDF d'un même envoi"),
+    db: Session = Depends(get_db),
+):
+    """
+    Range un envoi comme UN document.
+
+    Plusieurs photos d'un même envoi deviennent un PDF multipage : le modèle
+    reçoit alors un document cohérent plutôt que N images dont il doit deviner
+    qu'elles vont ensemble — et c'est aussi ce qui rend la lecture bon marché
+    (258 jetons par page, quel que soit le format d'origine).
+    """
+    user = current_user(request)
+    consultation = _get_owned_consultation(db, consultation_id, user)
+
+    if not files:
+        raise HTTPException(status_code=400, detail=_t("err.document_empty"))
+    if len(files) > 40:
+        raise HTTPException(status_code=400, detail=_t("err.document_too_many"))
+
+    limite = settings.max_document_mb * 1024 * 1024
+    images: List[bytes] = []
+    pdf_bytes: Optional[bytes] = None
+    total = 0
+
+    for upload in files:
+        raw = await upload.read()
+        total += len(raw)
+        if not raw:
+            continue
+        if total > limite:
+            raise HTTPException(
+                status_code=413,
+                detail=_t("err.document_too_large", limit=settings.max_document_mb),
+            )
+        mime = documents_service.normalize_mime(upload.content_type or "", raw)
+        if mime is None:
+            raise HTTPException(status_code=415, detail=_t("err.document_type"))
+        if mime == "application/pdf":
+            if pdf_bytes is not None or images:
+                # Un PDF et des photos ne peuvent pas être « le même » document
+                # assemblé : le client envoie l'un ou l'autre.
+                raise HTTPException(status_code=400, detail=_t("err.document_mixed"))
+            pdf_bytes = raw
+        else:
+            if pdf_bytes is not None:
+                raise HTTPException(status_code=400, detail=_t("err.document_mixed"))
+            if mime != "image/jpeg":
+                # Le modèle accepte PNG et WebP, mais l'assemblage PDF écrit du
+                # DCTDecode : on ne sait assembler que du JPEG, et le client
+                # redimensionne déjà en JPEG.
+                raise HTTPException(status_code=415, detail=_t("err.document_type"))
+            images.append(raw)
+
+    if pdf_bytes is None and not images:
+        raise HTTPException(status_code=400, detail=_t("err.document_empty"))
+
+    try:
+        if pdf_bytes is not None:
+            stored = documents_service.store_bytes(
+                db, consultation, pdf_bytes, "application/pdf", _pdf_pages(pdf_bytes)
+            )
+        else:
+            stored = documents_service.store_images_as_document(db, consultation, images)
+    except (OSError, ValueError) as exc:
+        logger.exception("Document non conservé")
+        raise HTTPException(status_code=500, detail=_t("err.document_store")) from exc
+
+    live.publish(user.owner_key, "documents_changed", {
+        "consultation_id": consultation.id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
+    return _document_payload(stored)
+
+
+class DocumentUpdateIn(BaseModel):
+    kind: Optional[str] = None
+    title: Optional[str] = None
+
+
+@app.patch("/api/documents/{document_id}")
+def update_document(
+    document_id: int, payload: DocumentUpdateIn, request: Request, db: Session = Depends(get_db)
+):
+    """Reclasser un document : le modèle se trompe parfois de type."""
+    user = current_user(request)
+    document = _owned_document(db, document_id, user)
+    if payload.kind:
+        kind = payload.kind.strip().lower()
+        if kind not in extraction.KINDS:
+            raise HTTPException(status_code=422, detail=_t("err.document_kind"))
+        document.kind = kind
+    if payload.title is not None:
+        document.title = payload.title.strip()[:200]
+    db.commit()
+    db.refresh(document)
+    return _document_payload(document)
+
+
+@app.post("/api/documents/{document_id}/extract")
+def extract_document(document_id: int, request: Request, db: Session = Depends(get_db)):
+    """
+    Lit le document : UN appel pour toutes ses pages, le modèle segmente.
+
+    Bloquant (réseau) mais exécuté hors de la boucle asyncio : la route est
+    synchrone, FastAPI la place donc dans son pool de threads. Un échec ne
+    touche à rien — l'extraction précédente, s'il y en a une, reste intacte.
+    """
+    user = current_user(request)
+    document = _owned_document(db, document_id, user)
+    consultation = _get_owned_consultation(db, document.consultation_id, user)
+
+    langue = i18n.normalize(preferences.document_language() or "fr")
+    try:
+        result = extraction.extract_documents(db, consultation, [document], langue)
+    except extraction.ExtractionError as exc:
+        logger.warning("Extraction refusée (document %s) : %s", document_id, exc)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Extraction interrompue (document %s)", document_id)
+        raise HTTPException(status_code=502, detail=_t("err.document_extract", error=exc)) from exc
+
+    # Le type du document suit la segmentation quand elle est univoque ; sinon
+    # le premier document reconnu donne le ton, le reste se reclasse à la main.
+    documents_reconnus = result.get("documents") or []
+    if documents_reconnus:
+        document.kind = documents_reconnus[0].get("kind") or "other"
+        document.title = (documents_reconnus[0].get("title") or "")[:200]
+    document.extraction_json = json.dumps(result, ensure_ascii=False)
+    document.extraction_version = int(document.extraction_version or 0) + 1
+    document.extracted_at = utcnow()
+    consultation.updated_at = utcnow()
+    db.commit()
+    db.refresh(document)
+
+    live.publish(user.owner_key, "documents_changed", {
+        "consultation_id": consultation.id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
+    return _document_payload(document)
+
+
+class DocumentReviewIn(BaseModel):
+    items: Optional[List[dict]] = None
+    observations: Optional[List[dict]] = None
+
+
+@app.post("/api/documents/{document_id}/review")
+def review_document(
+    document_id: int, payload: DocumentReviewIn, request: Request, db: Session = Depends(get_db)
+):
+    """
+    Enregistre l'arbitrage du clinicien : texte édité et cases cochées.
+
+    Persisté en base, pas seulement dans le DOM : rouvrir le brouillon, ou
+    régénérer la note, ne doit jamais défaire ce travail-là. Les champs
+    inconnus sont ignorés et l'ordre du modèle est conservé.
+    """
+    user = current_user(request)
+    document = _owned_document(db, document_id, user)
+    stocke = _stored_extraction(document)
+    if not stocke:
+        raise HTTPException(status_code=409, detail=_t("err.document_not_extracted"))
+
+    if payload.items is not None:
+        connus = {item.get("text", "") for item in stocke.get("items", [])}
+        stockes = stocke.get("items", [])
+        nouveaux = []
+        for position, item in enumerate(payload.items):
+            if not isinstance(item, dict):
+                continue
+            texte = str(item.get("text") or "").strip()
+            if not texte:
+                continue
+            # L'index vient du client : l'ordre du DOM (groupé par document
+            # logique) n'est pas celui du tableau du modèle. Sans lui, une
+            # ligne récupérait les champs d'une autre (page source, molécule).
+            try:
+                index = int(item.get("index", position))
+            except (TypeError, ValueError):
+                index = position
+            base = stockes[index] if 0 <= index < len(stockes) else {}
+            nouveaux.append({
+                "document_id": base.get("document_id", ""),
+                "kind": base.get("kind", "other"),
+                "text": texte,
+                "fields": base.get("fields", {}),
+                "source_page": base.get("source_page", 0),
+                "included": bool(item.get("included", True)),
+                # Le texte diffère de la lecture du modèle : c'est une
+                # correction du clinicien, on la trace.
+                "edited": texte not in connus or bool(item.get("edited", False)),
+            })
+        stocke["items"] = nouveaux
+
+    if payload.observations is not None:
+        observations = []
+        for index, obs in enumerate(payload.observations):
+            if not isinstance(obs, dict):
+                continue
+            texte = str(obs.get("text") or "").strip()
+            if not texte:
+                continue
+            base = stocke.get("observations", [])[index] if index < len(stocke.get("observations", [])) else {}
+            observations.append({
+                "text": texte,
+                "pages": base.get("pages", []),
+                "included": bool(obs.get("included", False)),
+                "edited": bool(obs.get("edited", False)),
+            })
+        stocke["observations"] = observations
+
+    document.extraction_json = json.dumps(stocke, ensure_ascii=False)
+    db.commit()
+    db.refresh(document)
+    return _document_payload(document)
+
+
+@app.delete("/api/documents/{document_id}", status_code=204)
+def delete_document(document_id: int, request: Request, db: Session = Depends(get_db)):
+    user = current_user(request)
+    document = _owned_document(db, document_id, user)
+    consultation_id = document.consultation_id
+    documents_service.delete_one(db, document)
+    live.publish(user.owner_key, "documents_changed", {
+        "consultation_id": consultation_id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
+    return None
+
+
+@app.get("/api/documents/{document_id}/file")
+def document_file(document_id: int, request: Request, db: Session = Depends(get_db)):
+    """Sert le document au propriétaire seul (visionneuse de l'onglet)."""
+    user = current_user(request)
+    document = _owned_document(db, document_id, user)
+    path = documents_service.absolute_path(document)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail=_t("err.document_missing"))
+    # Type MIME imposé par le contenu enregistré, jamais déduit de l'extension :
+    # un fichier patient ne doit pas pouvoir être servi comme du SVG ou du HTML.
+    media = (
+        document.mime_type
+        if document.mime_type in documents_service.SUPPORTED_MIME
+        else "application/octet-stream"
+    )
+    return FileResponse(path, media_type=media, headers={
+        "Content-Disposition": "inline",
+        "Cache-Control": "private, no-store",
+    })
+
+
 class RetranscribeIn(BaseModel):
     template_id: Optional[int] = None
-
-
 @app.post("/api/consultations/{consultation_id}/retranscribe")
 async def retranscribe_consultation(
     consultation_id: int,

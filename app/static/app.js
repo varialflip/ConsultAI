@@ -916,6 +916,10 @@
     // (voir connectLiveEvents) pour ne pas se les appliquer à soi-même.
     tabId: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()),
     consultationId: null,   // brouillon courant en base
+    //: Documents du brouillon, tels que renvoyés par l'API (extraction
+    //: comprise). La note de génération ne lit que les éléments cochés.
+    documents: [],
+    documentsBusy: false,
     recording: false,
     paused: false,
     recordedSeconds: 0,
@@ -2765,28 +2769,37 @@
   }
 
   function selectDicteeTab(tab) {
-    const vueTranscription = $('transcriptView');
-    const vueSecondPass = $('secondPassView');
-    if (!vueTranscription || !vueSecondPass) return;
-    const transcriptionActive = tab !== 'secondpass';
+    const vues = {
+      transcript: $('transcriptView'),
+      secondpass: $('secondPassView'),
+      documents: $('documentsView'),
+    };
+    if (!vues.transcript || !vues.secondpass) return;
+    if (tab !== 'documents') tab = tab === 'secondpass' ? 'secondpass' : 'transcript';
 
     // Seule la classe « hidden » change : chaque vue garde SA disposition
     // (flex) intacte, la bascule est donc structurellement garantie.
-    vueTranscription.classList.toggle('hidden', !transcriptionActive);
-    vueSecondPass.classList.toggle('hidden', transcriptionActive);
+    Object.entries(vues).forEach(([cle, vue]) => {
+      if (vue) vue.classList.toggle('hidden', cle !== tab);
+    });
 
-    const ongletTranscription = $('tabTranscript');
-    const ongletSecondPass = $('tabSecondPass');
-    if (ongletTranscription && ongletSecondPass) {
-      ongletTranscription.classList.toggle('accent-tab', transcriptionActive);
-      ongletTranscription.classList.toggle('text-slate-700', transcriptionActive);
-      ongletTranscription.classList.toggle('text-slate-500', !transcriptionActive);
-      ongletSecondPass.classList.toggle('accent-tab', !transcriptionActive);
-      ongletSecondPass.classList.toggle('text-slate-700', !transcriptionActive);
-      ongletSecondPass.classList.toggle('text-slate-500', transcriptionActive);
-      ongletTranscription.setAttribute('aria-selected', transcriptionActive ? 'true' : 'false');
-      ongletSecondPass.setAttribute('aria-selected', transcriptionActive ? 'false' : 'true');
-    }
+    const onglets = {
+      transcript: $('tabTranscript'),
+      secondpass: $('tabSecondPass'),
+      documents: $('tabDocuments'),
+    };
+    Object.entries(onglets).forEach(([cle, onglet]) => {
+      if (!onglet) return;
+      const actif = cle === tab;
+      onglet.classList.toggle('accent-tab', actif);
+      onglet.classList.toggle('text-slate-700', actif);
+      onglet.classList.toggle('text-slate-500', !actif);
+      onglet.setAttribute('aria-selected', actif ? 'true' : 'false');
+    });
+
+    // À l'ouverture de l'onglet, on relit l'état réel : un autre appareil a
+    // pu envoyer ou relire un document entre-temps.
+    if (tab === 'documents') loadDocuments();
   }
 
   function setSecondPassSpinner(actif) {
@@ -4906,6 +4919,7 @@
       selectDicteeTab(notePresente && contenuValidation ? 'secondpass' : 'transcript');
       state.lastSavedSnapshot = workspaceSnapshot();
       loadRecordings();
+      loadDocuments();
       showNoteEngines(draft.stt_used, draft.llm_used, draft.audio_used);
       showTranscriptEngine(draft.stt_used);
       showDebugInfo({
@@ -4948,6 +4962,7 @@
     showTranscriptEngine('');
     showDebugInfo(null);
     loadRecordings();
+    loadDocuments();
     showPreview();
     setMobilePane('dictee');
     selectDicteeTab('transcript');
@@ -7892,6 +7907,425 @@
     liveSource.onerror = () => console.warn('Flux en direct interrompu, reconnexion automatique en cours.');
   }
 
+  /* -------------------------------------------------------------------------
+   * Documents photographiés
+   * ----------------------------------------------------------------------
+   * La revue du dossier précède la dictée : on photographie la liste de
+   * médicaments, les antécédents, un bilan, puis on envoie, on relit ce que
+   * le modèle a lu, on coche — et seulement après on dicte.
+   *
+   * Les prises sont d'abord écrites en IndexedDB : entre la photo et
+   * l'envoi il y a un geste humain (« Envoyer »), et un téléphone qui
+   * s'endort entre les deux ne doit pas emporter six pages.
+   *
+   * À l'envoi, les photos d'un même lot sont réunies côté SERVEUR en un PDF
+   * multipage (un PDF importé passe tel quel) : le modèle reçoit UN document
+   * et le segmente lui-même.
+   * ---------------------------------------------------------------------- */
+
+  const DOC_DB_NAME = 'consultai-documents';
+  //: Côté long maximal envoyé au modèle. Une page PDF est facturée au forfait
+  //: (258 jetons) et affichée jusqu'à 3072 px : descendre plus bas ne gagne
+  //: rien et perd les petits caractères d'une posologie.
+  const DOC_MAX_SIDE = 3072;
+  let docDbPromise = null;
+
+  function openDocDb() {
+    if (docDbPromise) return docDbPromise;
+    docDbPromise = new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) {
+        reject(new Error('IndexedDB indisponible'));
+        return;
+      }
+      const request = indexedDB.open(DOC_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains('pending')) {
+          db.createObjectStore('pending', { keyPath: 'id' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return docDbPromise;
+  }
+
+  const pendingDocs = {
+    async put(record) {
+      const db = await openDocDb();
+      await new Promise((resolve, reject) => {
+        const store = db.transaction('pending', 'readwrite').objectStore('pending');
+        const r = store.put(record);
+        r.onsuccess = () => resolve();
+        r.onerror = () => reject(r.error);
+      });
+    },
+    async all() {
+      try {
+        const db = await openDocDb();
+        const rows = await new Promise((resolve, reject) => {
+          const store = db.transaction('pending').objectStore('pending');
+          const r = store.getAll();
+          r.onsuccess = () => resolve(r.result || []);
+          r.onerror = () => reject(r.error);
+        });
+        return rows.sort((a, b) => a.createdAt - b.createdAt);
+      } catch (_) {
+        return [];
+      }
+    },
+    async clear() {
+      try {
+        const db = await openDocDb();
+        await new Promise((resolve) => {
+          const store = db.transaction('pending', 'readwrite').objectStore('pending');
+          const r = store.clear();
+          r.onsuccess = () => resolve();
+          r.onerror = () => resolve();
+        });
+      } catch (_) { /* IndexedDB refuse : rien à vider */ }
+    },
+  };
+
+  /** Redimensionne une photo en JPEG, orientation EXIF appliquée. */
+  async function documentToJpeg(file) {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const echelle = Math.min(1, DOC_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+      const largeur = Math.max(1, Math.round(bitmap.width * echelle));
+      const hauteur = Math.max(1, Math.round(bitmap.height * echelle));
+      const canvas = document.createElement('canvas');
+      canvas.width = largeur;
+      canvas.height = hauteur;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, largeur, hauteur);
+      if (bitmap.close) bitmap.close();
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+      return blob || file;
+    } catch (_) {
+      // createImageBitmap absent ou refusé : le serveur refusera un format
+      // inattendu plutôt que d'inventer une conversion.
+      return file;
+    }
+  }
+
+  async function receiveDocumentFiles(fileList) {
+    const fichiers = Array.from(fileList || []);
+    if (!fichiers.length) return;
+    for (const fichier of fichiers) {
+      const estPdf = (fichier.type || '').toLowerCase() === 'application/pdf';
+      const blob = estPdf ? fichier : await documentToJpeg(fichier);
+      await pendingDocs.put({
+        id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()),
+        createdAt: Date.now(),
+        name: fichier.name || 'photo',
+        type: estPdf ? 'application/pdf' : 'image/jpeg',
+        blob,
+      });
+    }
+    await renderPendingDocuments();
+  }
+
+  async function renderPendingDocuments() {
+    const zone = $('documentsPending');
+    const liste = $('documentsThumbs');
+    if (!zone || !liste) return;
+    const rows = await pendingDocs.all();
+    if (!rows.length) {
+      zone.classList.add('hidden');
+      liste.innerHTML = '';
+      return;
+    }
+    zone.classList.remove('hidden');
+    $('documentsPendingCount').textContent = rows.length;
+    liste.innerHTML = '';
+    rows.forEach((row) => {
+      const url = URL.createObjectURL(row.blob);
+      const figure = document.createElement('figure');
+      figure.className = 'shrink-0 w-16';
+      if (row.type === 'application/pdf') {
+        figure.innerHTML = `<div class="w-16 h-20 rounded border border-amber-300 bg-white grid place-items-center text-[10px] text-amber-800">PDF</div>`;
+      } else {
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'w-16 h-20 object-cover rounded border border-amber-300 bg-white';
+        img.alt = row.name || '';
+        figure.appendChild(img);
+      }
+      liste.appendChild(figure);
+    });
+  }
+
+  /** Envoie le lot : UN document côté serveur, puis lecture par le modèle. */
+  async function sendPendingDocuments() {
+    if (state.documentsBusy) return;
+    const rows = await pendingDocs.all();
+    if (!rows.length) return;
+    state.documentsBusy = true;
+    const bouton = $('btnDocumentsSend');
+    if (bouton) { bouton.disabled = true; bouton.textContent = T('doc.sending'); }
+    try {
+      const consultationId = state.consultationId || await ensureConsultation();
+      const form = new FormData();
+      rows.forEach((row) => form.append('files', row.blob, row.name || 'photo.jpg'));
+      const stored = await api(`/api/consultations/${consultationId}/documents`, {
+        method: 'POST',
+        body: form,
+      });
+      await pendingDocs.clear();
+      await renderPendingDocuments();
+      // La lecture peut prendre plusieurs secondes : elle a son propre état,
+      // l'onglet reste utilisable entre-temps.
+      await extractDocument(stored.id);
+      await loadDocuments();
+      selectDicteeTab('documents');
+    } catch (err) {
+      toast(T('doc.send_failed') + ' ' + (err.message || err), 'error');
+    } finally {
+      state.documentsBusy = false;
+      if (bouton) { bouton.disabled = false; bouton.textContent = T('doc.send'); }
+    }
+  }
+
+  async function extractDocument(documentId) {
+    const badge = $('documentsBadge');
+    if (badge) badge.classList.remove('hidden');
+    try {
+      await api(`/api/documents/${documentId}/extract`, { method: 'POST' });
+    } catch (err) {
+      // Le document reste enregistré : seul l'extraction a échoué. On le dit
+      // et on laisse le bouton « Relire » pour réessayer.
+      toast(T('doc.extract_failed') + ' ' + (err.message || err), 'error');
+    } finally {
+      if (badge) badge.classList.add('hidden');
+    }
+  }
+
+  async function loadDocuments() {
+    if (!state.consultationId) {
+      state.documents = [];
+      renderDocuments();
+      return;
+    }
+    try {
+      const data = await api(`/api/consultations/${state.consultationId}/documents`);
+      state.documents = data.documents || [];
+    } catch (_) {
+      state.documents = [];
+    }
+    renderDocuments();
+  }
+
+  function documentKindLabel(kind) {
+    const cle = `doc.kind.${kind}`;
+    return CATALOG[cle] !== undefined ? T(cle) : kind;
+  }
+
+  function renderDocuments() {
+    const liste = $('documentsList');
+    const vide = $('documentsEmpty');
+    const badge = $('documentsBadge');
+    if (!liste) return;
+    const docs = state.documents || [];
+    if (badge) {
+      badge.textContent = docs.length || '';
+      badge.classList.toggle('hidden', !docs.length);
+    }
+    if (vide) vide.classList.toggle('hidden', docs.length > 0);
+    liste.innerHTML = '';
+    docs.forEach((doc) => liste.appendChild(renderDocumentBlock(doc)));
+  }
+
+  function renderDocumentBlock(doc) {
+    const extractionData = doc.extraction || {};
+    const blocs = extractionData.documents || [];
+    const items = extractionData.items || [];
+    const observations = extractionData.observations || [];
+    const entete = document.createElement('section');
+    entete.className = 'rounded-lg border border-slate-200 bg-white';
+    entete.dataset.documentId = doc.id;
+
+    const barre = document.createElement('div');
+    barre.className = 'flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2';
+    const titre = document.createElement('span');
+    titre.className = 'font-semibold text-xs text-slate-700';
+    titre.textContent = doc.title || (doc.mime_type === 'application/pdf' ? 'PDF' : T('doc.photo'));
+    barre.appendChild(titre);
+
+    const pages = document.createElement('span');
+    pages.className = 'text-[11px] text-slate-400';
+    pages.textContent = `${doc.pages || 1} ${T('doc.pages')}`;
+    barre.appendChild(pages);
+
+    const select = document.createElement('select');
+    select.className = 'ml-auto rounded border-slate-300 text-[11px] py-0.5';
+    ['medications', 'history', 'labs', 'imaging', 'other'].forEach((kind) => {
+      const option = document.createElement('option');
+      option.value = kind;
+      option.textContent = documentKindLabel(kind);
+      option.selected = (doc.kind || 'other') === kind;
+      select.appendChild(option);
+    });
+    select.addEventListener('change', async () => {
+      try {
+        await api(`/api/documents/${doc.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ kind: select.value }),
+        });
+        doc.kind = select.value;
+      } catch (err) {
+        toast(T('doc.save_failed'), 'error');
+      }
+    });
+    barre.appendChild(select);
+
+    const lien = document.createElement('a');
+    lien.href = `/api/documents/${doc.id}/file`;
+    lien.target = '_blank';
+    lien.rel = 'noopener';
+    lien.className = 'text-[11px] text-slate-500 underline';
+    lien.textContent = T('doc.view');
+    barre.appendChild(lien);
+
+    const relire = document.createElement('button');
+    relire.type = 'button';
+    relire.className = 'text-[11px] text-slate-500 underline';
+    relire.textContent = T('doc.reread');
+    relire.addEventListener('click', async () => {
+      if (!confirm(T('doc.reread_confirm'))) return;
+      relire.disabled = true;
+      await extractDocument(doc.id);
+      await loadDocuments();
+    });
+    barre.appendChild(relire);
+
+    const supprimer = document.createElement('button');
+    supprimer.type = 'button';
+    supprimer.className = 'text-[11px] text-red-600 underline';
+    supprimer.textContent = T('doc.delete');
+    supprimer.addEventListener('click', async () => {
+      if (!confirm(T('doc.delete_confirm'))) return;
+      try {
+        await api(`/api/documents/${doc.id}`, { method: 'DELETE' });
+        await loadDocuments();
+      } catch (err) {
+        toast(T('doc.save_failed'), 'error');
+      }
+    });
+    barre.appendChild(supprimer);
+
+    entete.appendChild(barre);
+
+    const corps = document.createElement('div');
+    corps.className = 'p-3 space-y-3';
+
+    if (!items.length && !observations.length) {
+      const attente = document.createElement('p');
+      attente.className = 'italic text-slate-400 text-xs';
+      attente.textContent = extractionData.documents
+        ? T('doc.nothing_kept')
+        : T('doc.not_read');
+      corps.appendChild(attente);
+    }
+
+    // Un sous-bloc par DOCUMENT logique reconnu (le modèle peut en voir
+    // plusieurs dans un même envoi).
+    blocs.forEach((bloc) => {
+      const duBloc = items.filter((item) => (item.document_id || 'd1') === bloc.id);
+      if (!duBloc.length) return;
+      const titreBloc = document.createElement('div');
+      titreBloc.className = 'text-[11px] font-semibold uppercase tracking-wide text-slate-500';
+      titreBloc.textContent = `${documentKindLabel(bloc.kind)} · ${T('doc.pages')} ${(bloc.pages || []).join(', ')}`;
+      corps.appendChild(titreBloc);
+      duBloc.forEach((item) => corps.appendChild(
+        renderDocumentItem(doc, item, false, items.indexOf(item)),
+      ));
+    });
+
+    if (observations.length) {
+      const titreObs = document.createElement('div');
+      titreObs.className = 'text-[11px] font-semibold uppercase tracking-wide text-violet-600 mt-2';
+      titreObs.textContent = T('doc.observations');
+      corps.appendChild(titreObs);
+      observations.forEach((obs) => corps.appendChild(
+        renderDocumentItem(doc, obs, true, observations.indexOf(obs)),
+      ));
+    }
+
+    entete.appendChild(corps);
+    // Toute modification (case ou texte) part au serveur après une pause :
+    // l'arbitrage survit à la fermeture de l'onglet.
+    entete.addEventListener('input', () => scheduleDocumentReview(doc, entete));
+    entete.addEventListener('change', () => scheduleDocumentReview(doc, entete));
+    return entete;
+  }
+
+  function renderDocumentItem(doc, item, estObservation, index) {
+    // PAS de <label> autour de la zone de texte : un clic dans le champ
+    // basculerait la case. La case reste donc seule dans son enveloppe.
+    const ligne = document.createElement('div');
+    ligne.dataset.role = estObservation ? 'observation' : 'item';
+    ligne.className = 'flex items-start gap-2 rounded px-1 py-0.5 hover:bg-slate-50';
+    const case_ = document.createElement('input');
+    case_.type = 'checkbox';
+    case_.className = 'mt-0.5 shrink-0 rounded border-slate-300';
+    case_.checked = Boolean(item.included);
+    case_.dataset.role = 'include';
+    case_.dataset.index = String(index);
+    const zone = document.createElement('div');
+    zone.className = 'flex-1 min-w-0';
+    const champ = document.createElement('textarea');
+    champ.value = item.text || '';
+    champ.rows = Math.min(6, Math.max(1, Math.ceil((item.text || '').length / 70)));
+    champ.className = 'w-full resize-y rounded border-slate-200 text-[12px] leading-snug py-0.5 px-1 focus:border-slate-400 focus:ring-0';
+    champ.dataset.role = 'text';
+    zone.appendChild(champ);
+    if (item.source_page) {
+      const source = document.createElement('span');
+      source.className = 'text-[10px] text-slate-400';
+      source.textContent = `${T('doc.page')} ${item.source_page}`;
+      zone.appendChild(source);
+    }
+    if (estObservation) ligne.classList.add('bg-violet-50');
+    ligne.appendChild(case_);
+    ligne.appendChild(zone);
+    return ligne;
+  }
+
+  let documentReviewTimers = new WeakMap();
+
+  function scheduleDocumentReview(doc, element) {
+    const precedent = documentReviewTimers.get(element);
+    if (precedent) clearTimeout(precedent);
+    documentReviewTimers.set(element, setTimeout(() => saveDocumentReview(doc, element), 800));
+  }
+
+  async function saveDocumentReview(doc, element) {
+    const items = [];
+    const observations = [];
+    // Les deux listes sont reconstruites dans l'ordre du DOM : les éléments,
+    // puis le bloc d'observations s'il est présent.
+    element.querySelectorAll('[data-role="include"]').forEach((box) => {
+      const champ = box.parentElement.querySelector('[data-role="text"]');
+      const ligne = box.closest('[data-role="item"], [data-role="observation"]');
+      const entree = {
+        index: Number(box.dataset.index),
+        text: champ ? champ.value : '',
+        included: box.checked,
+      };
+      if (ligne && ligne.dataset.role === 'observation') observations.push(entree);
+      else items.push(entree);
+    });
+    try {
+      const data = await api(`/api/documents/${doc.id}/review`, {
+        method: 'POST',
+        body: JSON.stringify({ items, observations }),
+      });
+      doc.extraction = data.extraction;
+    } catch (err) {
+      toast(T('doc.save_failed'), 'error');
+    }
+  }
+
   async function init() {
     // Date du jour pré-remplie : c'est le cas de très loin le plus fréquent,
     // et une valeur déjà présente n'est jamais écrasée par l'extraction.
@@ -7901,6 +8335,27 @@
     $('btnRecord').addEventListener('click', startRecording);
     $('tabTranscript').addEventListener('click', () => selectDicteeTab('transcript'));
     $('tabSecondPass').addEventListener('click', () => selectDicteeTab('secondpass'));
+    if ($('tabDocuments')) {
+      $('tabDocuments').addEventListener('click', () => selectDicteeTab('documents'));
+    }
+
+    // --- Documents photographiés ---
+    if ($('documentFileInput')) {
+      $('documentFileInput').addEventListener('change', async (event) => {
+        await receiveDocumentFiles(event.target.files);
+        event.target.value = '';
+      });
+    }
+    if ($('btnDocumentsSend')) {
+      $('btnDocumentsSend').addEventListener('click', sendPendingDocuments);
+    }
+    if ($('btnDocumentsClear')) {
+      $('btnDocumentsClear').addEventListener('click', async () => {
+        await pendingDocs.clear();
+        await renderPendingDocuments();
+      });
+    }
+    renderPendingDocuments();
     $('btnPause').addEventListener('click', togglePause);
     $('btnFinish').addEventListener('click', finishRecording);
     $('btnAbort').addEventListener('click', abortRecording);

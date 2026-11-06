@@ -81,6 +81,7 @@ Déploiement en production (2026-08-14) :
 | **Renseignements de santé** | Contenu des consultations : anamnèse, motifs, examens, diagnostics, plans de traitement (champs `reason`, `raw_transcript`, `generated_markdown`, `edited_markdown`, `corrections_markdown` — rubrique « Corrections et éléments à valider » retirée de la note à la génération ; `transcript_conf`, confiance mot-à-mot du STT, simple projection de `raw_transcript`, interne au serveur et jamais transmise au navigateur) | Très élevée |
 | **Identité des patients** | **Non collectée** : le nom (`patient_name`) et le numéro de dossier (`patient_ref`) ne sont plus saisis ni stockés (dénominalisation, § 7.7). Date de consultation, demandeur (`requester`) et accompagnateur (`accompanied_by`) restent conservés | Très élevée (ce qui reste) |
 | **Voix / enregistrements audio** | Enregistrement brut de la dictée (fichiers sous `/data/audio/<consultation_id>/`) et son dérivé préparé pour la génération (`/data/audio-cache/`, régénérable, suit la même vie que sa source) | Très élevée — voix non anonymisable. **Aucune voix de patient n'est attendue** (dictée post-consultation par le clinicien seul, § portée) ; une voix tierce captée par erreur reste traitée comme un renseignement de santé, sous rétention automatique de 12 h |
+| **Documents photographiés** | Photographies et PDF joints au brouillon pendant la revue du dossier (liste de médicaments, antécédents, bilan de laboratoire, rapport d'imagerie) : fichiers sous `/data/documents/<consultation_id>/`, extraction structurée (`documents.extraction_json`) et état de revue (texte édité, cases cochées). **Peuvent porter l'identité du patient** (nom, date de naissance, numéro d'assurance maladie imprimés sur la page) : l'extraction n'en retient rien et les en-têtes administratifs sont exclus par consigne, mais la **photographie elle-même est conservée** | Très élevée |
 | **Identité des utilisateurs** | `username`, `email`, `display_name`, `avatar_url`, groupes, dates de connexion | Élevée (données d'identité de professionnels de la santé) |
 | **Données d'usage** | `usage_events` : durées audio, fournisseur/modèle utilisés, tokens, coûts, horodatages | Faible à moyenne (révèle l'activité clinique) |
 | **Données de facturation d'usage** | `pricing_rates`, `usage_daily` | Faible |
@@ -177,6 +178,7 @@ Autres flux :
 |---|---|---|---|
 | Mise en forme de la note (depuis 2026-08-16) | **Audio de la dictée** (trajet principal) ; texte recoupé par le gabarit | Google Vertex AI — Gemini `gemini-3.5-flash` | Québec (région `northamerica-northeast1`, Montréal) — voir § 7.4 |
 | Validation — 2e passe (audit, tous fournisseurs depuis 2026-08-31) | Note générée + **audio** de la dictée (fournisseurs audio) **ou** note + **transcription** (Anthropic/OpenAI/Cohere/Mistral) | Le **même fournisseur** que la mise en forme de la note (modèle de 2e passe réglable dans le panneau, par défaut le même) | Identique à la mise en forme de la note (ligne ci-dessus ; décision de conformité § 5) |
+| Lecture des documents photographiés (depuis 2026-11-06) | **Page photographiée ou PDF** (liste de médicaments, antécédents, bilan, imagerie) — jusqu'à 1000 pages par PDF, 50 Mo | Google Vertex AI — Gemini, lecture du document et extraction structurée (un appel par document, 258 jetons par page) | Québec (région `northamerica-northeast1`, Montréal) — même région que la mise en forme de la note |
 | Reconnaissance vocale | Audio brut | Serveur local (Québec) | **Québec — jamais exporté** (Parakeet local, mode par défaut) |
 | Reconnaissance vocale — fournisseur cloud (Modulate, si sélectionné) | Tranches de dictée (~10 s) | API Modulate (Velma STT) | Traitement hébergé par Modulate — **aucun mode par défaut ne l'envoie** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |
 | OpenRouter — modèle de langage **et/ou** STT (si sélectionné) | Audio de la dictée (note directe **ou** transcription), texte | API OpenRouter (modèle multimodal, ex. `thinkingmachines/inkling-small`) | Traitement hébergé par OpenRouter (cloud) — **aucun mode par défaut ne l'utilise** ; l'activer dans le panneau est une **décision de conformité** (résidence, entente), voir § 5 |
@@ -401,6 +403,28 @@ L'application ne collecte plus l'identité du patient :
   conservées, vides).
 - Les notes générées sont donc dénominalisées à la source ; l'identification du patient
   se fait au moment du versement au dossier médical, en dehors de l'application.
+
+#### Documents photographiés — la seule surface qui peut porter l'identité
+
+Une page imprimée (liste de médicaments de la pharmacie, rapport d'hôpital,
+bilan de laboratoire) porte presque toujours le nom du patient, sa date de
+naissance ou son numéro d'assurance maladie. La photographie **rétablit donc
+temporairement l'identité** que la dénominalisation avait retirée. Mesures
+retenues (2026-11-06) :
+
+- **Consigne d'extraction** : les en-têtes administratifs ne sont pas extraits,
+  ne sont recopiés nulle part et n'entrent pas dans la note ; un bloc que le
+  modèle n'a pas su classer arrive décoché.
+- **La page photographiée reste conservée** (c'est la provenance : le clinicien
+  doit pouvoir vérifier une dose douteuse). Elle vit sous
+  `/data/documents/<consultation_id>/`, n'est servie qu'à son propriétaire et
+  **s'efface avec le brouillon**, par le même geste et la même purge de
+  rétention que l'audio.
+- **Aucune image n'est transmise à la génération de la note** : seuls les
+  éléments cochés y entrent, sous forme de texte. La page quitte la machine
+  une seule fois, à la lecture.
+- Le clinicien reste maître de ce qu'il photographie ; l'application n'ajoute
+  aucun conseil à l'écran sur ce point (décision du responsable, 2026-11-06).
 
 ### 7.8 Droits des personnes (Loi 25)
 

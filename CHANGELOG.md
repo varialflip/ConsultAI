@@ -2,6 +2,48 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
+
+*Le dossier se lit avant la consultation : on photographie la liste de
+médicaments, les antécédents, un bilan, puis on dicte. Jusqu'ici ces pages
+devaient être retapées ou dictées. Elles entrent maintenant dans le brouillon
+comme documents lus par le modèle, relus et cochés par le médecin.*
+
+- **Caméra dans la barre d'outils**, à gauche du micro (côté chronologique du
+  travail). Les prises restent en **IndexedDB** jusqu'au bouton « Envoyer » :
+  rien ne part au serveur avant ce geste, et un téléphone qui s'endort
+  n'emporte pas six pages.
+- **Un document, pas une photo** : les photos d'un même envoi sont assemblées
+  en **un PDF multipage** (Python pur, sans nouvelle dépendance ; un PDF du
+  DME passe tel quel). Le modèle reçoit un document cohérent — 258 jetons par
+  page — au lieu de N images indépendantes.
+- **Le modèle segmente** : il décide combien de documents distincts contiennent
+  les pages, leur type (médicaments / antécédents / laboratoire / imagerie /
+  autre) et les pages de chacun. Aucune heuristique d'assemblage côté serveur.
+- **Contrat de couverture vérifié en code** : chaque page envoyée doit être
+  rendue (lue ou déclarée illisible). Une page manquante fait **échouer**
+  l'extraction avec un message — une liste de médicaments ne perd jamais une
+  ligne en silence.
+- **Onglet « Documents »** : texte éditable et case à cocher par élément,
+  provenance (page source), type reclassable, relecture ciblée. L'arbitrage est
+  **persisté en base** (texte et cases) : rouvrir le brouillon ne défait rien.
+- **Médicaments** : la ligne de la note porte la **molécule**, pas le préfixe
+  du distributeur (« APO-RAMIPRIL » → « Ramipril 5 mg ») ; la ligne imprimée
+  est conservée en provenance. Les statuts ne sont repris que s'ils sont
+  **imprimés** — « 0 renouvellement » n'est jamais traduit par « cessé ».
+- **Aucune image à la génération** : les éléments cochés entrent dans la note
+  en TEXTE, avec une consigne qui les exempte de la règle « aucune invention »
+  (ils ne sont pas dans la dictée) et un garde-fou quand **aucune dictée**
+  n'accompagne les documents — sinon le modèle remplissait les rubriques vides
+  par invention. L'audit « Validation » reçoit le même bloc : il ne signale
+  plus la liste du médecin comme une invention.
+- **Identité** : les en-têtes administratifs (nom, NAS, adresse, numéro de
+  dossier) ne sont pas extraits ; un bloc que le modèle n'a pas su classer
+  (« autre ») arrive **décoché**.
+- **Rétention** : les documents s'effacent avec le brouillon (suppression et
+  purge), fichiers compris ; un nettoyage des fichiers orphelins tourne à
+  chaque purge. `DOCUMENTS_DIR=/data/documents`, `MAX_DOCUMENT_MB=25`.
+
 ## 2026-10-01 — Levers de réflexion oMLX dans le panneau (point de terminaison personnalisé)
 
 *Un modèle à raisonnement auto-hébergé (oMLX) bouclait sans fin : le panneau

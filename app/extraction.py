@@ -131,17 +131,22 @@ Les quatre premiers champs servent à composer la ligne de la note ; le logiciel
 la met en forme, toi tu lui donnes les quatre morceaux :
 - ``short_name`` : le nom court qu'un pharmacien écrirait (``POLYETHYLENE-\
 GLYCOL-3350`` → ``PEG 3350``, ``ACETAMINOPHEN`` → ``Acétaminophène``).
-- ``dose`` : la dose CHIFFRÉE telle qu'elle se lit dans la posologie, nombre \
-collé à l'unité (``17g``, ``650mg``, ``500mg``, ``2,5mg``). Si la posologie \
-dit « 17 grammes », écris ``17g``. Si elle ne donne aucune dose chiffrée, \
-laisse vide.
+- ``quantity`` : le nombre d'UNITÉS par prise, tel que la posologie le dit \
+(``2`` pour « 2 comprimés », ``0.5`` pour « 1/2 comprimé », ``1`` pour un \
+comprimé seul). Une poudre ou un liquide : ``1``.
+- ``dose`` : la dose ADMINISTRÉE par prise, en unité de masse, nombre collé à \
+l'unité (``650mg``, ``12.5mg``, ``17g``). C'est ``quantity × strength`` : \
+``ACETAMINOPHENE 325MG, 2 comprimés`` → ``dose`` = ``650mg``, pas ``325mg`` \
+(c'est la force du comprimé, elle va dans ``strength``). « 1/2 comprimé de \
+1 mg » → ``0.5mg``. « 17 grammes » de poudre → ``17g``. Si aucune masse \
+n'est imprimée, laisse vide.
 - ``route`` : ``po``, ``sc``, ``im``, ``iv``, ``inh``, ``opht``, ``top``.
 - ``frequency`` : ``die``, ``bid``, ``tid``, ``qid``, ``hs``, ``qsem``, \
 ``q6h``, ``q4-6h``, ``prn``. « 1 fois par jour » → ``die``, « aux 6 heures » \
 → ``q6h``, « si besoin » → ``prn``.
 
 Exemples de ligne attendue : ``PEG 3350 17g po die``, \
-``Acétaminophène 650mg po q6h prn``.
+``Acétaminophène 650mg po q6h prn`` (deux comprimés de 325 mg).
 
 **history** — un item par problème, intervention ou hospitalisation :
 ``text``, ``fields`` = {``year`` ou ``date`` si imprimé, ``category`` \
@@ -240,15 +245,21 @@ The first four feed the note line; the software formats it, you supply the \
 four pieces:
 - ``short_name``: the short name a pharmacist would write \
 (``POLYETHYLENE-GLYCOL-3350`` → ``PEG 3350``).
-- ``dose``: the NUMERIC dose as read in the directions, number glued to the \
-unit (``17g``, ``650mg``, ``500mg``). If the directions say "17 grams", write \
-``17g``. Leave empty when no numeric dose is printed.
+- ``quantity``: the number of UNITS per intake as the directions state it \
+(``2`` for "2 tablets", ``0.5`` for "1/2 tablet", ``1`` for a single tablet). \
+A powder or a liquid: ``1``.
+- ``dose``: the ADMINISTERED dose per intake, in a mass unit, number glued to \
+the unit (``650mg``, ``12.5mg``, ``17g``). It is ``quantity × strength``: \
+``ACETAMINOPHENE 325MG, 2 tablets`` → ``dose`` = ``650mg``, not ``325mg`` \
+(that is the tablet strength, which belongs in ``strength``). "1/2 tablet of \
+1 mg" → ``0.5mg``. "17 grams" of powder → ``17g``. Leave empty when no mass \
+is printed.
 - ``route``: ``po``, ``sc``, ``im``, ``iv``, ``inh``, ``opht``, ``top``.
 - ``frequency``: ``die``, ``bid``, ``tid``, ``qid``, ``hs``, ``qsem``, \
 ``q6h``, ``q4-6h``, ``prn``.
 
 Expected line examples: ``PEG 3350 17g po die``, \
-``Acetaminophen 650mg po q6h prn``.
+``Acetaminophen 650mg po q6h prn`` (two 325 mg tablets).
 
 **history** — one item per condition, procedure or hospitalization: ``text``, \
 ``fields`` = {``year`` or ``date`` if printed, ``category`` (``condition`` | \
@@ -303,7 +314,7 @@ line break (compact JSON, on a single line):
 #: (observé : un caractère non échappé au milieu d'un objet de 12 000 signes,
 #: une lecture perdue sur trois). Un champ absent est simplement omis.
 _CHAMPS_SCHEMA = (
-    "molecule", "short_name", "strength", "form", "directions", "dose",
+    "molecule", "short_name", "strength", "form", "directions", "dose", "quantity",
     "route", "frequency", "din", "last_dispensed",
     "renewals", "status_printed", "as_printed",
     "analyte", "value", "unit", "reference", "flag", "date", "pertinence",
@@ -619,6 +630,49 @@ def _dose(*textes: str) -> str:
     return ""
 
 
+#: Unités de masse, ramenées au milligramme pour comparer.
+_MASSE_EN_MG = {"mg": 1.0, "g": 1000.0, "mcg": 0.001}
+
+
+def _masse(texte: str):
+    """« 325mg » → (325.0, 'mg') ; « 1 g » → (1000.0, 'g'). None si absent."""
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(grammes?|milligrammes?|microgrammes?|mcg|mg|g|µg|ug)\b",
+                  _cle(texte))
+    if not m:
+        return None
+    unite = _UNITES.get(m.group(2), m.group(2))
+    return float(m.group(1).replace(",", ".")), unite
+
+
+def _quantite(texte: str) -> float:
+    """
+    Nombre d'unités par prise : « 2 comprimés » → 2, « 1/2 comprimé » → 0.5.
+
+    C'est la quantité PRISE, pas la dose : 2 comprimés de 325 mg font 650 mg.
+    """
+    plat = _cle(texte)
+    demi = r"demi(?:e)?"
+    m = re.search(r"(\d+)\s*/\s*(\d+)\s*(?:comprimes?|compris?|cpr|co|cp|capsules?|gelules?|sachets?|gouttes?)", plat)
+    if m and float(m.group(2)):
+        return float(m.group(1)) / float(m.group(2))
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:comprimes?|compris?|cpr|co|cp|capsules?|gelules?|sachets?|gouttes?)", plat)
+    if m:
+        return float(m.group(1).replace(",", "."))
+    if re.search(r"\b" + demi + r"\s*(?:comprimes?|capsules?|gelules?)", plat):
+        return 0.5
+    mots = {"un": 1.0, "une": 1.0, "deux": 2.0, "trois": 3.0, "quatre": 4.0}
+    for mot, valeur in mots.items():
+        if re.search(r"\b" + mot + r"\s*(?:comprimes?|capsules?|gelules?)", plat):
+            return valeur
+    return 0.0
+
+
+def _fmt_masse(valeur: float, unite: str) -> str:
+    """438.0, 'mg' → « 438mg » ; 12.5 → « 12.5mg » (virgule décimale française)."""
+    nombre = ("%f" % valeur).rstrip("0").rstrip(".")
+    return nombre.replace(".", ",") + unite
+
+
 def _nom_court(nom: str) -> str:
     """
     Casse d'une molécule lue sur un scan.
@@ -648,12 +702,36 @@ def _ligne_medicament(champs: dict) -> tuple:
         str(champs.get("short_name") or champs.get("molecule") or "").strip()
     )
     directions = str(champs.get("directions") or "")
-    # La dose est cherchée dans les directions D'ABORD : sur un scan, la force
-    # (« 100 % ») ne dit rien et le nombre de grammes est dans la posologie.
-    dose = (
-        _dose(str(champs.get("dose") or ""), directions)
-        or _dose(str(champs.get("strength") or ""))
-    )
+
+    # DOSE ADMINISTRÉE, pas la force du comprimé : « 2 comprimés de 325 mg »
+    # font 650 mg. On multiplie quand les deux nombres sont là — c'est de
+    # l'arithmétique, pas du jugement, et une erreur y fait une fausse
+    # ordonnance. Le modèle donne la quantité et la force ; le code multiplie.
+    quantite = 0.0
+    try:
+        quantite = float(str(champs.get("quantity") or "").replace(",", ".") or 0)
+    except ValueError:
+        quantite = 0.0
+    if not quantite:
+        quantite = _quantite(directions)
+    force = _masse(str(champs.get("strength") or ""))
+    annoncee = _masse(str(champs.get("dose") or "")) or _masse(directions)
+
+    dose = ""
+    if force and quantite:
+        valeur, unite = force
+        dose = _fmt_masse(valeur * quantite, unite)
+        # Le modèle a annoncé autre chose : on garde le calcul (il est
+        # vérifiable) et on note l'écart, affiché dans l'interface.
+        if annoncee:
+            ecart = abs(annoncee[0] * _MASSE_EN_MG[annoncee[1]]
+                        - valeur * quantite * _MASSE_EN_MG[unite])
+            if ecart > 0.01:
+                champs["dose_conflict"] = _fmt_masse(*annoncee)
+    elif annoncee:
+        dose = _fmt_masse(*annoncee)
+    else:
+        dose = _dose(str(champs.get("strength") or ""))
     voie = (
         _voie(str(champs.get("route") or ""))
         or _voie(directions)

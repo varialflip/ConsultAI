@@ -52,6 +52,12 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
   une dose. La ligne imprimée reste dans `as_printed` (infobulle) ; une ligne
   qui ne rentre pas dans le moule est affichée **« non normalisée »** au lieu
   d'être corrigée en silence.
+  La **dose administrée** est calculée, pas recopiée : « 2 comprimés de
+  325 mg » → `650mg` (et non `325mg`, la force du comprimé), « 1/2 comprimé
+  de 1 mg » → `0,5mg`. Le modèle fournit la quantité d'unités et la force, le
+  code multiplie — c'est de l'arithmétique vérifiable, pas du jugement — et un
+  désaccord entre les deux est signalé (`dose_conflict`), jamais tranché en
+  silence.
 - **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
   analytes n'a pas sa place dans une note. Chaque valeur reçoit une
   `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie

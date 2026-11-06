@@ -158,6 +158,33 @@ class TestNormalisation(unittest.TestCase):
         self.assertEqual(extraction._dose("prendre 2 comprimés de 500 mg"), "500mg")
         self.assertEqual(extraction._dose("250 ml"), "")
 
+    def test_dose_administree_pas_la_force_du_comprime(self):
+        """Deux comprimés de 325 mg font 650 mg — l'erreur qui compte."""
+        champs = {
+            "short_name": "Acétaminophène",
+            "strength": "325mg",
+            "quantity": "2",
+            "directions": "PRENDRE 2 COMPRIME AUX 6 HEURES SI BESOIN",
+        }
+        ligne, ok = extraction._ligne_medicament(champs)
+        self.assertEqual(ligne, "Acétaminophène 650mg po q6h prn")
+        self.assertTrue(ok)
+
+    def test_demi_comprime(self):
+        champs = {"short_name": "Hydromorphone", "strength": "1mg",
+                  "directions": "PRENDRE 1/2 COMPRIME AUX 4 HEURES SI BESOIN"}
+        ligne, _ = extraction._ligne_medicament(champs)
+        self.assertEqual(ligne, "Hydromorphone 0,5mg po q4h prn")
+
+    def test_desaccord_de_dose_signale(self):
+        """Le calcul est gardé, l'écart avec le modèle est noté."""
+        champs = {"short_name": "Acétaminophène", "strength": "325mg",
+                  "quantity": "2", "dose": "325mg",
+                  "directions": "2 comprimes aux 6 heures"}
+        ligne, _ = extraction._ligne_medicament(champs)
+        self.assertEqual(ligne, "Acétaminophène 650mg po q6h")
+        self.assertEqual(champs.get("dose_conflict"), "325mg")
+
     def test_ligne_hors_moule_signalee(self):
         """Sans dose chiffrée, la ligne n'est pas « normalisée » — et le dit."""
         ligne, ok = extraction._ligne_medicament({"short_name": "Ramipril",

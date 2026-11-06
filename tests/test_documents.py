@@ -84,7 +84,7 @@ class TestCouverture(unittest.TestCase):
         self.assertEqual(len(resultat["items"]), 1)
         self.assertTrue(resultat["items"][0]["included"])
 
-    def test_entree_non_couverte_signalee_sans_bloquer(self):
+    def test_page_non_couverte_signalee_sans_bloquer(self):
         """Une page oubliée se voit, mais n'emporte plus toute la lecture."""
         resultat = extraction._normalize(_payload(), 2)
         self.assertEqual(resultat["missing"], [2])
@@ -93,7 +93,7 @@ class TestCouverture(unittest.TestCase):
     def test_entree_illisible_compte_comme_couverte(self):
         charge = _payload(unreadable=[{"input": 2, "reason": "page tournée"}])
         resultat = extraction._normalize(charge, 2)
-        self.assertEqual(resultat["unreadable"], [{"input": 2, "reason": "page tournée"}])
+        self.assertEqual(resultat["unreadable"], [{"page": 2, "reason": "page tournée"}])
 
     def test_aucun_document_refuse(self):
         with self.assertRaises(extraction.ExtractionError):

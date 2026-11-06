@@ -78,6 +78,13 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
   les deux : un second onglet ou un autre appareil voit « Lecture en cours… »
   puis le résultat, sans recharger. Un échec de lecture referme aussi
   l'attente — sinon les autres écrans restaient bloqués dessus.
+- **Une page qui ne donne rien, ça se voit (2026-11-06).** Une photo floue
+  (page 2 d'un scan) a produit zéro élément ; le modèle avait même écrit
+  « texte non clinique, fragment d'adresse » dans sa réponse, mais rien de
+  tout cela n'atteignait l'écran. L'onglet Documents affiche maintenant une
+  ligne par PAGE : type reconnu et nombre d'éléments, et en ambre
+  « page N — rien d'exploitable, vérifier la photo » quand une page ne rend
+  aucun élément. L'explication du modèle reste en infobulle.
 - **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
   analytes n'a pas sa place dans une note. Chaque valeur reçoit une
   `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie

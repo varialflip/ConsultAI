@@ -425,6 +425,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "page(s) non rendue(s) :",
         "page(s) not returned:",
     ),
+    "doc.page_nothing": (
+        "rien d'exploitable — vérifier la photo",
+        "nothing usable — check the photo",
+    ),
+    "doc.other_doc": (
+        "autre",
+        "other",
+    ),
     "doc.included": (
         "dans la note",
         "in the note",

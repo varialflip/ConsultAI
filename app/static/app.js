@@ -8204,6 +8204,36 @@
     compte.textContent = `${retenus}/${total} ${T('doc.included')}`;
     barre.appendChild(compte);
 
+    // CE QUE CHAQUE PAGE A DONNÉ. Une page lue qui ne produit rien est le
+    // signe d'une photo ratée (floue, tournée, page de garde) — et c'est
+    // exactement ce qu'on ne voyait pas : le modèle le disait dans sa
+    // réponse, personne ne l'affichait. Mieux vaut le voir avant de chercher
+    // un médicament manquant dans la note.
+    const nbPages = Number(doc.pages || 1);
+    if (nbPages > 1 || total > 0) {
+      const carte = document.createElement('div');
+      carte.className = 'flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-[11px] text-slate-500 border-b border-slate-100';
+      const notes = {};
+      (extractionData.coverage || []).forEach((row) => {
+        if (row && row.page) notes[row.page] = row.note || '';
+      });
+      for (let page = 1; page <= nbPages; page += 1) {
+        const surPage = tous.filter((i) => Number(i.source_page) === page);
+        const typesPage = (extractionData.documents || [])
+          .filter((d) => (d.pages || []).map(Number).includes(page))
+          .map((d) => documentKindLabel(d.kind));
+        const morceau = document.createElement('span');
+        const vide = surPage.length === 0 && nbPages > 1;
+        morceau.className = vide ? 'text-amber-600 font-medium' : '';
+        morceau.textContent = vide
+          ? `${T('doc.page')} ${page} — ${T('doc.page_nothing')}`
+          : `${T('doc.page')} ${page} · ${typesPage[0] || T('doc.other_doc')} (${surPage.length})`;
+        if (notes[page]) morceau.title = notes[page];
+        carte.appendChild(morceau);
+      }
+      entete.appendChild(carte);
+    }
+
     // Pages que le modèle n'a pas rendues : on le dit, sans rien bloquer et
     // sans jeter la lecture des autres.
     const manquantes = extractionData.missing || [];

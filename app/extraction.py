@@ -83,9 +83,9 @@ Tu lis des documents photographiés fournis par un médecin pendant la revue de 
 dossier : listes de médicaments, listes d'antécédents, bilans de laboratoire, \
 rapports d'imagerie.
 
-Tu reçois %(count)d entrée(s), numérotées de 1 à %(count)d dans l'ordre où \
-elles ont été fournies. Une entrée peut être une photographie ou un PDF de \
-plusieurs pages.
+Tu reçois UN document de %(count)d page(s), numérotées de 1 à %(count)d dans \
+l'ordre du fichier. Chaque page peut contenir un document différent (une \
+liste de médicaments, un bilan, un rapport) : c'est à toi de le voir.
 
 ## 1. SEGMENTATION
 Décide combien de DOCUMENTS distincts contiennent ces entrées — c'est toi qui \
@@ -96,10 +96,11 @@ pour un PDF, le numéro de page DANS LE FICHIER (1 = première page) ; pour une 
 simple photo, son numéro d'entrée.
 
 ## 2. COUVERTURE — OBLIGATOIRE
-Chaque entrée reçue doit apparaître EXACTEMENT UNE FOIS, soit dans \
-``coverage``, soit dans ``unreadable``. Une entrée que tu n'as pas lue doit \
-être déclarée dans ``unreadable`` avec sa raison (« page tournée », \
-« floue », « vide »). Ne l'omets jamais en silence.
+Chaque PAGE reçue doit apparaître EXACTEMENT UNE FOIS, soit dans \
+``coverage`` (champ ``page``), soit dans ``unreadable`` (champ ``page``). Une \
+page que tu n'as pas lue doit y être déclarée avec sa raison (« page \
+tournée », « floue », « vide », « page de garde »). Ne l'omets JAMAIS en \
+silence : c'est la seule erreur qu'on ne peut pas réparer après coup.
 
 ## 3. EN-TÊTES ADMINISTRATIFS — NE PAS EXTRAIRE
 Le nom du patient, la date de naissance, le NAS, l'adresse, le numéro de \
@@ -226,8 +227,8 @@ indentation ni saut de ligne (JSON compact, sur une seule ligne) :
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
   "items": [{"document_id": "d1", "kind": "…", "text": "…", "fields": {},
              "source_page": 1}],
-  "coverage": [{"input": 1, "document_id": "d1", "note": ""}],
-  "unreadable": [{"input": 3, "reason": "…"}],
+  "coverage": [{"page": 1, "document_id": "d1", "note": ""}],
+  "unreadable": [{"page": 3, "reason": "…"}],
   "observations": [{"text": "…", "pages": [1, 2]}]
 }
 """
@@ -236,8 +237,9 @@ _PROMPT_EN = """\
 You are reading documents photographed by a physician during chart review: \
 medication lists, medical history lists, lab reports, imaging reports.
 
-You receive %(count)d input(s), numbered 1 to %(count)d in the order supplied. \
-An input may be a photograph or a multi-page PDF.
+You receive ONE document of %(count)d page(s), numbered 1 to %(count)d in \
+file order. Each page may hold a different document (a medication list, a lab \
+report, an imaging report): spotting that is your job.
 
 ## 1. SEGMENTATION
 Decide how many distinct DOCUMENTS these inputs contain — that is your call. \
@@ -247,9 +249,11 @@ in ``pages`` the PAGE numbers in reading order: for a PDF, the page number \
 INSIDE THE FILE (1 = first page); for a plain photograph, its input number.
 
 ## 2. COVERAGE — MANDATORY
-Every input must appear EXACTLY ONCE, either in ``coverage`` or in \
-``unreadable``. An input you did not read must be declared in ``unreadable`` \
-with a reason ("page upside down", "blurry", "blank"). Never drop one silently.
+Every PAGE must appear EXACTLY ONCE, either in ``coverage`` (field ``page``) \
+or in ``unreadable`` (field ``page``). A page you did not read must be \
+declared there with a reason ("upside down", "blurry", "blank", "cover \
+page"). NEVER drop one silently: it is the one error that cannot be repaired \
+afterwards.
 
 ## 3. ADMINISTRATIVE HEADERS — DO NOT EXTRACT
 The patient's name, date of birth, health insurance number, address, record \
@@ -370,8 +374,8 @@ line break (compact JSON, on a single line):
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
   "items": [{"document_id": "d1", "kind": "…", "text": "…", "fields": {},
              "source_page": 1}],
-  "coverage": [{"input": 1, "document_id": "d1", "note": ""}],
-  "unreadable": [{"input": 3, "reason": "…"}],
+  "coverage": [{"page": 1, "document_id": "d1", "note": ""}],
+  "unreadable": [{"page": 3, "reason": "…"}],
   "observations": [{"text": "…", "pages": [1, 2]}]
 }
 """
@@ -428,11 +432,12 @@ _SCHEMA = {
             "items": {
                 "type": "OBJECT",
                 "properties": {
+                    "page": {"type": "INTEGER"},
                     "input": {"type": "INTEGER"},
                     "document_id": {"type": "STRING"},
                     "note": {"type": "STRING"},
                 },
-                "required": ["input"],
+                "required": ["page"],
             },
         },
         "unreadable": {
@@ -440,10 +445,11 @@ _SCHEMA = {
             "items": {
                 "type": "OBJECT",
                 "properties": {
+                    "page": {"type": "INTEGER"},
                     "input": {"type": "INTEGER"},
                     "reason": {"type": "STRING"},
                 },
-                "required": ["input"],
+                "required": ["page"],
             },
         },
         "observations": {
@@ -706,17 +712,31 @@ def _normalize(payload: dict, count: int) -> dict:
             doc["confidence"] = 0.0
         ids.append(identifiant)
 
-    # Couverture : chaque entrée doit être vue exactement une fois.
+    # Couverture : chaque PAGE doit être vue exactement une fois.
+    #
+    # Ce contrôle portait sur les ENTRÉES, alors que tout l'envoi est assemblé
+    # en UN PDF : il n'y avait donc qu'une entrée, et il ne pouvait rien
+    # manquer. Il a fallu qu'une page 2 entière (un médicament) disparaisse
+    # pour que ça se voie. On compte désormais des PAGES.
+    def _numero(row: dict) -> int:
+        """Numéro de page (ou d'entrée, pour l'ancien format de réponse)."""
+        for cle in ("page", "input"):
+            try:
+                valeur = int(row.get(cle))
+            except (TypeError, ValueError):
+                continue
+            if valeur:
+                return valeur
+        return 0
+
     vues = []
     for row in coverage:
         if not isinstance(row, dict):
             continue
-        try:
-            entree = int(row.get("input"))
-        except (TypeError, ValueError):
-            continue
-        if 1 <= entree <= count and entree not in vues:
-            vues.append(entree)
+        page = _numero(row)
+        if 1 <= page <= count and page not in vues:
+            vues.append(page)
+            row["page"] = page
             ids_couverts = row.get("document_id")
             if isinstance(ids_couverts, list):
                 row["document_id"] = ids_couverts[0] if ids_couverts else ""
@@ -724,13 +744,10 @@ def _normalize(payload: dict, count: int) -> dict:
     for row in unreadable:
         if not isinstance(row, dict):
             continue
-        try:
-            entree = int(row.get("input"))
-        except (TypeError, ValueError):
-            continue
-        if 1 <= entree <= count and entree not in vues:
-            vues.append(entree)
-            illisibles.append({"input": entree, "reason": str(row.get("reason") or "")[:300]})
+        page = _numero(row)
+        if 1 <= page <= count and page not in vues:
+            vues.append(page)
+            illisibles.append({"page": page, "reason": str(row.get("reason") or "")[:300]})
 
     # Couverture : on la SIGNALE, on ne jette plus la lecture. Une page
     # oubliée doit se voir — pas coûter l'extraction entière du lot.
@@ -906,7 +923,10 @@ def extract_documents(
                 f"Document {doc.id} illisible sur le disque ({exc})."
             ) from exc
 
-    prompt = _prompt(len(blobs), language)
+    # Nombre de pages réel du document : c'est lui que le modèle doit couvrir.
+    # ``Document.pages`` vient du compte de pages du PDF (ou 1 pour une photo).
+    pages_total = sum(max(1, int(d.pages or 1)) for d in documents)
+    prompt = _prompt(pages_total, language)
     # Modèle RAPIDE pour la lecture : le modèle de rédaction (gemini-2.5-pro
     # sur l'instance) mettait 72 s sur un dossier de quatre pages, contre 15 s
     # ici, pour une lecture identique. Le réglage « Modèle rapide » du panneau
@@ -981,7 +1001,7 @@ def extract_documents(
             "pages d'un même rapport peuvent rester ensemble)."
         )
     payload = _parse(getattr(response, "text", None) or "", motif)
-    result = _normalize(payload, len(blobs))
+    result = _normalize(payload, pages_total)
     result["model"] = modele
     result["usage"] = usage
     result["version"] = 1

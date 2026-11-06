@@ -131,7 +131,10 @@ est IMPRIMÉ : « cessé le… », « suspendu »)}.
 (``condition`` | ``surgery`` | ``hospitalization`` | ``allergy`` | ``family``)}.
 
 **labs** — un item par analyte : ``text``, ``fields`` = {``analyte``, \
-``value``, ``unit``, ``reference``, ``flag``, ``date``}.
+``value``, ``unit``, ``reference``, ``flag``, ``date``}. Si le tableau donne \
+PLUSIEURS colonnes datées, crée UN item par analyte ET par date : ``date`` \
+porte la date de la colonne, jamais celle du prélèvement global — deux valeurs \
+d'une même analyte à deux dates sont deux faits, pas un.
 
 **imaging** — UN seul item par rapport, ``text`` = le corps du rapport \
 (conclusion comprise), ``fields`` = {``study``, ``date``}.
@@ -204,7 +207,10 @@ interpretation belongs to the physician.
 ``surgery`` | ``hospitalization`` | ``allergy`` | ``family``)}.
 
 **labs** — one item per analyte: ``text``, ``fields`` = {``analyte``, \
-``value``, ``unit``, ``reference``, ``flag``, ``date``}.
+``value``, ``unit``, ``reference``, ``flag``, ``date``}. If the table gives \
+SEVERAL dated columns, create ONE item per analyte AND per date: ``date`` \
+carries the column's date, never the overall collection date — two values of \
+one analyte at two dates are two facts, not one.
 
 **imaging** — ONE item per report, ``text`` = the report body (impression \
 included), ``fields`` = {``study``, ``date``}.
@@ -472,15 +478,22 @@ def extract_documents(
     parts: List[object] = [
         types.Part.from_bytes(data=data, mime_type=mime) for data, mime in blobs
     ]
+    # Budget de sortie PROPRE à l'extraction : une liste de médicaments de
+    # douze lignes plus un bilan et un rapport produisent un JSON de plusieurs
+    # milliers de jetons, et le plafond de la note (8 192) le tronquait — un
+    # JSON coupé est illisible, donc une lecture perdue. Le raisonnement est
+    # par ailleurs borné : lire une page est une tâche mécanique, le budget de
+    # réflexion du panneau est réglé pour la rédaction clinique.
+    plafond = max(int(settings.gemini_max_output_tokens), 16384)
     config_kwargs = dict(
         temperature=0.1,
-        max_output_tokens=settings.gemini_max_output_tokens,
+        max_output_tokens=plafond,
         safety_settings=llm._safety_settings(),
         response_mime_type="application/json",
     )
     try:
         config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_budget=llm._gemini_thinking_budget()
+            thinking_budget=min(llm._gemini_thinking_budget(), 1024)
         )
     except Exception:  # pragma: no cover - très défensif
         pass
@@ -503,6 +516,14 @@ def extract_documents(
         ) from exc
 
     usage = llm._gemini_usage(getattr(response, "usage_metadata", None))
+    candidats = getattr(response, "candidates", None) or []
+    motif = str(getattr(candidats[0], "finish_reason", "") or "") if candidats else ""
+    if "MAX_TOKENS" in motif:
+        raise ExtractionError(
+            "Lecture interrompue : le document produit plus de contenu que le "
+            "modèle ne peut en rendre d'un coup. Envoyez-le en deux fois (les "
+            "pages d'un même rapport peuvent rester ensemble)."
+        )
     payload = _parse(getattr(response, "text", None) or "")
     result = _normalize(payload, len(blobs))
     result["model"] = modele

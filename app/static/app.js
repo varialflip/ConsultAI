@@ -7841,6 +7841,34 @@
     );
   }
 
+  /**
+   * Documents photographiés : un autre onglet (ou un autre appareil) a envoyé,
+   * lu ou supprimé un document de CE brouillon.
+   *
+   * L'onglet qui a fait le geste s'ignore (``origin_tab``) — il a déjà mis son
+   * écran à jour. Les autres relisent l'état réel plutôt que d'appliquer un
+   * différentiel : c'est le serveur qui fait foi, et une lecture d'extraction
+   * peut avoir changé beaucoup de lignes d'un coup.
+   */
+  function onSyncDocuments(evt) {
+    const payload = JSON.parse(evt.data);
+    if (payload.origin_tab && payload.origin_tab === state.tabId) return;
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    if (payload.document_id) {
+      // « Lecture en cours » : l'attente devient visible sur les autres écrans.
+      state.extractingId = String(payload.document_id);
+    }
+    loadDocuments();
+  }
+
+  function onSyncDocumentsChanged(evt) {
+    const payload = JSON.parse(evt.data);
+    if (payload.origin_tab && payload.origin_tab === state.tabId) return;
+    if (String(payload.consultation_id) !== String(state.consultationId)) return;
+    state.extractingId = null;
+    loadDocuments();
+  }
+
   function onSyncConsultationDeleted(evt) {
     const payload = JSON.parse(evt.data);
     if (payload.origin_tab === state.tabId) return;
@@ -7882,6 +7910,8 @@
     liveSource.addEventListener('transcript_delta', onTranscriptDelta);
     liveSource.addEventListener('transcript_final', onTranscriptFinal);
     liveSource.addEventListener('dictation_started', onSyncDictationStarted);
+    liveSource.addEventListener('documents_reading', onSyncDocuments);
+    liveSource.addEventListener('documents_changed', onSyncDocumentsChanged);
     liveSource.addEventListener('recording_added', onSyncRecording);
     liveSource.addEventListener('recording_deleted', onSyncRecording);
     liveSource.addEventListener('generated', onSyncGeneratedOrPatched);

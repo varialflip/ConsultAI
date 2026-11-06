@@ -72,6 +72,12 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
   `source_pages`). Un doublon qui DIFFÈRE — dose, forme, DIN — n'est pas
   touché : c'est peut-être deux forces différentes, et ce n'est pas à
   l'application de trancher.
+- **Documents en direct (SSE, 2026-11-06)** : l'envoi, la lecture, le
+  reclassement et la suppression d'un document publient `documents_changed`,
+  et le DÉBUT d'une lecture publie `documents_reading`. Le navigateur écoute
+  les deux : un second onglet ou un autre appareil voit « Lecture en cours… »
+  puis le résultat, sans recharger. Un échec de lecture referme aussi
+  l'attente — sinon les autres écrans restaient bloqués dessus.
 - **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
   analytes n'a pas sa place dans une note. Chaque valeur reçoit une
   `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie

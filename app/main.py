@@ -4118,6 +4118,10 @@ def update_document(
         document.title = payload.title.strip()[:200]
     db.commit()
     db.refresh(document)
+    live.publish(user.owner_key, "documents_changed", {
+        "consultation_id": document.consultation_id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     return _document_payload(document)
 
 
@@ -4135,13 +4139,33 @@ def extract_document(document_id: int, request: Request, db: Session = Depends(g
     consultation = _get_owned_consultation(db, document.consultation_id, user)
 
     langue = i18n.normalize(preferences.document_language() or "fr")
+
+    # La lecture dure de quelques secondes à une demi-minute : les autres
+    # onglets et appareils doivent voir qu'elle a COMMENCÉ, pas seulement
+    # qu'elle est finie. Sans cet évènement, un second appareil reste devant
+    # « Document pas encore lu » pendant toute la durée de l'appel.
+    live.publish(user.owner_key, "documents_reading", {
+        "consultation_id": consultation.id,
+        "document_id": document.id,
+        "origin_tab": request.headers.get("x-consultai-tab", ""),
+    })
     try:
         result = extraction.extract_documents(db, consultation, [document], langue)
     except extraction.ExtractionError as exc:
         logger.warning("Extraction refusée (document %s) : %s", document_id, exc)
+        # Un échec doit AUSSI refermer l'attente des autres écrans : sans cet
+        # évènement, ils resteraient sur « Lecture en cours… » indéfiniment.
+        live.publish(user.owner_key, "documents_changed", {
+            "consultation_id": consultation.id,
+            "origin_tab": request.headers.get("x-consultai-tab", ""),
+        })
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
         logger.exception("Extraction interrompue (document %s)", document_id)
+        live.publish(user.owner_key, "documents_changed", {
+            "consultation_id": consultation.id,
+            "origin_tab": request.headers.get("x-consultai-tab", ""),
+        })
         raise HTTPException(status_code=502, detail=_t("err.document_extract", error=exc)) from exc
 
     # Le type du document suit la segmentation quand elle est univoque ; sinon

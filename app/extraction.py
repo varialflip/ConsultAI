@@ -120,11 +120,28 @@ Tu restitues le fait imprimé ; l'interprétation appartient au médecin.
 ## 6. CHAMPS PAR TYPE
 
 **medications** — un item par ligne de la liste :
-``text`` (la ligne telle qu'imprimée, préfixe fabricant compris), \
-``fields`` = {``molecule`` si la molécule est certaine d'après ce qui est \
-imprimé, sinon vide, ``strength``, ``form``, ``directions``, ``din``, \
+``text`` = la ligne telle qu'imprimée, VERBATIM (préfixe fabricant compris, \
+majuscules comprises) ; c'est la provenance, elle est conservée telle quelle. \
+``fields`` = {``short_name``, ``dose``, ``route``, ``frequency``, ``molecule`` \
+si la molécule est certaine, ``strength``, ``form``, ``directions``, ``din``, \
 ``last_dispensed``, ``renewals``, ``status_printed`` (seulement si le statut \
 est IMPRIMÉ : « cessé le… », « suspendu »)}.
+
+Les quatre premiers champs servent à composer la ligne de la note ; le logiciel \
+la met en forme, toi tu lui donnes les quatre morceaux :
+- ``short_name`` : le nom court qu'un pharmacien écrirait (``POLYETHYLENE-\
+GLYCOL-3350`` → ``PEG 3350``, ``ACETAMINOPHEN`` → ``Acétaminophène``).
+- ``dose`` : la dose CHIFFRÉE telle qu'elle se lit dans la posologie, nombre \
+collé à l'unité (``17g``, ``650mg``, ``500mg``, ``2,5mg``). Si la posologie \
+dit « 17 grammes », écris ``17g``. Si elle ne donne aucune dose chiffrée, \
+laisse vide.
+- ``route`` : ``po``, ``sc``, ``im``, ``iv``, ``inh``, ``opht``, ``top``.
+- ``frequency`` : ``die``, ``bid``, ``tid``, ``qid``, ``hs``, ``qsem``, \
+``q6h``, ``q4-6h``, ``prn``. « 1 fois par jour » → ``die``, « aux 6 heures » \
+→ ``q6h``, « si besoin » → ``prn``.
+
+Exemples de ligne attendue : ``PEG 3350 17g po die``, \
+``Acétaminophène 650mg po q6h prn``.
 
 **history** — un item par problème, intervention ou hospitalisation :
 ``text``, ``fields`` = {``year`` ou ``date`` si imprimé, ``category`` \
@@ -213,10 +230,25 @@ interpretation belongs to the physician.
 ## 6. FIELDS BY TYPE
 
 **medications** — one item per list line:
-``text`` (the line as printed, manufacturer prefix included), ``fields`` = \
-{``molecule`` if certain from what is printed, else empty, ``strength``, \
-``form``, ``directions``, ``din``, ``last_dispensed``, ``renewals``, \
-``status_printed`` (only if the status is PRINTED: "stopped on…", "on hold")}.
+``text`` = the line as printed, VERBATIM (manufacturer prefix included, \
+capitalisation included); that is the provenance, kept unchanged. ``fields`` = \
+{``short_name``, ``dose``, ``route``, ``frequency``, ``molecule`` if certain, \
+``strength``, ``form``, ``directions``, ``din``, ``last_dispensed``, \
+``renewals``, ``status_printed`` (only if PRINTED: "stopped on…", "on hold")}.
+
+The first four feed the note line; the software formats it, you supply the \
+four pieces:
+- ``short_name``: the short name a pharmacist would write \
+(``POLYETHYLENE-GLYCOL-3350`` → ``PEG 3350``).
+- ``dose``: the NUMERIC dose as read in the directions, number glued to the \
+unit (``17g``, ``650mg``, ``500mg``). If the directions say "17 grams", write \
+``17g``. Leave empty when no numeric dose is printed.
+- ``route``: ``po``, ``sc``, ``im``, ``iv``, ``inh``, ``opht``, ``top``.
+- ``frequency``: ``die``, ``bid``, ``tid``, ``qid``, ``hs``, ``qsem``, \
+``q6h``, ``q4-6h``, ``prn``.
+
+Expected line examples: ``PEG 3350 17g po die``, \
+``Acetaminophen 650mg po q6h prn``.
 
 **history** — one item per condition, procedure or hospitalization: ``text``, \
 ``fields`` = {``year`` or ``date`` if printed, ``category`` (``condition`` | \
@@ -271,7 +303,8 @@ line break (compact JSON, on a single line):
 #: (observé : un caractère non échappé au milieu d'un objet de 12 000 signes,
 #: une lecture perdue sur trois). Un champ absent est simplement omis.
 _CHAMPS_SCHEMA = (
-    "molecule", "strength", "form", "directions", "din", "last_dispensed",
+    "molecule", "short_name", "strength", "form", "directions", "dose",
+    "route", "frequency", "din", "last_dispensed",
     "renewals", "status_printed", "as_printed",
     "analyte", "value", "unit", "reference", "flag", "date", "pertinence",
     "study", "body", "year", "category", "partie",
@@ -479,6 +512,170 @@ def _analytes_retenus(analyte: str, liste: str) -> bool:
     return False
 
 
+#: Fréquences : la phrase imprimée → le jeton maison. Table de CODE, pas de
+#: prompt : « 1 fois par jour » doit donner `die` à chaque fois, jamais `qd`
+#: ni `DIE`. L'ordre compte (du plus spécifique au plus général).
+_FREQUENCES = (
+    (r"\b(?:aux?|toutes les)\s*(\d+)\s*(?:a|-|et)\s*(\d+)\s*heures?\b", "q{1}-{2}h"),
+    (r"\b(?:aux?|toutes les)\s*(\d+)\s*heures?\b", "q{n}h"),
+    (r"\b(?:4|quatre)\s*fois\b|\bquater in die\b|\bqid\b", "qid"),
+    (r"\b(?:3|trois)\s*fois\b|\bter in die\b|\btid\b", "tid"),
+    (r"\b(?:2|deux)\s*fois\b|\bbis in die\b|\bbid\b", "bid"),
+    (r"\b1\s*fois par semaine\b|\bune fois par semaine\b|\bhebdomadaire\b|\bqsem\b", "qsem"),
+    (r"\bau coucher\b|\bau soir\b|\bhs\b|\bhora somni\b", "hs"),
+    (r"\b1\s*fois\b|\bune fois\b|\bquotidien\b|\bchaque jour\b|\bpar jour\b|\bdie\b|\bqd\b", "die"),
+)
+
+#: Voies : la phrase → le sigle maison.
+_VOIES = (
+    (r"\b(?:par )?voie orale\b|\bpar la bouche\b|\bboire\b|\bavaler\b|\bper os\b|\bpo\b", "po"),
+    (r"\bsous-?cutan", "sc"),
+    (r"\bintramusculaire\b|\bim\b", "im"),
+    (r"\bintraveineu", "iv"),
+    (r"\binhal", "inh"),
+    (r"\bophtalm", "opht"),
+    (r"\btopique\b|\bcutan", "top"),
+)
+
+_UNITES = {
+    "grammes": "g", "gramme": "g", "g": "g",
+    "milligrammes": "mg", "milligramme": "mg", "mg": "mg",
+    "microgrammes": "mcg", "microgramme": "mcg", "mcg": "mcg", "µg": "mcg", "ug": "mcg",
+    "unites": "ui", "unite": "ui", "ui": "ui",
+}
+
+#: Une ligne de médicament « normalisée » : nom, dose chiffrée, voie,
+#: fréquence, `prn` en dernier. Rien de plus — ce qui n'entre pas dans ce
+#: moule est signalé comme non normalisé plutôt que corrigé en silence.
+_LIGNE_MED = re.compile(
+    r"^.+ \d+(?:[.,]\d+)?(?:mg|g|mcg|ml|ui|%)"
+    r"(?: (?:po|sc|im|iv|inh|opht|top))?"
+    r"(?: (?:die|bid|tid|qid|hs|qsem|prn|q\d+(?:-\d+)?h))?"
+    r"(?: prn)?$"
+)
+
+
+def _cle(texte: str) -> str:
+    """Minuscules sans accents, espaces normalisés — pour reconnaître les phrases."""
+    import unicodedata
+
+    plat = "".join(
+        c for c in unicodedata.normalize("NFD", texte or "")
+        if unicodedata.category(c) != "Mn"
+    )
+    return re.sub(r"\s+", " ", plat.lower()).strip()
+
+
+def _frequence(texte: str) -> str:
+    plat = _cle(texte)
+    for motif, jeton in _FREQUENCES:
+        m = re.search(motif, plat)
+        if m:
+            if "{1}" in jeton:
+                return (jeton.replace("{1}", str(int(m.group(1))))
+                             .replace("{2}", str(int(m.group(2)))))
+            if "{n}" in jeton:
+                return jeton.replace("{n}", str(int(m.group(1))))
+            return jeton
+    return ""
+
+
+#: « si besoin » se COMBINE avec l'intervalle : aux 6 heures si besoin = q6h prn.
+_PRN = re.compile(r"\bsi besoin\b|\bau besoin\b|\bprn\b|\bs\.o\.s\.?\b")
+
+
+def _prn(texte: str) -> bool:
+    return bool(_PRN.search(_cle(texte)))
+
+
+def _voie(texte: str) -> str:
+    plat = _cle(texte)
+    for motif, sigle in _VOIES:
+        if re.search(motif, plat):
+            return sigle
+    # Forme galénique : un comprimé, une gélule ou un sirop s'avalent. Ce n'est
+    # pas une supposition sur le patient, c'est la forme imprimée sur la ligne.
+    if re.search(r"\bcomprimes?\b|\bgelules?\b|\bcapsules?\b|\bsirop\b|\bsolution buvable\b", plat):
+        return "po"
+    return ""
+
+
+def _dose(*textes: str) -> str:
+    """
+    Dose chiffrée avec son unité, en collant le nombre à l'unité (« 650mg »).
+
+    On écarte les millilitres : sur une liste de médicaments, un volume est
+    presque toujours une dilution (« dans 250 ml ») et non la dose. Le premier
+    nombre porteur d'une unité massique gagne.
+    """
+    for texte in textes:
+        plat = _cle(texte)
+        for m in re.finditer(
+            r"(\d+(?:[.,]\d+)?)\s*(grammes?|milligrammes?|microgrammes?|mcg|mg|g|ui|µg|ug)\b",
+            plat,
+        ):
+            nombre, unite = m.group(1).replace(",", "."), m.group(2)
+            return nombre + _UNITES.get(unite, unite)
+    return ""
+
+
+def _nom_court(nom: str) -> str:
+    """
+    Casse d'une molécule lue sur un scan.
+
+    Un nom tout en majuscules vient du scanner et se lit mal dans une note :
+    on le ramène en casse de phrase — SAUF s'il contient un sigle court, qu'il
+    faut laisser tel quel (``PEG 3350``, ``ASA``, ``B12``). Le modèle fournit
+    ``short_name`` ; ceci n'est que le filet du repli sur ``molecule``.
+    """
+    nom = re.sub(r"\s+", " ", (nom or "").strip())
+    if not nom.isupper() or len(nom) <= 4:
+        return nom
+    if any(mot.isalpha() and mot.isupper() and len(mot) <= 3 for mot in nom.split()):
+        return nom
+    return nom.capitalize()
+
+
+def _ligne_medicament(champs: dict) -> tuple:
+    """
+    Compose la ligne de la note : nom, dose, voie, fréquence.
+
+    Retourne ``(ligne, ok)``. ``ok`` est faux quand la ligne ne rentre pas dans
+    le moule : elle est alors affichée comme non normalisée, avec la ligne
+    imprimée à côté — jamais corrigée en silence.
+    """
+    nom = _nom_court(
+        str(champs.get("short_name") or champs.get("molecule") or "").strip()
+    )
+    directions = str(champs.get("directions") or "")
+    # La dose est cherchée dans les directions D'ABORD : sur un scan, la force
+    # (« 100 % ») ne dit rien et le nombre de grammes est dans la posologie.
+    dose = (
+        _dose(str(champs.get("dose") or ""), directions)
+        or _dose(str(champs.get("strength") or ""))
+    )
+    voie = (
+        _voie(str(champs.get("route") or ""))
+        or _voie(directions)
+        or _voie(str(champs.get("form") or ""))
+    )
+    freq = _frequence(str(champs.get("frequency") or "")) or _frequence(directions)
+    if _prn(str(champs.get("frequency") or "")) or _prn(directions):
+        freq = (freq + " prn").strip()
+
+    if not nom:
+        return "", False
+    morceaux = [nom, dose, voie, freq]
+    ligne = " ".join(m for m in morceaux if m).strip()
+    # Statut IMPRIMÉ seulement (« Cessé le … ») : un fait de la page, jamais
+    # une déduction. Hors du moule, donc ajouté après validation.
+    statut = str(champs.get("status_printed") or "").strip()
+    ok = bool(_LIGNE_MED.match(ligne)) if dose else False
+    if statut:
+        ligne = f"{ligne} ({statut})"
+    return ligne, ok
+
+
 def _inclus_par_defaut(kind: str, champs: dict) -> bool:
     """
     Ce qui entre dans la note SANS geste du clinicien.
@@ -621,28 +818,14 @@ def _normalize(payload: dict, count: int) -> dict:
         except (TypeError, ValueError):
             page = 0
         champs = dict(champs)
-        if kind == "medications" and champs.get("molecule"):
-            # La ligne de la note porte la MOLÉCULE, pas le préfixe du
-            # distributeur : « APO-RAMIPRIL » est une marque de fabricant, la
-            # molécule est ramipril. La ligne imprimée reste dans
-            # ``as_printed`` — c'est la provenance, et le clinicien la retrouve
-            # dans le document.
-            molecule = str(champs["molecule"]).strip()
-            if molecule.isupper():
-                molecule = molecule.capitalize()
-            morceaux = [molecule, str(champs.get("strength") or "").strip()]
-            ligne = " ".join(m for m in morceaux if m).strip()
-            directions = str(champs.get("directions") or "").strip()
-            if directions:
-                ligne = f"{ligne} — {directions}"
-            # Statut IMPRIMÉ seulement (« cessé le… »). Jamais déduit : une
-            # ligne sans renouvellement n'est pas une ligne arrêtée. Le fait
-            # figure tel quel, entre parenthèses, et le clinicien tranche.
-            statut = str(champs.get("status_printed") or "").strip()
-            if statut and ligne:
-                ligne = f"{ligne} ({statut})"
+        ligne_ok = True
+        if kind == "medications":
+            # La ligne de la note est COMPOSÉE, pas recopiée : nom court, dose,
+            # voie, fréquence (convention maison, cf. default_prompts § 2.5).
+            # La ligne imprimée reste dans ``as_printed`` — c'est la provenance.
+            ligne, ligne_ok = _ligne_medicament(champs)
             if ligne:
-                champs["as_printed"] = texte
+                champs.setdefault("as_printed", texte)
                 texte = ligne
 
         propres.append({
@@ -659,6 +842,10 @@ def _normalize(payload: dict, count: int) -> dict:
             # ne doit entrer dans la note sans un geste.
             "included": _inclus_par_defaut(kind, champs),
             "edited": False,
+            # Faux quand la ligne ne rentre pas dans le moule : l'interface
+            # l'affiche comme « non normalisée » au lieu de laisser croire à
+            # une mise en forme propre.
+            "line_ok": ligne_ok,
         })
 
     # Imagerie : la conclusion entre, le corps du rapport accompagne — décoché.

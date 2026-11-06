@@ -40,6 +40,18 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
 - **Identité** : les en-têtes administratifs (nom, NAS, adresse, numéro de
   dossier) ne sont pas extraits ; un bloc que le modèle n'a pas su classer
   (« autre ») arrive **décoché**.
+- **Lignes de médicaments mises en forme, pas recopiées.** Un scan DSQ
+  donnait « POLYETHYLENE-GLYCOL-3350 100% — DISSOUDRE 17 GRAMMES… » : de
+  l'OCR habillé. La ligne est maintenant composée en quatre emplacements —
+  nom court, dose, voie, fréquence — et lit `PEG 3350 17g po die`,
+  `Acétaminophène 650mg po q6h prn`. Le modèle fournit le nom court et les
+  quatre morceaux ; une **table de code** traduit les phrases en jetons maison
+  (`1 fois par jour` → `die`, `aux 6 heures` → `q6h`, `si besoin` → `prn`,
+  `par voie orale`/comprimé → `po`). La dose vient des DIRECTIONS quand la
+  force ne dit rien (`100 %`), et un volume de dilution n'est jamais pris pour
+  une dose. La ligne imprimée reste dans `as_printed` (infobulle) ; une ligne
+  qui ne rentre pas dans le moule est affichée **« non normalisée »** au lieu
+  d'être corrigée en silence.
 - **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
   analytes n'a pas sa place dans une note. Chaque valeur reçoit une
   `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie

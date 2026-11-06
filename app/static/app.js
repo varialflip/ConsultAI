@@ -8320,11 +8320,22 @@
     champ.className = 'w-full resize-y rounded border-slate-200 text-[12px] leading-snug py-0.5 px-1 focus:border-slate-400 focus:ring-0';
     champ.dataset.role = 'text';
     zone.appendChild(champ);
-    if (item.source_page) {
+    // Provenance : la ligne IMPRIMÉE reste accessible en infobulle, même
+    // quand la ligne affichée a été mise en forme.
+    if (item.fields && item.fields.as_printed) champ.title = item.fields.as_printed;
+    if (item.source_page || item.line_ok === false) {
       const source = document.createElement('span');
       source.className = 'text-[10px] text-slate-400';
-      source.textContent = `${T('doc.page')} ${item.source_page}`;
+      source.textContent = item.source_page ? `${T('doc.page')} ${item.source_page}` : '';
       zone.appendChild(source);
+      if (item.line_ok === false) {
+        // Ligne hors du moule : on le DIT, plutôt que de laisser croire à une
+        // mise en forme propre — et la ligne imprimée est en infobulle.
+        const alerte = document.createElement('span');
+        alerte.className = 'ml-2 text-[10px] text-amber-600';
+        alerte.textContent = T('doc.not_normalized');
+        zone.appendChild(alerte);
+      }
     }
     if (estObservation) ligne.classList.add('bg-violet-50');
     ligne.appendChild(case_);

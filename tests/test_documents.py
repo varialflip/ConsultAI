@@ -111,6 +111,60 @@ class TestNormalisation(unittest.TestCase):
         self.assertFalse(resultat["items"][0]["included"])
         self.assertTrue(resultat["items"][1]["included"])
 
+    def test_ligne_medicament_quatre_emplacements(self):
+        """Les deux exemples demandés, produits par le normaliseur."""
+        champs = {
+            "short_name": "PEG 3350",
+            "dose": "",
+            "route": "",
+            "frequency": "",
+            "strength": "100%",
+            "directions": "DISSOUDRE 17 GRAMMES DANS PLUS OU MOINS 250 ML DE "
+                          "LIQUIDE ET BOIRE 1 FOIS PAR JOUR",
+        }
+        ligne, ok = extraction._ligne_medicament(champs)
+        self.assertEqual(ligne, "PEG 3350 17g po die")
+        self.assertTrue(ok)
+
+        champs = {
+            "short_name": "Acétaminophène",
+            "directions": "PRENDRE 1 COMPRIMÉ AUX 6 HEURES SI BESOIN",
+            "dose": "650mg",
+        }
+        ligne, ok = extraction._ligne_medicament(champs)
+        self.assertEqual(ligne, "Acétaminophène 650mg po q6h prn")
+        self.assertTrue(ok)
+
+    def test_frequences_et_voies(self):
+        cas = [
+            ("1 fois par jour", "die"), ("deux fois par jour", "bid"),
+            ("3 fois par jour", "tid"), ("4 fois par jour", "qid"),
+            ("au coucher", "hs"), ("1 fois par semaine", "qsem"),
+            ("aux 6 heures", "q6h"), ("aux 4 à 6 heures", "q4-6h"),
+        ]
+        for phrase, attendu in cas:
+            self.assertEqual(extraction._frequence(phrase), attendu, phrase)
+        # « si besoin » est un MODE, pas une fréquence : il se combine.
+        self.assertTrue(extraction._prn("si besoin"))
+        self.assertTrue(extraction._prn("aux 6 heures au besoin"))
+        self.assertEqual(extraction._voie("par voie orale"), "po")
+        self.assertEqual(extraction._voie("sous-cutanée"), "sc")
+        self.assertEqual(extraction._voie("inhalée"), "inh")
+
+    def test_dose_ignore_le_volume_de_dilution(self):
+        self.assertEqual(
+            extraction._dose("dissoudre 17 grammes dans 250 ml de liquide"), "17g"
+        )
+        self.assertEqual(extraction._dose("prendre 2 comprimés de 500 mg"), "500mg")
+        self.assertEqual(extraction._dose("250 ml"), "")
+
+    def test_ligne_hors_moule_signalee(self):
+        """Sans dose chiffrée, la ligne n'est pas « normalisée » — et le dit."""
+        ligne, ok = extraction._ligne_medicament({"short_name": "Ramipril",
+                                                  "directions": "au besoin"})
+        self.assertFalse(ok)
+        self.assertEqual(ligne, "Ramipril prn")
+
     def test_molecule_remplace_le_prefixe_fabricant(self):
         charge = _payload(items=[{
             "document_id": "d1",
@@ -125,7 +179,7 @@ class TestNormalisation(unittest.TestCase):
             "source_page": 1,
         }])
         item = extraction._normalize(charge, 1)["items"][0]
-        self.assertEqual(item["text"], "Citalopram 20 mg — 1 co PO DIE (Cessé le 2026-03-02)")
+        self.assertEqual(item["text"], "Citalopram 20mg po die (Cessé le 2026-03-02)")
         self.assertTrue(item["fields"]["as_printed"].startswith("JAMP-CITALOPRAM"))
 
     def test_bilan_normal_decoché_bilan_marque_inclus(self):

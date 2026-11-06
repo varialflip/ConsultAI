@@ -1521,6 +1521,19 @@ manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers
 sans ligne correspondante tourne à chaque purge. `DOCUMENTS_DIR` (défaut
 `/data/documents`, à laisser sous `/data`) et `MAX_DOCUMENT_MB` (défaut 25).
 
+**Lignes de médicaments mises en forme.** Un scan de liste n'est pas recopié :
+la ligne est composée en quatre emplacements — nom court, dose, voie, fréquence
+— et se lit `PEG 3350 17g po die`, `Acétaminophène 650mg po q6h prn`. Le
+modèle fournit le nom court (`POLYETHYLENE-GLYCOL-3350` → `PEG 3350`) et les
+quatre morceaux ; une table de code traduit les phrases en jetons maison
+(`1 fois par jour` → `die`, `aux 6 heures` → `q6h`, `au coucher` → `hs`,
+`si besoin` → `prn`, `par voie orale` ou un comprimé → `po`). La dose est
+cherchée dans les directions quand la force ne dit rien (un `100 %` n'est pas
+une dose), et un volume de dilution n'est jamais pris pour une dose. La ligne
+imprimée reste accessible en infobulle (`fields.as_printed`) ; une ligne qui ne
+rentre pas dans le moule est signalée **« non normalisée »**, jamais corrigée
+en silence.
+
 **Tout n'entre pas.** Une note de consultation ne recopie pas un panneau de
 trente analytes. Chaque valeur de bilan reçoit une `pertinence` du modèle
 (`pertinent`, `anormal`, `routine`) et seule la partie pertinente est cochée

@@ -112,12 +112,18 @@ Transcris ce qui est IMPRIMÉ, sans corriger, sans compléter, sans traduire. \
 Un passage illisible s'écrit exactement ``[illisible]``. Ne complète JAMAIS \
 une posologie, une date, un chiffre ou un nom manquant.
 
-## 5. CE QUE TU N'AS PAS LE DROIT DE FAIRE
+## 5. MISE EN PAGE — NE PAS RECOPIER LES PUCES
+Aucun ``text`` ne commence par une puce, un glyphe de liste ou un numéro \
+d'énumération (``•``, ``◇``, ``-``, ``1.``, ``a)``) : ces marques appartiennent \
+à la page, pas à l'énoncé. Et une phrase qui se poursuit à la ligne suivante \
+est prise entière — on ne coupe jamais un item au milieu.
+
+## 6. CE QUE TU N'AS PAS LE DROIT DE FAIRE
 Tu n'es pas clinicien. Tu ne déduis aucun statut : « 0 renouvellement » n'est \
 PAS « cessé », une date de dernière distribution n'est PAS une date d'arrêt. \
 Tu restitues le fait imprimé ; l'interprétation appartient au médecin.
 
-## 6. CHAMPS PAR TYPE
+## 7. CHAMPS PAR TYPE
 
 **medications** — un item par ligne de la liste :
 ``text`` = la ligne telle qu'imprimée, VERBATIM (préfixe fabricant compris, \
@@ -157,9 +163,24 @@ n'est imprimée, laisse vide.
 Exemples de ligne attendue : ``PEG 3350 17g po die``, \
 ``Acétaminophène 650mg po q6h prn`` (deux comprimés de 325 mg).
 
-**history** — un item par problème, intervention ou hospitalisation :
-``text``, ``fields`` = {``year`` ou ``date`` si imprimé, ``category`` \
-(``condition`` | ``surgery`` | ``hospitalization`` | ``allergy`` | ``family``)}.
+**history** — un item par problème de santé, intervention, hospitalisation ou \
+allergie : ``text`` = l'énoncé COMPLET tel qu'imprimé, en une phrase, SANS \
+puce ni glyphe (``•``, ``◇``, ``-``, ``1.``) et sans numéro de liste ; si la \
+phrase continue à la ligne suivante, prends la suite plutôt que de la couper \
+au milieu. ``fields`` = {``year`` (l'année imprimée, MÊME si elle figure aussi \
+dans le texte), ``category`` (``condition`` | ``surgery`` | ``hospitalization`` \
+| ``allergy`` | ``family``)}.
+
+Un rapport de consultation contient plusieurs rubriques : ne retiens comme \
+antécédents que ce qui est un problème de santé, une intervention ou une \
+hospitalisation. N'extrais PAS comme antécédent un identifiant de dossier \
+(``ID:``, MRN, numéro), un titre de rubrique, ni les données de vie \
+quotidienne (AVQ, AVD, habitudes, situation de vie) : celles-là vont en \
+``other``. Un constat d'examen rattaché à un problème (« HTA, 220 à la \
+présentation, bien contrôlée ensuite ») reste UN seul item : c'est la même \
+histoire. Même règle quand un problème est cité deux fois (une fois nu, une \
+fois détaillé) : UN seul item, celui qui en dit le plus — jamais « HTA » à \
+côté de « HTA, 220 à la présentation ».
 
 **labs** — un item par analyte : ``text``, ``fields`` = {``analyte``, \
 ``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
@@ -187,12 +208,12 @@ verbatim}.
 
 **other** — un item par bloc de texte cohérent.
 
-## 7. OBSERVATIONS
+## 8. OBSERVATIONS
 Dans ``observations``, uniquement des recoupements FACTUELS entre documents \
 (« la date du bilan précède celle du rapport », « deux posologies différentes \
 pour la même molécule »). Jamais de diagnostic, jamais de conduite à tenir.
 
-## 8. RÉPONSE
+## 9. RÉPONSE
 Un seul objet JSON, aucun texte autour, aucune clôture de code, AUCUNE
 indentation ni saut de ligne (JSON compact, sur une seule ligne) :
 {
@@ -236,12 +257,18 @@ Transcribe what is PRINTED, without correcting, completing or translating. An \
 illegible passage is written exactly ``[illisible]``. Never fill in a missing \
 dosage, date, number or name.
 
-## 5. WHAT YOU MUST NOT DO
+## 5. LAYOUT — DO NOT COPY BULLETS
+No ``text`` starts with a bullet, a list glyph or an enumeration number \
+(``•``, ``◇``, ``-``, ``1.``, ``a)``): those marks belong to the page, not to \
+the statement. And a sentence continuing on the next line is taken whole — an \
+item is never cut mid-sentence.
+
+## 6. WHAT YOU MUST NOT DO
 You are not a clinician. Infer no status: "0 renewals" is NOT "stopped", a \
 last-dispensed date is NOT a stop date. Report the printed fact; \
 interpretation belongs to the physician.
 
-## 6. FIELDS BY TYPE
+## 7. FIELDS BY TYPE
 
 **medications** — one item per list line:
 ``text`` = the line as printed, VERBATIM (manufacturer prefix included, \
@@ -280,9 +307,22 @@ is printed.
 Expected line examples: ``PEG 3350 17g po die``, \
 ``Acetaminophen 650mg po q6h prn`` (two 325 mg tablets).
 
-**history** — one item per condition, procedure or hospitalization: ``text``, \
-``fields`` = {``year`` or ``date`` if printed, ``category`` (``condition`` | \
-``surgery`` | ``hospitalization`` | ``allergy`` | ``family``)}.
+**history** — one item per health problem, procedure, hospitalization or \
+allergy: ``text`` = the COMPLETE statement as printed, as a sentence, WITHOUT \
+bullet or glyph (``•``, ``◇``, ``-``, ``1.``) and without list numbering; if \
+the sentence continues on the next line, take the continuation rather than \
+cutting it mid-sentence. ``fields`` = {``year`` (the printed year, EVEN if it \
+also appears in the text), ``category`` (``condition`` | ``surgery`` | \
+``hospitalization`` | ``allergy`` | ``family``)}.
+
+A consultation report contains several headings: keep as history only what is \
+a health problem, a procedure or a hospitalization. Do NOT extract as history \
+a record identifier (``ID:``, MRN, number), a section heading, or daily-life \
+data (ADL, IADL, habits, living situation): those go to ``other``. An \
+examination finding attached to a problem ("HTN, 220 on presentation, well \
+controlled afterwards") stays ONE item: it is the same story. Same rule when \
+a problem is stated twice (once bare, once detailed): ONE item, the fuller \
+one — never "HTN" next to "HTN, 220 on presentation".
 
 **labs** — one item per analyte: ``text``, ``fields`` = {``analyte``, \
 ``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
@@ -308,12 +348,12 @@ printed (2 to 4 lines, this is what goes into the note), ``fields`` = \
 
 **other** — one item per coherent block of text.
 
-## 7. OBSERVATIONS
+## 8. OBSERVATIONS
 In ``observations``, only FACTUAL cross-references between documents ("the lab \
 date precedes the report date", "two different dosages for the same molecule"). \
 Never a diagnosis, never a recommendation.
 
-## 8. RESPONSE
+## 9. RESPONSE
 A single JSON object, no surrounding text, no code fence, NO indentation or
 line break (compact JSON, on a single line):
 {

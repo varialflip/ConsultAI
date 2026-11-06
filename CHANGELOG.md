@@ -57,6 +57,14 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
   vérification : le texte affiché est éditable, **le médecin est le
   validateur**. Seule la page oubliée reste signalée (et n'emporte plus toute
   la lecture du lot).
+- **Antécédents (2026-11-06)** : un rapport de consultation photographié
+  donnait des fragments de liste — « • HTA », « • 2025/12 récidive… », puces
+  recopiées, années perdues, `ID: F84` pris pour un problème. Le prompt dit
+  maintenant : énoncé complet sans puce ni glyphe, phrase qui continue reprise
+  entière, année dans le champ `year` MÊME si elle figure dans le texte,
+  catégories réellement utilisées, et **rien d'administratif** (identifiant de
+  dossier, titre de rubrique, AVQ/AVD, situation de vie) — ces lignes vont en
+  `other`. Un problème cité deux fois reste un seul item, le plus complet.
 - **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
   analytes n'a pas sa place dans une note. Chaque valeur reçoit une
   `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie

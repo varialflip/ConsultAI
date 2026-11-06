@@ -421,6 +421,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Document pas encore lu.",
         "Document not read yet.",
     ),
+    "doc.check_all": (
+        "Tout cocher",
+        "Check all",
+    ),
+    "doc.uncheck_all": (
+        "Tout décocher",
+        "Uncheck all",
+    ),
     "doc.reading": (
         "Lecture en cours… (quelques secondes)",
         "Reading… (a few seconds)",

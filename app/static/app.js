@@ -8176,7 +8176,7 @@
       try {
         await api(`/api/documents/${doc.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ kind: select.value }),
+          body: { kind: select.value },
         });
         doc.kind = select.value;
       } catch (err) {
@@ -8192,6 +8192,22 @@
     lien.className = 'text-[11px] text-slate-500 underline';
     lien.textContent = T('doc.view');
     barre.appendChild(lien);
+
+    // Tout cocher / tout décocher : un document entier reconnu « autre »
+    // (photo d'écran, en-tête, page de garde) arrive décoché — c'est le bon
+    // défaut, mais cocher douze lignes une par une ne l'est pas.
+    const tout = document.createElement('button');
+    tout.type = 'button';
+    tout.className = 'text-[11px] text-slate-500 underline';
+    tout.textContent = T('doc.check_all');
+    tout.addEventListener('click', () => {
+      const cases = entete.querySelectorAll('[data-role="include"]');
+      const toutesCochees = Array.from(cases).every((c) => c.checked);
+      cases.forEach((c) => { c.checked = !toutesCochees; });
+      tout.textContent = toutesCochees ? T('doc.check_all') : T('doc.uncheck_all');
+      saveDocumentReview(doc, entete);
+    });
+    barre.appendChild(tout);
 
     const relire = document.createElement('button');
     relire.type = 'button';
@@ -8325,7 +8341,7 @@
     try {
       const data = await api(`/api/documents/${doc.id}/review`, {
         method: 'POST',
-        body: JSON.stringify({ items, observations }),
+        body: { items, observations },
       });
       doc.extraction = data.extraction;
     } catch (err) {

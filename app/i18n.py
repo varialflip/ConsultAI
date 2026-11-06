@@ -2278,6 +2278,41 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "If the note comes back empty (reasoning saturating the budget), raise "
         "the Output budget rather than increasing effort.",
     ),
+    "set.custom_llm_enable_thinking.label": (
+        "Réflexion (interrupteur)", "Thinking (switch)",
+    ),
+    "set.custom_llm_enable_thinking.help": (
+        "Interrupteur natif oMLX / serveurs compatibles OpenAI auto-hébergés "
+        "(ils ignore « reasoning.effort » de l'OpenRouter et lisent "
+        "`enable_thinking` en racine du corps). « Désactivé » = le modèle ne "
+        "réfléchit pas : la note sort immédiatement, sans écran « Raisonnement "
+        "du modèle… » (recommandé pour un modèle qui boucle sans fin). "
+        "« Activé » = réflexion forcée, à borner avec le Budget de réflexion "
+        "ci-dessous. « Automatique » = paramètre non envoyé, le serveur décide. "
+        "Utiliser un seul levier à la fois (interrupteur, budget, effort).",
+        "Native switch for oMLX / self-hosted OpenAI-compatible servers (they "
+        "ignore OpenRouter's `reasoning.effort` and read `enable_thinking` at "
+        "the body root). 'Disabled' = the model does not think: the note comes "
+        "out immediately, no 'Model reasoning…' screen (recommended for a model "
+        "that loops forever). 'Enabled' = thinking forced on, to be capped with "
+        "the Thinking budget below. 'Automatic' = parameter not sent, the server "
+        "decides. Use one lever at a time (switch, budget, effort).",
+    ),
+    "set.custom_llm_thinking_budget.label": (
+        "Budget de réflexion (jetons)", "Thinking budget (tokens)",
+    ),
+    "set.custom_llm_thinking_budget.help": (
+        "Borne explicite des jetons de pensée (`thinking_budget`, natif oMLX) : "
+        "le modèle réfléchit au plus tant de jetons puis écrit la note. "
+        "Ex. 1500 ≈ 15-20 s de réflexion puis la note. Vide = non envoyé. À "
+        "combiner avec « Réflexion : Activé » ; inutile si la réflexion est "
+        "désactivée. Jamais en même temps que l'effort.",
+        "Explicit cap on thinking tokens (`thinking_budget`, native oMLX): the "
+        "model thinks at most that many tokens, then writes the note. E.g. 1500 "
+        "≈ 15-20 s of thinking then the note. Empty = not sent. Combine with "
+        "'Thinking: Enabled'; pointless if thinking is disabled. Never together "
+        "with effort.",
+    ),
     "set.openrouter_api_key.label": ("Clé API OpenRouter", "OpenRouter API key"),
     "set.openrouter_api_key.help": (
         "openrouter.ai → Keys. Une seule clé pour les deux usages : la note et "

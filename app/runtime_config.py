@@ -742,6 +742,26 @@ SETTINGS: Tuple[Setting, ...] = (
         ),
         only_for=("llm_provider", "custom"),
     ),
+    # Levers oMLX natives (le point de terminaison ignore « reasoning:{effort} »
+    # de l'OpenRouter — il lit « reasoning_effort », « thinking_budget » et
+    # « enable_thinking » en RACINE du corps). Un seul à la fois : « off »
+    # coupe la réflexion (note immédiate), « thinking_budget » la borne en
+    # jetons, « reasoning_effort » l'ajuste finement. Voir llm.py.
+    Setting(
+        "custom_llm_enable_thinking", "choice", "group.note",
+        default=lambda: "auto",
+        choices=(
+            ("auto", "choice.reasoning_auto"),
+            ("true", "choice.on"),
+            ("false", "choice.off"),
+        ),
+        only_for=("llm_provider", "custom"),
+    ),
+    Setting(
+        "custom_llm_thinking_budget", "text", "group.note",
+        default=lambda: "", placeholder="ex. 1500 (jetons de pensée)",
+        only_for=("llm_provider", "custom"),
+    ),
     *_cap_audio("custom", "custom", help_key=None),
     Setting(
         "custom_send_audio_format", "choice", "group.note",

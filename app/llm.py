@@ -859,8 +859,13 @@ _OPENROUTER_REASONING_BUDGET = 512
 #: borne donc la réflexion isolée : au-delà de ces cumuls, la génération est
 #: déclarée bloquée (le raisonnement a probablement débordé du budget et la
 #: note ne sortira jamais).
-_STREAM_REASONING_MAX_CHARS = 24000    # ≈ 6-8 k jetons de pensée cumulés
-_STREAM_REASONING_MAX_SECONDS = 180    # borne aussi temporelle (débit lent)
+# Bornes relevées in vivo (oMLX, prompt gériatrique plein, 2026-10-01) :
+# « reasoning_effort:low » = 24 757 car. de pensée / 86 s avant la note ;
+# « thinking_budget:1500 » ≈ 6 000 car. / 17 s ; « enable_thinking:false » = 0.
+# On borne donc assez haut pour ne jamais trancher une réflexion légitimement
+# réglée au panneau (le levier fait foi), tout en coupant un vrai débordement.
+_STREAM_REASONING_MAX_CHARS = 60000    # ≈ 15-20 k jetons de pensée cumulés
+_STREAM_REASONING_MAX_SECONDS = 300    # borne aussi temporelle (débit lent)
 
 
 def _custom_max_tokens() -> int:
@@ -884,6 +889,47 @@ def _custom_reasoning_effort() -> Optional[str]:
     """
     effort = (runtime_config.value("custom_llm_reasoning_effort") or "").strip().lower()
     return effort if effort in ("none", "minimal", "low", "medium", "high") else None
+
+
+def _custom_reasoning_kwargs(reasoning_off: bool = False) -> Dict[str, object]:
+    """
+    Paramètres de raisonnement NATIFS oMLX pour le point de terminaison personnalisé.
+
+    oMLX (et la plupart des serveurs compatibles OpenAI auto-hébergés) lit
+    ``enable_thinking`` / ``thinking_budget`` / ``reasoning_effort`` en RACINE du
+    corps — PAS ``reasoning:{effort}`` (convention OpenRouter), qui lui est
+    inconnu et donc ignoré : d'où le raisonnement intégral en boucle observé en
+    production (le chien de garde tuait la génération). On envoie donc les clés
+    natives, via ``extra_body`` (le SDK OpenAI refuse les kwargs inconnus).
+
+    Un seul levier à la fois, par ordre de priorité (jamais de combinaison
+    contradictoire) :
+      - ``reasoning_off`` (tâche mécanique : extraction/validation) → on COUPE
+        la réflexion (``enable_thinking:false``) : note immédiate, zéro jeton de
+        pensée gaspillé ;
+      - « off » demandé au panneau → on coupe ;
+      - « on » demandé → on force la réflexion, bornée par ``thinking_budget`` si
+        un budget est réglé ;
+      - « auto » (défaut) → on ne touche rien, le serveur fait son choix.
+    """
+    out: Dict[str, object] = {}
+    # Valeurs du choix au panneau : « true » / « false » (convention ON_OFF) —
+    # tolérer aussi « on » / « off » par prudence.
+    et = (runtime_config.value("custom_llm_enable_thinking") or "auto").strip().lower()
+    if reasoning_off or et in ("false", "off"):
+        return {"enable_thinking": False}
+    if et in ("true", "on"):
+        out["enable_thinking"] = True
+    budget = (runtime_config.value("custom_llm_thinking_budget") or "").strip()
+    if budget:
+        try:
+            out["thinking_budget"] = int(float(budget.replace(",", ".")))
+        except (TypeError, ValueError):
+            pass
+    effort = _custom_reasoning_effort()
+    if effort and effort != "auto":
+        out["reasoning_effort"] = effort
+    return out
 
 
 def _openrouter_max_tokens() -> int:
@@ -2151,7 +2197,16 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
         # métadonnées) et peut faire déborder ``max_tokens``.
         kwargs["enable_thinking"] = False
 
-    if provider in ("custom", "openrouter"):
+    if provider == "custom":
+        # oMLX lit les clés natives en RACINE du corps (``enable_thinking`` /
+        # ``thinking_budget`` / ``reasoning_effort``), pas ``reasoning:{effort}``
+        # de l'OpenRouter — d'où le raisonnement intégral en boucle qui figeait
+        # l'écran sur « Raisonnement du modèle… » jusqu'à ce que le chien de
+        # garde le tue. En mode JSON / extraction (tâche mécanique) on coupe.
+        kwargs.setdefault("extra_body", {}).update(
+            _custom_reasoning_kwargs(reasoning_off=reasoning_off or json_mode)
+        )
+    elif provider == "openrouter":
         if reasoning_off:
             # Extraction (passe 1) : tâche mécanique — on coupe le raisonnement
             # quel que soit l'effort réglé au panneau. ``{"effort": "none"}`` est
@@ -2159,10 +2214,7 @@ def _stream_openai_like(system, user, model, temperature, max_tokens, json_mode,
             # par défaut (DeepSeek v4 : ``reasoning_tokens = 0`` vérifié).
             kwargs.setdefault("extra_body", {})["reasoning"] = {"effort": "none"}
         else:
-            effort = (
-                _custom_reasoning_effort() if provider == "custom"
-                else _openrouter_reasoning_effort()
-            )
+            effort = _openrouter_reasoning_effort()
             if effort and not json_mode:
                 # Modèles à raisonnement (DeepSeek…) : effort demandé, s'il est
                 # honoré par le point de terminaison (OpenRouter ``reasoning.effort``).
@@ -2723,11 +2775,16 @@ def _complete_openai(system, user, model, temperature, max_tokens, json_mode, pr
     }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
-    if provider in ("custom", "openrouter"):
-        effort = (
-            _custom_reasoning_effort() if provider == "custom"
-            else _openrouter_reasoning_effort()
+    if provider == "custom":
+        # oMLX lit les clés natives en RACINE du corps (``enable_thinking`` /
+        # ``thinking_budget`` / ``reasoning_effort``), pas ``reasoning:{effort}``
+        # de l'OpenRouter — d'où le raisonnement intégral en boucle observé en
+        # prod. En mode JSON (extraction, tâche mécanique) on coupe la réflexion.
+        kwargs.setdefault("extra_body", {}).update(
+            _custom_reasoning_kwargs(reasoning_off=json_mode)
         )
+    elif provider == "openrouter":
+        effort = _openrouter_reasoning_effort()
         if effort and not json_mode:
             # ``reasoning`` passe par ``extra_body`` : le SDK OpenAI refuse les
             # kwargs inconnus (cf. ``_stream_openai_like``). Jamais en mode JSON

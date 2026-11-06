@@ -195,6 +195,26 @@ même commit** :
   `_apply_grounding` (filet synchrone) sans écraser une raison au clavier).
   Le prompt de région doit rester court et efficace (une réponse d'une seule
   ligne `TITRE:` en plus du texte de région).
+- **Levers de réflexion oMLX (point de terminaison personnalisé)** (2026-10-01,
+  cf. `_custom_reasoning_kwargs` dans `llm.py`) : un modèle à raisonnement
+  auto-hébergé (oMLX 0.7.0, `fredericks-mac-studio:8000`) lit `enable_thinking`
+  / `thinking_budget` / `reasoning_effort` en **RACINE du corps** (via
+  `extra_body`), PAS la forme OpenRouter `reasoning:{effort}` — que le serveur
+  ignore (pydantic extra=ignore). Avant ce fix, le panneau envoyait
+  `reasoning:{effort}` → ignoré → réflexion intégrale en boucle → l'écran
+  figeait sur « Raisonnement du modèle… » jusqu'à ce que le **chien de garde**
+  (`_STREAM_REASONING_MAX_CHARS`/`_SECONDS`) tue la génération. Trois leviers
+  au panneau, **un seul à la fois** (jamais de combinaison contradictoire) :
+  `custom_llm_enable_thinking` (auto/true/false → `enable_thinking`),
+  `custom_llm_thinking_budget` (→ `thinking_budget`), `custom_llm_reasoning_effort`
+  (→ `reasoning_effort`). En mode JSON / extraction (tâche mécanique) on COUPE
+  (`enable_thinking:false`). Chien de garde relevé 24 000→60 000 car. / 180→300 s
+  (mesures in vivo : `reasoning_effort:low` = 24 757 car./86 s avant la note ;
+  `thinking_budget:1500` ≈ 6 000 car./17 s ; `enable_thinking:false` = note en
+  16 s). **Le levier réglé au panneau fait foi, le garde ne le tranche plus.**
+  Recommandation pour un modèle qui boucle : `enable_thinking:désactivé`. Toute
+  évolution doit re-vérifier sur l'endpoint oMLX (prompt gériatrique plein) que
+  la note sort, et préserver la visibilité (jamais renvoyer une réflexion seule).
 - **Fenêtre glissante live** (`stt_sliding_window`, 2026-09-08, cf.
   `_transcribe_fenetre` / `_fusionner_fenetre` / `_aligner_chevauchement` dans
   `dictation.py`) : mode optionnel — fenêtres 90 s, pas 15 s (60 s se vaut,

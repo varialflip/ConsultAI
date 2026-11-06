@@ -2,6 +2,33 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-10-01 — Levers de réflexion oMLX dans le panneau (point de terminaison personnalisé)
+
+*Un modèle à raisonnement auto-hébergé (oMLX) bouclait sans fin : le panneau
+envoyait `reasoning.effort` (convention OpenRouter), que oMLX ignore — il lit
+`enable_thinking` / `thinking_budget` / `reasoning_effort` en racine du corps.
+Le modèle réfléchissait donc à fond, ne produisait jamais la note, et le chien
+de garde tuait la génération. On expose les leviers natifs et on relève le
+chien de garde.*
+
+- **Deux nouveaux réglages sous Note → Point de terminaison personnalisé** :
+  « Réflexion (interrupteur) » (`custom_llm_enable_thinking`, auto/activé/
+  désactivé) et « Budget de réflexion (jetons) » (`custom_llm_thinking_budget`).
+  Envoyés en RACINE du corps via `extra_body` (les clés natives oMLX), plus
+  sous forme `reasoning:{effort}` que le serveur ignore.
+- **`reasoning_effort` envoyé en racine** pour le personnalisé (oMLX l'honore ;
+  la forme OpenRouter `reasoning:{effort}` ne passait jamais). En mode JSON /
+  extraction (tâche mécanique) on coupe la réflexion (`enable_thinking:false`).
+- **Chien de garde « raisonnement seul » relevé** : 24 000 → 60 000 caractères,
+  180 → 300 s (mesures in vivo : `reasoning_effort:low` = 24 757 car./86 s
+  avant la note). Le levier réglé au panneau fait foi, le garde ne le tranche
+  plus.
+- **Vérifié sur l'instance de test** (prompt gériatrique plein, oMLX 0.7.0) :
+  `enable_thinking:false` → note en 16 s sans réflexion ; `thinking_budget:1500`
+  → ~6 000 car. de pensée puis note en 23 s ; `reasoning_effort:low` → note en
+  86 s. Recommandation : `enable_thinking:désactivé` (ou un budget borné) pour
+  un modèle qui boucle.
+
 ## 2026-09-17 — Copie « Aligné » : tableaux en liste pointée deux colonnes ; largeur 89
 
 *Les tableaux Markdown de la note ne sortent plus encadrés — les cadres

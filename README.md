@@ -545,19 +545,26 @@ terminaison personnalisé, OpenRouter). Les fournisseurs sans liste de modèles
 la main. Si le modèle configuré n'apparaît pas dans la liste, un avertissement
 prévient que la transcription (ou la mise en forme) échouera.
 
-> Le **point de terminaison personnalisé** expose un **Budget de sortie**
-> (`custom_llm_max_tokens`, 32768 jetons par défaut) propre à ce fournisseur,
-> distinct du plafond de Gemini, et un réglage **Raisonnement**
-> (`custom_llm_reasoning_effort`, « Auto » par défaut) qui borne la réflexion
-> des modèles à raisonnement (Gemma 4, DeepSeek via OpenRouter…). Un
-> tel modèle consomme une large part du budget dans sa pensée : au lieu de
-> `reasoning.effort`, l'application envoie désormais une **borne explicite**
-> `reasoning.max_tokens` (512 jetons de pensée par défaut) pour que le texte
-> visible garde toujours sa part. Si le raisonnement déborde quand même, la
-> réponse vide (« motif : length ») déclenche une relance automatique au budget
-> doublé, et un **chien de garde** coupe un flux qui réfléchirait seul trop
-> longtemps (sans le moindre texte) — le panneau explique comment ajuster.
-> Le raisonnement ne s'applique qu'à la **mise en forme de la note** : la
+> Le **point de terminaison personnalisé** (ex. oMLX auto-hébergé) expose un
+> **Budget de sortie** (`custom_llm_max_tokens`, 32768 jetons par défaut) propre
+> à ce fournisseur, distinct du plafond de Gemini, et **trois leviers de
+> réflexion** à utiliser **un seul à la fois** :
+> - **Réflexion (interrupteur)** (`custom_llm_enable_thinking`, auto/activé/
+>   désactivé) — clé native `enable_thinking` envoyée **en racine du corps** ;
+>   « désactivé » = pas de pensée, note immédiate (recommandé pour un modèle qui
+>   boucle sans fin) ;
+> - **Budget de réflexion** (`custom_llm_thinking_budget`) — clé native
+>   `thinking_budget`, borne explicite des jetons de pensée (ex. 1500) ;
+> - **Raisonnement** (`custom_llm_reasoning_effort`, auto/none/…/high) — clé
+>   native `reasoning_effort`.
+> Ces trois clés sont **natives oMLX** et passent par `extra_body` (le SDK
+> OpenAI refuse les kwargs inconnus). ⚠ La forme OpenRouter `reasoning:{effort}`
+> est **ignorée** par oMLX et les serveurs compatibles auto-hébergés : d'où,
+> avant ce réglage, un modèle reflexif qui réfléchissait à fond, ne produisait
+> jamais la note, et se faisait couper par le **chien de garde** (relevé à
+> 60 000 caractères / 300 s — le levier réglé au panneau fait foi). En mode
+> JSON / extraction (tâche mécanique) on **coupe** la réflexion (`enable_thinking:
+> false`). Le raisonnement ne s'applique qu'à la **mise en forme de la note** : la
 > détection de la région médicaments (qui rapporte aussi le titre du brouillon,
 > cf. plus bas) est annulée lorsque le modèle actif réfléchit, et remplacée
 > par un découpage local — aucun format JSON à protéger de la pensée.

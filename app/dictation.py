@@ -303,9 +303,31 @@ class DictationSession:
         with _lock_for(self.id):
             self.updated_at = time.time()
             directory = os.path.dirname(self.state_path)
-            fd, temporary = tempfile.mkstemp(
-                dir=directory, prefix=".state-", suffix=".tmp",
-            )
+            try:
+                fd, temporary = tempfile.mkstemp(
+                    dir=directory, prefix=".state-", suffix=".tmp",
+                )
+            except FileNotFoundError:
+                # Le dossier de la session a disparu : dictée conclue et purgée,
+                # nettoyée par une passe concurrente, ou conteneur recréé en
+                # pleine dictée. Ce n'est pas une panne de l'application — mais
+                # l'exception remontait jusqu'à ``/finish`` et rendait un 502,
+                # que le navigateur lisait comme une dictée cassée. On recrée le
+                # dossier : l'état doit survivre même si l'audio, lui, est perdu.
+                logger.warning(
+                    "Dictée %s : dossier d'état absent, recréé avant écriture",
+                    self.id,
+                )
+                try:
+                    os.makedirs(directory, exist_ok=True)
+                    fd, temporary = tempfile.mkstemp(
+                        dir=directory, prefix=".state-", suffix=".tmp",
+                    )
+                except OSError as exc:
+                    logger.error(
+                        "Dictée %s : état non enregistré (%s)", self.id, exc
+                    )
+                    return
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as handle:
                     json.dump(self.to_state(), handle, ensure_ascii=False)

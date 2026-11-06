@@ -127,8 +127,16 @@ si la molécule est certaine, ``strength``, ``form``, ``directions``, ``din``, \
 ``last_dispensed``, ``renewals``, ``status_printed`` (seulement si le statut \
 est IMPRIMÉ : « cessé le… », « suspendu »)}.
 
-Les quatre premiers champs servent à composer la ligne de la note ; le logiciel \
-la met en forme, toi tu lui donnes les quatre morceaux :
+**``line`` — la ligne finale, que TU écris.** C'est elle qui paraît dans la \
+note. Format exact : ``Nom court dose voie fréquence``, nombre collé à \
+l'unité, abréviations en minuscules, ``prn`` en dernier :
+``PEG 3350 17g po die`` · ``Acétaminophène 650mg po q6h prn`` · \
+``Quétiapine 12,5mg po hs prn`` · ``Hydromorphone 0,5mg po q4h prn``.
+La dose de ``line`` est la dose ADMINISTRÉE par prise (quantité × force), pas \
+la force du comprimé. Le logiciel vérifie ensuite la forme et l'arithmétique ; \
+il ne réécrit pas ta ligne, il la signale si elle ne tient pas.
+
+Les champs suivants servent à ce contrôle, et au cas où ``line`` manquerait :
 - ``short_name`` : le nom court qu'un pharmacien écrirait (``POLYETHYLENE-\
 GLYCOL-3350`` → ``PEG 3350``, ``ACETAMINOPHEN`` → ``Acétaminophène``).
 - ``quantity`` : le nombre d'UNITÉS par prise, tel que la posologie le dit \
@@ -241,8 +249,18 @@ capitalisation included); that is the provenance, kept unchanged. ``fields`` = \
 ``strength``, ``form``, ``directions``, ``din``, ``last_dispensed``, \
 ``renewals``, ``status_printed`` (only if PRINTED: "stopped on…", "on hold")}.
 
-The first four feed the note line; the software formats it, you supply the \
-four pieces:
+**``line`` — the final line, written by YOU.** It is what appears in the note. \
+Exact format: ``Short name dose route frequency``, number glued to the unit, \
+abbreviations lowercase, ``prn`` last:
+``PEG 3350 17g po die`` · ``Acetaminophen 650mg po q6h prn`` · \
+``Quetiapine 12.5mg po hs prn`` · ``Hydromorphone 0.5mg po q4h prn``.
+The dose in ``line`` is the ADMINISTERED dose per intake (quantity × \
+strength), not the tablet strength. The software then checks the shape and \
+the arithmetic; it does not rewrite your line, it flags it when it does not \
+hold.
+
+The following fields feed that check, and the fallback when ``line`` is \
+missing:
 - ``short_name``: the short name a pharmacist would write \
 (``POLYETHYLENE-GLYCOL-3350`` → ``PEG 3350``).
 - ``quantity``: the number of UNITS per intake as the directions state it \
@@ -314,7 +332,7 @@ line break (compact JSON, on a single line):
 #: (observé : un caractère non échappé au milieu d'un objet de 12 000 signes,
 #: une lecture perdue sur trois). Un champ absent est simplement omis.
 _CHAMPS_SCHEMA = (
-    "molecule", "short_name", "strength", "form", "directions", "dose", "quantity",
+    "line", "molecule", "short_name", "strength", "form", "directions", "dose", "quantity",
     "route", "frequency", "din", "last_dispensed",
     "renewals", "status_printed", "as_printed",
     "analyte", "value", "unit", "reference", "flag", "date", "pertinence",
@@ -692,12 +710,51 @@ def _nom_court(nom: str) -> str:
 
 def _ligne_medicament(champs: dict) -> tuple:
     """
-    Compose la ligne de la note : nom, dose, voie, fréquence.
+    Ligne de la note : le MODÈLE la propose, le code la vérifie.
 
-    Retourne ``(ligne, ok)``. ``ok`` est faux quand la ligne ne rentre pas dans
-    le moule : elle est alors affichée comme non normalisée, avec la ligne
-    imprimée à côté — jamais corrigée en silence.
+    Le partage est volontaire. Composer la ligne en Python revenait à coder
+    d'avance toutes les tournures d'une posologie imprimée — et à mal traiter
+    celles qu'on n'a pas prévues (c'est ainsi qu'un « 2 comprimés de 325 mg »
+    est sorti à 325 mg). Lire « 1/2 comprimé au coucher » est une tâche de
+    LECTURE, pas une règle : elle revient au modèle.
+
+    Le code garde ce qui doit être garanti : la forme de la ligne, la présence
+    d'une dose chiffrée, et l'arithmétique ``quantité × force`` quand les deux
+    sont connues. Un désaccord est signalé, jamais tranché en silence.
+
+    Retourne ``(ligne, ok)`` ; ``ok`` faux = affichée « non normalisée ».
     """
+    proposee = re.sub(r"\s+", " ", str(champs.get("line") or "")).strip()
+    calculee, ok_calculee = _composer_ligne(champs)
+
+    # Le calcul de la dose reste un CONTRÔLE, même quand le modèle propose :
+    # deux comprimés de 325 mg ne font pas 325 mg.
+    quantite = _quantite_prise(champs)
+    force = _masse(str(champs.get("strength") or ""))
+    if quantite and force:
+        attendue = force[0] * quantite
+        mesuree = _masse(str(champs.get("dose") or "")) or _masse(proposee)
+        if mesuree and abs(mesuree[0] * _MASSE_EN_MG[mesuree[1]]
+                           - attendue * _MASSE_EN_MG[force[1]]) > 0.01:
+            champs["dose_conflict"] = _fmt_masse(*mesuree)
+
+    if proposee and _LIGNE_MED.match(proposee):
+        return proposee, True
+    # Ligne absente ou hors moule : on retombe sur la composition, et le
+    # drapeau dit si même celle-là n'est pas propre.
+    return calculee, ok_calculee
+
+
+def _quantite_prise(champs: dict) -> float:
+    try:
+        quantite = float(str(champs.get("quantity") or "").replace(",", ".") or 0)
+    except ValueError:
+        quantite = 0.0
+    return quantite or _quantite(str(champs.get("directions") or ""))
+
+
+def _composer_ligne(champs: dict) -> tuple:
+    """Repli déterministe quand le modèle ne fournit pas de ligne exploitable."""
     nom = _nom_court(
         str(champs.get("short_name") or champs.get("molecule") or "").strip()
     )
@@ -707,13 +764,7 @@ def _ligne_medicament(champs: dict) -> tuple:
     # font 650 mg. On multiplie quand les deux nombres sont là — c'est de
     # l'arithmétique, pas du jugement, et une erreur y fait une fausse
     # ordonnance. Le modèle donne la quantité et la force ; le code multiplie.
-    quantite = 0.0
-    try:
-        quantite = float(str(champs.get("quantity") or "").replace(",", ".") or 0)
-    except ValueError:
-        quantite = 0.0
-    if not quantite:
-        quantite = _quantite(directions)
+    quantite = _quantite_prise(champs)
     force = _masse(str(champs.get("strength") or ""))
     annoncee = _masse(str(champs.get("dose") or "")) or _masse(directions)
 
@@ -1058,9 +1109,14 @@ def extract_documents(
         response_schema=_SCHEMA,
     )
     try:
-        # Réflexion COUPÉE : lire une page ne demande aucune inférence. Le
-        # budget du panneau est réglé pour la rédaction clinique, où il sert.
-        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+        # Réflexion BORNÉE, pas coupée. La couper avait été un arbitrage de
+        # vitesse ; à l'usage c'est exactement là que les cas tordus se
+        # règlent (« 2 comprimés de 325 mg » vaut 650 mg, « 1/2 comprimé au
+        # coucher » vaut 0,5 mg le soir). Le budget du panneau est réglé pour
+        # la rédaction ; on le borne ici à 1 024 jetons.
+        config_kwargs["thinking_config"] = types.ThinkingConfig(
+            thinking_budget=min(llm._gemini_thinking_budget(), 1024)
+        )
     except Exception:  # pragma: no cover - très défensif
         pass
 

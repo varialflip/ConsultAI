@@ -158,6 +158,23 @@ class TestNormalisation(unittest.TestCase):
         self.assertEqual(extraction._dose("prendre 2 comprimés de 500 mg"), "500mg")
         self.assertEqual(extraction._dose("250 ml"), "")
 
+    def test_ligne_du_modele_utilisee_telle_quelle(self):
+        """Le modèle compose ; le code ne réécrit pas une ligne valide."""
+        champs = {"short_name": "Acétaminophène", "strength": "325mg",
+                  "quantity": "2", "line": "Acétaminophène 650mg po q6h prn",
+                  "directions": "2 comprimes aux 6 heures si besoin"}
+        ligne, ok = extraction._ligne_medicament(champs)
+        self.assertEqual(ligne, "Acétaminophène 650mg po q6h prn")
+        self.assertTrue(ok)
+
+    def test_ligne_du_modele_hors_moule_repliee(self):
+        """Une ligne qui ne tient pas la forme retombe sur la composition."""
+        champs = {"short_name": "Acétaminophène", "strength": "325mg",
+                  "quantity": "2", "line": "Acétaminophène deux comprimés au besoin",
+                  "directions": "2 comprimes aux 6 heures"}
+        ligne, _ = extraction._ligne_medicament(champs)
+        self.assertEqual(ligne, "Acétaminophène 650mg po q6h")
+
     def test_dose_administree_pas_la_force_du_comprime(self):
         """Deux comprimés de 325 mg font 650 mg — l'erreur qui compte."""
         champs = {

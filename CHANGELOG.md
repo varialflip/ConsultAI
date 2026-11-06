@@ -52,6 +52,14 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
   une dose. La ligne imprimée reste dans `as_printed` (infobulle) ; une ligne
   qui ne rentre pas dans le moule est affichée **« non normalisée »** au lieu
   d'être corrigée en silence.
+  La **ligne est écrite par le modèle**, pas composée en Python : lire
+  « 1/2 comprimé au coucher » est une tâche de lecture, pas une règle — coder
+  d'avance toutes les tournures d'une posologie, c'est mal traiter celles qu'on
+  n'a pas prévues (c'est ainsi qu'un « 2 comprimés de 325 mg » est sorti à
+  325 mg). Le code garde ce qui doit être garanti : la **forme** de la ligne,
+  la présence d'une dose chiffrée, et l'**arithmétique** `quantité × force`,
+  qu'il signale en désaccord. La réflexion du modèle est rétablie (bornée à
+  1 024 jetons) : c'est précisément là que se règlent les cas tordus.
   La **dose administrée** est calculée, pas recopiée : « 2 comprimés de
   325 mg » → `650mg` (et non `325mg`, la force du comprimé), « 1/2 comprimé
   de 1 mg » → `0,5mg`. Le modèle fournit la quantité d'unités et la force, le

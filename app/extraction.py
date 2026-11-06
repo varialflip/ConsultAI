@@ -147,7 +147,8 @@ Dans ``observations``, uniquement des recoupements FACTUELS entre documents \
 pour la même molécule »). Jamais de diagnostic, jamais de conduite à tenir.
 
 ## 8. RÉPONSE
-Un seul objet JSON, aucun texte autour, aucune clôture de code :
+Un seul objet JSON, aucun texte autour, aucune clôture de code, AUCUNE
+indentation ni saut de ligne (JSON compact, sur une seule ligne) :
 {
   "documents": [{"id": "d1", "kind": "medications|history|labs|imaging|other",
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
@@ -223,7 +224,8 @@ date precedes the report date", "two different dosages for the same molecule"). 
 Never a diagnosis, never a recommendation.
 
 ## 8. RESPONSE
-A single JSON object, no surrounding text, no code fence:
+A single JSON object, no surrounding text, no code fence, NO indentation or
+line break (compact JSON, on a single line):
 {
   "documents": [{"id": "d1", "kind": "medications|history|labs|imaging|other",
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
@@ -241,8 +243,14 @@ def _prompt(count: int, language: str) -> str:
     return modele % {"count": count}
 
 
-def _parse(raw: str) -> dict:
+def _parse(raw: str, motif: str = "") -> dict:
     texte = (raw or "").strip()
+    if not texte:
+        raise ExtractionError(
+            "Le modèle n'a rien renvoyé pour ce document"
+            + (f" (motif : {motif})" if motif and motif != "STOP" else "")
+            + ". Renvoyez-le, ou relisez-le page par page."
+        )
     texte = re.sub(r"^```(?:json)?\s*", "", texte, flags=re.IGNORECASE)
     texte = re.sub(r"\s*```$", "", texte)
     try:
@@ -470,7 +478,14 @@ def extract_documents(
             ) from exc
 
     prompt = _prompt(len(blobs), language)
-    modele = llm.active_model()
+    # Modèle RAPIDE pour la lecture : le modèle de rédaction (gemini-2.5-pro
+    # sur l'instance) mettait 72 s sur un dossier de quatre pages, contre 15 s
+    # ici, pour une lecture identique. Le réglage « Modèle rapide » du panneau
+    # fait foi ; vide = le défaut livré.
+    modele = (
+        (llm.raw_fast_model("gemini") or "").strip()
+        or settings.gemini_document_model
+    )
 
     from google.genai import types
 
@@ -492,9 +507,9 @@ def extract_documents(
         response_mime_type="application/json",
     )
     try:
-        config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_budget=min(llm._gemini_thinking_budget(), 1024)
-        )
+        # Réflexion COUPÉE : lire une page ne demande aucune inférence. Le
+        # budget du panneau est réglé pour la rédaction clinique, où il sert.
+        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
     except Exception:  # pragma: no cover - très défensif
         pass
 
@@ -524,7 +539,7 @@ def extract_documents(
             "modèle ne peut en rendre d'un coup. Envoyez-le en deux fois (les "
             "pages d'un même rapport peuvent rester ensemble)."
         )
-    payload = _parse(getattr(response, "text", None) or "")
+    payload = _parse(getattr(response, "text", None) or "", motif)
     result = _normalize(payload, len(blobs))
     result["model"] = modele
     result["usage"] = usage

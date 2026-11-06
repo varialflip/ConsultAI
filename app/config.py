@@ -286,6 +286,11 @@ class Settings:
     # --- Gemini ---
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash"
+    #: Modèle de LECTURE des documents photographiés. Distinct de celui de la
+    #: note à dessein : lire une page est une tâche mécanique (transcrire,
+    #: classer), et un modèle « pro » y met trois à cinq fois plus de temps
+    #: pour le même résultat. Surchargeable dans le panneau (``document_model``).
+    gemini_document_model: str = "gemini-2.5-flash"
     gemini_temperature: float = 0.15
     gemini_thinking_budget: int = 128
     gemini_max_output_tokens: int = 8192
@@ -511,6 +516,7 @@ class Settings:
 
             gemini_api_key=_env("GEMINI_API_KEY"),
             gemini_model=_env("GEMINI_MODEL", "gemini-3.5-flash"),
+            gemini_document_model=_env("GEMINI_DOCUMENT_MODEL", "gemini-2.5-flash"),
             gemini_temperature=_env_float("GEMINI_TEMPERATURE", 0.15),
             gemini_thinking_budget=_env_int("GEMINI_THINKING_BUDGET", 128),
             gemini_max_output_tokens=_env_int("GEMINI_MAX_OUTPUT_TOKENS", 8192),

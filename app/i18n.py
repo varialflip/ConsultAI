@@ -421,6 +421,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Document pas encore lu.",
         "Document not read yet.",
     ),
+    "doc.reading": (
+        "Lecture en cours… (quelques secondes)",
+        "Reading… (a few seconds)",
+    ),
     "doc.kind.medications": ("Médicaments", "Medications"),
     "doc.kind.history": ("Antécédents", "Medical history"),
     "doc.kind.labs": ("Laboratoire", "Laboratory"),
@@ -1523,14 +1527,20 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "configured key and shows what this account actually has access to.",
     ),
     "set.cap.model_fast.label": (
-        "Modèle rapide (métadonnées)",
-        "Fast model (metadata)",
+        "Modèle rapide (lecture des documents)",
+        "Fast model (document reading)",
     ),
     "set.cap.model_fast.help": (
-        "Utilisé pour la seule relecture des métadonnées, une tâche triviale "
-        "payée au jeton. Laisser vide pour employer le modèle principal.",
-        "Used only to re-read metadata, a trivial task paid by the token. "
-        "Leave empty to use the main model.",
+        "Sert à LIRE les documents photographiés (liste de médicaments, "
+        "bilan, rapport) : transcrire et classer une page est une tâche "
+        "mécanique, et un modèle de rédaction y met plusieurs fois plus de "
+        "temps pour le même résultat. Vide = « gemini-2.5-flash ». Le modèle "
+        "principal continue de rédiger la note.",
+        "Used to READ photographed documents (medication list, lab report, "
+        "imaging report): transcribing and classifying a page is mechanical "
+        "work, and a writing-class model takes several times longer for the "
+        "same result. Empty = \"gemini-2.5-flash\". The main model still "
+        "writes the note.",
     ),
     "set.cap.verify_model.label": (
         "Modèle de 2e passe (Validation)",

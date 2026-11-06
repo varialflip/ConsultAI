@@ -40,9 +40,17 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
 - **Identité** : les en-têtes administratifs (nom, NAS, adresse, numéro de
   dossier) ne sont pas extraits ; un bloc que le modèle n'a pas su classer
   (« autre ») arrive **décoché**.
+- **Vitesse** : la lecture emploie le **modèle rapide** du panneau
+  (« Modèle rapide (lecture des documents) », vide = `gemini-2.5-flash`) et
+  non celui de la rédaction, avec la réflexion coupée et un JSON compact :
+  un dossier de quatre pages passe de 72 s à ~19 s, une liste d'une page à
+  ~5 s. Le modèle principal continue de rédiger la note ; le plafond de
+  sortie de la lecture est distinct de celui de la note (16 k), sinon un
+  dossier de quatre pages tronquait son JSON en plein objet.
 - **Rétention** : les documents s'effacent avec le brouillon (suppression et
   purge), fichiers compris ; un nettoyage des fichiers orphelins tourne à
-  chaque purge. `DOCUMENTS_DIR=/data/documents`, `MAX_DOCUMENT_MB=25`.
+  chaque purge. `DOCUMENTS_DIR=/data/documents`, `MAX_DOCUMENT_MB=25`,
+  `GEMINI_DOCUMENT_MODEL=gemini-2.5-flash`.
 
 ## 2026-10-01 — Levers de réflexion oMLX dans le panneau (point de terminaison personnalisé)
 

@@ -920,6 +920,7 @@
     //: comprise). La note de génération ne lit que les éléments cochés.
     documents: [],
     documentsBusy: false,
+    extractingId: null,
     recording: false,
     paused: false,
     recordedSeconds: 0,
@@ -8073,11 +8074,13 @@
       });
       await pendingDocs.clear();
       await renderPendingDocuments();
-      // La lecture peut prendre plusieurs secondes : elle a son propre état,
-      // l'onglet reste utilisable entre-temps.
-      await extractDocument(stored.id);
+      // Le document est enregistré AVANT la lecture : on bascule tout de
+      // suite sur l'onglet et on y montre l'attente. La lecture (quelques
+      // secondes) se fait sous les yeux, pas derrière un bouton figé.
       await loadDocuments();
       selectDicteeTab('documents');
+      await extractDocument(stored.id);
+      await loadDocuments();
     } catch (err) {
       toast(T('doc.send_failed') + ' ' + (err.message || err), 'error');
     } finally {
@@ -8089,6 +8092,8 @@
   async function extractDocument(documentId) {
     const badge = $('documentsBadge');
     if (badge) badge.classList.remove('hidden');
+    state.extractingId = String(documentId);
+    renderDocuments();
     try {
       await api(`/api/documents/${documentId}/extract`, { method: 'POST' });
     } catch (err) {
@@ -8096,7 +8101,9 @@
       // et on laisse le bouton « Relire » pour réessayer.
       toast(T('doc.extract_failed') + ' ' + (err.message || err), 'error');
     } finally {
+      state.extractingId = null;
       if (badge) badge.classList.add('hidden');
+      renderDocuments();
     }
   }
 
@@ -8221,9 +8228,9 @@
     if (!items.length && !observations.length) {
       const attente = document.createElement('p');
       attente.className = 'italic text-slate-400 text-xs';
-      attente.textContent = extractionData.documents
-        ? T('doc.nothing_kept')
-        : T('doc.not_read');
+      attente.textContent = state.extractingId === String(doc.id)
+        ? T('doc.reading')
+        : (extractionData.documents ? T('doc.nothing_kept') : T('doc.not_read'));
       corps.appendChild(attente);
     }
 

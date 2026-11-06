@@ -1521,6 +1521,13 @@ manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers
 sans ligne correspondante tourne à chaque purge. `DOCUMENTS_DIR` (défaut
 `/data/documents`, à laisser sous `/data`) et `MAX_DOCUMENT_MB` (défaut 25).
 
+**Vitesse.** La lecture emploie le **modèle rapide** du panneau
+(« Modèle rapide (lecture des documents) », `gemini_model_fast`, vide =
+`gemini-2.5-flash`), la réflexion coupée et un JSON compact : ~5 s pour une
+liste d'une page, ~19 s pour un dossier de quatre pages. Le modèle principal
+rédige toujours la note. Le document est enregistré avant d'être lu : l'onglet
+s'ouvre tout de suite et affiche « Lecture en cours… ».
+
 **Limites assumées.** Le fournisseur de modèle doit savoir lire un document :
 Gemini (Vertex) oui ; les autres sont refusés avec un message explicite plutôt
 que silencieusement ignorés. L'écriture manuscrite est hors périmètre — la

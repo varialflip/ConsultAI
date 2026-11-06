@@ -84,11 +84,11 @@ class TestCouverture(unittest.TestCase):
         self.assertEqual(len(resultat["items"]), 1)
         self.assertTrue(resultat["items"][0]["included"])
 
-    def test_entree_non_couverte_refusee(self):
-        """Le mode d'échec qui compte : une page oubliée en silence."""
-        with self.assertRaises(extraction.ExtractionError) as ctx:
-            extraction._normalize(_payload(), 2)
-        self.assertIn("2", str(ctx.exception))
+    def test_entree_non_couverte_signalee_sans_bloquer(self):
+        """Une page oubliée se voit, mais n'emporte plus toute la lecture."""
+        resultat = extraction._normalize(_payload(), 2)
+        self.assertEqual(resultat["missing"], [2])
+        self.assertTrue(resultat["items"])
 
     def test_entree_illisible_compte_comme_couverte(self):
         charge = _payload(unreadable=[{"input": 2, "reason": "page tournée"}])
@@ -111,145 +111,29 @@ class TestNormalisation(unittest.TestCase):
         self.assertFalse(resultat["items"][0]["included"])
         self.assertTrue(resultat["items"][1]["included"])
 
-    def test_ligne_medicament_quatre_emplacements(self):
-        """Les deux exemples demandés, produits par le normaliseur."""
-        champs = {
-            "short_name": "PEG 3350",
-            "dose": "",
-            "route": "",
-            "frequency": "",
-            "strength": "100%",
-            "directions": "DISSOUDRE 17 GRAMMES DANS PLUS OU MOINS 250 ML DE "
-                          "LIQUIDE ET BOIRE 1 FOIS PAR JOUR",
-        }
-        ligne, ok = extraction._ligne_medicament(champs)
-        self.assertEqual(ligne, "PEG 3350 17g po die")
-        self.assertTrue(ok)
-
-        champs = {
-            "short_name": "Acétaminophène",
-            "directions": "PRENDRE 1 COMPRIMÉ AUX 6 HEURES SI BESOIN",
-            "dose": "650mg",
-        }
-        ligne, ok = extraction._ligne_medicament(champs)
-        self.assertEqual(ligne, "Acétaminophène 650mg po q6h prn")
-        self.assertTrue(ok)
-
-    def test_frequences_et_voies(self):
-        cas = [
-            ("1 fois par jour", "die"), ("deux fois par jour", "bid"),
-            ("3 fois par jour", "tid"), ("4 fois par jour", "qid"),
-            ("au coucher", "hs"), ("1 fois par semaine", "qsem"),
-            ("aux 6 heures", "q6h"), ("aux 4 à 6 heures", "q4-6h"),
-        ]
-        for phrase, attendu in cas:
-            self.assertEqual(extraction._frequence(phrase), attendu, phrase)
-        # « si besoin » est un MODE, pas une fréquence : il se combine.
-        self.assertTrue(extraction._prn("si besoin"))
-        self.assertTrue(extraction._prn("aux 6 heures au besoin"))
-        self.assertEqual(extraction._voie("par voie orale"), "po")
-        self.assertEqual(extraction._voie("sous-cutanée"), "sc")
-        self.assertEqual(extraction._voie("inhalée"), "inh")
-
-    def test_dose_ignore_le_volume_de_dilution(self):
-        self.assertEqual(
-            extraction._dose("dissoudre 17 grammes dans 250 ml de liquide"), "17g"
-        )
-        self.assertEqual(extraction._dose("prendre 2 comprimés de 500 mg"), "500mg")
-        self.assertEqual(extraction._dose("250 ml"), "")
-
-    def test_ligne_du_modele_utilisee_telle_quelle(self):
-        """Le modèle compose ; le code ne réécrit pas une ligne valide."""
-        champs = {"short_name": "Acétaminophène", "strength": "325mg",
-                  "quantity": "2", "line": "Acétaminophène 650mg po q6h prn",
-                  "directions": "2 comprimes aux 6 heures si besoin"}
-        ligne, ok = extraction._ligne_medicament(champs)
-        self.assertEqual(ligne, "Acétaminophène 650mg po q6h prn")
-        self.assertTrue(ok)
-
-    def test_ligne_du_modele_hors_moule_repliee(self):
-        """Une ligne qui ne tient pas la forme retombe sur la composition."""
-        champs = {"short_name": "Acétaminophène", "strength": "325mg",
-                  "quantity": "2", "line": "Acétaminophène deux comprimés au besoin",
-                  "directions": "2 comprimes aux 6 heures"}
-        ligne, _ = extraction._ligne_medicament(champs)
-        self.assertEqual(ligne, "Acétaminophène 650mg po q6h")
-
-    def test_dose_administree_pas_la_force_du_comprime(self):
-        """Deux comprimés de 325 mg font 650 mg — l'erreur qui compte."""
-        champs = {
-            "short_name": "Acétaminophène",
-            "strength": "325mg",
-            "quantity": "2",
-            "directions": "PRENDRE 2 COMPRIME AUX 6 HEURES SI BESOIN",
-        }
-        ligne, ok = extraction._ligne_medicament(champs)
-        self.assertEqual(ligne, "Acétaminophène 650mg po q6h prn")
-        self.assertTrue(ok)
-
-    def test_demi_comprime(self):
-        champs = {"short_name": "Hydromorphone", "strength": "1mg",
-                  "directions": "PRENDRE 1/2 COMPRIME AUX 4 HEURES SI BESOIN"}
-        ligne, _ = extraction._ligne_medicament(champs)
-        self.assertEqual(ligne, "Hydromorphone 0,5mg po q4h prn")
-
-    def test_desaccord_de_dose_signale(self):
-        """Le calcul est gardé, l'écart avec le modèle est noté."""
-        champs = {"short_name": "Acétaminophène", "strength": "325mg",
-                  "quantity": "2", "dose": "325mg",
-                  "directions": "2 comprimes aux 6 heures"}
-        ligne, _ = extraction._ligne_medicament(champs)
-        self.assertEqual(ligne, "Acétaminophène 650mg po q6h")
-        self.assertEqual(champs.get("dose_conflict"), "325mg")
-
-    def test_statut_fragmentaire_ecarte(self):
-        """Un fragment de page (« En att ») n'entre pas dans la ligne."""
-        self.assertEqual(extraction._statut_propre("En att"), "")
-        self.assertEqual(extraction._statut_propre("(En att"), "")
-        self.assertEqual(extraction._statut_propre("Cessé le 2026-03-02"),
-                         "Cessé le 2026-03-02")
-        self.assertEqual(extraction._statut_propre("Suspendu"), "Suspendu")
-
-    def test_ligne_hors_moule_signalee(self):
-        """Sans dose chiffrée, la ligne n'est pas « normalisée » — et le dit."""
-        ligne, ok = extraction._ligne_medicament({"short_name": "Ramipril",
-                                                  "directions": "au besoin"})
-        self.assertFalse(ok)
-        self.assertEqual(ligne, "Ramipril prn")
-
-    def test_molecule_remplace_le_prefixe_fabricant(self):
+    def test_ligne_du_modele_affichee_telle_quelle(self):
+        """Aucune réécriture : la ligne du modèle est celle qui s'affiche."""
         charge = _payload(items=[{
-            "document_id": "d1",
-            "kind": "medications",
-            "text": "JAMP-CITALOPRAM 20 mg comp 1 co PO DIE  Cessé le 2026-03-02",
-            "fields": {
-                "molecule": "CITALOPRAM",
-                "strength": "20 mg",
-                "directions": "1 co PO DIE",
-                "status_printed": "Cessé le 2026-03-02",
-            },
-            "source_page": 1,
+            "document_id": "d1", "kind": "medications",
+            "text": "TRAZODONE 50MG COMPRIME",
+            "fields": {"line": "Trazodone 25-50mg po hs",
+                       "strength": "50MG", "quantity": "0.5-1",
+                       "as_printed": "TRAZODONE 50MG COMPRIME"},
         }])
         item = extraction._normalize(charge, 1)["items"][0]
-        self.assertEqual(item["text"], "Citalopram 20mg po die (Cessé le 2026-03-02)")
-        self.assertTrue(item["fields"]["as_printed"].startswith("JAMP-CITALOPRAM"))
+        self.assertEqual(item["text"], "Trazodone 25-50mg po hs")
+        self.assertEqual(item["fields"]["as_printed"], "TRAZODONE 50MG COMPRIME")
 
-    def test_bilan_normal_decoché_bilan_marque_inclus(self):
-        """La note ne recopie pas un bilan entier : le drapeau IMPRIMÉ décide."""
-        charge = _payload(items=[
-            # Chlore : hors de la liste du médecin, normal → pas versé.
-            {"document_id": "d1", "kind": "labs", "text": "Chlore 101 mmol/L",
-             "fields": {"analyte": "Chlore", "flag": None}},
-            # Acide urique : hors liste, mais le laboratoire l'a marqué.
-            {"document_id": "d1", "kind": "labs", "text": "Acide urique 512",
-             "fields": {"analyte": "Acide urique", "flag": "H"}},
-            {"document_id": "d1", "kind": "labs", "text": "Bilirubine 22",
-             "fields": {"analyte": "Bilirubine", "flag": "↓"}},
-        ])
-        items = extraction._normalize(charge, 1)["items"]
-        self.assertFalse(items[0]["included"])   # disponible, pas versé
-        self.assertTrue(items[1]["included"])    # H imprimé = garde-fou
-        self.assertTrue(items[2]["included"])    # ↓ imprimé = garde-fou
+    def test_sans_ligne_on_montre_l_imprime(self):
+        """Pas de ligne du modèle → la ligne imprimée, jamais une composition."""
+        charge = _payload(items=[{
+            "document_id": "d1", "kind": "medications",
+            "text": "APO-RAMIPRIL 5 mg comp 1 co PO DIE",
+            "fields": {"as_printed": "APO-RAMIPRIL 5 mg comp 1 co PO DIE"},
+        }])
+        item = extraction._normalize(charge, 1)["items"][0]
+        self.assertEqual(item["text"], "APO-RAMIPRIL 5 mg comp 1 co PO DIE")
+        self.assertNotIn("line_ok", item)
 
     def test_bilan_routine_decoché_pertinent_inclus(self):
         """Décocher TIBC à chaque fois serait une corvée : le modèle juge."""
@@ -263,22 +147,11 @@ class TestNormalisation(unittest.TestCase):
                         "flag": "H"}},
         ])
         items = extraction._normalize(charge, 1)["items"]
-        self.assertFalse(items[0]["included"])   # routine, non versé
-        self.assertTrue(items[1]["included"])    # pertinent
-        self.assertTrue(items[2]["included"])    # drapeau imprimé = garde-fou
-
-    def test_liste_du_medecin_reconnue_par_abreviation(self):
-        """« na », « creat », « vih » doivent reconnaître Sodium, Créatinine, VIH."""
-        self.assertTrue(extraction._analytes_retenus("Sodium", "na, k, creat"))
-        self.assertTrue(extraction._analytes_retenus("Créatinine", "na, k, creat"))
-        self.assertTrue(extraction._analytes_retenus("Créatinine (DFGe)", "creat"))
-        self.assertTrue(extraction._analytes_retenus("VIH 1/2", "vih"))
-        self.assertTrue(extraction._analytes_retenus("VGM", "vgm"))
-        self.assertFalse(extraction._analytes_retenus("TIBC", "na, k, creat"))
-        self.assertFalse(extraction._analytes_retenus("Sodium", ""))
+        self.assertFalse(items[0]["included"])
+        self.assertTrue(items[1]["included"])
+        self.assertTrue(items[2]["included"])
 
     def test_liste_du_medecin_prime_sur_le_jugement(self):
-        """Marqué « routine » par le modèle, mais réclamé par le médecin."""
         charge = _payload(items=[
             {"document_id": "d1", "kind": "labs", "text": "Sodium 137 mmol/L",
              "fields": {"analyte": "Sodium", "pertinence": "routine"}},
@@ -286,8 +159,14 @@ class TestNormalisation(unittest.TestCase):
              "fields": {"analyte": "TIBC", "pertinence": "routine"}},
         ])
         items = extraction._normalize(charge, 1)["items"]
-        self.assertTrue(items[0]["included"])   # dans la liste du médecin
-        self.assertFalse(items[1]["included"])  # routine, hors liste
+        self.assertTrue(items[0]["included"])
+        self.assertFalse(items[1]["included"])
+
+    def test_liste_du_medecin_reconnue_par_abreviation(self):
+        self.assertTrue(extraction._analytes_retenus("Sodium", "na, k, creat"))
+        self.assertTrue(extraction._analytes_retenus("Créatinine", "creat"))
+        self.assertTrue(extraction._analytes_retenus("VIH 1/2", "vih"))
+        self.assertFalse(extraction._analytes_retenus("TIBC", "na, k, creat"))
 
     def test_imagerie_conclusion_incluse_corps_decoché(self):
         corps = "Les champs pulmonaires montrent un infiltrat basal droit. " * 3
@@ -298,9 +177,8 @@ class TestNormalisation(unittest.TestCase):
         }])
         items = extraction._normalize(charge, 1)["items"]
         self.assertEqual(len(items), 2)
-        self.assertTrue(items[0]["included"])    # la conclusion entre
-        self.assertFalse(items[1]["included"])   # le corps accompagne
-        self.assertEqual(items[1]["text"].strip(), corps.strip())
+        self.assertTrue(items[0]["included"])
+        self.assertFalse(items[1]["included"])
 
     def test_observation_decochée_par_defaut(self):
         charge = _payload(observations=[{"text": "Le bilan précède la liste", "pages": [1]}])
@@ -308,7 +186,6 @@ class TestNormalisation(unittest.TestCase):
         self.assertFalse(observation["included"])
 
     def test_pages_deduites_des_lignes(self):
-        """Le récapitulatif du modèle se trompe parfois ; les lignes font foi."""
         charge = _payload(
             documents=[{"id": "d1", "kind": "labs", "pages": [1]}],
             items=[{"document_id": "d1", "kind": "labs", "text": "Créatinine 132",

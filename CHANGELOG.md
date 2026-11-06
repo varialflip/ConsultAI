@@ -40,34 +40,23 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
 - **Identité** : les en-têtes administratifs (nom, NAS, adresse, numéro de
   dossier) ne sont pas extraits ; un bloc que le modèle n'a pas su classer
   (« autre ») arrive **décoché**.
-- **Lignes de médicaments mises en forme, pas recopiées.** Un scan DSQ
-  donnait « POLYETHYLENE-GLYCOL-3350 100% — DISSOUDRE 17 GRAMMES… » : de
-  l'OCR habillé. La ligne est maintenant composée en quatre emplacements —
-  nom court, dose, voie, fréquence — et lit `PEG 3350 17g po die`,
-  `Acétaminophène 650mg po q6h prn`. Le modèle fournit le nom court et les
-  quatre morceaux ; une **table de code** traduit les phrases en jetons maison
-  (`1 fois par jour` → `die`, `aux 6 heures` → `q6h`, `si besoin` → `prn`,
-  `par voie orale`/comprimé → `po`). La dose vient des DIRECTIONS quand la
-  force ne dit rien (`100 %`), et un volume de dilution n'est jamais pris pour
-  une dose. La ligne imprimée reste dans `as_printed` (infobulle) ; une ligne
-  qui ne rentre pas dans le moule est affichée **« non normalisée »** au lieu
-  d'être corrigée en silence.
-  La **ligne est écrite par le modèle**, pas composée en Python : lire
-  « 1/2 comprimé au coucher » est une tâche de lecture, pas une règle — coder
-  d'avance toutes les tournures d'une posologie, c'est mal traiter celles qu'on
-  n'a pas prévues (c'est ainsi qu'un « 2 comprimés de 325 mg » est sorti à
-  325 mg). Le code garde ce qui doit être garanti : la **forme** de la ligne,
-  la présence d'une dose chiffrée, et l'**arithmétique** `quantité × force`,
-  qu'il signale en désaccord. La réflexion du modèle est bornée à **256
-  jetons** (mesuré : 0 fait perdre la fidélité des unités — « HbAlc » — et
-  n'est pas plus rapide sur un dossier ; 1 024 ne gagne rien et coûte le
-  double).
-  La **dose administrée** est calculée, pas recopiée : « 2 comprimés de
-  325 mg » → `650mg` (et non `325mg`, la force du comprimé), « 1/2 comprimé
-  de 1 mg » → `0,5mg`. Le modèle fournit la quantité d'unités et la force, le
-  code multiplie — c'est de l'arithmétique vérifiable, pas du jugement — et un
-  désaccord entre les deux est signalé (`dose_conflict`), jamais tranché en
-  silence.
+- **Lignes de médicaments : le modèle les écrit, l'application ne les
+  retouche pas.** Un scan DSQ donnait « POLYETHYLENE-GLYCOL-3350 100% —
+  DISSOUDRE 17 GRAMMES… ». Le modèle rend désormais la ligne finale
+  (`PEG 3350 17g po die`, `Acétaminophène 650mg po q6h prn`,
+  `Trazodone 25-50mg po hs`) et elle est affichée **telle quelle**.
+  La dose est la dose ADMINISTRÉE par prise, pas la force du comprimé
+  (« 2 comprimés de 325 mg » → 650mg ; « 1/2 à 1 comprimé de 50 mg » →
+  25-50mg). La ligne imprimée reste dans `as_printed` (infobulle).
+- **La couche de vérification a été RETIRÉE (2026-11-06).** Un moule à quatre
+  emplacements, une table de fréquences, une composition de repli et un
+  contrôle arithmétique avaient été ajoutés ; sur le terrain ils ont remplacé
+  une ligne juste (`Trazodone 25-50mg po hs`) par une ligne fausse (`50mg`,
+  la force du comprimé) — le moule ne connaissait pas les intervalles. Une
+  vérification qui réécrit une dose est plus dangereuse que pas de
+  vérification : le texte affiché est éditable, **le médecin est le
+  validateur**. Seule la page oubliée reste signalée (et n'emporte plus toute
+  la lecture du lot).
 - **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
   analytes n'a pas sa place dans une note. Chaque valeur reçoit une
   `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie

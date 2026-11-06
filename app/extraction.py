@@ -133,10 +133,11 @@ l'unité, abréviations en minuscules, ``prn`` en dernier :
 ``PEG 3350 17g po die`` · ``Acétaminophène 650mg po q6h prn`` · \
 ``Quétiapine 12,5mg po hs prn`` · ``Hydromorphone 0,5mg po q4h prn``.
 La dose de ``line`` est la dose ADMINISTRÉE par prise (quantité × force), pas \
-la force du comprimé. Le logiciel vérifie ensuite la forme et l'arithmétique ; \
-il ne réécrit pas ta ligne, il la signale si elle ne tient pas.
+la force du comprimé. Cette ligne est affichée TELLE QUELLE et reste éditable : \
+le médecin la relit, tu n'as pas à la conformer à un format d'ordinateur.
 
-Les champs suivants servent à ce contrôle, et au cas où ``line`` manquerait :
+Les champs suivants documentent la lecture (provenance, contrôle par le \
+médecin) :
 - ``short_name`` : le nom court qu'un pharmacien écrirait (``POLYETHYLENE-\
 GLYCOL-3350`` → ``PEG 3350``, ``ACETAMINOPHEN`` → ``Acétaminophène``).
 - ``quantity`` : le nombre d'UNITÉS par prise, tel que la posologie le dit \
@@ -255,12 +256,12 @@ abbreviations lowercase, ``prn`` last:
 ``PEG 3350 17g po die`` · ``Acetaminophen 650mg po q6h prn`` · \
 ``Quetiapine 12.5mg po hs prn`` · ``Hydromorphone 0.5mg po q4h prn``.
 The dose in ``line`` is the ADMINISTERED dose per intake (quantity × \
-strength), not the tablet strength. The software then checks the shape and \
-the arithmetic; it does not rewrite your line, it flags it when it does not \
-hold.
+strength), not the tablet strength. That line is shown AS IS and stays \
+editable: the physician reviews it, you do not have to fit it to a computer \
+format.
 
-The following fields feed that check, and the fallback when ``line`` is \
-missing:
+The following fields document the reading (provenance, the physician's \
+check):
 - ``short_name``: the short name a pharmacist would write \
 (``POLYETHYLENE-GLYCOL-3350`` → ``PEG 3350``).
 - ``quantity``: the number of UNITS per intake as the directions state it \
@@ -544,280 +545,28 @@ def _analytes_retenus(analyte: str, liste: str) -> bool:
 #: Fréquences : la phrase imprimée → le jeton maison. Table de CODE, pas de
 #: prompt : « 1 fois par jour » doit donner `die` à chaque fois, jamais `qd`
 #: ni `DIE`. L'ordre compte (du plus spécifique au plus général).
-_FREQUENCES = (
-    (r"\b(?:aux?|toutes les)\s*(\d+)\s*(?:a|-|et)\s*(\d+)\s*heures?\b", "q{1}-{2}h"),
-    (r"\b(?:aux?|toutes les)\s*(\d+)\s*heures?\b", "q{n}h"),
-    (r"\b(?:4|quatre)\s*fois\b|\bquater in die\b|\bqid\b", "qid"),
-    (r"\b(?:3|trois)\s*fois\b|\bter in die\b|\btid\b", "tid"),
-    (r"\b(?:2|deux)\s*fois\b|\bbis in die\b|\bbid\b", "bid"),
-    (r"\b1\s*fois par semaine\b|\bune fois par semaine\b|\bhebdomadaire\b|\bqsem\b", "qsem"),
-    (r"\bau coucher\b|\bau soir\b|\bhs\b|\bhora somni\b", "hs"),
-    (r"\b1\s*fois\b|\bune fois\b|\bquotidien\b|\bchaque jour\b|\bpar jour\b|\bdie\b|\bqd\b", "die"),
-)
-
-#: Voies : la phrase → le sigle maison.
-_VOIES = (
-    (r"\b(?:par )?voie orale\b|\bpar la bouche\b|\bboire\b|\bavaler\b|\bper os\b|\bpo\b", "po"),
-    (r"\bsous-?cutan", "sc"),
-    (r"\bintramusculaire\b|\bim\b", "im"),
-    (r"\bintraveineu", "iv"),
-    (r"\binhal", "inh"),
-    (r"\bophtalm", "opht"),
-    (r"\btopique\b|\bcutan", "top"),
-)
-
-_UNITES = {
-    "grammes": "g", "gramme": "g", "g": "g",
-    "milligrammes": "mg", "milligramme": "mg", "mg": "mg",
-    "microgrammes": "mcg", "microgramme": "mcg", "mcg": "mcg", "µg": "mcg", "ug": "mcg",
-    "unites": "ui", "unite": "ui", "ui": "ui",
-}
-
-#: Une ligne de médicament « normalisée » : nom, dose chiffrée, voie,
-#: fréquence, `prn` en dernier. Rien de plus — ce qui n'entre pas dans ce
-#: moule est signalé comme non normalisé plutôt que corrigé en silence.
-_LIGNE_MED = re.compile(
-    r"^.+ \d+(?:[.,]\d+)?(?:mg|g|mcg|ml|ui|%)"
-    r"(?: (?:po|sc|im|iv|inh|opht|top))?"
-    r"(?: (?:die|bid|tid|qid|hs|qsem|prn|q\d+(?:-\d+)?h))?"
-    r"(?: prn)?$"
-)
+# ---------------------------------------------------------------------------
+# Ligne de médicament : celle du modèle, sinon celle de la page
+# ---------------------------------------------------------------------------
+# Il y avait ici une table de fréquences, une table de voies, un moule à quatre
+# emplacements, une composition de repli et un contrôle arithmétique. Tout cela
+# a été RETIRÉ (2026-11-06) : sur le terrain, ce filet a remplacé une ligne
+# juste (« Trazodone 25-50mg po hs ») par une ligne fausse (« 50mg », la force
+# du comprimé) parce que le moule ne connaissait pas les intervalles. Une
+# vérification qui réécrit une dose est plus dangereuse que pas de vérification
+# du tout.
+#
+# La règle tient en trois lignes : le modèle écrit la ligne, on l'affiche telle
+# quelle, et si elle manque on montre la ligne IMPRIMÉE plutôt que d'en
+# fabriquer une. Le médecin est le validateur — il édite le texte dans l'onglet.
 
 
-def _cle(texte: str) -> str:
-    """Minuscules sans accents, espaces normalisés — pour reconnaître les phrases."""
-    import unicodedata
-
-    plat = "".join(
-        c for c in unicodedata.normalize("NFD", texte or "")
-        if unicodedata.category(c) != "Mn"
-    )
-    return re.sub(r"\s+", " ", plat.lower()).strip()
-
-
-def _frequence(texte: str) -> str:
-    plat = _cle(texte)
-    for motif, jeton in _FREQUENCES:
-        m = re.search(motif, plat)
-        if m:
-            if "{1}" in jeton:
-                return (jeton.replace("{1}", str(int(m.group(1))))
-                             .replace("{2}", str(int(m.group(2)))))
-            if "{n}" in jeton:
-                return jeton.replace("{n}", str(int(m.group(1))))
-            return jeton
-    return ""
-
-
-#: « si besoin » se COMBINE avec l'intervalle : aux 6 heures si besoin = q6h prn.
-_PRN = re.compile(r"\bsi besoin\b|\bau besoin\b|\bprn\b|\bs\.o\.s\.?\b")
-
-
-def _prn(texte: str) -> bool:
-    return bool(_PRN.search(_cle(texte)))
-
-
-def _voie(texte: str) -> str:
-    plat = _cle(texte)
-    for motif, sigle in _VOIES:
-        if re.search(motif, plat):
-            return sigle
-    # Forme galénique : un comprimé, une gélule ou un sirop s'avalent. Ce n'est
-    # pas une supposition sur le patient, c'est la forme imprimée sur la ligne.
-    if re.search(r"\bcomprimes?\b|\bgelules?\b|\bcapsules?\b|\bsirop\b|\bsolution buvable\b", plat):
-        return "po"
-    return ""
-
-
-def _dose(*textes: str) -> str:
-    """
-    Dose chiffrée avec son unité, en collant le nombre à l'unité (« 650mg »).
-
-    On écarte les millilitres : sur une liste de médicaments, un volume est
-    presque toujours une dilution (« dans 250 ml ») et non la dose. Le premier
-    nombre porteur d'une unité massique gagne.
-    """
-    for texte in textes:
-        plat = _cle(texte)
-        for m in re.finditer(
-            r"(\d+(?:[.,]\d+)?)\s*(grammes?|milligrammes?|microgrammes?|mcg|mg|g|ui|µg|ug)\b",
-            plat,
-        ):
-            nombre, unite = m.group(1).replace(",", "."), m.group(2)
-            return nombre + _UNITES.get(unite, unite)
-    return ""
-
-
-#: Unités de masse, ramenées au milligramme pour comparer.
-_MASSE_EN_MG = {"mg": 1.0, "g": 1000.0, "mcg": 0.001}
-
-
-def _masse(texte: str):
-    """« 325mg » → (325.0, 'mg') ; « 1 g » → (1000.0, 'g'). None si absent."""
-    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(grammes?|milligrammes?|microgrammes?|mcg|mg|g|µg|ug)\b",
-                  _cle(texte))
-    if not m:
-        return None
-    unite = _UNITES.get(m.group(2), m.group(2))
-    return float(m.group(1).replace(",", ".")), unite
-
-
-def _quantite(texte: str) -> float:
-    """
-    Nombre d'unités par prise : « 2 comprimés » → 2, « 1/2 comprimé » → 0.5.
-
-    C'est la quantité PRISE, pas la dose : 2 comprimés de 325 mg font 650 mg.
-    """
-    plat = _cle(texte)
-    demi = r"demi(?:e)?"
-    m = re.search(r"(\d+)\s*/\s*(\d+)\s*(?:comprimes?|compris?|cpr|co|cp|capsules?|gelules?|sachets?|gouttes?)", plat)
-    if m and float(m.group(2)):
-        return float(m.group(1)) / float(m.group(2))
-    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:comprimes?|compris?|cpr|co|cp|capsules?|gelules?|sachets?|gouttes?)", plat)
-    if m:
-        return float(m.group(1).replace(",", "."))
-    if re.search(r"\b" + demi + r"\s*(?:comprimes?|capsules?|gelules?)", plat):
-        return 0.5
-    mots = {"un": 1.0, "une": 1.0, "deux": 2.0, "trois": 3.0, "quatre": 4.0}
-    for mot, valeur in mots.items():
-        if re.search(r"\b" + mot + r"\s*(?:comprimes?|capsules?|gelules?)", plat):
-            return valeur
-    return 0.0
-
-
-def _fmt_masse(valeur: float, unite: str) -> str:
-    """438.0, 'mg' → « 438mg » ; 12.5 → « 12.5mg » (virgule décimale française)."""
-    nombre = ("%f" % valeur).rstrip("0").rstrip(".")
-    return nombre.replace(".", ",") + unite
-
-
-#: Un statut IMPRIMÉ n'est repris que s'il ressemble à un statut : « Cessé le
-#: 2026-03-02 », « Suspendu », « Arrêté le … ». Un fragment de page capté par
-#: erreur (« (En att ») n'entre pas dans une note.
-_STATUT_RECONNU = re.compile(
-    r"(?i)cess|arr[êe]t|suspend|discontinu|interromp|on hold|stopped|hold|\d{4}[-/]\d{1,2}"
-)
-
-
-def _statut_propre(texte: str) -> str:
-    texte = re.sub(r"\s+", " ", (texte or "").strip())
-    if not texte or len(texte) > 40:
-        return ""
-    return texte if _STATUT_RECONNU.search(texte) else ""
-
-
-def _nom_court(nom: str) -> str:
-    """
-    Casse d'une molécule lue sur un scan.
-
-    Un nom tout en majuscules vient du scanner et se lit mal dans une note :
-    on le ramène en casse de phrase — SAUF s'il contient un sigle court, qu'il
-    faut laisser tel quel (``PEG 3350``, ``ASA``, ``B12``). Le modèle fournit
-    ``short_name`` ; ceci n'est que le filet du repli sur ``molecule``.
-    """
-    nom = re.sub(r"\s+", " ", (nom or "").strip())
-    if not nom.isupper() or len(nom) <= 4:
-        return nom
-    if any(mot.isalpha() and mot.isupper() and len(mot) <= 3 for mot in nom.split()):
-        return nom
-    return nom.capitalize()
-
-
-def _ligne_medicament(champs: dict) -> tuple:
-    """
-    Ligne de la note : le MODÈLE la propose, le code la vérifie.
-
-    Le partage est volontaire. Composer la ligne en Python revenait à coder
-    d'avance toutes les tournures d'une posologie imprimée — et à mal traiter
-    celles qu'on n'a pas prévues (c'est ainsi qu'un « 2 comprimés de 325 mg »
-    est sorti à 325 mg). Lire « 1/2 comprimé au coucher » est une tâche de
-    LECTURE, pas une règle : elle revient au modèle.
-
-    Le code garde ce qui doit être garanti : la forme de la ligne, la présence
-    d'une dose chiffrée, et l'arithmétique ``quantité × force`` quand les deux
-    sont connues. Un désaccord est signalé, jamais tranché en silence.
-
-    Retourne ``(ligne, ok)`` ; ``ok`` faux = affichée « non normalisée ».
-    """
+def _ligne_medicament(champs: dict) -> str:
+    """La ligne du modèle si elle existe, sinon la ligne imprimée, telle quelle."""
     proposee = re.sub(r"\s+", " ", str(champs.get("line") or "")).strip()
-    calculee, ok_calculee = _composer_ligne(champs)
-
-    # Le calcul de la dose reste un CONTRÔLE, même quand le modèle propose :
-    # deux comprimés de 325 mg ne font pas 325 mg.
-    quantite = _quantite_prise(champs)
-    force = _masse(str(champs.get("strength") or ""))
-    if quantite and force:
-        attendue = force[0] * quantite
-        mesuree = _masse(str(champs.get("dose") or "")) or _masse(proposee)
-        if mesuree and abs(mesuree[0] * _MASSE_EN_MG[mesuree[1]]
-                           - attendue * _MASSE_EN_MG[force[1]]) > 0.01:
-            champs["dose_conflict"] = _fmt_masse(*mesuree)
-
-    if proposee and _LIGNE_MED.match(proposee):
-        return proposee, True
-    # Ligne absente ou hors moule : on retombe sur la composition, et le
-    # drapeau dit si même celle-là n'est pas propre.
-    return calculee, ok_calculee
-
-
-def _quantite_prise(champs: dict) -> float:
-    try:
-        quantite = float(str(champs.get("quantity") or "").replace(",", ".") or 0)
-    except ValueError:
-        quantite = 0.0
-    return quantite or _quantite(str(champs.get("directions") or ""))
-
-
-def _composer_ligne(champs: dict) -> tuple:
-    """Repli déterministe quand le modèle ne fournit pas de ligne exploitable."""
-    nom = _nom_court(
-        str(champs.get("short_name") or champs.get("molecule") or "").strip()
-    )
-    directions = str(champs.get("directions") or "")
-
-    # DOSE ADMINISTRÉE, pas la force du comprimé : « 2 comprimés de 325 mg »
-    # font 650 mg. On multiplie quand les deux nombres sont là — c'est de
-    # l'arithmétique, pas du jugement, et une erreur y fait une fausse
-    # ordonnance. Le modèle donne la quantité et la force ; le code multiplie.
-    quantite = _quantite_prise(champs)
-    force = _masse(str(champs.get("strength") or ""))
-    annoncee = _masse(str(champs.get("dose") or "")) or _masse(directions)
-
-    dose = ""
-    if force and quantite:
-        valeur, unite = force
-        dose = _fmt_masse(valeur * quantite, unite)
-        # Le modèle a annoncé autre chose : on garde le calcul (il est
-        # vérifiable) et on note l'écart, affiché dans l'interface.
-        if annoncee:
-            ecart = abs(annoncee[0] * _MASSE_EN_MG[annoncee[1]]
-                        - valeur * quantite * _MASSE_EN_MG[unite])
-            if ecart > 0.01:
-                champs["dose_conflict"] = _fmt_masse(*annoncee)
-    elif annoncee:
-        dose = _fmt_masse(*annoncee)
-    else:
-        dose = _dose(str(champs.get("strength") or ""))
-    voie = (
-        _voie(str(champs.get("route") or ""))
-        or _voie(directions)
-        or _voie(str(champs.get("form") or ""))
-    )
-    freq = _frequence(str(champs.get("frequency") or "")) or _frequence(directions)
-    if _prn(str(champs.get("frequency") or "")) or _prn(directions):
-        freq = (freq + " prn").strip()
-
-    if not nom:
-        return "", False
-    morceaux = [nom, dose, voie, freq]
-    ligne = " ".join(m for m in morceaux if m).strip()
-    # Statut IMPRIMÉ seulement (« Cessé le … ») : un fait de la page, jamais
-    # une déduction. Hors du moule, donc ajouté après validation.
-    statut = _statut_propre(str(champs.get("status_printed") or ""))
-    ok = bool(_LIGNE_MED.match(ligne)) if dose else False
-    if statut:
-        ligne = f"{ligne} ({statut})"
-    return ligne, ok
+    if proposee:
+        return proposee
+    return re.sub(r"\s+", " ", str(champs.get("as_printed") or "")).strip()
 
 
 def _inclus_par_defaut(kind: str, champs: dict) -> bool:
@@ -934,13 +683,13 @@ def _normalize(payload: dict, count: int) -> dict:
             vues.append(entree)
             illisibles.append({"input": entree, "reason": str(row.get("reason") or "")[:300]})
 
+    # Couverture : on la SIGNALE, on ne jette plus la lecture. Une page
+    # oubliée doit se voir — pas coûter l'extraction entière du lot.
     manquantes = [n for n in range(1, count + 1) if n not in vues]
     if manquantes:
-        raise ExtractionError(
-            "Lecture incomplète : la ou les entrées "
-            + ", ".join(str(n) for n in manquantes)
-            + " n'ont pas été rendues par le modèle. Rien n'a été enregistré — "
-            "renvoyez le lot, ou relisez ces pages seules."
+        logger.warning(
+            "Extraction : entrée(s) %s non rendue(s) par le modèle",
+            ", ".join(str(n) for n in manquantes),
         )
 
     propres = []
@@ -962,15 +711,12 @@ def _normalize(payload: dict, count: int) -> dict:
         except (TypeError, ValueError):
             page = 0
         champs = dict(champs)
-        ligne_ok = True
         if kind == "medications":
-            # La ligne de la note est COMPOSÉE, pas recopiée : nom court, dose,
-            # voie, fréquence (convention maison, cf. default_prompts § 2.5).
-            # La ligne imprimée reste dans ``as_printed`` — c'est la provenance.
-            ligne, ligne_ok = _ligne_medicament(champs)
-            if ligne:
-                champs.setdefault("as_printed", texte)
-                texte = ligne
+            # La ligne du modèle, telle quelle. La ligne imprimée reste dans
+            # ``as_printed`` — c'est la provenance, et le texte affiché reste
+            # éditable : le médecin est le validateur.
+            champs.setdefault("as_printed", texte)
+            texte = _ligne_medicament(champs) or texte
 
         propres.append({
             "document_id": doc_id,
@@ -986,10 +732,6 @@ def _normalize(payload: dict, count: int) -> dict:
             # ne doit entrer dans la note sans un geste.
             "included": _inclus_par_defaut(kind, champs),
             "edited": False,
-            # Faux quand la ligne ne rentre pas dans le moule : l'interface
-            # l'affiche comme « non normalisée » au lieu de laisser croire à
-            # une mise en forme propre.
-            "line_ok": ligne_ok,
         })
 
     # Imagerie : la conclusion entre, le corps du rapport accompagne — décoché.
@@ -1053,6 +795,8 @@ def _normalize(payload: dict, count: int) -> dict:
         "documents": documents,
         "items": propres,
         "coverage": coverage,
+        # Pages non rendues : affichées dans l'onglet, jamais bloquantes.
+        "missing": manquantes,
         "unreadable": illisibles,
         "observations": observations_propres,
     }

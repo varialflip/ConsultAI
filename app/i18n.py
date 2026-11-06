@@ -421,9 +421,9 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Document pas encore lu.",
         "Document not read yet.",
     ),
-    "doc.not_normalized": (
-        "non normalisée — ligne imprimée en infobulle",
-        "not normalised — printed line in the tooltip",
+    "doc.missing_pages": (
+        "page(s) non rendue(s) :",
+        "page(s) not returned:",
     ),
     "doc.included": (
         "dans la note",

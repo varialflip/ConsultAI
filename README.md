@@ -1521,18 +1521,20 @@ manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers
 sans ligne correspondante tourne à chaque purge. `DOCUMENTS_DIR` (défaut
 `/data/documents`, à laisser sous `/data`) et `MAX_DOCUMENT_MB` (défaut 25).
 
-**Lignes de médicaments mises en forme.** Un scan de liste n'est pas recopié :
-la ligne est composée en quatre emplacements — nom court, dose, voie, fréquence
-— et se lit `PEG 3350 17g po die`, `Acétaminophène 650mg po q6h prn`. Le
-modèle fournit le nom court (`POLYETHYLENE-GLYCOL-3350` → `PEG 3350`) et les
-quatre morceaux ; une table de code traduit les phrases en jetons maison
-(`1 fois par jour` → `die`, `aux 6 heures` → `q6h`, `au coucher` → `hs`,
-`si besoin` → `prn`, `par voie orale` ou un comprimé → `po`). La dose est
-cherchée dans les directions quand la force ne dit rien (un `100 %` n'est pas
-une dose), et un volume de dilution n'est jamais pris pour une dose. La ligne
-imprimée reste accessible en infobulle (`fields.as_printed`) ; une ligne qui ne
-rentre pas dans le moule est signalée **« non normalisée »**, jamais corrigée
-en silence.
+**Lignes de médicaments : écrites par le modèle, non retouchées.** Un scan de
+liste n'est pas recopié : le modèle rend la ligne finale, dans la convention de
+la note — `PEG 3350 17g po die`, `Acétaminophène 650mg po q6h prn`,
+`Trazodone 25-50mg po hs` — et elle s'affiche **telle quelle**, éditable. La
+dose est celle ADMINISTRÉE par prise (« 2 comprimés de 325 mg » → 650mg,
+« 1/2 à 1 comprimé de 50 mg » → 25-50mg), pas la force du comprimé. La ligne
+imprimée reste accessible en infobulle (`fields.as_printed`).
+
+L'application **ne vérifie ni ne réécrit** ces lignes : une couche de contrôle
+(moule, table de fréquences, composition de repli, arithmétique) a existé puis
+a été retirée — elle a remplacé une ligne juste par une ligne fausse en
+refusant un intervalle (`25-50mg`). Le texte reste éditable et **le médecin est
+le validateur**. Seule information conservée : les pages que le modèle n'a pas
+rendues sont signalées dans l'en-tête du document.
 
 **Tout n'entre pas.** Une note de consultation ne recopie pas un panneau de
 trente analytes. Chaque valeur de bilan reçoit une `pertinence` du modèle

@@ -2618,7 +2618,14 @@ def get_dictation(session_id: str, request: Request):
     # ``_STALE_AFTER`` secondes ferait marquer le brouillon « abandonnée » et
     # archiver l'audio par ``dictation.cleanup_abandoned`` alors que le
     # médecin compte bien reprendre.
-    session.save()
+    try:
+        session.save()
+    except OSError:
+        # Le dossier de la session a disparu entre la lecture et l'écriture :
+        # dictée conclue et purgée, ou nettoyée par une passe concurrente.
+        # Une scrutation d'avancement ne doit jamais produire un 500 — le
+        # navigateur le lirait comme une dictée cassée.
+        logger.debug("Dictée %s : état non réécrit (dossier disparu)", session_id)
     return session.to_public()
 
 

@@ -3634,15 +3634,20 @@ def _call_openrouter_region(model: str, prompt: str) -> dict | None:
 
 
 def _call_gemini_region(model: str, prompt: str) -> dict | None:
-    """Appel Gemini pour la détection de région."""
+    """
+    Appel Gemini pour la détection de région.
+
+    Passe par le client de ``llm``, donc par Vertex comme le reste de
+    l'application : la clé d'API ne suffit plus (la production est en Vertex,
+    sans clé), et ``settings.google_api_key`` n'existe même plus dans la
+    configuration — l'ancien code levait un AttributeError à chaque appel,
+    silencieusement remplacé par le repli local. « Ce n'est jamais parti »
+    était donc littéral.
+    """
     try:
         from google import genai
-        from app.config import settings
-        key = settings.google_api_key
-        if not key:
-            logger.warning("Région médicaments : clé Gemini absente, détection annulée")
-            return None
-        client = genai.Client(api_key=key)
+        from app import llm as llm_mod
+        client = llm_mod.get_client("gemini")
         resp = client.models.generate_content(
             model=model,
             contents=prompt,

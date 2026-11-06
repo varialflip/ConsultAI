@@ -691,6 +691,21 @@ def _fmt_masse(valeur: float, unite: str) -> str:
     return nombre.replace(".", ",") + unite
 
 
+#: Un statut IMPRIMÉ n'est repris que s'il ressemble à un statut : « Cessé le
+#: 2026-03-02 », « Suspendu », « Arrêté le … ». Un fragment de page capté par
+#: erreur (« (En att ») n'entre pas dans une note.
+_STATUT_RECONNU = re.compile(
+    r"(?i)cess|arr[êe]t|suspend|discontinu|interromp|on hold|stopped|hold|\d{4}[-/]\d{1,2}"
+)
+
+
+def _statut_propre(texte: str) -> str:
+    texte = re.sub(r"\s+", " ", (texte or "").strip())
+    if not texte or len(texte) > 40:
+        return ""
+    return texte if _STATUT_RECONNU.search(texte) else ""
+
+
 def _nom_court(nom: str) -> str:
     """
     Casse d'une molécule lue sur un scan.
@@ -798,7 +813,7 @@ def _composer_ligne(champs: dict) -> tuple:
     ligne = " ".join(m for m in morceaux if m).strip()
     # Statut IMPRIMÉ seulement (« Cessé le … ») : un fait de la page, jamais
     # une déduction. Hors du moule, donc ajouté après validation.
-    statut = str(champs.get("status_printed") or "").strip()
+    statut = _statut_propre(str(champs.get("status_printed") or ""))
     ok = bool(_LIGNE_MED.match(ligne)) if dose else False
     if statut:
         ligne = f"{ligne} ({statut})"
@@ -1109,13 +1124,16 @@ def extract_documents(
         response_schema=_SCHEMA,
     )
     try:
-        # Réflexion BORNÉE, pas coupée. La couper avait été un arbitrage de
-        # vitesse ; à l'usage c'est exactement là que les cas tordus se
-        # règlent (« 2 comprimés de 325 mg » vaut 650 mg, « 1/2 comprimé au
-        # coucher » vaut 0,5 mg le soir). Le budget du panneau est réglé pour
-        # la rédaction ; on le borne ici à 1 024 jetons.
+        # Réflexion BORNÉE, pas coupée — mais courtement bornée. Mesuré sur
+        # le scan DSQ réel et le dossier de quatre pages :
+        #   0 jeton    : 5,1 s / 39,1 s — et « HbAlc » au lieu de « HbA1c »
+        #   256 jetons : 6,8 s / 21,8 s — tout juste
+        #   1 024      : 11,8 s / 30,4 s — pas mieux
+        # Un peu de réflexion paie (fidélité des unités, cas tordus) ; audelà
+        # de 256, on paie sans rien gagner. Le panneau garde la main pour la
+        # rédaction de la note, pas pour la lecture.
         config_kwargs["thinking_config"] = types.ThinkingConfig(
-            thinking_budget=min(llm._gemini_thinking_budget(), 1024)
+            thinking_budget=min(llm._gemini_thinking_budget(), 256)
         )
     except Exception:  # pragma: no cover - très défensif
         pass

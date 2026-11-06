@@ -202,6 +202,14 @@ class TestNormalisation(unittest.TestCase):
         self.assertEqual(ligne, "Acétaminophène 650mg po q6h")
         self.assertEqual(champs.get("dose_conflict"), "325mg")
 
+    def test_statut_fragmentaire_ecarte(self):
+        """Un fragment de page (« En att ») n'entre pas dans la ligne."""
+        self.assertEqual(extraction._statut_propre("En att"), "")
+        self.assertEqual(extraction._statut_propre("(En att"), "")
+        self.assertEqual(extraction._statut_propre("Cessé le 2026-03-02"),
+                         "Cessé le 2026-03-02")
+        self.assertEqual(extraction._statut_propre("Suspendu"), "Suspendu")
+
     def test_ligne_hors_moule_signalee(self):
         """Sans dose chiffrée, la ligne n'est pas « normalisée » — et le dit."""
         ligne, ok = extraction._ligne_medicament({"short_name": "Ramipril",

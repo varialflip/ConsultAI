@@ -124,6 +124,28 @@ class TestNormalisation(unittest.TestCase):
         self.assertEqual(item["text"], "Trazodone 25-50mg po hs")
         self.assertEqual(item["fields"]["as_printed"], "TRAZODONE 50MG COMPRIME")
 
+    def test_meme_medicament_sur_deux_pages_une_seule_fois(self):
+        """Un doublon EXACT ne s'affiche qu'une fois ; les pages sont réunies."""
+        charge = _payload(items=[
+            {"document_id": "d1", "kind": "medications", "text": "Magnésium-gluconate 1g po tid",
+             "fields": {"line": "Magnésium-gluconate 1g po tid"}, "source_page": 1},
+            {"document_id": "d1", "kind": "medications", "text": "Magnésium-gluconate 1g po tid",
+             "fields": {"line": "Magnésium-gluconate 1g po tid"}, "source_page": 2},
+        ])
+        items = extraction._normalize(charge, 1)["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(sorted(items[0]["source_pages"]), [1, 2])
+
+    def test_doublon_qui_differe_est_conserve(self):
+        """Deux forces différentes ne sont pas un doublon : on ne tranche pas."""
+        charge = _payload(items=[
+            {"document_id": "d1", "kind": "medications", "text": "Metformine 500mg po bid",
+             "fields": {}, "source_page": 1},
+            {"document_id": "d1", "kind": "medications", "text": "Metformine 1000mg po bid",
+             "fields": {}, "source_page": 2},
+        ])
+        self.assertEqual(len(extraction._normalize(charge, 1)["items"]), 2)
+
     def test_sans_ligne_on_montre_l_imprime(self):
         """Pas de ligne du modèle → la ligne imprimée, jamais une composition."""
         charge = _payload(items=[{

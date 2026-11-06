@@ -65,6 +65,13 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
   catégories réellement utilisées, et **rien d'administratif** (identifiant de
   dossier, titre de rubrique, AVQ/AVD, situation de vie) — ces lignes vont en
   `other`. Un problème cité deux fois reste un seul item, le plus complet.
+- **Doublon de médicament (2026-11-06)** : un médicament vu sur deux pages
+  (« Magnésium-gluconate 1g po tid », pages 1 et 2) sortait deux fois. Le
+  prompt demande maintenant UN seul item avec sa page de première apparition,
+  et un doublon **exact** est fusionné à l'extraction (pages réunies dans
+  `source_pages`). Un doublon qui DIFFÈRE — dose, forme, DIN — n'est pas
+  touché : c'est peut-être deux forces différentes, et ce n'est pas à
+  l'application de trancher.
 - **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
   analytes n'a pas sa place dans une note. Chaque valeur reçoit une
   `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie

@@ -160,8 +160,13 @@ n'est imprimée, laisse vide.
 ``q6h``, ``q4-6h``, ``prn``. « 1 fois par jour » → ``die``, « aux 6 heures » \
 → ``q6h``, « si besoin » → ``prn``.
 
+Un médicament qui apparaît sur DEUX pages (liste qui continue, ou photo qui \
+recouvre la précédente) est UN seul item, jamais deux. Range sa page de \
+première apparition.
+
 Exemples de ligne attendue : ``PEG 3350 17g po die``, \
-``Acétaminophène 650mg po q6h prn`` (deux comprimés de 325 mg).
+``Acétaminophène 650mg po q6h prn`` (deux comprimés de 325 mg), \
+``Magnésium-gluconate 1g po tid``.
 
 **history** — un item par problème de santé, intervention, hospitalisation ou \
 allergie : ``text`` = l'énoncé COMPLET tel qu'imprimé, en une phrase, SANS \
@@ -304,8 +309,12 @@ is printed.
 - ``frequency``: ``die``, ``bid``, ``tid``, ``qid``, ``hs``, ``qsem``, \
 ``q6h``, ``q4-6h``, ``prn``.
 
+A medication appearing on TWO pages (a list that continues, or a photograph \
+overlapping the previous one) is ONE item, never two. Give its first page.
+
 Expected line examples: ``PEG 3350 17g po die``, \
-``Acetaminophen 650mg po q6h prn`` (two 325 mg tablets).
+``Acetaminophen 650mg po q6h prn`` (two 325 mg tablets), \
+``Magnesium gluconate 1g po tid``.
 
 **history** — one item per health problem, procedure, hospitalization or \
 allergy: ``text`` = the COMPLETE statement as printed, as a sentence, WITHOUT \
@@ -795,6 +804,29 @@ def _normalize(payload: dict, count: int) -> dict:
             "edited": False,
         })
     propres = enrichis
+
+    # Doublon exact : la même ligne vue sur deux pages (liste qui continue,
+    # photo qui recouvre la précédente). Texte identique = même médicament ;
+    # on n'en garde qu'un, en réunissant les pages pour ne rien perdre. Un
+    # doublon qui diffère (dose, forme, DIN) n'est PAS touché : c'est peut-être
+    # deux forces différentes, et ce n'est pas à l'application de trancher.
+    vus: dict = {}
+    uniques = []
+    for item in propres:
+        if item["kind"] != "medications":
+            uniques.append(item)
+            continue
+        cle = re.sub(r"\s+", " ", _sans_accent(item["text"])).strip()
+        if cle in vus:
+            garde = vus[cle]
+            for page in (item.get("source_page"), garde.get("source_page")):
+                if page and page not in garde.setdefault("source_pages", []):
+                    garde["source_pages"].append(page)
+            garde["source_pages"].sort()
+            continue
+        vus[cle] = item
+        uniques.append(item)
+    propres = uniques
 
     # Les pages d'un document sont déduites des lignes réellement lues : le
     # modèle se trompe parfois dans le récapitulatif ``documents[].pages``

@@ -309,19 +309,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "pane.dictation": ("Dictée", "Dictation"),
     "pane.note": ("Note structurée", "Structured note"),
     "pane.raw": ("Transcription brute", "Raw transcript"),
-    "secondpass.toggle": ("Validation", "Validation"),
     "secondpass.tab": ("Validation", "Validation"),
     "secondpass.corrections": (
         "Corrections et éléments à valider",
         "Corrections and items to verify",
-    ),
-    "secondpass.title": (
-        "Validation : après chaque note, comparer la note à la référence "
-        "(l'audio si le fournisseur le reçoit, sinon la transcription) et "
-        "signaler les écarts certains (omissions / éléments non dictés).",
-        "Validation: after each note, compare it against the reference "
-        "(the audio when the provider receives it, otherwise the transcript) "
-        "and flag certain discrepancies (omissions / non-dictated items).",
     ),
     "secondpass.pending": (
         "Vérification en cours — comparaison de la note à la référence…",
@@ -352,10 +343,6 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "secondpass.unavailable": (
         "Indisponible : le fournisseur actif ne transmet pas d'audio.",
         "Unavailable: the active provider does not send audio.",
-    ),
-    "secondpass.save_error": (
-        "Préférence « Validation » non enregistrée.",
-        "Could not save the \u201cValidation\u201d preference.",
     ),
     "medgrounding.title": (
         "Médicaments normalisés",
@@ -2120,14 +2107,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Thinking",
     ),
     "set.gemini_thinking.help": (
-        "Désactivé (par défaut) : raisonnement coupé (budget 0). Pris en charge "
-        "par gemini-2.5-flash ; gemini-2.5-pro le refuse — un message le "
-        "signale alors, passez sur « Oui » avec un budget de 128. Activé : le "
+        "Désactivé (par défaut) : raisonnement coupé (budget 0), accepté par "
+        "gemini-3.5-flash. Activé : le "
         "modèle réfléchit avant de répondre ; le champ « Budget de "
         "raisonnement » ci-dessous fixe l'ampleur.",
-        "Off (default): reasoning cut (budget 0). Supported by "
-        "gemini-2.5-flash; gemini-2.5-pro rejects it — you will be told, "
-        "then switch to “On” with a budget of 128. On: the model thinks "
+        "Off (default): reasoning cut (budget 0), supported by "
+        "gemini-3.5-flash. On: the model thinks "
         "before answering; the “Thinking budget” field below sets how much.",
     ),
     "set.gemini_thinking_budget.label": (
@@ -2136,11 +2121,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "set.gemini_thinking_budget.help": (
         "Prise en compte si « Raisonnement » est activé. Jetons de raisonnement "
-        "alloués au modèle avant de répondre. Minimum accepté par "
-        "gemini-2.5-pro sur Vertex : 128 (0 et 1-127 sont refusés). Vide = 128.",
+        "alloués au modèle avant de répondre. Plage acceptée par "
+        "gemini-3.5-flash sur Vertex : 1 à 32768. Vide = 128.",
         "Used when “Thinking” is on. Reasoning tokens allocated to the model "
-        "before answering. Minimum accepted by gemini-2.5-pro on Vertex: 128 "
-        "(0 and 1-127 are rejected). Empty = 128.",
+        "before answering. Range accepted by gemini-3.5-flash on Vertex: 1 to "
+        "32768. Empty = 128.",
     ),
     "set.show_thinking_admin.label": (
         "Montrer le raisonnement — administrateurs",
@@ -2160,6 +2145,19 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.show_thinking_users.label": (
         "Montrer le raisonnement — utilisateurs",
         "Show reasoning — users",
+    ),
+    "set.second_pass_enabled.label": (
+        "Validation (audit de la note)",
+        "Validation (note audit)",
+    ),
+    "set.second_pass_enabled.help": (
+        "Après chaque note, comparer la note à l'audio de la dictée et "
+        "signaler les écarts (omissions, inventions). Coûte un second appel "
+        "au modèle (l'audio est renvoyé) ; désactivé par défaut. S'applique "
+        "à tous les usagers.",
+        "After each note, compare it against the dictation audio and flag "
+        "discrepancies (omissions, inventions). Costs a second model call "
+        "(the audio is sent again); off by default. Applies to all users.",
     ),
     "set.show_thinking_users.help": (
         "Même affichage transitoire du raisonnement (thinking), pour les "

@@ -2764,52 +2764,6 @@
     }, 5000);
   }
 
-  function updateSecondPassToggle() {
-    const actif = state.secondPass;
-    const bouton = $('btnSecondPass');
-    if (bouton) {
-      bouton.setAttribute('aria-checked', actif ? 'true' : 'false');
-      bouton.classList.toggle('secondpass-on', actif);
-    }
-    const goujon = $('secondPassKnob');
-    if (goujon) {
-      goujon.classList.toggle('translate-x-0.5', !actif);
-      goujon.classList.toggle('translate-x-4', actif);
-    }
-    // Variante mobile : bouton-pilule à état (pressed).
-    const mobile = $('btnSecondPassMobile');
-    if (mobile) {
-      mobile.setAttribute('aria-pressed', actif ? 'true' : 'false');
-      mobile.classList.toggle('secondpass-on', actif);
-    }
-  }
-
-  function updateSecondPassAvailability() {
-    const capable = state.verificationCapable !== false;
-    const bouton = $('btnSecondPass');
-    const mobile = $('btnSecondPassMobile');
-    if (bouton) bouton.disabled = !capable;
-    if (mobile) mobile.disabled = !capable;
-    if (!capable && state.secondPass) {
-      state.secondPass = false;
-      updateSecondPassToggle();
-    }
-  }
-
-  async function toggleSecondPass() {
-    const cible = !state.secondPass;
-    // Optimiste : retour à l'état précédent si le serveur refuse.
-    state.secondPass = cible;
-    updateSecondPassToggle();
-    try {
-      await api('/api/me/second_pass', { method: 'PUT', body: { enabled: cible } });
-    } catch (err) {
-      state.secondPass = !cible;
-      updateSecondPassToggle();
-      toast(err.message || T('secondpass.save_error'), 'error', 8000);
-    }
-  }
-
   function selectDicteeTab(tab) {
     const vueTranscription = $('transcriptView');
     const vueSecondPass = $('secondPassView');
@@ -3265,7 +3219,6 @@
           transcript,
           consultation_id: consultationId,
           extra_instructions: $('ctxExtra').value.trim(),
-          use_pro: false,
           generation_token: state.generationToken,
           second_pass: state.secondPass,
         }, readMetadata()),
@@ -7141,13 +7094,12 @@
     state.isAdmin = Boolean(config.is_admin);
     state.llmBypassStt = Boolean(config.llm_bypass_stt);
     state.llmBypassSttKeepTranscript = Boolean(config.llm_bypass_stt_keep_transcript);
-    // « Validation » : capable = fournisseur audio ; préférence = valeur usager.
+    // « Validation » : capable = fournisseur audio ; interrupteur GLOBAL du
+    // panneau d'administration (plus de bascule par usager).
     state.verificationCapable = Boolean(config.verification_capable);
     state.secondPass = Boolean(config.second_pass) && state.verificationCapable;
     // « Correction des médicaments » : réglage admin global.
     state.medGroundingOn = Boolean(config.dictation_grounding);
-    updateSecondPassToggle();
-    updateSecondPassAvailability();
     updateActionButtons();
     updateBypassSttNotice();
     renderLanguageChoices(config.languages, config.language || LANG);
@@ -7947,8 +7899,6 @@
 
     // --- Enregistrement ---
     $('btnRecord').addEventListener('click', startRecording);
-    $('btnSecondPass').addEventListener('click', toggleSecondPass);
-    $('btnSecondPassMobile').addEventListener('click', toggleSecondPass);
     $('tabTranscript').addEventListener('click', () => selectDicteeTab('transcript'));
     $('tabSecondPass').addEventListener('click', () => selectDicteeTab('secondpass'));
     $('btnPause').addEventListener('click', togglePause);

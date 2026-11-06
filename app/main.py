@@ -621,8 +621,6 @@ class GenerateIn(BaseModel):
     requester: str = Field("", max_length=200)
     accompanied_by: str = Field("", max_length=200)
     extra_instructions: str = Field("", max_length=4000)
-    # Bascule ponctuelle vers le modèle « pro » pour une dictée difficile.
-    use_pro: bool = False
     # Jeton propre à CETTE demande de génération, généré par l'onglet qui
     # clique sur « Mettre en forme ». Repris tel quel dans les évènements
     # ``generation_chunk`` diffusés en direct, il permet à l'onglet émetteur de
@@ -1430,11 +1428,6 @@ class ThemeIn(BaseModel):
     theme: str = Field("", max_length=32)
 
 
-class SecondPassIn(BaseModel):
-    #: « Validation » : auditer chaque note après génération (audio↔note).
-    enabled: bool
-
-
 @app.put("/api/me/language")
 def put_my_language(payload: LanguageIn, request: Request):
     """
@@ -1476,14 +1469,6 @@ def put_my_theme(payload: ThemeIn, request: Request):
             for tid, label_fr, label_en, hex_color in preferences.THEMES
         ],
     }
-
-
-@app.put("/api/me/second_pass")
-def put_my_second_pass(payload: SecondPassIn, request: Request):
-    """Enregistre la préférence « Validation » de l'usager courant."""
-    user = current_user(request)
-    retenu = preferences.set_second_pass(user.owner_key, payload.enabled)
-    return {"second_pass": retenu}
 
 
 @app.get("/api/me/usage")
@@ -1542,9 +1527,10 @@ async def api_config(request: Request):
         "llm_bypass_stt": audio_opts["bypass_stt"],
         "llm_bypass_stt_keep_transcript": audio_opts["keep_transcript"],
         "gemini_backend": "vertex" if settings.gemini_use_vertex else "api_key",
-        # « Validation » : capable (fournisseur audio) et préférence de l'usager.
+        # « Validation » : capable (fournisseur audio) et interrupteur GLOBAL
+        # du panneau (plus de préférence par usager).
         "verification_capable": llm.verification_capable(),
-        "second_pass": preferences.second_pass_for(user.owner_key),
+        "second_pass": runtime_config.value("second_pass_enabled") == "true",
         # « Correction des médicaments » : réglage admin global.
         "dictation_grounding": _med_grounding_on(),
         "max_audio_mb": settings.max_audio_mb,
@@ -3113,7 +3099,15 @@ async def api_generate(
     # compteur qui décidera lequel des deux a le droit d'écrire son résultat.
     generation_seq = _generation_guard.begin(payload.consultation_id)
 
-    model_name = settings.gemini_model_pro if payload.use_pro else None
+    model_name = None
+
+    # « Validation » : interrupteur GLOBAL du panneau (plus de préférence par
+    # usager). Le client envoie ``second_pass``, mais c'est ce réglage qui
+    # décide — un client périmé ne peut pas forcer l'audit.
+    second_pass_actif = (
+        payload.second_pass
+        and runtime_config.value("second_pass_enabled") == "true"
+    )
 
     # Consigne système partagée entre la mise en forme et l'audit « Validation »
     # (la MÊME chaîne, pour que [consigne système + audio] soit un préfixe
@@ -3159,7 +3153,7 @@ async def api_generate(
     # laisser la roue tourner jusqu'au filet de 180 s — sans référence, l'audit
     # ne partira jamais.
     if (
-        payload.second_pass
+        second_pass_actif
         and payload.consultation_id
         and audio_payload is None
         and not (payload.transcript or "").strip()
@@ -3585,7 +3579,7 @@ async def api_generate(
     # fournisseur ne reçoit pas l'audio) en tâche de fond — jamais sur le
     # chemin de la réponse ; le résultat partira en SSE quand il sera prêt.
     if (
-        payload.second_pass
+        second_pass_actif
         and payload.consultation_id
         and llm.verification_capable()
         and (audio_payload is not None or (payload.transcript or "").strip())

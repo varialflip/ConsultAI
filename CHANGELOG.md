@@ -57,6 +57,42 @@ convertit en liste pointée sur deux colonnes, et la largeur de ligne revient à
 - Alignement avec `main`, où la même présentation et la même largeur sont
   appliquées.
 
+## 2026-09-16 — Gemini 3.5 Flash ; Validation pilotée par l'administration
+
+*Gemini 2.5 Pro étant en fin de vie, la mise en forme de la note passe au
+modèle courant de la famille Flash, servi par Vertex AI à Montréal
+(`northamerica-northeast1`). La bascule « modèle pro » disparaît : elle
+n'ajoutait qu'un second nom de modèle, sans équivalent dans la famille 3.5.*
+
+- **Modèle par défaut : `gemini-3.5-flash`** (Vertex AI, région Montréal,
+  audio envoyé directement au modèle multimodal — inchangé). Vérifié en réel :
+  génération texte et entrée audio fonctionnelles.
+- **`gemini-3.5-flash` ajouté d'office à la liste des modèles disponibles** :
+  Vertex le sert à Montréal mais ne l'expose pas dans `models.list()` de la
+  région — sans cette injection, le bouton « Modèles disponibles » du panneau
+  le tairait alors qu'il fonctionne.
+- **Suppression de la bascule « pro »** (`GEMINI_MODEL_PRO`, `GEMINI_USE_PRO`,
+  champ `use_pro` de l'API) : un seul modèle, choisi dans le panneau.
+- **Raisonnement** : `gemini-3.5-flash` accepte la coupure réelle (budget 0) et
+  la plage 1 à 32768 ; le minimum de 128 propre à 2.5 Pro est retiré, un budget
+  au-dessus du maximum est ramené au lieu d'échouer.
+- **Tarifs** : entrée 1,65 $/M, entrée en cache 0,165 $/M, sortie 9,90 $/M
+  (tarif « non-global » de Vertex, la région Montréal n'étant pas l'endpoint
+  global) ; l'audio entre au tarif du texte.
+- Redéploiement : tag `v2.0.0-rc.3`.
+
+*La « Validation » (audit factuel audio↔note) passe d'une préférence par
+usager à un interrupteur GLOBAL : elle est désactivée pour tous par défaut, et
+seul l'administrateur l'active — la bascule à côté de « Mettre en forme »
+disparaît.*
+
+- **Réglage d'administration « Validation (audit de la note) »**
+  (`second_pass_enabled`, onglet Note), désactivé par défaut. Il vaut pour
+  tous les usagers ; le serveur s'y fie aussi, un client périmé ne peut donc
+  pas forcer l'audit.
+- **Retrait de la bascule par usager** (boutons bureau et mobile) et de la
+  route `PUT /api/me/second_pass` : plus de préférence individuelle.
+- Redéploiement : tag `v2.0.0-rc.4`.
 ## 2026-09-09 — Les tests dictés restent dans leur rubrique d'origine
 
 - **Correction** : un test cognitif dicté (MoCA, MMSE…) finissait toujours

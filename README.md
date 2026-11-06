@@ -288,14 +288,16 @@ direct** (tranche par tranche) que pour les **enregistrements importés**
 > persistés (`usage_events.cached_tokens`), et le coût applique la remise
 > (tarif `token_input_cached_1m`, ~90 %).
 
-> **🔎 « Validation » — audit factuel de la note.** Bascule à côté du bouton
-> « Mettre en forme » (préférence par usager, désactivée par défaut). Quand
-> elle est active, chaque génération est suivie d'un second appel — **quel que
-> soit le fournisseur LLM** — qui compare la note à la référence disponible et
-> renvoie deux listes : ce qui fut dicté mais manque à la note, ce que la note
-> affirme sans avoir été dicté. Volontairement permissif : seuls les écarts
-> certains sont signalés, les reformulations médicales sont acceptées. Le
-> résultat est diffusé en
+> **🔎 « Validation » — audit factuel de la note.** Interrupteur GLOBAL dans
+> le panneau d'administration (onglet Note, « Validation (audit de la
+> note) », `second_pass_enabled`, désactivé par défaut) : il vaut pour tous
+> les usagers — il n'y a plus de bascule à côté du bouton « Mettre en forme ».
+> Quand il est actif, chaque génération est suivie d'un second appel qui
+> compare la note à l'AUDIO de la dictée (source de vérité — jamais la
+> transcription Parakeet, trop imprécise) et renvoie deux listes : ce qui
+> fut dicté mais manque à la note, ce que la note affirme sans avoir été
+> dicté. Volontairement permissif : seuls les écarts certains sont signalés,
+> les reformulations médicales sont acceptées. Le résultat est diffusé en
 > direct (SSE `verification_chunk`, JSON brut re-rendu au fil de l'eau, puis
 > `verification_result`) dans un second onglet du panneau de transcription —
 > roue sur le titre à partir de la FIN de la génération (jamais avant),
@@ -485,7 +487,7 @@ Le journal de démarrage résume l'état effectif :
 ```
 Authentification : OIDC chez https://… | retour https://…/auth/callback
                  | 1 compte(s) connu(s) | inscription automatique : non
-Modèle : gemini / gemini-2.5-flash | Reconnaissance vocale : soniox (fr-CA) | Langue : fr
+Modèle : gemini / gemini-3.5-flash | Reconnaissance vocale : soniox (fr-CA) | Langue : fr
 ```
 
 ---
@@ -929,8 +931,8 @@ fichier (§ 7.4) en bénéficie aussi.
 > l'événement SSE `generation_started` (le serveur a fini d'envoyer la
 > requête au fournisseur — ConsultAI n'exécute pas le modèle), « La note se
 > génère… » dès le premier morceau `generation_chunk`, puis « Validation en
-> cours… » à la fin de la génération quand la bascule « Validation » est
-> active (jusqu'à l'arrivée du `verification_result`). Plus aucun voile plein
+> cours… » à la fin de la génération quand l'audit « Validation » est
+> activé (jusqu'à l'arrivée du `verification_result`). Plus aucun voile plein
 > écran bloquant. Sur mobile, tous les toasts tiennent sur une seule ligne
 > (message tronqué avec des points de suspension).
 
@@ -1686,7 +1688,7 @@ print('vertex:', settings.gemini_use_vertex, '| llm:', llm.active_provider(), '|
 > sur l'API grand public, hors région — sans aucun message.
 
 **Décision de ce déploiement (2026-08-14)** : modèle de langage sur Vertex AI à
-Montréal, et **audio envoyé directement à Gemini** (Vertex AI, `northamerica-northeast1`)
+Montréal (`gemini-3.5-flash`), et **audio envoyé directement à Gemini** (Vertex AI, `northamerica-northeast1`)
 — le seul choix qui garde **les deux trajets** au Québec, couvert par l'addendum
 de politique cloud de Google consenti pour les renseignements de santé. Le
 service de transcription par défaut est un **Whisper local** (`speaches`,

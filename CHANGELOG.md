@@ -85,6 +85,17 @@ comme documents lus par le modèle, relus et cochés par le médecin.*
   ligne par PAGE : type reconnu et nombre d'éléments, et en ambre
   « page N — rien d'exploitable, vérifier la photo » quand une page ne rend
   aucun élément. L'explication du modèle reste en infobulle.
+- **Dictée iOS : pause puis changement d'application (2026-11-07).** En
+  enregistrement, pause, puis sortie de l'app : au retour, impossible de
+  reprendre — il fallait terminer et recommencer. iOS suspend la PWA et
+  reprend le micro ; `resume()` levait alors `InvalidStateError` hors de tout
+  `try`, l'interface restait « en pause » et le bouton d'enregistrement
+  désactivé, seuls « Terminer » et « Abandonner » répondant.
+  Désormais : le micro et le recorder sont surveillés (`ended`, `mute`), le
+  retour d'arrière-plan **réarme la capture sur la même dictée** (nouvelle
+  piste, nouveau `MediaRecorder`, même session serveur et même compteur de
+  fragments), `resume()`/`pause()` sont encadrés, et si le micro ne revient
+  pas l'écran le DIT — « Terminer » transcrit tout ce qui a déjà été reçu.
 - **Tout n'entre pas : le modèle juge la pertinence.** Un bilan de trente
   analytes n'a pas sa place dans une note. Chaque valeur reçoit une
   `pertinence` (`pertinent` / `anormal` / `routine`) et seule la partie

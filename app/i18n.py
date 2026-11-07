@@ -907,6 +907,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Enregistrement impossible sur ce navigateur : {error}",
         "Recording is not possible in this browser: {error}",
     ),
+    "dictation.mic_resumed": (
+        "Micro repris — la dictée continue.",
+        "Microphone recovered — the dictation continues.",
+    ),
+    "dictation.mic_lost_after_resume": (
+        "Le téléphone a repris le micro pendant l'absence et il ne revient pas. La dictée n'est pas perdue : « Terminer » transcrit tout ce qui a déjà été reçu.",
+        "The phone took the microphone while you were away and it is not coming back. The dictation is not lost: « Finish » transcribes everything already received.",
+    ),
     "mic.recorder_error": (
         "Erreur d'enregistrement : {error}",
         "Recording error: {error}",

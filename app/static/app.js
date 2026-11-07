@@ -983,6 +983,10 @@
     animationHandle: null,
     mimeType: '',
     wakeLock: null,
+    //: Vrai quand la piste micro a été reprise par le système (iOS en pause +
+    //: changement d'application). L'interface le dit : « Terminer » reste
+    //: possible, l'audio déjà reçu n'est pas perdu.
+    microPerche: false,
   };
 
   /**
@@ -2154,6 +2158,14 @@
     if (document.visibilityState === 'visible' && state.recording && !recorder.wakeLock) {
       acquireWakeLock();
     }
+    // Retour d'arrière-plan : iOS a presque toujours libéré le micro pendant
+    // l'absence. On le voit ICI, pas au clic sur lecture — le médecin doit
+    // retrouver son micro prêt, et savoir que la dictée n'a pas été perdue.
+    if (document.visibilityState === 'visible' && state.recording
+        && (!recorderVivant() || !microVivant())) {
+      console.warn('Dictée : micro perdu pendant l\'absence, réarmement');
+      rearmCapture().then((ok) => { if (ok) updateRecordingUI(); });
+    }
     // Filet de sécurité : EventSource se reconnecte tout seul, mais une mise
     // en veille prolongée (Safari iOS notamment) peut la tuer sans jamais
     // relancer ce mécanisme intégré.
@@ -2162,6 +2174,70 @@
       connectLiveEvents();
     }
   });
+
+  /**
+   * Arme le MediaRecorder sur le flux déjà ouvert et branche ses évènements.
+   *
+   * Fonction séparée parce qu'elle sert DEUX fois : au démarrage d'une dictée,
+   * et au RÉARMEMENT quand iOS a repris le micro (pause + changement
+   * d'application). Dans les deux cas les fragments continuent la même
+   * session : ``ondataavailable`` incrémente le même compteur ``dictation.seq``.
+   *
+   * Rend ``false`` si le recorder ne peut pas être créé (l'appelant décide
+   * alors quoi faire de l'interface).
+   */
+  /**
+   * Branche les évènements d'un MediaRecorder recémment créé.
+   *
+   * À la réarmement, iOS a pu tuer la piste micro : on surveille ``ended`` /
+   * ``mute`` pour ne PAS se retrouver avec une dictée « en cours » dont le
+   * micro est mort (l'état figé qui obligeait à tout recommencer).
+   */
+  function installerEvenementsRecorder() {
+    recorder.mediaRecorder.ondataavailable = (event) => {
+      if (!event.data || event.data.size === 0) return;
+      const seq = dictation.seq;
+      dictation.seq += 1;
+      const durationMs = dictationConfig.chunkSeconds * 1000;
+
+      dictation.queue.push({ seq, blob: event.data, durationMs });
+      bestEffort(() => audioStore.putChunk(dictation.localId, seq, event.data),
+                 `écriture du fragment ${seq}`);
+      pumpQueue();
+    };
+    recorder.mediaRecorder.onerror = (event) => {
+      toast(T('mic.recorder_error', { error: event.error && event.error.name }), 'error');
+    };
+
+    if (recorder.stream) {
+      recorder.stream.getAudioTracks().forEach((track) => {
+        track.onended = () => {
+          // iOS a repris le micro (app en arrière-plan, autre appel audio…).
+          console.warn('Dictée : piste micro terminée pendant la dictée');
+          recorder.microPerche = true;
+          if (state.recording) rearmCapture();
+        };
+        track.onmute = () => {
+          console.warn('Dictée : micro coupé (mute)');
+          recorder.microPerche = true;
+        };
+      });
+    }
+  }
+
+  async function armerRecorder() {
+    try {
+      recorder.mediaRecorder = recorder.mimeType
+        ? new MediaRecorder(recorder.stream, { mimeType: recorder.mimeType, audioBitsPerSecond: 64000 })
+        : new MediaRecorder(recorder.stream);
+    } catch (err) {
+      toast(T('mic.recorder_failed', { error: err.message }), 'error');
+      recorder.stream.getTracks().forEach((track) => track.stop());
+      return false;
+    }
+    installerEvenementsRecorder();
+    return true;
+  }
 
   async function startRecording() {
     // getUserMedia exige un contexte sécurisé : HTTPS ou localhost.
@@ -2197,15 +2273,7 @@
 
     recorder.mimeType = pickMimeType();
 
-    try {
-      recorder.mediaRecorder = recorder.mimeType
-        ? new MediaRecorder(recorder.stream, { mimeType: recorder.mimeType, audioBitsPerSecond: 64000 })
-        : new MediaRecorder(recorder.stream);
-    } catch (err) {
-      toast(T('mic.recorder_failed', { error: err.message }), 'error');
-      recorder.stream.getTracks().forEach((track) => track.stop());
-      return;
-    }
+    if (!(await armerRecorder())) return;
 
     // --- Ouverture de la session côté serveur ------------------------------
     // Le brouillon existe avant la première seconde d'audio : c'est lui qui
@@ -2249,20 +2317,6 @@
       label: buildTitle(),
     }), 'création de la session');
 
-    recorder.mediaRecorder.ondataavailable = (event) => {
-      if (!event.data || event.data.size === 0) return;
-      const seq = dictation.seq;
-      dictation.seq += 1;
-      const durationMs = dictationConfig.chunkSeconds * 1000;
-
-      dictation.queue.push({ seq, blob: event.data, durationMs });
-      bestEffort(() => audioStore.putChunk(dictation.localId, seq, event.data),
-                 `écriture du fragment ${seq}`);
-      pumpQueue();
-    };
-    recorder.mediaRecorder.onerror = (event) => {
-      toast(T('mic.recorder_error', { error: event.error && event.error.name }), 'error');
-    };
 
     // Un fragment toutes les quelques secondes : c'est l'unité de
     // téléversement, donc aussi le pire cas de perte sur une panne franche.
@@ -2285,23 +2339,141 @@
     window.addEventListener('beforeunload', warnBeforeUnload);
   }
 
+  /** Le micro est-il encore utilisable ? (piste vivante et audible) */
+  function microVivant() {
+    if (!recorder.stream) return false;
+    const pistes = recorder.stream.getAudioTracks();
+    return pistes.length > 0 && pistes.some((t) => t.readyState === 'live' && !t.muted);
+  }
+
+  /** Vrai si le MediaRecorder peut encore enregistrer (ni inactive ni clos). */
+  function recorderVivant() {
+    return Boolean(recorder.mediaRecorder)
+      && recorder.mediaRecorder.state !== 'inactive';
+  }
+
+  let rearmementEnCours = false;
+
+  /**
+   * Reprend la capture sur la MÊME dictée après qu'iOS a repris le micro.
+   *
+   * iOS suspend une PWA en arrière-plan et libère le périphérique : au retour,
+   * la piste est ``ended`` et le MediaRecorder ``inactive``. Jusqu'ici, le
+   * bouton lecture levait alors ``InvalidStateError`` sans que rien ne le
+   * rattrape — l'écran restait « en pause » et le bouton d'enregistrement
+   * restait désactivé, d'où « il faut terminer puis recommencer ».
+   *
+   * On rouvre le micro et on recrée un MediaRecorder, mais on NE touche PAS à
+   * ``dictation`` : même session serveur, même compteur ``seq``. Le serveur
+   * n'exige qu'une suite continue de numéros, et les fragments WebM se
+   * concatènent (voir app/dictation.py).
+   */
+  async function rearmCapture() {
+    if (!state.recording || rearmementEnCours) return false;
+    if (recorderVivant() && microVivant()) return true;
+    rearmementEnCours = true;
+    try {
+      recorder.microPerche = false;
+      if (recorder.stream) {
+        recorder.stream.getTracks().forEach((track) => { track.onended = null; track.stop(); });
+        recorder.stream = null;
+      }
+      recorder.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      if (!(await armerRecorder())) {
+        await abandonApresEchecMicro();
+        return false;
+      }
+      // Le MediaRecorder neuf redémarre en pause si la dictée l'était : on
+      // réarme en enregistrement, l'état de pause sera remis par l'appelant.
+      recorder.mediaRecorder.start(dictationConfig.chunkSeconds * 1000);
+      state.paused = false;
+      startWaveform(recorder.stream);
+      acquireWakeLock();
+      updateRecordingUI();
+      toast(T('dictation.mic_resumed'), 'info', 4000);
+      return true;
+    } catch (err) {
+      console.warn('Réarmement du micro impossible :', err);
+      await abandonApresEchecMicro(err);
+      return false;
+    } finally {
+      rearmementEnCours = false;
+    }
+  }
+
+  /**
+   * Le micro n'est pas revenu : on le DIT et on ne laisse jamais un bouton
+   * mort. La dictée n'est pas perdue — l'audio déjà reçu est sur le serveur,
+   * et « Terminer » le transcrit.
+   */
+  async function abandonApresEchecMicro(err) {
+    recorder.microPerche = true;
+    updateRecordingUI();
+    const message = (err && err.name === 'NotAllowedError')
+      ? T('mic.denied')
+      : T('dictation.mic_lost_after_resume');
+    toast(message, 'warning', 12000);
+  }
+
   function togglePause() {
-    if (!recorder.mediaRecorder || !state.recording) return;
+    if (!state.recording) return;
     if (state.paused) {
       if (dphone.active) playClick(true);   // reprise = « clic on »
-      recorder.mediaRecorder.resume();
-      state.paused = false;
-      resetVad();  // la pause a interrompu le signal : on repart de zéro
+      reprendreEnregistrement();
     } else {
       // Mise en pause = « clic off », joué avant pause() tant que le micro
       // enregistre encore côté navigateur — il sort par les haut-parleurs,
       // jamais capturé (le pause() survient juste après).
       if (dphone.active) playClick(false);
-      recorder.mediaRecorder.pause();
-      state.paused = true;
+      mettreEnPauseEnregistrement();
+    }
+    updateRecordingUI();
+  }
+
+  /**
+   * Reprendre : un simple resume() suffit si le recorder a survécu ; sinon
+   * (iOS a repris le micro pendant l'absence) on réarme la capture sur la
+   * même dictée. Aucune de ces deux voies ne laisse l'exception s'échapper :
+   * une exception ici gelait l'interface sans le moindre message.
+   */
+  async function reprendreEnregistrement() {
+    if (!recorderVivant() || !microVivant()) {
+      if (!(await rearmCapture())) return;
+      resetVad();
+      updateRecordingUI();
+      return;
+    }
+    try {
+      if (recorder.mediaRecorder.state === 'paused') recorder.mediaRecorder.resume();
+      state.paused = false;
+      resetVad();  // la pause a interrompu le signal : on repart de zéro
+    } catch (err) {
+      console.warn('resume() refusé, réarmement :', err);
+      if (!(await rearmCapture())) return;
       resetVad();
     }
     updateRecordingUI();
+  }
+
+  /** Mettre en pause, sans jamais lever : un pause() refusé n'est pas une panne. */
+  function mettreEnPauseEnregistrement() {
+    try {
+      if (recorder.mediaRecorder && recorder.mediaRecorder.state === 'recording') {
+        recorder.mediaRecorder.pause();
+      }
+      state.paused = true;
+      resetVad();
+    } catch (err) {
+      console.warn('pause() refusé :', err);
+      state.paused = true;
+    }
   }
 
   /**

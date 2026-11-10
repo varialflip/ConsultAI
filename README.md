@@ -1512,6 +1512,13 @@ souvent, aucune.
 texte verbatim de l'item — seule provenance conservée depuis que les champs
 structurés ont quitté les médicaments.
 
+**Le prescripteur de l'en-tête.** La liste imprimée porte en tête le médecin
+ou la clinique (« Groupe méd. : DAIGNEAULT, Gabrielle (04965, M.D.) »). C'est
+la **seule exception** à la règle des en-têtes administratifs : le nom et le
+numéro de permis entrent dans `prescriber` et sont transmis à la note pour le
+champ « Médecin de famille » — le nom du patient, lui, reste interdit. Une
+clinique s'écrit avec la mention « (GAP) ».
+
 **Liste réconciliée, dans le même appel.** La lecture rend aussi `med_list` :
 une ligne par médicament, conditionnements de la même molécule fondus, dose
 administrée (fourchettes et maximums compris), ordre du gabarit, cours terminé

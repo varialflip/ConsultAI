@@ -3996,11 +3996,24 @@ def _documents_context(
         "L'ordre ci-dessous n'est qu'un défaut : l'ordre de préférence du "
         "GABARIT l'emporte."
     )
+    entete_prescripteur = (
+        "Family physician printed on the document header (use it for the "
+        "family-physician field): {valeur}"
+        if anglais else
+        "Médecin de famille imprimé en tête du document (à utiliser pour le "
+        "champ du même nom) : {valeur}"
+    )
     blocs: List[str] = []
     for document in documents_service.for_consultation(db, consultation_id):
         extraction_stockee = _stored_extraction(document)
         if not extraction_stockee:
             continue
+        prescripteur = extraction_stockee.get("prescriber") or {}
+        nom_prescripteur = str(prescripteur.get("name") or "").strip()
+        if nom_prescripteur:
+            permis = str(prescripteur.get("license") or "").strip()
+            valeur = f"{nom_prescripteur} — permis {permis}" if permis else nom_prescripteur
+            blocs.append(entete_prescripteur.format(valeur=valeur))
         items = extraction_stockee.get("items", [])
         par_id = {item.get("id"): item for item in items}
         # Liste réconciliée : une ligne dont TOUTES les sources sont décochées

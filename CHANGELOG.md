@@ -45,6 +45,11 @@ que la lecture.*
   sans lui, décocher un médicament cessait de filtrer sa ligne.
 - **Prompt allégé** : 12 770 → 9 900 caractères (champs de médicaments retirés,
   exemples redondants coupés).
+- **Prescripteur de l'en-tête** : le médecin (nom + numéro de permis) ou la
+  clinique « (GAP) » imprimés en tête de la liste entrent dans `prescriber` et
+  sont transmis à la note pour le champ « Médecin de famille » — seule
+  exception à la règle des en-têtes administratifs, le nom du patient restant
+  interdit.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

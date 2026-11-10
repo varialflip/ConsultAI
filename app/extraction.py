@@ -109,6 +109,13 @@ dossier et les coordonnées ne sont PAS du contenu clinique : ne les extrais \
 pas comme élément, ne les recopie nulle part. L'application ne collecte pas \
 l'identité du patient.
 
+**EXCEPTION — le prescripteur.** Le médecin ou la clinique imprimés en tête de \
+la liste de médicaments (« Groupe méd. : », « P.L. », en-tête de clinique) \
+sont utiles : recueille-les dans ``prescriber`` — ``name``, ``license`` (le \
+numéro imprimé près du nom, souvent suivi de « M.D. ») et ``type`` \
+(``medecin`` ou ``clinique``). Si c'est une clinique, ``name`` est son nom \
+suivi de « (GAP) ». Le nom du patient, lui, reste interdit.
+
 ## 4. TRANSCRIPTION FIDÈLE
 Transcris ce qui est IMPRIMÉ, sans corriger, sans compléter, sans traduire. \
 Un passage illisible s'écrit exactement ``[illisible]``. Ne complète JAMAIS \
@@ -281,6 +288,13 @@ The patient's name, date of birth, health insurance number, address, record \
 number and contact details are NOT clinical content: do not extract them as \
 items and do not copy them anywhere. The application does not collect patient \
 identity.
+
+**EXCEPTION — the prescriber.** The physician or clinic printed at the top of \
+the medication list ("Groupe méd. :", "P.L.", clinic letterhead) is useful: \
+collect it in ``prescriber`` — ``name``, ``license`` (the number printed next \
+to the name, often followed by "M.D.") and ``type`` (``medecin`` or \
+``clinique``). If it is a clinic, ``name`` is its name followed by "(GAP)". \
+The patient's name, however, remains forbidden.
 
 ## 4. FAITHFUL TRANSCRIPTION
 Transcribe what is PRINTED, without correcting, completing or translating. An \
@@ -484,6 +498,18 @@ _SCHEMA = {
                 "required": ["line", "sources", "group"],
             },
         },
+        #: Prescripteur imprimé en tête de la liste (médecin + permis, ou
+        #: clinique). Seule exception à la règle « en-têtes administratifs » :
+        #: le nom du patient reste interdit.
+        "prescriber": {
+            "type": "OBJECT",
+            "properties": {
+                "name": {"type": "STRING"},
+                "license": {"type": "STRING"},
+                "type": {"type": "STRING", "enum": ["medecin", "clinique"]},
+            },
+            "required": ["name", "type"],
+        },
         "coverage": {
             "type": "ARRAY",
             "items": {
@@ -679,6 +705,22 @@ def _ligne_medicament(champs: dict) -> str:
     if proposee:
         return proposee
     return re.sub(r"\s+", " ", str(champs.get("as_printed") or "")).strip()
+
+
+def _prescripteur(brut: object) -> dict:
+    """En-tête « Groupe méd. » : médecin + permis, ou clinique « (GAP) »."""
+    if not isinstance(brut, dict):
+        return {}
+    nom = re.sub(r"\s+", " ", str(brut.get("name") or "")).strip()[:120]
+    if not nom:
+        return {}
+    type_ = str(brut.get("type") or "").strip().lower()
+    if type_ not in ("medecin", "clinique"):
+        type_ = "medecin"
+    if type_ == "clinique" and "(gap)" not in nom.lower():
+        nom = f"{nom} (GAP)"
+    permis = re.sub(r"\s+", " ", str(brut.get("license") or "")).strip()[:20]
+    return {"name": nom, "license": permis, "type": type_}
 
 
 def _inclus_par_defaut(kind: str, champs: dict) -> bool:
@@ -979,6 +1021,7 @@ def _normalize(payload: dict, count: int) -> dict:
         # qu'un médicament perdu. Seules les sources connues servent à
         # appliquer les cases cochées du médecin.
         "med_list": med_list,
+        "prescriber": _prescripteur(payload.get("prescriber")),
         "coverage": coverage,
         # Pages non rendues : affichées dans l'onglet, jamais bloquantes.
         "missing": manquantes,

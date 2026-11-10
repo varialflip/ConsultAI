@@ -8301,7 +8301,15 @@
     // pas l'onglet. Le toast persistant suit l'appel et disparaît avec lui.
     const progress = showProgressToast(T('doc.reading'));
     try {
-      await api(`/api/documents/${documentId}/extract`, { method: 'POST' });
+      const data = await api(`/api/documents/${documentId}/extract`, { method: 'POST' });
+      // La réponse porte la lecture fraîche : sans la replacer dans l'état, la
+      // ré-extraction mettait la base à jour mais l'écran réaffichait l'ancien
+      // texte — « Relire » semblait ne rien faire.
+      const liste = state.documents || [];
+      const position = liste.findIndex((d) => String(d.id) === String(documentId));
+      if (position >= 0) liste[position] = data;
+      else liste.push(data);
+      state.documents = liste;
     } catch (err) {
       // Le document reste enregistré : seul l'extraction a échoué. On le dit
       // et on laisse le bouton « Relire » pour réessayer.

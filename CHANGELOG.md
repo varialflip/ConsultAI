@@ -73,6 +73,9 @@ que la lecture.*
   famille (nom + numéro de permis) ou la clinique « (GAP) » lu en tête du
   document, à côté du décompte des éléments — il n'était visible nulle part
   avant la note.
+- **« Relire » rafraîchit l'écran** : la réponse de la ré-extraction remplace
+  le document dans l'état local. La base était mise à jour mais l'onglet
+  réaffichait l'ancien texte — le bouton semblait ne rien faire.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

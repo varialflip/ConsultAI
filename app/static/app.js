@@ -8296,6 +8296,10 @@
     if (badge) badge.classList.remove('hidden');
     state.extractingId = String(documentId);
     renderDocuments();
+    // La lecture n'est pas instantanée (lecture + réconciliation de la liste) :
+    // sans ce témoin, « Envoyer » semble ne rien faire tant qu'on ne rouvre
+    // pas l'onglet. Le toast persistant suit l'appel et disparaît avec lui.
+    const progress = showProgressToast(T('doc.reading'));
     try {
       await api(`/api/documents/${documentId}/extract`, { method: 'POST' });
     } catch (err) {
@@ -8303,6 +8307,7 @@
       // et on laisse le bouton « Relire » pour réessayer.
       toast(T('doc.extract_failed') + ' ' + (err.message || err), 'error');
     } finally {
+      progress.dismiss();
       state.extractingId = null;
       if (badge) badge.classList.add('hidden');
       renderDocuments();

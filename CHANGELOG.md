@@ -55,6 +55,16 @@ que la lecture.*
   Règle écrite dans le prompt ; gemini-2.5-flash ne l'applique pas de façon
   fiable (constaté sur deux AAS, 80 et 81 mg), le doublon restant décochable à
   la relecture. gemini-3.5-flash l'applique.
+- **Modèle de lecture : 2.5-pro par défaut.** Lire n'est pas transcrire —
+  fusion des conditionnements, dose administrée, dates de « Dernière
+  délivrance ». Mesuré sur des DSQ réels : 2.5-pro applique le remplacement
+  (un seul citalopram, un seul AAS) et lit « ½ comprimé 2 fois par jour »
+  comme 12,5 mg, là où 2.5-flash conserve les doublons et double la dose ;
+  ~24 s contre ~13 s. Le panneau dit désormais « Modèle de lecture des
+  documents » (vide = `gemini-2.5-pro`).
+- **Toast de lecture** : l'envoi d'un document affiche « Lecture des documents
+  en cours… » (toast persistant) au lieu de laisser croire que rien ne se
+  passe.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

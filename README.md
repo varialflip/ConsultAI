@@ -1569,12 +1569,17 @@ affiché et se coche d'un clic, avec « Tout cocher » par document et un
 compteur « N/M dans la note ». Pour l'imagerie, la **conclusion** entre et le
 corps du rapport accompagne décoché.
 
-**Vitesse.** La lecture emploie le **modèle rapide** du panneau
-(« Modèle rapide (lecture des documents) », `gemini_model_fast`, vide =
-`gemini-2.5-flash`), la réflexion coupée et un JSON compact : ~5 s pour une
-liste d'une page, ~19 s pour un dossier de quatre pages. Le modèle principal
-rédige toujours la note. Le document est enregistré avant d'être lu : l'onglet
-s'ouvre tout de suite et affiche « Lecture en cours… ».
+**Vitesse et justesse.** La lecture emploie le **modèle de lecture** du panneau
+(« Modèle de lecture des documents », `gemini_model_fast`, vide =
+`gemini-2.5-pro`) : ~16 s pour une liste d'une page, ~24 s pour un dossier de
+trois à quatre pages. Le modèle principal rédige toujours la note. Lire n'est
+pas transcrire : fondre les conditionnements, calculer la dose administrée et
+comparer les dates de « Dernière délivrance » demandent du jugement. Mesuré sur
+des DSQ réels, 2.5-pro applique le remplacement (un seul AAS, un seul
+citalopram) et lit « ½ comprimé 2 fois par jour » comme 12,5 mg, là où
+2.5-flash conserve les doublons et double la dose. Le document est enregistré
+avant d'être lu : l'onglet s'ouvre tout de suite et le toast « Lecture des
+documents en cours… » suit l'appel.
 
 **Limites assumées.** Le fournisseur de modèle doit savoir lire un document :
 Gemini (Vertex) oui ; les autres sont refusés avec un message explicite plutôt

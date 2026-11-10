@@ -446,8 +446,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Uncheck all",
     ),
     "doc.reading": (
-        "Lecture en cours… (quelques secondes)",
-        "Reading… (a few seconds)",
+        "Lecture des documents en cours…",
+        "Reading the documents…",
     ),
     "doc.kind.medications": ("Médicaments", "Medications"),
     "doc.kind.history": ("Antécédents", "Medical history"),
@@ -1581,20 +1581,24 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "ticking them remains possible, line by line. Empty = none.",
     ),
     "set.cap.model_fast.label": (
-        "Modèle rapide (lecture des documents)",
-        "Fast model (document reading)",
+        "Modèle de lecture des documents",
+        "Document reading model",
     ),
     "set.cap.model_fast.help": (
-        "Sert à LIRE les documents photographiés (liste de médicaments, "
-        "bilan, rapport) : transcrire et classer une page est une tâche "
-        "mécanique, et un modèle de rédaction y met plusieurs fois plus de "
-        "temps pour le même résultat. Vide = « gemini-2.5-flash ». Le modèle "
-        "principal continue de rédiger la note.",
-        "Used to READ photographed documents (medication list, lab report, "
-        "imaging report): transcribing and classifying a page is mechanical "
-        "work, and a writing-class model takes several times longer for the "
-        "same result. Empty = \"gemini-2.5-flash\". The main model still "
-        "writes the note.",
+        "Sert à LIRE et à RÉCONCILIER les documents photographiés (liste de "
+        "médicaments, bilan, rapport) : fusionner les conditionnements, "
+        "calculer la dose administrée et comparer les dates de dernière "
+        "délivrance demandent du jugement, pas seulement de la transcription. "
+        "« gemini-2.5-pro » produit une liste plus juste que 2.5-flash, au "
+        "prix du temps (~25 s pour un dossier de trois pages). Vide = "
+        "« gemini-2.5-pro ». Le modèle principal continue de rédiger la note.",
+        "Used to READ and RECONCILE photographed documents (medication list, "
+        "lab report, imaging report): merging packagings, computing the "
+        "administered dose and comparing last-dispensed dates need judgement, "
+        "not just transcription. \"gemini-2.5-pro\" produces a more accurate "
+        "list than 2.5-flash, at the cost of time (~25 s for a three-page "
+        "record). Empty = \"gemini-2.5-pro\". The main model still writes the "
+        "note.",
     ),
     "set.cap.verify_model.label": (
         "Modèle de 2e passe (Validation)",

@@ -81,9 +81,10 @@ que la lecture.*
   au-dessus des cases. Une ligne dont toutes les sources sont décochées
   apparaît barrée — l'onglet ne montre plus seulement le texte OCR.
 - **Arbitrage par ligne** : les médicaments ne se cochent plus item par item.
-  Une case par ligne réconciliée (celle qui entre dans la note) ; l'historique,
-  le laboratoire et l'imagerie gardent leurs cases et leur texte éditable. Le
-  texte brut des médicaments reste stocké comme provenance, sans être affiché.
+  Une case par ligne réconciliée (celle qui entre dans la note), **éditable**
+  comme le texte des items ; l'historique, le laboratoire et l'imagerie gardent
+  leurs cases et leur texte. Le texte brut des médicaments reste stocké comme
+  provenance, sans être affiché.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

@@ -4316,6 +4316,9 @@ def review_document(
             except (TypeError, ValueError):
                 index = position
             if 0 <= index < len(lignes):
+                texte = str(ligne.get("text") or "").strip()
+                if texte:
+                    lignes[index]["line"] = texte
                 lignes[index]["included"] = bool(ligne.get("included", True))
         stocke["med_list"] = lignes
 

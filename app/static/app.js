@@ -8299,7 +8299,7 @@
     // La lecture n'est pas instantanée (lecture + réconciliation de la liste) :
     // sans ce témoin, « Envoyer » semble ne rien faire tant qu'on ne rouvre
     // pas l'onglet. Le toast persistant suit l'appel et disparaît avec lui.
-    const progress = showProgressToast(T('doc.reading'));
+    const progress = toast(T('doc.reading'), 'info', 0);
     try {
       const data = await api(`/api/documents/${documentId}/extract`, { method: 'POST' });
       // La réponse porte la lecture fraîche : sans la replacer dans l'état, la
@@ -8550,12 +8550,19 @@
         case_.dataset.role = 'include';
         case_.dataset.index = String(position);
         case_.checked = entry.included !== false;
-        case_.addEventListener('change', () => saveDocumentReview(doc, entete));
-        const texte = document.createElement('span');
-        texte.className = 'flex-1 min-w-0';
-        texte.textContent = entry.line;
-        texte.title = T('doc.reconciled_hint');
-        ligne.append(case_, texte);
+        case_.addEventListener('change', () => scheduleDocumentReview(doc, entete));
+        const zone = document.createElement('div');
+        zone.className = 'flex-1 min-w-0';
+        const champ = document.createElement('textarea');
+        champ.value = entry.line || '';
+        champ.rows = 1;
+        champ.className = 'w-full resize-y rounded border-slate-200 text-[12px] leading-snug py-0.5 px-1 focus:border-slate-400 focus:ring-0';
+        champ.dataset.role = 'text';
+        // La ligne EST ce qui entre dans la note : elle s'édite ici, comme le
+        // texte des items d'historique ou de laboratoire.
+        champ.addEventListener('input', () => scheduleDocumentReview(doc, entete));
+        zone.appendChild(champ);
+        ligne.append(case_, zone);
         ul.appendChild(ligne);
       });
       panneau.appendChild(ul);
@@ -8676,7 +8683,12 @@
         included: box.checked,
       };
       if (role === 'line') {
-        lines.push(entree);
+        const champ = box.parentElement.querySelector('[data-role="text"]');
+        lines.push({
+          index: Number(box.dataset.index),
+          included: box.checked,
+          text: champ ? champ.value : '',
+        });
         return;
       }
       const champ = box.parentElement.querySelector('[data-role="text"]');

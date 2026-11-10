@@ -445,6 +445,18 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Clinique",
         "Clinic",
     ),
+    "doc.reconciled": (
+        "Liste réconciliée",
+        "Reconciled list",
+    ),
+    "doc.reconciled_hint": (
+        "Ligne qui entre dans la note",
+        "Line that goes into the note",
+    ),
+    "doc.reconciled_dropped": (
+        "Sources décochées : n'entre pas dans la note",
+        "Sources unchecked: not in the note",
+    ),
     "doc.check_all": (
         "Tout cocher",
         "Check all",

@@ -76,6 +76,10 @@ que la lecture.*
 - **« Relire » rafraîchit l'écran** : la réponse de la ré-extraction remplace
   le document dans l'état local. La base était mise à jour mais l'onglet
   réaffichait l'ancien texte — le bouton semblait ne rien faire.
+- **Liste réconciliée dans l'onglet Documents** : le bloc affiche les lignes
+  qui entrent dans la note (conditionnements fondus, dose administrée),
+  au-dessus des cases. Une ligne dont toutes les sources sont décochées
+  apparaît barrée — l'onglet ne montre plus seulement le texte OCR.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

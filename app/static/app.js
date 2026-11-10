@@ -8519,6 +8519,38 @@
 
     entete.appendChild(barre);
 
+    // Ce que la lecture PRODUIT, pas seulement ce qu'elle lit : la liste
+    // réconciliée est ce qui entre dans la note (conditionnements fondus,
+    // dose administrée, cours terminé en fin de liste). Sans elle, l'onglet
+    // ne montrait que le texte OCR et il fallait générer la note pour voir le
+    // résultat.
+    const reconciliees = extractionData.med_list || [];
+    if (reconciliees.length) {
+      const panneau = document.createElement('div');
+      panneau.className = 'px-3 py-2 border-b border-slate-100 bg-slate-50/60';
+      const titreListe = document.createElement('div');
+      titreListe.className = 'text-[11px] font-semibold uppercase tracking-wide text-slate-500';
+      titreListe.textContent = `${T('doc.reconciled')} · ${reconciliees.length}`;
+      panneau.appendChild(titreListe);
+      const parId = {};
+      items.forEach((item) => { if (item.id) parId[item.id] = item; });
+      const ul = document.createElement('ul');
+      ul.className = 'mt-0.5 text-[12px] leading-snug text-slate-700';
+      reconciliees.forEach((entry) => {
+        const sources = (entry.sources || [])
+          .map((identifiant) => parId[identifiant])
+          .filter(Boolean);
+        const gardee = !sources.length || sources.some((item) => item.included);
+        const li = document.createElement('li');
+        li.className = gardee ? '' : 'text-slate-400 line-through';
+        li.textContent = entry.line;
+        li.title = gardee ? T('doc.reconciled_hint') : T('doc.reconciled_dropped');
+        ul.appendChild(li);
+      });
+      panneau.appendChild(ul);
+      entete.appendChild(panneau);
+    }
+
     const corps = document.createElement('div');
     corps.className = 'p-3 space-y-3';
 

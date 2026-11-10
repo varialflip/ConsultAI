@@ -1210,12 +1210,15 @@ def _est_think_refusee_gemini(exc: Exception) -> bool:
     """
     Vrai si Gemini refuse le ``thinking_config`` demandé (400).
 
-    Certains modèles rejettent ``ThinkingConfig(thinking_budget=…)`` : le
-    message annonce alors « does not support setting thinking_budget ». C'est
-    une erreur de réglage, pas de quota : l'appelant retire le champ et relance.
+    Deux messages observés : « does not support setting thinking_budget »
+    (gemini-2.5-pro) et « Thinking budget is not supported for this model »
+    (gemini-3.5-flash). C'est une erreur de réglage, pas de quota :
+    l'appelant retire le champ et relance.
     """
     lowered = str(exc).lower()
-    return "thinking_budget" in lowered and "does not support" in lowered
+    mentionne = "thinking_budget" in lowered or "thinking budget" in lowered
+    refus = "does not support" in lowered or "not supported" in lowered
+    return mentionne and refus
 
 
 #: Plage de ``thinking_budget`` acceptée par gemini-3.5-flash sur Vertex AI

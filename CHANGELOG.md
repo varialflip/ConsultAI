@@ -2,6 +2,32 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-10 — Documents : la liste de médicaments arrive réconciliée
+
+*La lecture d'une liste de médicaments rend maintenant la liste finale, prête
+pour la note : conditionnements fondus, dose administrée, fourchettes et
+maximums conservés, cours terminé replacé en fin de liste — dans le MÊME appel
+que la lecture.*
+
+- **`med_list` dans l'appel d'extraction** : une ligne par médicament, chaque
+  conditionnement de la même molécule fondu, dose administrée (`1 à 2 co de
+  500 mg` → `500 à 1000 mg`), `q6h prn` conservé avec son maximum. Chaque
+  ligne cite les `id` de ses items : décocher ces items la retire de la note.
+- **Aucun champ structuré pour les médicaments** : le texte verbatim est la
+  provenance, la ligne réconciliée est le contenu. Mesuré : 5 785 → ~3 000
+  jetons de sortie, ~20 s → ~10 s pour deux pages, ~14 s pour quatre.
+- **Les libellés de catégorie restent internes** : la note ne les reçoit pas ;
+  c'est le gabarit qui regroupe et ordonne.
+- **Observations muettes par défaut** : plus de récit des fusions ni des pages
+  lues — seulement un recoupement qui change la lecture d'un fait.
+- **Repli « réflexion » pour les modèles qui refusent `thinking_budget`**
+  (gemini-3.5-flash) : bascule sur `thinking_level` BAS, sans quoi la réflexion
+  mange le plafond de sortie et le JSON est tronqué.
+- **Correction** : l'enregistrement de la revue conserve l'`id` des items —
+  sans lui, décocher un médicament cessait de filtrer sa ligne.
+- **Prompt allégé** : 12 770 → 9 900 caractères (champs de médicaments retirés,
+  exemples redondants coupés).
+
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 
 *Le dossier se lit avant la consultation : on photographie la liste de

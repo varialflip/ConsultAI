@@ -1503,12 +1503,25 @@ distribution n'est pas une date d'arrêt. Le statut n'est repris que s'il est
 **imprimé** sur la page. Les en-têtes administratifs (nom, NAS, adresse,
 numéro de dossier) ne sont pas extraits ; un bloc que le modèle n'a pas su
 classer arrive **décoché**. Les **observations** (recoupements entre documents)
-ont leur propre bloc, décoché par défaut.
+ne sont produites que si un recoupement change la lecture d'un fait — le plus
+souvent, aucune.
 
 **Le préfixe du distributeur.** `APO-RAMIPRIL`, `TEVA-METFORMINE`,
-`SANDOZ-ATORVASTATINE` : la ligne de la note porte la **molécule**
-(« Ramipril 5 mg — 1 co PO DIE »), la ligne imprimée reste conservée en
-provenance dans `fields.as_printed`.
+`SANDOZ-ATORVASTATINE` : la ligne réconciliée porte la **molécule**
+(« Ramipril 5 mg PO DIE ») ; la ligne imprimée, préfixe compris, reste le
+texte verbatim de l'item — seule provenance conservée depuis que les champs
+structurés ont quitté les médicaments.
+
+**Liste réconciliée, dans le même appel.** La lecture rend aussi `med_list` :
+une ligne par médicament, conditionnements de la même molécule fondus, dose
+administrée (fourchettes et maximums compris), ordre du gabarit, cours terminé
+replacé en fin de liste. Chaque ligne cite les `id` des items dont elle est
+issue : décocher ces items dans l'onglet la retire de la note. Le texte
+verbatim reste la provenance ; **aucun champ structuré n'est demandé pour les
+médicaments** (les mesurer coûtait ~5 500 caractères de sortie sans que rien ne
+les lise). La note reçoit ces lignes **sans libellé de catégorie** — le
+regroupement appartient au gabarit. Mesuré : ~10 s pour deux pages, ~14 s pour
+quatre.
 
 **Rien ne repart en image à la génération.** Les éléments cochés entrent dans
 la note en texte, avec une consigne qui les exempte de la règle « aucune

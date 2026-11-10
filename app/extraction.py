@@ -34,6 +34,7 @@ visible sans devenir une affirmation clinique dans la note.
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -43,7 +44,7 @@ from sqlalchemy.orm import Session
 
 from app import llm
 from app.config import settings
-from app.database import Consultation, Document
+from app.database import Consultation, Document, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -127,47 +128,14 @@ Tu restitues le fait imprimé ; l'interprétation appartient au médecin.
 ## 7. CHAMPS PAR TYPE
 
 **medications** — un item par ligne de la liste :
-``text`` = la ligne telle qu'imprimée, VERBATIM (préfixe fabricant compris, \
-majuscules comprises) ; c'est la provenance, elle est conservée telle quelle. \
-``fields`` = {``short_name``, ``dose``, ``route``, ``frequency``, ``molecule`` \
-si la molécule est certaine, ``strength``, ``form``, ``directions``, ``din``, \
-``last_dispensed``, ``renewals``, ``status_printed`` (seulement si le statut \
-est IMPRIMÉ : « cessé le… », « suspendu »)}.
-
-**``line`` — la ligne finale, que TU écris.** C'est elle qui paraît dans la \
-note. Format exact : ``Nom court dose voie fréquence``, nombre collé à \
-l'unité, abréviations en minuscules, ``prn`` en dernier :
-``PEG 3350 17g po die`` · ``Acétaminophène 650mg po q6h prn`` · \
-``Quétiapine 12,5mg po hs prn`` · ``Hydromorphone 0,5mg po q4h prn``.
-La dose de ``line`` est la dose ADMINISTRÉE par prise (quantité × force), pas \
-la force du comprimé. Cette ligne est affichée TELLE QUELLE et reste éditable : \
-le médecin la relit, tu n'as pas à la conformer à un format d'ordinateur.
-
-Les champs suivants documentent la lecture (provenance, contrôle par le \
-médecin) :
-- ``short_name`` : le nom court qu'un pharmacien écrirait (``POLYETHYLENE-\
-GLYCOL-3350`` → ``PEG 3350``, ``ACETAMINOPHEN`` → ``Acétaminophène``).
-- ``quantity`` : le nombre d'UNITÉS par prise, tel que la posologie le dit \
-(``2`` pour « 2 comprimés », ``0.5`` pour « 1/2 comprimé », ``1`` pour un \
-comprimé seul). Une poudre ou un liquide : ``1``.
-- ``dose`` : la dose ADMINISTRÉE par prise, en unité de masse, nombre collé à \
-l'unité (``650mg``, ``12.5mg``, ``17g``). C'est ``quantity × strength`` : \
-``ACETAMINOPHENE 325MG, 2 comprimés`` → ``dose`` = ``650mg``, pas ``325mg`` \
-(c'est la force du comprimé, elle va dans ``strength``). « 1/2 comprimé de \
-1 mg » → ``0.5mg``. « 17 grammes » de poudre → ``17g``. Si aucune masse \
-n'est imprimée, laisse vide.
-- ``route`` : ``po``, ``sc``, ``im``, ``iv``, ``inh``, ``opht``, ``top``.
-- ``frequency`` : ``die``, ``bid``, ``tid``, ``qid``, ``hs``, ``qsem``, \
-``q6h``, ``q4-6h``, ``prn``. « 1 fois par jour » → ``die``, « aux 6 heures » \
-→ ``q6h``, « si besoin » → ``prn``.
+``text`` = la ligne telle qu'imprimée — médicament ET posologie — VERBATIM \
+(préfixe fabricant compris, majuscules comprises) ; c'est la provenance, elle \
+est conservée telle quelle. AUCUN ``fields`` pour les médicaments : la liste \
+réconciliée de §8 porte tout ce dont la note a besoin.
 
 Un médicament qui apparaît sur DEUX pages (liste qui continue, ou photo qui \
 recouvre la précédente) est UN seul item, jamais deux. Range sa page de \
 première apparition.
-
-Exemples de ligne attendue : ``PEG 3350 17g po die``, \
-``Acétaminophène 650mg po q6h prn`` (deux comprimés de 325 mg), \
-``Magnésium-gluconate 1g po tid``.
 
 **history** — un item par problème de santé, intervention, hospitalisation ou \
 allergie : ``text`` = l'énoncé COMPLET tel qu'imprimé, en une phrase, SANS \
@@ -177,31 +145,23 @@ au milieu. ``fields`` = {``year`` (l'année imprimée, MÊME si elle figure auss
 dans le texte), ``category`` (``condition`` | ``surgery`` | ``hospitalization`` \
 | ``allergy`` | ``family``)}.
 
-Un rapport de consultation contient plusieurs rubriques : ne retiens comme \
-antécédents que ce qui est un problème de santé, une intervention ou une \
-hospitalisation. N'extrais PAS comme antécédent un identifiant de dossier \
-(``ID:``, MRN, numéro), un titre de rubrique, ni les données de vie \
-quotidienne (AVQ, AVD, habitudes, situation de vie) : celles-là vont en \
-``other``. Un constat d'examen rattaché à un problème (« HTA, 220 à la \
-présentation, bien contrôlée ensuite ») reste UN seul item : c'est la même \
-histoire. Même règle quand un problème est cité deux fois (une fois nu, une \
-fois détaillé) : UN seul item, celui qui en dit le plus — jamais « HTA » à \
-côté de « HTA, 220 à la présentation ».
+Un rapport contient plusieurs rubriques : ne retiens comme antécédents que ce \
+qui est un problème de santé, une intervention ou une hospitalisation. \
+N'extrais PAS un identifiant de dossier, un titre de rubrique, ni les données \
+de vie quotidienne (AVQ, AVD, habitudes, situation de vie) — celles-là vont en \
+``other``. Un constat d'examen rattaché à un problème reste UN item, et un \
+problème cité deux fois n'en fait qu'un, celui qui en dit le plus.
 
 **labs** — un item par analyte : ``text``, ``fields`` = {``analyte``, \
 ``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
 ``pertinence`` vaut ``pertinent``, ``routine`` ou ``anormal``.
 
-Tu n'es pas clinicien et tu ne poses aucun diagnostic — mais tu sais ce qu'est \
-un bilan usuel, et une note de consultation ne recopie pas un panneau entier. \
+Tu n'es pas clinicien, mais une note ne recopie pas un panneau entier. \
 ``pertinent`` : ce qu'un médecin citerait — hémoglobine, plaquettes, VGM, \
-globules blancs et différentiel d'une formule sanguine ; créatinine et DFGe ; \
-HbA1c ; INR ; TSH ; tout résultat marqué par le laboratoire. ``anormal`` : \
-valeur hors des références imprimées, même sans drapeau. ``routine`` : le \
-reste du panneau — sodium et potassium normaux, chlore, bicarbonates, \
-albumine normale, bilirubine, TIBC et paramètres du fer, sérologies négatives, \
-toute valeur normale qu'un médecin ne citerait pas. Une formule sanguine \
-normale s'écrit en une ligne, pas en trente.
+globules blancs et différentiel ; créatinine et DFGe ; HbA1c ; INR ; TSH ; \
+tout résultat marqué par le laboratoire. ``anormal`` : hors références \
+imprimées, même sans drapeau. ``routine`` : le reste — sodium, potassium, \
+chlore, bicarbonates, albumine, bilirubine, fer, sérologies négatives.
 
 Si le tableau donne PLUSIEURS colonnes datées, crée UN item par analyte ET par \
 date : ``date`` porte la date de la colonne, jamais celle du prélèvement \
@@ -214,19 +174,80 @@ verbatim}.
 
 **other** — un item par bloc de texte cohérent.
 
-## 8. OBSERVATIONS
-Dans ``observations``, uniquement des recoupements FACTUELS entre documents \
-(« la date du bilan précède celle du rapport », « deux posologies différentes \
-pour la même molécule »). Jamais de diagnostic, jamais de conduite à tenir.
+## 8. LISTE RÉCONCILIÉE DES MÉDICAMENTS
 
-## 9. RÉPONSE
+Produis aussi ``med_list`` : la liste finale des médicaments, telle qu'elle \
+paraîtra dans la note. Elle se construit UNIQUEMENT à partir des items \
+``medications`` lus ci-dessus — jamais d'une autre source.
+
+**Ordre imposé** — les lignes se suivent dans cet ordre, chacune avec son \
+``group`` : cognition, impact SNC (antiparkinsoniens, psychotropes, \
+prégabaline), diabète (antidiabétiques), cardiovasculaire, autres (IPP, \
+analgésique, os), puis laxatifs, vitamine D + calcium, et cours terminés en \
+dernier. C'est l'ordre du gabarit « Gériatrie | Inversé ». ``group`` est une \
+métadonnée interne : elle n'est jamais recopiée dans la note, et le \
+regroupement final appartient au gabarit.
+
+- **Un médicament, une ligne.** Une molécule garde UNE ligne, quels que soient \
+ses schémas ; les prises se joignent par « et », celles d'un même moment \
+s'additionnent : ``2 × 50 mg + 1 × 25 mg au coucher`` → ``Prégabaline 125 mg \
+po hs`` ; ``Clonidine 0,05 mg po bid et 0,1 mg po hs``. Deux forces de la même \
+molécule aux mêmes prises se fondent en une ligne, force puis nombre, sans la \
+voie : ``Lévodopa/bensérazide 100/25 mg 1 co tid + 50/12,5 mg 1 co tid``. Une \
+ligne qui n'est pas un médicament (bandelettes, matériel) ne produit aucune \
+ligne.
+- **Posologie complète.** Une posologie en deux temps s'écrit en entier sur la \
+même ligne : ``½ co (= 0,05 mg) matin et dîner, puis 1 co au coucher`` → \
+``Clonidine 0,05 mg po bid et 0,1 mg po hs``. Une condition (« si \
+constipation », « si besoin ») donne ``prn``, en dernier. Une fourchette \
+s'écrit en dose ADMINISTRÉE, ses deux bornes comprises : ``1 à 2 co de \
+500 mg`` → ``500 à 1000 mg``. « aux 6 heures » → ``q6h``, même avec « au \
+besoin » : ``q6h prn``. Un maximum imprimé se garde : ``max 6 co/jour``.
+- **Dose administrée** : quantité × force, espace avant l'unité, virgule \
+décimale et espace des milliers (``650 mg``, ``12,5 mg``, ``10 000 UI`` ; \
+jamais ``10000``). Injectable : volume × concentration → ``210 mg``, voie \
+``SC`` ; durée imprimée conservée avec le caractère ``×`` (jamais la lettre x) : \
+``210 mg SC q mois × 12 mois``. LÉVODOPA : jamais la dose totale ni la voie, \
+le nombre s'écrit ``1 co``, la plus forte force d'abord — exemple ci-dessus.
+- **Fréquence seulement** : die, bid, tid, qid, hs, qsem, q mois, q8h, prn. \
+Supprime le moment (« aux repas », « au déjeuner », « le matin », « matin et \
+dîner », « régulièrement », « (dimanche) »). « Au coucher » → ``hs`` quand la \
+prise du soir est le sens de la prescription (somnifère, sédatif, comme la \
+quétiapine) ; ``die`` pour toute autre prise unique quotidienne, même au \
+coucher — ``Rosuvastatine 40 mg po die``, JAMAIS ``po hs``. ``prn`` en dernier. \
+La voie reste (``po``, ``SC``).
+- **Cours récents** : un médicament dont la posologie imprime une DURÉE \
+(« pour 7 jours ») calcule sa fin comme la date de dernière distribution PLUS \
+cette durée. Fin ANTÉRIEURE à la date de consultation (%(date)s) → en fin de \
+liste, « terminé le <jour mois année> », en toutes lettres (jamais \
+``2026-10-20``). Fin POSTÉRIEURE → traitement EN COURS : garde la durée \
+(« × 12 semaines »). **« terminé le » ne s'écrit JAMAIS avec une date \
+postérieure à %(date)s** — une date future est une contradiction. Ne déduis \
+JAMAIS un arrêt de « 0 renouvellement » ni d'une date de dernière distribution \
+seule.
+- **Molécule seule, en français** : aucun nom commercial (``Metformine``, \
+``Carbonate de calcium``, ``Acétaminophène``, ``Lévodopa/bensérazide``, \
+``Sennosides A-B``).
+- **``sources``** : les ``id`` des items dont la ligne est issue. Chaque item \
+``medications`` qui est un médicament apparaît dans exactement une ligne ; \
+aucune ligne ne cite un item absent.
+
+## 9. OBSERVATIONS
+``observations`` est le plus souvent VIDE. N'y écris qu'un recoupement \
+FACTUEL qui change la lecture d'un fait (deux posologies contradictoires, une \
+date incohérente entre deux documents), en UNE phrase courte. Ne raconte jamais \
+ta réconciliation, les pages lues ni les fusions faites. Jamais de diagnostic, \
+jamais de conduite à tenir.
+
+## 10. RÉPONSE
 Un seul objet JSON, aucun texte autour, aucune clôture de code, AUCUNE
 indentation ni saut de ligne (JSON compact, sur une seule ligne) :
 {
   "documents": [{"id": "d1", "kind": "medications|history|labs|imaging|other",
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
-  "items": [{"document_id": "d1", "kind": "…", "text": "…", "fields": {},
-             "source_page": 1}],
+  "items": [{"id": "i1", "document_id": "d1", "kind": "…", "text": "…",
+             "fields": {}, "source_page": 1}],
+  "med_list": [{"group": "…", "line": "…", "sources": ["i1", "i2"]}],
   "coverage": [{"page": 1, "document_id": "d1", "note": ""}],
   "unreadable": [{"page": 3, "reason": "…"}],
   "observations": [{"text": "…", "pages": [1, 2]}]
@@ -280,45 +301,13 @@ interpretation belongs to the physician.
 ## 7. FIELDS BY TYPE
 
 **medications** — one item per list line:
-``text`` = the line as printed, VERBATIM (manufacturer prefix included, \
-capitalisation included); that is the provenance, kept unchanged. ``fields`` = \
-{``short_name``, ``dose``, ``route``, ``frequency``, ``molecule`` if certain, \
-``strength``, ``form``, ``directions``, ``din``, ``last_dispensed``, \
-``renewals``, ``status_printed`` (only if PRINTED: "stopped on…", "on hold")}.
-
-**``line`` — the final line, written by YOU.** It is what appears in the note. \
-Exact format: ``Short name dose route frequency``, number glued to the unit, \
-abbreviations lowercase, ``prn`` last:
-``PEG 3350 17g po die`` · ``Acetaminophen 650mg po q6h prn`` · \
-``Quetiapine 12.5mg po hs prn`` · ``Hydromorphone 0.5mg po q4h prn``.
-The dose in ``line`` is the ADMINISTERED dose per intake (quantity × \
-strength), not the tablet strength. That line is shown AS IS and stays \
-editable: the physician reviews it, you do not have to fit it to a computer \
-format.
-
-The following fields document the reading (provenance, the physician's \
-check):
-- ``short_name``: the short name a pharmacist would write \
-(``POLYETHYLENE-GLYCOL-3350`` → ``PEG 3350``).
-- ``quantity``: the number of UNITS per intake as the directions state it \
-(``2`` for "2 tablets", ``0.5`` for "1/2 tablet", ``1`` for a single tablet). \
-A powder or a liquid: ``1``.
-- ``dose``: the ADMINISTERED dose per intake, in a mass unit, number glued to \
-the unit (``650mg``, ``12.5mg``, ``17g``). It is ``quantity × strength``: \
-``ACETAMINOPHENE 325MG, 2 tablets`` → ``dose`` = ``650mg``, not ``325mg`` \
-(that is the tablet strength, which belongs in ``strength``). "1/2 tablet of \
-1 mg" → ``0.5mg``. "17 grams" of powder → ``17g``. Leave empty when no mass \
-is printed.
-- ``route``: ``po``, ``sc``, ``im``, ``iv``, ``inh``, ``opht``, ``top``.
-- ``frequency``: ``die``, ``bid``, ``tid``, ``qid``, ``hs``, ``qsem``, \
-``q6h``, ``q4-6h``, ``prn``.
+``text`` = the line as printed — medication AND directions — VERBATIM \
+(manufacturer prefix included, capitalisation included); that is the \
+provenance, kept unchanged. NO ``fields`` for medications: the reconciled \
+list of §8 carries everything the note needs.
 
 A medication appearing on TWO pages (a list that continues, or a photograph \
 overlapping the previous one) is ONE item, never two. Give its first page.
-
-Expected line examples: ``PEG 3350 17g po die``, \
-``Acetaminophen 650mg po q6h prn`` (two 325 mg tablets), \
-``Magnesium gluconate 1g po tid``.
 
 **history** — one item per health problem, procedure, hospitalization or \
 allergy: ``text`` = the COMPLETE statement as printed, as a sentence, WITHOUT \
@@ -329,27 +318,21 @@ also appears in the text), ``category`` (``condition`` | ``surgery`` | \
 ``hospitalization`` | ``allergy`` | ``family``)}.
 
 A consultation report contains several headings: keep as history only what is \
-a health problem, a procedure or a hospitalization. Do NOT extract as history \
-a record identifier (``ID:``, MRN, number), a section heading, or daily-life \
-data (ADL, IADL, habits, living situation): those go to ``other``. An \
-examination finding attached to a problem ("HTN, 220 on presentation, well \
-controlled afterwards") stays ONE item: it is the same story. Same rule when \
-a problem is stated twice (once bare, once detailed): ONE item, the fuller \
-one — never "HTN" next to "HTN, 220 on presentation".
+a health problem, a procedure or a hospitalization. Do NOT extract a record \
+identifier, a section heading, or daily-life data (ADL, IADL, habits, living \
+situation) — those go to ``other``. An examination finding attached to a \
+problem stays ONE item, and a problem stated twice is one item, the fuller one.
 
 **labs** — one item per analyte: ``text``, ``fields`` = {``analyte``, \
 ``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
 ``pertinence`` is ``pertinent``, ``routine`` or ``anormal``.
 
-You are not a clinician and you make no diagnosis — but you know what a \
-routine panel is, and a consultation note does not copy a whole panel. \
+You are not a clinician, but a note does not copy a whole panel. \
 ``pertinent``: what a physician would cite — haemoglobin, platelets, MCV, \
-white cells and differential from a blood count; creatinine and eGFR; HbA1c; \
-INR; TSH; anything the laboratory flagged. ``anormal``: outside the printed \
-reference range even without a flag. ``routine``: the rest of the panel — \
-normal sodium and potassium, chloride, bicarbonate, normal albumin, \
-bilirubin, TIBC and iron studies, negative serologies, any normal value a \
-physician would not cite. A normal blood count is one line, not thirty.
+white cells and differential; creatinine and eGFR; HbA1c; INR; TSH; anything \
+the laboratory flagged. ``anormal``: outside the printed reference range, \
+even without a flag. ``routine``: the rest — sodium, potassium, chloride, \
+bicarbonate, albumin, bilirubin, iron, negative serologies.
 
 If the table gives SEVERAL dated columns, create ONE item per analyte AND per \
 date: ``date`` carries the column's date, never the overall collection date — \
@@ -361,19 +344,76 @@ printed (2 to 4 lines, this is what goes into the note), ``fields`` = \
 
 **other** — one item per coherent block of text.
 
-## 8. OBSERVATIONS
-In ``observations``, only FACTUAL cross-references between documents ("the lab \
-date precedes the report date", "two different dosages for the same molecule"). \
-Never a diagnosis, never a recommendation.
+## 8. RECONCILED MEDICATION LIST
 
-## 9. RESPONSE
+Also produce ``med_list``: the final medication list as it will appear in the \
+note. It is built ONLY from the ``medications`` items read above — never from \
+another source.
+
+**Mandatory order** — lines follow this order, each with its ``group``: \
+cognition, CNS impact (antiparkinsonians, psychotropics, pregabalin), diabetes \
+(antidiabetics), cardiovascular, others (PPI, analgesic, bone), then \
+laxatives, vitamin D + calcium, and completed courses last. This is the \
+"Gériatrie | Inversé" template order. ``group`` is internal metadata: it is \
+never copied into the note, and the final grouping belongs to the template.
+
+- **One medication, one line.** A molecule keeps ONE line whatever its \
+schedules; intakes are joined by "and", those at the same moment are added: \
+``2 × 50 mg + 1 × 25 mg at bedtime`` → ``Pregabalin 125 mg PO HS``; \
+``Clonidine 0.05 mg PO BID and 0.1 mg PO HS``. Two strengths of the same \
+molecule at the same intakes merge into one line, strength then count, without \
+the route: ``Levodopa/benserazide 100/25 mg 1 tab TID + 50/12.5 mg 1 tab TID``. \
+A line that is not a medication (test strips, supplies) produces no line.
+- **Complete directions.** A two-part schedule is written in full on the same \
+line: ``½ tab (= 0.05 mg) morning and supper, then 1 tab at bedtime`` → \
+``Clonidine 0.05 mg PO BID and 0.1 mg PO HS``. A condition ("if constipated", \
+"if needed") gives ``PRN``, last. A range is written as an ADMINISTERED dose, \
+both bounds included: ``1 to 2 tabs of 500 mg`` → ``500 to 1000 mg``. "every \
+6 hours" → ``q6h``, even with "as needed": ``q6h PRN``. A printed maximum is \
+kept: ``max 6 tabs/day``.
+- **Administered dose**: quantity × strength, space before the unit, decimal \
+point and a space in thousands (``650 mg``, ``12.5 mg``, ``10 000 IU``; never \
+``10000``). Injectable: volume × concentration → ``210 mg``, route ``SC``; \
+printed duration kept with the ``×`` character (never the letter x): \
+``210 mg SC monthly × 12 months``. LEVODOPA: never the total dose nor the \
+route, the count is ``1 tab``, strongest strength first — example above.
+- **Frequency only**: daily, BID, TID, QID, HS, weekly, monthly, q8h, PRN. \
+Drop the moment ("with meals", "at lunch", "in the morning", "morning and \
+supper", "regularly", "(Sunday)"). "At bedtime" → ``HS`` when the evening dose \
+is the point of the prescription (sleep aid, sedative, such as quetiapine); \
+``daily`` for any other single daily intake, even at bedtime — \
+``Rosuvastatin 40 mg PO daily``, NEVER ``PO HS``. ``PRN`` last. Route stays \
+(``PO``, ``SC``).
+- **Recent courses**: a medication whose directions print a DURATION ("for 7 \
+days") computes its end as the last-dispensed date PLUS that duration. End \
+BEFORE the consultation date (%(date)s) → at the end of the list, "completed \
+on <day month year>", in words (never ``2026-10-20``). End AFTER → ONGOING \
+treatment: keep the duration ("× 12 weeks"). **"completed on" is NEVER \
+written with a date after %(date)s** — a future date is a contradiction. NEVER \
+infer a stop from "0 renewals" or from a last-dispensed date alone.
+- **Molecule only, in the note's language**: no brand name (``Metformin``, \
+``Calcium carbonate``, ``Acetaminophen``, ``Levodopa/benserazide``, \
+``Sennosides A-B``).
+- **``sources``**: the ``id`` of the items the line comes from. Every \
+``medications`` item that is a medication appears in exactly one line; no line \
+cites a missing item.
+
+## 9. OBSERVATIONS
+``observations`` is usually EMPTY. Write one only when a FACTUAL cross-check \
+changes how a fact reads (two contradictory dosages, an inconsistent date \
+between two documents), in ONE short sentence. Never narrate your \
+reconciliation, the pages read or the merges made. Never a diagnosis, never a \
+recommendation.
+
+## 10. RESPONSE
 A single JSON object, no surrounding text, no code fence, NO indentation or
 line break (compact JSON, on a single line):
 {
   "documents": [{"id": "d1", "kind": "medications|history|labs|imaging|other",
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
-  "items": [{"document_id": "d1", "kind": "…", "text": "…", "fields": {},
-             "source_page": 1}],
+  "items": [{"id": "i1", "document_id": "d1", "kind": "…", "text": "…",
+             "fields": {}, "source_page": 1}],
+  "med_list": [{"group": "…", "line": "…", "sources": ["i1", "i2"]}],
   "coverage": [{"page": 1, "document_id": "d1", "note": ""}],
   "unreadable": [{"page": 3, "reason": "…"}],
   "observations": [{"text": "…", "pages": [1, 2]}]
@@ -386,9 +426,9 @@ line break (compact JSON, on a single line):
 #: (observé : un caractère non échappé au milieu d'un objet de 12 000 signes,
 #: une lecture perdue sur trois). Un champ absent est simplement omis.
 _CHAMPS_SCHEMA = (
-    "line", "molecule", "short_name", "strength", "form", "directions", "dose", "quantity",
-    "route", "frequency", "din", "last_dispensed",
-    "renewals", "status_printed", "as_printed",
+    # Aucun champ de médicament : la liste réconciliée (§8) porte la ligne
+    # finale, et le texte verbatim porte la provenance. Les mesurer coûtait
+    # ~5 500 caractères de sortie (~6 s) sans que rien ne les lise.
     "analyte", "value", "unit", "reference", "flag", "date", "pertinence",
     "study", "body", "year", "category", "partie",
 )
@@ -415,6 +455,7 @@ _SCHEMA = {
             "items": {
                 "type": "OBJECT",
                 "properties": {
+                    "id": {"type": "STRING"},
                     "document_id": {"type": "STRING"},
                     "kind": {"type": "STRING", "enum": list(KINDS)},
                     "text": {"type": "STRING"},
@@ -424,7 +465,23 @@ _SCHEMA = {
                     },
                     "source_page": {"type": "INTEGER"},
                 },
-                "required": ["document_id", "kind", "text"],
+                "required": ["id", "document_id", "kind", "text"],
+            },
+        },
+        #: Liste réconciliée, construite dans le MÊME appel que la lecture :
+        #: chaque ligne cite les items dont elle est issue (``sources``), ce
+        #: qui permet d'appliquer les cases cochées du médecin sans relire le
+        #: document.
+        "med_list": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "group": {"type": "STRING"},
+                    "line": {"type": "STRING"},
+                    "sources": {"type": "ARRAY", "items": {"type": "STRING"}},
+                },
+                "required": ["line", "sources", "group"],
             },
         },
         "coverage": {
@@ -468,12 +525,12 @@ _SCHEMA = {
 }
 
 
-def _prompt(count: int, language: str) -> str:
+def _prompt(count: int, language: str, date_consultation: str = "") -> str:
     from app import runtime_config
 
     anglais = (language or "fr").lower().startswith("en")
     modele = _PROMPT_EN if anglais else _PROMPT_FR
-    base = modele % {"count": count}
+    base = modele % {"count": count, "date": date_consultation or "—"}
 
     # Choix de lecture du médecin, dits une fois dans le panneau : la même
     # phrase revient à chaque bilan (« je ne regarde que Hb, Plt, VGM, GB et
@@ -762,7 +819,7 @@ def _normalize(payload: dict, count: int) -> dict:
     for item in items:
         if not isinstance(item, dict):
             continue
-        texte = str(item.get("text") or "").strip()
+        texte = html.unescape(str(item.get("text") or "").strip())
         if not texte:
             continue
         kind = str(item.get("kind") or "other").lower()
@@ -777,14 +834,15 @@ def _normalize(payload: dict, count: int) -> dict:
         except (TypeError, ValueError):
             page = 0
         champs = dict(champs)
-        if kind == "medications":
-            # La ligne du modèle, telle quelle. La ligne imprimée reste dans
-            # ``as_printed`` — c'est la provenance, et le texte affiché reste
-            # éditable : le médecin est le validateur.
+        if kind == "medications" and champs:
+            # Extractions antérieures : la ligne du modèle et sa provenance.
+            # Les nouvelles n'émettent plus de champs pour les médicaments —
+            # le texte verbatim EST la provenance, sans doublon.
             champs.setdefault("as_printed", texte)
             texte = _ligne_medicament(champs) or texte
 
         propres.append({
+            "id": str(item.get("id") or ""),
             "document_id": doc_id,
             "kind": kind,
             "text": texte,
@@ -845,6 +903,20 @@ def _normalize(payload: dict, count: int) -> dict:
         uniques.append(item)
     propres = uniques
 
+    # Identifiants : la liste réconciliée y renvoie (``sources``). On garde
+    # ceux du modèle quand ils sont uniques ; sinon on en attribue un, pour
+    # que la référence reste vérifiable et que deux items ne se confondent
+    # jamais.
+    vus_id: set = set()
+    for position, item in enumerate(propres):
+        identifiant = str(item.get("id") or "").strip()
+        if not identifiant or identifiant in vus_id:
+            identifiant = f"i{position + 1}"
+            while identifiant in vus_id:
+                identifiant += "_"
+        item["id"] = identifiant
+        vus_id.add(identifiant)
+
     # Les pages d'un document sont déduites des lignes réellement lues : le
     # modèle se trompe parfois dans le récapitulatif ``documents[].pages``
     # alors que chaque ligne porte sa bonne page. Le faisceau des lignes fait
@@ -880,9 +952,33 @@ def _normalize(payload: dict, count: int) -> dict:
             "edited": False,
         })
 
+    # Liste réconciliée construite dans le même appel que la lecture.
+    med_list = []
+    connu = {item["id"] for item in propres if item["kind"] == "medications"}
+    for entry in (payload.get("med_list") or []):
+        if not isinstance(entry, dict):
+            continue
+        ligne = re.sub(r"\s+", " ", html.unescape(str(entry.get("line") or ""))).strip()
+        if not ligne:
+            continue
+        sources = [str(s) for s in (entry.get("sources") or []) if str(s) in connu]
+        med_list.append({
+            # ``group`` reste une métadonnée de lecture : elle n'est PAS
+            # transmise à la note, qui regroupe selon son gabarit.
+            "group": re.sub(r"\s+", " ", str(entry.get("group") or "")).strip()[:60],
+            "line": ligne,
+            "sources": sources,
+        })
+
     return {
         "documents": documents,
         "items": propres,
+        # Liste réconciliée : chaque ligne cite ses items d'origine. Une ligne
+        # qui cite un item disparu (doublon fusionné, id inventé) reste
+        # affichée — mieux vaut un médicament de trop, visible et éditable,
+        # qu'un médicament perdu. Seules les sources connues servent à
+        # appliquer les cases cochées du médecin.
+        "med_list": med_list,
         "coverage": coverage,
         # Pages non rendues : affichées dans l'onglet, jamais bloquantes.
         "missing": manquantes,
@@ -926,7 +1022,13 @@ def extract_documents(
     # Nombre de pages réel du document : c'est lui que le modèle doit couvrir.
     # ``Document.pages`` vient du compte de pages du PDF (ou 1 pour une photo).
     pages_total = sum(max(1, int(d.pages or 1)) for d in documents)
-    prompt = _prompt(pages_total, language)
+    # La date de consultation sert à la liste réconciliée : un cours de sept
+    # jours terminé avant cette date s'écrit « terminé le… ». La date du
+    # dossier fait foi ; à défaut, celle du jour.
+    date_consultation = str(getattr(consultation, "consultation_date", "") or "").strip()
+    if not date_consultation:
+        date_consultation = utcnow().date().isoformat()
+    prompt = _prompt(pages_total, language, date_consultation)
     # Modèle RAPIDE pour la lecture : le modèle de rédaction (gemini-2.5-pro
     # sur l'instance) mettait 72 s sur un dossier de quatre pages, contre 15 s
     # ici, pour une lecture identique. Le réglage « Modèle rapide » du panneau
@@ -980,11 +1082,45 @@ def extract_documents(
         ", ".join(f"{d.id}:{d.mime_type}" for d in documents),
     )
     try:
-        response = client.models.generate_content(
-            model=modele,
-            contents=parts + [prompt],
-            config=types.GenerateContentConfig(**config_kwargs),
-        )
+        try:
+            response = client.models.generate_content(
+                model=modele,
+                contents=parts + [prompt],
+                config=types.GenerateContentConfig(**config_kwargs),
+            )
+        except Exception as exc:
+            # Certains modèles (gemini-3.5-flash) refusent thinking_budget :
+            # c'est un réglage, pas une panne. On bascule sur thinking_level
+            # BAS — sans quoi la réflexion par défaut mange le plafond de
+            # sortie et le JSON est tronqué (constaté : MAX_TOKENS à 16k).
+            if "thinking_config" not in config_kwargs or not llm._est_think_refusee_gemini(exc):
+                raise
+            logger.info(
+                "Extraction : %s refuse thinking_budget — bascule sur "
+                "thinking_level LOW.", modele,
+            )
+            config_kwargs["thinking_config"] = types.ThinkingConfig(
+                thinking_level="LOW"
+            )
+            try:
+                response = client.models.generate_content(
+                    model=modele,
+                    contents=parts + [prompt],
+                    config=types.GenerateContentConfig(**config_kwargs),
+                )
+            except Exception as exc2:
+                if not llm._est_think_refusee_gemini(exc2):
+                    raise
+                logger.info(
+                    "Extraction : %s refuse aussi thinking_level — relance sans "
+                    "réflexion.", modele,
+                )
+                config_kwargs.pop("thinking_config", None)
+                response = client.models.generate_content(
+                    model=modele,
+                    contents=parts + [prompt],
+                    config=types.GenerateContentConfig(**config_kwargs),
+                )
     except Exception as exc:
         logger.exception("Extraction refusée par le fournisseur")
         raise ExtractionError(

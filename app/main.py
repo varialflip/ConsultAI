@@ -3032,7 +3032,7 @@ async def _run_second_pass(
         # la liste de médicaments du médecin serait signalée comme une
         # invention (elle n'est ni dans l'audio ni dans la transcription).
         with SessionLocal() as doc_db:
-            documents_block = _documents_context(doc_db, consultation_id)
+            documents_block = _documents_context(doc_db, consultation_id, langue)
         resultat, usage_passe = llm.verify_note_stream(
             note_markdown,
             langue=langue,
@@ -3415,7 +3415,7 @@ async def api_generate(
             med_hints,
             n_transcript,
             conf_map,
-            _documents_context(db, payload.consultation_id),
+            _documents_context(db, payload.consultation_id, template_row.language),
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -3954,7 +3954,9 @@ def _document_payload(document: Document) -> dict:
     return payload
 
 
-def _documents_context(db: Session, consultation_id: Optional[int]) -> str:
+def _documents_context(
+    db: Session, consultation_id: Optional[int], language: str = "fr"
+) -> str:
     """
     Documents du brouillon, en TEXTE, pour la génération de la note.
 
@@ -3964,19 +3966,63 @@ def _documents_context(db: Session, consultation_id: Optional[int]) -> str:
     une lecture du modèle ne devient pas un fait clinique sans un geste
     explicite.
 
+    Les médicaments arrivent en liste RÉCONCILIÉE (fusion des conditionnements,
+    dose administrée, ordre des groupes), produite dans le MÊME appel que la
+    lecture et rattachée à ses items par ``sources`` : la note la recopie, elle
+    ne la recalcule pas. Une extraction antérieure sans liste réconciliée
+    retombe sur les lignes brutes, comme avant.
+
     Rien de tout cela ne repart en image : la note se génère à partir de texte,
     ce qui rend la régénération gratuite et l'audit possible.
     """
     if not consultation_id:
         return ""
+    anglais = (language or "").strip().lower().startswith("en")
+    entete_liste = (
+        "Medications — list already reconciled from the printed list and "
+        "reviewed by the physician. Copy each line into the template's "
+        "medication section (table or list, whichever the template uses): do "
+        "not recompute any dose, do not rename anything. Group the lines "
+        "according to the template's rules — no category heading is written. "
+        "The order below is only a default: the template's medication order "
+        "prevails."
+        if anglais
+        else
+        "Médicaments — liste déjà réconciliée à partir de la liste imprimée, "
+        "relue par le médecin. Recopie chaque ligne dans la rubrique des "
+        "médicaments du gabarit (tableau ou liste, selon le gabarit) : ne "
+        "recalcule aucune dose, ne renomme rien. Regroupe les lignes selon "
+        "les règles du gabarit — aucun titre de catégorie ne s'écrit. "
+        "L'ordre ci-dessous n'est qu'un défaut : l'ordre de préférence du "
+        "GABARIT l'emporte."
+    )
     blocs: List[str] = []
     for document in documents_service.for_consultation(db, consultation_id):
         extraction_stockee = _stored_extraction(document)
         if not extraction_stockee:
             continue
+        items = extraction_stockee.get("items", [])
+        par_id = {item.get("id"): item for item in items}
+        # Liste réconciliée : une ligne dont TOUTES les sources sont décochées
+        # disparaît. Une ligne qui ne cite aucune source connue reste : elle ne
+        # peut pas être filtrée, et un médicament de trop se voit et s'édite.
+        reconciliees = []
+        for entry in extraction_stockee.get("med_list") or []:
+            sources = [par_id[s] for s in (entry.get("sources") or []) if s in par_id]
+            if sources and not any(item.get("included", True) for item in sources):
+                continue
+            reconciliees.append(entry)
+        if reconciliees:
+            blocs.append(entete_liste)
+            blocs.extend(entry["line"] for entry in reconciliees)
+            blocs.append("")
         par_document: dict = {}
-        for item in extraction_stockee.get("items", []):
+        for item in items:
             if not item.get("included", True):
+                continue
+            # Déjà couverts par la liste réconciliée, qui les fusionne et les
+            # dose : renvoyer aussi la ligne brute les ferait doubler.
+            if item.get("kind") == "medications" and reconciliees:
                 continue
             par_document.setdefault(item.get("document_id") or "d1", []).append(item["text"])
         for observation in extraction_stockee.get("observations", []):
@@ -4229,6 +4275,10 @@ def review_document(
                 index = position
             base = stockes[index] if 0 <= index < len(stockes) else {}
             nouveaux.append({
+                # L'identifiant relie l'item à sa ligne de ``med_list``
+                # (``sources``) : le perdre ici rendrait le filtrage par
+                # cases cochées inopérant.
+                "id": base.get("id", ""),
                 "document_id": base.get("document_id", ""),
                 "kind": base.get("kind", "other"),
                 "text": texte,

@@ -1019,6 +1019,9 @@ def _normalize(payload: dict, count: int) -> dict:
             "group": re.sub(r"\s+", " ", str(entry.get("group") or "")).strip()[:60],
             "line": ligne,
             "sources": sources,
+            # L'unité d'arbitrage est désormais la LIGNE, pas l'item : c'est
+            # elle qui entre dans la note, et une case la coche.
+            "included": True,
         })
 
     return {

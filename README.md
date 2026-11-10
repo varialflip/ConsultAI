@@ -1478,7 +1478,9 @@ de médicaments ou de dicter un bilan, on **photographie la page**. La caméra
 est dans la barre d'outils, à gauche du micro.
 
 **Le flux.** Photographier → « Envoyer » → le modèle lit → on relit à l'écran
-(texte éditable + case à cocher par élément) → on dicte → on génère la note.
+(une case par **ligne réconciliée** pour les médicaments, texte éditable + case
+par élément pour l'historique, le laboratoire et l'imagerie) → on dicte → on
+génère la note.
 Les prises restent dans le navigateur (IndexedDB) jusqu'à « Envoyer » : rien
 n'est téléversé avant ce geste, et un téléphone qui s'endort ne perd rien.
 

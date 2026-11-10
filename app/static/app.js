@@ -8382,10 +8382,16 @@
     // qui compte, pas le nombre de lignes lues.
     const compte = document.createElement('span');
     compte.className = 'text-[11px] font-semibold text-slate-500';
-    const tous = extractionData.items || [];
-    const total = tous.length + observations.length;
+    // Le décompte suit ce qui s'affiche : les médicaments comptent par LIGNE
+    // réconciliée, pas par item lu (leur texte brut n'est plus montré).
+    const lignesListe = extractionData.med_list || [];
+    const tous = (extractionData.items || []).filter(
+      (item) => !(lignesListe.length && item.kind === 'medications'),
+    );
+    const total = tous.length + observations.length + lignesListe.length;
     const retenus = tous.filter((i) => i.included).length
-      + observations.filter((o) => o.included).length;
+      + observations.filter((o) => o.included).length
+      + lignesListe.filter((l) => l.included !== false).length;
     compte.textContent = `${retenus}/${total} ${T('doc.included')}`;
     barre.appendChild(compte);
 
@@ -8532,20 +8538,25 @@
       titreListe.className = 'text-[11px] font-semibold uppercase tracking-wide text-slate-500';
       titreListe.textContent = `${T('doc.reconciled')} · ${reconciliees.length}`;
       panneau.appendChild(titreListe);
-      const parId = {};
-      items.forEach((item) => { if (item.id) parId[item.id] = item; });
       const ul = document.createElement('ul');
-      ul.className = 'mt-0.5 text-[12px] leading-snug text-slate-700';
-      reconciliees.forEach((entry) => {
-        const sources = (entry.sources || [])
-          .map((identifiant) => parId[identifiant])
-          .filter(Boolean);
-        const gardee = !sources.length || sources.some((item) => item.included);
-        const li = document.createElement('li');
-        li.className = gardee ? '' : 'text-slate-400 line-through';
-        li.textContent = entry.line;
-        li.title = gardee ? T('doc.reconciled_hint') : T('doc.reconciled_dropped');
-        ul.appendChild(li);
+      ul.className = 'mt-0.5 space-y-0.5 text-[12px] leading-snug text-slate-700';
+      reconciliees.forEach((entry, position) => {
+        const ligne = document.createElement('li');
+        ligne.dataset.role = 'line';
+        ligne.className = 'flex items-start gap-2 rounded px-1 py-0.5 hover:bg-white';
+        const case_ = document.createElement('input');
+        case_.type = 'checkbox';
+        case_.className = 'mt-0.5 shrink-0 rounded border-slate-300';
+        case_.dataset.role = 'include';
+        case_.dataset.index = String(position);
+        case_.checked = entry.included !== false;
+        case_.addEventListener('change', () => saveDocumentReview(doc, entete));
+        const texte = document.createElement('span');
+        texte.className = 'flex-1 min-w-0';
+        texte.textContent = entry.line;
+        texte.title = T('doc.reconciled_hint');
+        ligne.append(case_, texte);
+        ul.appendChild(ligne);
       });
       panneau.appendChild(ul);
       entete.appendChild(panneau);
@@ -8566,7 +8577,12 @@
     // Un sous-bloc par DOCUMENT logique reconnu (le modèle peut en voir
     // plusieurs dans un même envoi).
     blocs.forEach((bloc) => {
-      const duBloc = items.filter((item) => (item.document_id || 'd1') === bloc.id);
+      // Les médicaments ne s'affichent plus en lignes brutes : la liste
+      // réconciliée au-dessus porte l'arbitrage (une case par ligne).
+      const duBloc = items.filter(
+        (item) => (item.document_id || 'd1') === bloc.id
+          && !(reconciliees.length && item.kind === 'medications'),
+      );
       if (!duBloc.length) return;
       const titreBloc = document.createElement('div');
       titreBloc.className = 'text-[11px] font-semibold uppercase tracking-wide text-slate-500';
@@ -8649,23 +8665,29 @@
   async function saveDocumentReview(doc, element) {
     const items = [];
     const observations = [];
-    // Les deux listes sont reconstruites dans l'ordre du DOM : les éléments,
-    // puis le bloc d'observations s'il est présent.
+    const lines = [];
+    // Les listes sont reconstruites dans l'ordre du DOM : lignes réconciliées,
+    // éléments, puis observations.
     element.querySelectorAll('[data-role="include"]').forEach((box) => {
-      const champ = box.parentElement.querySelector('[data-role="text"]');
-      const ligne = box.closest('[data-role="item"], [data-role="observation"]');
+      const ligne = box.closest('[data-role="item"], [data-role="observation"], [data-role="line"]');
+      const role = ligne ? ligne.dataset.role : 'item';
       const entree = {
         index: Number(box.dataset.index),
-        text: champ ? champ.value : '',
         included: box.checked,
       };
-      if (ligne && ligne.dataset.role === 'observation') observations.push(entree);
+      if (role === 'line') {
+        lines.push(entree);
+        return;
+      }
+      const champ = box.parentElement.querySelector('[data-role="text"]');
+      entree.text = champ ? champ.value : '';
+      if (role === 'observation') observations.push(entree);
       else items.push(entree);
     });
     try {
       const data = await api(`/api/documents/${doc.id}/review`, {
         method: 'POST',
-        body: { items, observations },
+        body: { items, observations, lines },
       });
       doc.extraction = data.extraction;
     } catch (err) {

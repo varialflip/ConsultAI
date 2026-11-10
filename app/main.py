@@ -4021,9 +4021,16 @@ def _documents_context(
         # peut pas être filtrée, et un médicament de trop se voit et s'édite.
         reconciliees = []
         for entry in extraction_stockee.get("med_list") or []:
-            sources = [par_id[s] for s in (entry.get("sources") or []) if s in par_id]
-            if sources and not any(item.get("included", True) for item in sources):
-                continue
+            # L'arbitrage porte sur la LIGNE (les cases de l'onglet). Les
+            # extractions antérieures n'en portent pas : on retombe alors sur
+            # l'inclusion de ses items d'origine.
+            if "included" in entry:
+                if not entry.get("included", True):
+                    continue
+            else:
+                sources = [par_id[s] for s in (entry.get("sources") or []) if s in par_id]
+                if sources and not any(item.get("included", True) for item in sources):
+                    continue
             reconciliees.append(entry)
         if reconciliees:
             blocs.append(entete_liste)
@@ -4250,6 +4257,9 @@ def extract_document(document_id: int, request: Request, db: Session = Depends(g
 class DocumentReviewIn(BaseModel):
     items: Optional[List[dict]] = None
     observations: Optional[List[dict]] = None
+    #: Arbitrage par LIGNE réconciliée (les médicaments ne se cochent plus
+    #: item par item : la ligne est ce qui entre dans la note).
+    lines: Optional[List[dict]] = None
 
 
 @app.post("/api/documents/{document_id}/review")
@@ -4271,38 +4281,43 @@ def review_document(
 
     if payload.items is not None:
         connus = {item.get("text", "") for item in stocke.get("items", [])}
-        stockes = stocke.get("items", [])
-        nouveaux = []
+        stockes = list(stocke.get("items", []))
+        # Mise à jour EN PLACE : le client n'envoie plus les items de
+        # médicaments (c'est la ligne réconciliée qui se coche). Reconstruire
+        # la liste à partir de la requête les effacerait.
         for position, item in enumerate(payload.items):
             if not isinstance(item, dict):
                 continue
-            texte = str(item.get("text") or "").strip()
-            if not texte:
-                continue
             # L'index vient du client : l'ordre du DOM (groupé par document
-            # logique) n'est pas celui du tableau du modèle. Sans lui, une
-            # ligne récupérait les champs d'une autre (page source, molécule).
+            # logique) n'est pas celui du tableau du modèle.
             try:
                 index = int(item.get("index", position))
             except (TypeError, ValueError):
                 index = position
-            base = stockes[index] if 0 <= index < len(stockes) else {}
-            nouveaux.append({
-                # L'identifiant relie l'item à sa ligne de ``med_list``
-                # (``sources``) : le perdre ici rendrait le filtrage par
-                # cases cochées inopérant.
-                "id": base.get("id", ""),
-                "document_id": base.get("document_id", ""),
-                "kind": base.get("kind", "other"),
-                "text": texte,
-                "fields": base.get("fields", {}),
-                "source_page": base.get("source_page", 0),
-                "included": bool(item.get("included", True)),
+            if not 0 <= index < len(stockes):
+                continue
+            base = stockes[index]
+            texte = str(item.get("text") or "").strip()
+            if texte:
+                base["text"] = texte
                 # Le texte diffère de la lecture du modèle : c'est une
                 # correction du clinicien, on la trace.
-                "edited": texte not in connus or bool(item.get("edited", False)),
-            })
-        stocke["items"] = nouveaux
+                base["edited"] = texte not in connus or bool(item.get("edited", False))
+            base["included"] = bool(item.get("included", base.get("included", True)))
+        stocke["items"] = stockes
+
+    if payload.lines is not None:
+        lignes = list(stocke.get("med_list") or [])
+        for position, ligne in enumerate(payload.lines):
+            if not isinstance(ligne, dict):
+                continue
+            try:
+                index = int(ligne.get("index", position))
+            except (TypeError, ValueError):
+                index = position
+            if 0 <= index < len(lignes):
+                lignes[index]["included"] = bool(ligne.get("included", True))
+        stocke["med_list"] = lignes
 
     if payload.observations is not None:
         observations = []

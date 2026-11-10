@@ -50,6 +50,11 @@ que la lecture.*
   sont transmis à la note pour le champ « Médecin de famille » — seule
   exception à la règle des en-têtes administratifs, le nom du patient restant
   interdit.
+- **Remplacement** : deux forces de la même molécule avec des dates de
+  « Dernière délivrance » différentes — la plus récente remplace l'autre.
+  Règle écrite dans le prompt ; gemini-2.5-flash ne l'applique pas de façon
+  fiable (constaté sur deux AAS, 80 et 81 mg), le doublon restant décochable à
+  la relecture. gemini-3.5-flash l'applique.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

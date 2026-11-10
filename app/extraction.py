@@ -203,6 +203,11 @@ molécule aux mêmes prises se fondent en une ligne, force puis nombre, sans la 
 voie : ``Lévodopa/bensérazide 100/25 mg 1 co tid + 50/12,5 mg 1 co tid``. Une \
 ligne qui n'est pas un médicament (bandelettes, matériel) ne produit aucune \
 ligne.
+- **Remplacement.** Deux lignes de la même molécule, forces différentes — même \
+si le nom commercial diffère : compare la colonne « Dernière délivrance » du \
+document. La plus récente REMPLACE l'autre — une seule ligne, celle de la date \
+la plus récente. Des dates identiques signifient une association : garde les \
+deux.
 - **Posologie complète.** Une posologie en deux temps s'écrit en entier sur la \
 même ligne : ``½ co (= 0,05 mg) matin et dîner, puis 1 co au coucher`` → \
 ``Clonidine 0,05 mg po bid et 0,1 mg po hs``. Une condition (« si \
@@ -378,6 +383,10 @@ schedules; intakes are joined by "and", those at the same moment are added: \
 molecule at the same intakes merge into one line, strength then count, without \
 the route: ``Levodopa/benserazide 100/25 mg 1 tab TID + 50/12.5 mg 1 tab TID``. \
 A line that is not a medication (test strips, supplies) produces no line.
+- **Replacement.** Two lines of the same molecule with different strengths — \
+even when the brand name differs: compare the "Dernière délivrance" column of \
+the document. The most recent REPLACES the other — one line, the one with the \
+latest date. Identical dates mean a combination: keep both.
 - **Complete directions.** A two-part schedule is written in full on the same \
 line: ``½ tab (= 0.05 mg) morning and supper, then 1 tab at bedtime`` → \
 ``Clonidine 0.05 mg PO BID and 0.1 mg PO HS``. A condition ("if constipated", \

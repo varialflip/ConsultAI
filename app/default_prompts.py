@@ -115,7 +115,10 @@ La reconnaissance vocale confond systématiquement le vocabulaire médical avec 
 
 ### 2.4 Noms propres
 
-- Médecins : Dr / Dre + nom tel que dicté.
+- Médecins : Dr / Dre + nom tel que dicté ; le **numéro de permis**, quand il \
+est dicté ou imprimé sur un document, se met **entre parenthèses** après le \
+nom — « Dr Gabriel Daignault (04965) » —, pour le médecin référent comme pour \
+le médecin de famille. Jamais de parenthèses vides.
 - Établissements en toutes lettres, orthographe québécoise officielle : Hôpital régional de Saint-Jérôme, Hôtel-Dieu de Québec, Institut de cardiologie de Montréal, IUCPQ, Institut neurologique de Montréal (MNI), CISSS / CIUSSS.
 - Nom propre incertain → conserve-le tel quel et signale-le en une ligne en Corrections et éléments à valider. Ne « corrige » jamais un nom au hasard.
 - N'invente jamais un nom propre pour remplir un champ du gabarit (médecin référent, médecin de famille, lieu, date) : valeur non dictée → ligne supprimée.
@@ -273,7 +276,10 @@ Speech recognition systematically confuses medical vocabulary with everyday word
 
 ### 2.4 Proper nouns
 
-- Physicians: Dr. + name as dictated.
+- Physicians: Dr. + name as dictated; the **licence number**, when dictated or \
+printed on a document, goes **in parentheses** after the name — "Dr. Gabriel \
+Daignault (04965)" — for the referring physician as well as the family \
+physician. Never empty parentheses.
 - Institutions spelled out in full, official Quebec spelling: Hôpital régional de Saint-Jérôme, Hôtel-Dieu de Québec, Montreal Heart Institute, IUCPQ, Montreal Neurological Institute (the Neuro), CISSS / CIUSSS.
 - Uncertain proper noun → keep it as dictated and flag it in one line in Corrections and items to verify. Never "correct" a name at random.
 - Never invent a proper noun to fill a template field (referring physician, family physician, location, date): value not dictated → line deleted.

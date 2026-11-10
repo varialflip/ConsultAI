@@ -65,6 +65,10 @@ que la lecture.*
 - **Toast de lecture** : l'envoi d'un document affiche « Lecture des documents
   en cours… » (toast persistant) au lieu de laisser croire que rien ne se
   passe.
+- **Numéro de permis entre parenthèses** : le prompt général écrit
+  « Dr Gabriel Daignault (04965) » pour le médecin référent comme pour le
+  médecin de famille, dès que le numéro est dicté ou imprimé sur un document
+  (en-tête du DSQ). Jamais de parenthèses vides.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

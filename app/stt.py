@@ -2649,8 +2649,14 @@ def stt_unavailable(endpoint: str) -> bool:
             ok = _probe_custom(endpoint, api_key, model, langue)
     except Exception:
         ok = False
-    _STT_PROBE_CACHE[cle] = (now, ok)
-    return not ok
+    # Le cache garde le VERDICT rendu par cette fonction, jamais le résultat
+    # brut de la sonde : une entrée inversée ferait passer un service
+    # parfaitement joignable pour injoignable pendant tout le TTL, et le
+    # médecin verrait « service vocal indisponible » au milieu d'une dictée
+    # qui transcrit normalement.
+    indisponible = not ok
+    _STT_PROBE_CACHE[cle] = (now, indisponible)
+    return indisponible
 
 
 def stt_available(endpoint: str) -> bool:

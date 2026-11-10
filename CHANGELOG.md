@@ -2,6 +2,24 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-10 — Dictée : la sonde STT ne se contredit plus
+
+*L'instance de test annonçait « service vocal indisponible » au milieu d'une
+dictée qui transcrivait parfaitement. Le cache de la sonde rendait le résultat
+brut de la sonde au lieu du verdict de la fonction — donc l'inverse.*
+
+- **Cache inversé corrigé** : `stt_unavailable` mémorisait « le service
+  répond » (`ok`) et le rendait tel quel, alors que la fonction renvoie
+  « injoignable » (`not ok`). Pendant les 15 s du cache, un service en pleine
+  forme passait donc pour injoignable. Comme chaque passe de dictée sonde à
+  nouveau, l'avis « service vocal indisponible » clignotait toutes les deux
+  passes ; le texte, lui, continuait d'arriver — le verdict n'est
+  qu'informationnel et ne bloque jamais la transcription.
+- **Une entrée de cache = un verdict** : le cache garde désormais exactement
+  ce que la fonction renvoie, avec un commentaire qui nomme le piège.
+- **Régression** : `tests/test_stt_probe_cache.py` (service joignable et
+  injoignable, premier appel et appel servi par le cache).
+
 ## 2026-11-10 — Documents : la liste de médicaments arrive réconciliée
 
 *La lecture d'une liste de médicaments rend maintenant la liste finale, prête

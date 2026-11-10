@@ -8381,6 +8381,21 @@
     compte.textContent = `${retenus}/${total} ${T('doc.included')}`;
     barre.appendChild(compte);
 
+    // Le prescripteur de l'en-tête (« Groupe méd. : NOM (04965, M.D.) » ou une
+    // clinique « (GAP) ») : c'est lui qui remplit le champ « Médecin de
+    // famille » de la note. Il n'était visible nulle part avant la note.
+    const prescripteur = extractionData.prescriber || {};
+    if (prescripteur.name) {
+      const med = document.createElement('span');
+      med.className = 'text-[11px] text-slate-500';
+      const libelle = prescripteur.type === 'clinique'
+        ? T('doc.clinic') : T('doc.family_doctor');
+      const permis = prescripteur.license ? ` (${prescripteur.license})` : '';
+      med.textContent = `${libelle} ${prescripteur.name}${permis}`;
+      med.title = med.textContent;
+      barre.appendChild(med);
+    }
+
     // CE QUE CHAQUE PAGE A DONNÉ. Une page lue qui ne produit rien est le
     // signe d'une photo ratée (floue, tournée, page de garde) — et c'est
     // exactement ce qu'on ne voyait pas : le modèle le disait dans sa

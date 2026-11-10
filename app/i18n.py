@@ -437,6 +437,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "dans la note",
         "in the note",
     ),
+    "doc.family_doctor": (
+        "Médecin de famille",
+        "Family physician",
+    ),
+    "doc.clinic": (
+        "Clinique",
+        "Clinic",
+    ),
     "doc.check_all": (
         "Tout cocher",
         "Check all",

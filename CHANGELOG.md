@@ -69,6 +69,10 @@ que la lecture.*
   « Dr Gabriel Daignault (04965) » pour le médecin référent comme pour le
   médecin de famille, dès que le numéro est dicté ou imprimé sur un document
   (en-tête du DSQ). Jamais de parenthèses vides.
+- **Documents : prescripteur affiché.** L'onglet Documents montre le médecin de
+  famille (nom + numéro de permis) ou la clinique « (GAP) » lu en tête du
+  document, à côté du décompte des éléments — il n'était visible nulle part
+  avant la note.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

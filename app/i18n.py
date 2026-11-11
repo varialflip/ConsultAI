@@ -457,6 +457,14 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Comparée",
         "Compared",
     ),
+    "doc.compared_list": (
+        "Liste comparée",
+        "Compared list",
+    ),
+    "doc.lines": (
+        "lignes",
+        "lines",
+    ),
     "doc.compared_hint": (
         "Sert à écrire les divergences ; n'entre pas dans la note.",
         "Used to write the divergences; not written in the note.",

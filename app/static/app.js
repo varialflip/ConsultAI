@@ -8550,7 +8550,26 @@
     // ne montrait que le texte OCR et il fallait générer la note pour voir le
     // résultat.
     const reconciliees = extractionData.med_list || [];
-    if (reconciliees.length) {
+    if (reconciliees.length && estComparee) {
+      // Liste comparée : elle n'entre pas dans la note. Repliée, sans cases —
+      // deux listes dépliées donnaient l'impression qu'il fallait les traiter
+      // toutes les deux.
+      const details = document.createElement('details');
+      details.className = 'px-3 py-2 border-b border-slate-100 bg-slate-50/60';
+      const resume = document.createElement('summary');
+      resume.className = 'text-[11px] text-slate-500 cursor-pointer';
+      resume.textContent = `${T('doc.compared_list')} · ${reconciliees.length} ${T('doc.lines')} — ${T('doc.compared_hint')}`;
+      details.appendChild(resume);
+      const ul = document.createElement('ul');
+      ul.className = 'mt-1 text-[12px] leading-snug text-slate-400';
+      reconciliees.forEach((entry) => {
+        const li = document.createElement('li');
+        li.textContent = entry.line;
+        ul.appendChild(li);
+      });
+      details.appendChild(ul);
+      entete.appendChild(details);
+    } else if (reconciliees.length) {
       const panneau = document.createElement('div');
       panneau.className = 'px-3 py-2 border-b border-slate-100 bg-slate-50/60';
       const titreListe = document.createElement('div');

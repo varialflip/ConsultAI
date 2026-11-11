@@ -85,11 +85,12 @@ que la lecture.*
   comme le texte des items ; l'historique, le laboratoire et l'imagerie gardent
   leurs cases et leur texte. Le texte brut des médicaments reste stocké comme
   provenance, sans être affiché.
-- **Deux listes (DSQ + séjour en cours)** : la rubrique des médicaments montre
-  la liste de l'hospitalisation — celle qui s'applique aujourd'hui — puis les
-  écarts avec l'autre liste en prose (ajouté, cessé, dose changée). Le bloc de
-  documents annonce la règle dès qu'il y a plus d'une liste, et chaque liste
-  porte son titre entre crochets.
+- **Deux listes (DSQ + séjour en cours)** : **fusionnées à l'import**. Une
+  passe de fusion choisit la liste qui s'applique aujourd'hui (l'hospitalisation
+  prime sur le DSQ) et écrit les écarts en prose (ajouté, cessé, dose changée).
+  Résultat stocké sur la consultation (`med_merged_json`), recalculé à chaque
+  lecture ou suppression ; la note ne reçoit qu'une liste, suivie des
+  divergences. Sous deux listes, rien n'est fusionné.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

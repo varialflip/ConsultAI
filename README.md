@@ -1538,13 +1538,14 @@ invention » (ils ne figurent pas dans la dictée) — et un garde-fou quand auc
 dictée n'accompagne les documents. L'audit « Validation » reçoit le même bloc,
 sinon il signalerait la liste du médecin comme une invention.
 
-**Deux listes : le séjour en cours fait foi.** Quand un même brouillon porte le
-DSQ et la liste du séjour en cours (deux envois : un PDF et des photos ne
-peuvent pas être un seul document), la note écrit la liste de
-**l'hospitalisation** — celle qui s'applique aujourd'hui — puis, en prose, ce
-qui diffère de l'autre : ajouté, cessé, dose changée. Le bloc le dit au modèle
-dès qu'il y a plus d'une liste, et chaque liste porte son titre entre
-crochets pour qu'elles ne se confondent pas.
+**Deux listes : fusionnées à l'import.** Quand un second document porte une
+liste de médicaments (le DSQ et la liste du séjour en cours), une passe de
+fusion choisit la liste qui s'applique **aujourd'hui** — l'hospitalisation
+prime sur le DSQ — et écrit les écarts en prose (ajouté, cessé, dose changée).
+Le résultat est stocké sur la consultation (`med_merged_json`) et recalculé à
+chaque lecture ou suppression de document ; la note ne reçoit qu'une liste,
+suivie des divergences. Sous deux listes, rien n'est fusionné et les listes
+restent séparées, chacune avec son titre.
 
 **Rétention.** Les documents s'effacent avec le brouillon — suppression
 manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers

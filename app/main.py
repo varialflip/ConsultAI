@@ -3954,6 +3954,43 @@ def _document_payload(document: Document) -> dict:
     return payload
 
 
+def _refresh_med_merge(db: Session, consultation: Consultation) -> None:
+    """
+    Fusionne les listes de médicaments quand plusieurs documents en portent.
+
+    Le médecin photographie le DSQ, puis la liste du séjour : deux documents,
+    deux listes. La note n'en écrit qu'une — celle qui s'applique aujourd'hui —
+    et l'autre sert à écrire les écarts. Recalculée à chaque lecture ou
+    suppression de document ; ``None`` sous deux listes.
+    """
+    listes = []
+    for document in documents_service.for_consultation(db, consultation.id):
+        extraction_stockee = _stored_extraction(document)
+        if not extraction_stockee:
+            continue
+        lignes = [
+            str(entry.get("line") or "").strip()
+            for entry in extraction_stockee.get("med_list") or []
+            if str(entry.get("line") or "").strip()
+        ]
+        if lignes:
+            listes.append((document.id, document.title or "", lignes))
+
+    langue = "fr"
+    if consultation.template_name:
+        gabarit = db.scalars(
+            select(Template).where(Template.name == consultation.template_name)
+        ).first()
+        if gabarit and gabarit.language:
+            langue = gabarit.language
+
+    fusion = extraction.merge_medication_lists(listes, langue)
+    consultation.med_merged_json = (
+        json.dumps(fusion, ensure_ascii=False) if fusion else None
+    )
+    db.commit()
+
+
 def _documents_context(
     db: Session, consultation_id: Optional[int], language: str = "fr"
 ) -> str:
@@ -4026,12 +4063,22 @@ def _documents_context(
     )
     blocs: List[str] = []
     documents = list(documents_service.for_consultation(db, consultation_id))
+    # Fusion décidée à l'import (DSQ + séjour en cours) : une seule liste
+    # s'écrit, l'autre n'est plus qu'un point de comparaison.
+    fusion: dict = {}
+    brouillon = db.get(Consultation, consultation_id)
+    if brouillon is not None and brouillon.med_merged_json:
+        try:
+            fusion = json.loads(brouillon.med_merged_json) or {}
+        except ValueError:
+            fusion = {}
+    reference_id = fusion.get("reference_id")
     listes = 0
     for document in documents:
         stockee = _stored_extraction(document)
         if stockee and (stockee.get("med_list") or []):
             listes += 1
-    if listes > 1:
+    if listes > 1 and not reference_id:
         blocs.append(entete_plusieurs)
         blocs.append("")
     for document in documents:
@@ -4062,17 +4109,23 @@ def _documents_context(
                 if sources and not any(item.get("included", True) for item in sources):
                     continue
             reconciliees.append(entry)
+        # Fusion : la liste comparée ne s'écrit pas, elle sert aux divergences.
+        if reconciliees and reference_id and document.id != reference_id:
+            reconciliees = []
         if reconciliees:
             titre_doc = str(document.title or "").strip()
             # Plusieurs listes : le titre du document les distingue ; une seule
             # liste garde l'en-tête simple (rien à comparer).
-            if listes > 1 and titre_doc:
+            if listes > 1 and not reference_id and titre_doc:
                 blocs.append(f"[{titre_doc}] {entete_liste}")
             else:
                 blocs.append(entete_liste)
             blocs.extend(entry["line"] for entry in reconciliees)
             blocs.append("")
         divergences = str(extraction_stockee.get("med_divergences") or "").strip()
+        if reference_id and document.id == reference_id:
+            # La fusion décidée à l'import remplace la comparaison locale.
+            divergences = str(fusion.get("divergences") or divergences).strip()
         if divergences:
             blocs.append(entete_divergences.format(texte=divergences))
             blocs.append("")
@@ -4287,6 +4340,14 @@ def extract_document(document_id: int, request: Request, db: Session = Depends(g
     db.commit()
     db.refresh(document)
 
+    # Deux listes (DSQ + séjour en cours) : on les fusionne ici, à l'import,
+    # pour que la note n'ait jamais qu'une liste à écrire et les écarts en
+    # prose. Sous deux listes, la fonction efface la fusion.
+    try:
+        _refresh_med_merge(db, consultation)
+    except Exception:
+        logger.exception("Fusion des listes de médicaments ignorée (consultation %s)", consultation.id)
+
     live.publish(user.owner_key, "documents_changed", {
         "consultation_id": consultation.id,
         "origin_tab": request.headers.get("x-consultai-tab", ""),
@@ -4390,7 +4451,13 @@ def delete_document(document_id: int, request: Request, db: Session = Depends(ge
     user = current_user(request)
     document = _owned_document(db, document_id, user)
     consultation_id = document.consultation_id
+    consultation = db.get(Consultation, consultation_id)
     documents_service.delete_one(db, document)
+    if consultation is not None:
+        try:
+            _refresh_med_merge(db, consultation)
+        except Exception:
+            logger.exception("Fusion des listes de médicaments ignorée (suppression)")
     live.publish(user.owner_key, "documents_changed", {
         "consultation_id": consultation_id,
         "origin_tab": request.headers.get("x-consultai-tab", ""),

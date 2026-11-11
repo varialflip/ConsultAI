@@ -218,10 +218,13 @@ deux.
 - **Posologie complète.** Une posologie en deux temps s'écrit en entier sur la \
 même ligne : ``½ co (= 0,05 mg) matin et dîner, puis 1 co au coucher`` → \
 ``Clonidine 0,05 mg po bid et 0,1 mg po hs``. Une condition (« si \
-constipation », « si besoin ») donne ``prn``, en dernier. Une fourchette \
-s'écrit en dose ADMINISTRÉE, ses deux bornes comprises : ``1 à 2 co de \
-500 mg`` → ``500 à 1000 mg``. « aux 6 heures » → ``q6h``, même avec « au \
-besoin » : ``q6h prn``. Un maximum imprimé se garde : ``max 6 co/jour``.
+constipation », « si besoin ») donne ``prn``, en dernier. Une dose AJOUTÉE PLUS \
+TARD (« si besoin ajouter ½ co le midi dans 1 à 2 semaines ») s'écrit à part, \
+avec son moment et son délai : ``+ 12,5 mg po prn le midi dans 1 à 2 \
+semaines`` — jamais ``die`` en plus de ``prn``. Une fourchette s'écrit en dose \
+ADMINISTRÉE, ses deux bornes comprises : ``1 à 2 co de 500 mg`` → ``500 à \
+1000 mg``. « aux 6 heures » → ``q6h``, même avec « au besoin » : ``q6h prn``. \
+Un maximum imprimé se garde : ``max 6 co/jour``.
 - **Dose administrée** : quantité × force, espace avant l'unité, virgule \
 décimale et espace des milliers (``650 mg``, ``12,5 mg``, ``10 000 UI`` ; \
 jamais ``10000``). Injectable : volume × concentration → ``210 mg``, voie \
@@ -403,9 +406,12 @@ latest date. Identical dates mean a combination: keep both.
 - **Complete directions.** A two-part schedule is written in full on the same \
 line: ``½ tab (= 0.05 mg) morning and supper, then 1 tab at bedtime`` → \
 ``Clonidine 0.05 mg PO BID and 0.1 mg PO HS``. A condition ("if constipated", \
-"if needed") gives ``PRN``, last. A range is written as an ADMINISTERED dose, \
-both bounds included: ``1 to 2 tabs of 500 mg`` → ``500 to 1000 mg``. "every \
-6 hours" → ``q6h``, even with "as needed": ``q6h PRN``. A printed maximum is \
+"if needed") gives ``PRN``, last. A dose ADDED LATER ("if needed add ½ tab at \
+midday in 1 to 2 weeks") is written separately, with its moment and its \
+delay: ``+ 12.5 mg PO PRN at midday in 1 to 2 weeks`` — never ``daily`` \
+together with ``PRN``. A range is written as an ADMINISTERED dose, both \
+bounds included: ``1 to 2 tabs of 500 mg`` → ``500 to 1000 mg``. "every 6 \
+hours" → ``q6h``, even with "as needed": ``q6h PRN``. A printed maximum is \
 kept: ``max 6 tabs/day``.
 - **Administered dose**: quantity × strength, space before the unit, decimal \
 point and a space in thousands (``650 mg``, ``12.5 mg``, ``10 000 IU``; never \
@@ -746,6 +752,108 @@ def _prescripteur(brut: object) -> dict:
         nom = f"{nom} (GAP)"
     permis = re.sub(r"\s+", " ", str(brut.get("license") or "")).strip()[:20]
     return {"name": nom, "license": permis, "type": type_}
+
+
+#: Fusion de plusieurs listes de médicaments (DSQ + hospitalisation en cours).
+_MERGE_PROMPT_FR = """\
+Tu reçois plusieurs listes de médicaments du même dossier, chacune précédée du
+titre de son document.
+
+Décide laquelle s'applique AUJOURD'HUI : une liste d'HOSPITALISATION EN COURS
+prime sur le DSQ de la pharmacie (« médicaments actifs ou complétés derniers
+30 jours »), qui peut être plus ancien.
+
+Réponds uniquement par un objet JSON :
+{"reference_document_id": <id du document de référence>,
+ "divergences": "<une ou deux phrases : ce qui diffère entre les listes —
+ ajouté, cessé, dose changée ; chaîne vide si elles concordent>"}
+"""
+
+_MERGE_PROMPT_EN = """\
+You receive several medication lists from the same chart, each preceded by its
+document title.
+
+Decide which one applies TODAY: a CURRENT INPATIENT list prevails over the
+pharmacy DSQ ("active or completed in the last 30 days"), which may be older.
+
+Answer with a single JSON object:
+{"reference_document_id": <id of the reference document>,
+ "divergences": "<one or two sentences: what differs between the lists —
+ added, stopped, dose changed; empty string when they agree>"}
+"""
+
+_MERGE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "reference_document_id": {"type": "INTEGER"},
+        "divergences": {"type": "STRING"},
+    },
+    "required": ["reference_document_id", "divergences"],
+}
+
+
+def merge_medication_lists(
+    listes: Sequence[Tuple[int, str, Sequence[str]]], language: str = "fr"
+) -> Optional[dict]:
+    """
+    Choisit la liste qui s'applique aujourd'hui et décrit les écarts.
+
+    ``listes`` — (id du document, titre, lignes). Retourne
+    ``{"reference_id": int, "divergences": str}``, ou ``None`` s'il y a moins de
+    deux listes (rien à fusionner) ou si le modèle échoue : l'appelant garde
+    alors les listes séparées.
+    """
+    if len(listes) < 2:
+        return None
+    anglais = (language or "").strip().lower().startswith("en")
+    blocs: List[str] = []
+    for identifiant, titre, lignes in listes:
+        blocs.append(f"document {identifiant} — {titre or '(sans titre)'}")
+        blocs.extend(f"- {ligne}" for ligne in lignes)
+        blocs.append("")
+    contenu = "\n".join(blocs).strip()
+
+    modele = (llm.raw_fast_model("gemini") or "").strip() or settings.gemini_document_model
+    client = llm.get_client("gemini")
+    from google.genai import types
+
+    try:
+        reponse = client.models.generate_content(
+            model=modele,
+            contents=[(_MERGE_PROMPT_EN if anglais else _MERGE_PROMPT_FR), contenu],
+            config=types.GenerateContentConfig(
+                temperature=0.1,
+                max_output_tokens=2048,
+                response_mime_type="application/json",
+                response_schema=_MERGE_SCHEMA,
+                safety_settings=llm._safety_settings(),
+                thinking_config=types.ThinkingConfig(thinking_budget=256),
+            ),
+        )
+    except Exception:
+        logger.exception("Fusion des listes de médicaments impossible")
+        return None
+
+    try:
+        payload = _parse(getattr(reponse, "text", None) or "")
+    except ExtractionError:
+        logger.warning("Fusion : réponse illisible")
+        return None
+
+    connus = {identifiant for identifiant, _, _ in listes}
+    try:
+        reference = int(payload.get("reference_document_id"))
+    except (TypeError, ValueError):
+        reference = None
+    if reference not in connus:
+        logger.warning("Fusion : document de référence inconnu (%s)", reference)
+        return None
+    return {
+        "reference_id": reference,
+        "divergences": re.sub(
+            r"\s+", " ", str(payload.get("divergences") or "")
+        ).strip()[:600],
+    }
 
 
 def _inclus_par_defaut(kind: str, champs: dict) -> bool:

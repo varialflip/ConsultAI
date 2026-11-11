@@ -339,6 +339,10 @@ class Consultation(Base):
     #: tokens, modèle, latence). Persistée tant que le transcript existe ;
     #: invalidée par retranscription, import ou édition manuelle. JSON.
     med_region_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Fusion des listes de médicaments quand plusieurs documents en portent
+    #: (DSQ + hospitalisation en cours) : document de référence et écarts en
+    #: prose. JSON. Nullable : zéro ou une seule liste.
+    med_merged_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -3094,6 +3098,7 @@ _ADDED_COLUMNS = {
         ("normalized_transcript", "TEXT"),
         ("inline_fixed_json", "TEXT"),
         ("med_region_json", "TEXT"),
+        ("med_merged_json", "TEXT"),
     ],
     "usage_events": [
         ("audio_prompt_tokens", "INTEGER"),

@@ -4172,12 +4172,21 @@ def _documents_context(
 @app.get("/api/consultations/{consultation_id}/documents")
 def list_documents(consultation_id: int, request: Request, db: Session = Depends(get_db)):
     user = current_user(request)
-    _get_owned_consultation(db, consultation_id, user)
+    consultation = _get_owned_consultation(db, consultation_id, user)
+    # Fusion des listes (DSQ + séjour en cours) : l'onglet doit montrer quelle
+    # liste est retenue pour la note et les écarts, sans les recalculer.
+    fusion = None
+    if consultation.med_merged_json:
+        try:
+            fusion = json.loads(consultation.med_merged_json)
+        except ValueError:
+            fusion = None
     return {
         "documents": [
             _document_payload(row)
             for row in documents_service.for_consultation(db, consultation_id)
-        ]
+        ],
+        "med_merge": fusion,
     }
 
 

@@ -8325,12 +8325,14 @@
   async function loadDocuments() {
     if (!state.consultationId) {
       state.documents = [];
+      state.medMerge = null;
       renderDocuments();
       return;
     }
     try {
       const data = await api(`/api/consultations/${state.consultationId}/documents`);
       state.documents = data.documents || [];
+      state.medMerge = data.med_merge || null;
     } catch (_) {
       state.documents = [];
     }
@@ -8392,8 +8394,7 @@
     const retenus = tous.filter((i) => i.included).length
       + observations.filter((o) => o.included).length
       + lignesListe.filter((l) => l.included !== false).length;
-    compte.textContent = `${retenus}/${total} ${T('doc.included')}`;
-    barre.appendChild(compte);
+    compte.textContent = `${retenus}/${total} ${T('doc.included')}`;    barre.appendChild(compte);
 
     // Le prescripteur de l'en-tête (« Groupe méd. : NOM (04965, M.D.) » ou une
     // clinique « (GAP) ») : c'est lui qui remplit le champ « Médecin de
@@ -8408,6 +8409,24 @@
       med.textContent = `${libelle} ${prescripteur.name}${permis}`;
       med.title = med.textContent;
       barre.appendChild(med);
+    }
+
+    // Fusion des listes : quelle liste la note écrit, quelle liste sert aux
+    // divergences. Sans ce repère, l'onglet montre deux listes équivalentes
+    // alors qu'une seule entre dans la note.
+    const fusion = state.medMerge || null;
+    const estReference = Boolean(fusion && String(fusion.reference_id) === String(doc.id));
+    const estComparee = Boolean(
+      fusion && !estReference && (extractionData.med_list || []).length,
+    );
+    if (estReference || estComparee) {
+      const badge = document.createElement('span');
+      badge.className = estReference
+        ? 'text-[10px] font-semibold uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5'
+        : 'text-[10px] font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5';
+      badge.textContent = estReference ? T('doc.reference') : T('doc.compared');
+      badge.title = estReference ? T('doc.reference_hint') : T('doc.compared_hint');
+      barre.appendChild(badge);
     }
 
     // CE QUE CHAQUE PAGE A DONNÉ. Une page lue qui ne produit rien est le
@@ -8566,6 +8585,14 @@
         ul.appendChild(ligne);
       });
       panneau.appendChild(ul);
+      // Les écarts décidés à l'import : ils s'écrivent en prose dans la note,
+      // sous la liste, et se lisent ici avant de générer.
+      if (estReference && fusion && fusion.divergences) {
+        const ecarts = document.createElement('div');
+        ecarts.className = 'mt-1 border-t border-slate-200 pt-1 text-[12px] italic text-slate-600';
+        ecarts.textContent = `${T('doc.divergences')} ${fusion.divergences}`;
+        panneau.appendChild(ecarts);
+      }
       entete.appendChild(panneau);
     }
 

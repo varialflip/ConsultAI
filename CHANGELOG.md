@@ -94,6 +94,9 @@ que la lecture.*
 - **Correctif** : une liste dont toutes les lignes sont décochées (ou écartée
   par la fusion) ne fait plus réapparaître les lignes brutes dans la note — le
   garde-fou porte sur la présence d'une liste, pas sur son contenu.
+- **L'onglet Documents montre la fusion** : un badge « Liste retenue pour la
+  note » sur le document de référence, « Comparée » sur l'autre, et les
+  divergences en italique sous la liste retenue.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

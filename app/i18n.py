@@ -445,6 +445,26 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Clinique",
         "Clinic",
     ),
+    "doc.reference": (
+        "Liste retenue pour la note",
+        "List kept for the note",
+    ),
+    "doc.reference_hint": (
+        "C'est cette liste que la note écrit ; les autres servent aux divergences.",
+        "This list is what the note writes; the others feed the divergences.",
+    ),
+    "doc.compared": (
+        "Comparée",
+        "Compared",
+    ),
+    "doc.compared_hint": (
+        "Sert à écrire les divergences ; n'entre pas dans la note.",
+        "Used to write the divergences; not written in the note.",
+    ),
+    "doc.divergences": (
+        "Divergences :",
+        "Divergences:",
+    ),
     "doc.reconciled": (
         "Liste réconciliée",
         "Reconciled list",

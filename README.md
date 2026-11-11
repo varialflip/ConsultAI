@@ -406,6 +406,19 @@ direct** (tranche par tranche) que pour les **enregistrements importés**
 > médicaments, chute et delirium, cognition et capacité décisionnelle,
 > fragilité, nutrition, objectifs de soins, soutien de l'aidant, et les risques
 > gériatriques d'une transition de soins (non sa logistique).
+>
+> **Ton de pair.** La revue a d'abord écrit « L'affirmation « pas de notion de
+> trouble cognitif » est insuffisante après un delirium ; une évaluation
+> cognitive formelle est indiquée » — condescendant, et en contradiction avec
+> une décision pourtant écrite au Plan. Depuis : une phrase à la **première
+> personne** (« je n'ai pas de notion de… », « je n'ai pas d'investigation à
+> faire ») est traitée comme une **décision réfléchie**, jamais comme un oubli
+> — on ne la contredit pas, on ne la qualifie jamais d'insuffisante. Et le
+> **registre est celui du pair** : aucune formule qui juge le travail du
+> clinicien (« insuffisant », « incorrect », « il faut », « est indiqué »,
+> « devrait ») ; on propose (« à considérer », « à discuter », « pourrait être
+> envisagé »), et si l'élément revient sur un choix déjà écrit, on le reconnaît
+> d'abord ou on s'abstient.
 
 ---
 

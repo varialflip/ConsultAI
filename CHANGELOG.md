@@ -47,6 +47,22 @@ interactions médicamenteuses et pistes à évaluer.*
   médicaments, chute et delirium, cognition et capacité, fragilité, nutrition,
   objectifs de soins, soutien de l'aidant, et les risques gériatriques d'une
   transition de soins (non sa logistique).
+- **Ton de pair (2026-11-11)** : la revue a écrit « L'affirmation « pas de
+  notion de trouble cognitif » est insuffisante après un delirium ; une
+  évaluation cognitive formelle est indiquée » — condescendant, et en
+  contradiction avec une décision pourtant écrite au Plan (« je n'ai pas
+  d'investigation supplémentaire à faire »). Deux corrections :
+  - une phrase à la **première personne** dans la note (« je n'ai pas de
+    notion de… », « je n'ai pas d'investigation à faire ») est traitée comme
+    une décision réfléchie, jamais comme un oubli : on ne la contredit pas et
+    on ne la qualifie jamais d'insuffisante ;
+  - **registre de pair** imposé : aucune formule qui juge le travail du
+    clinicien (« insuffisant », « incorrect », « il faut », « est indiqué »,
+    « devrait »). On propose (« à considérer », « à discuter », « pourrait être
+    envisagé ») ; si l'élément revient sur un choix déjà écrit, on le reconnaît
+    d'abord ou on s'abstient.
+  Vérifié sur trois passes consécutives de la même note : aucun terme de
+  jugement, et l'élément condescendant ne revient plus.
 - **Appel SÉPARÉ, sans audio** : la note et les documents suffisent à un regard
   clinique, l'audio ne servant qu'à vérifier la fidélité. Mesuré sur une
   consultation réelle : ~1 400 jetons de prompt et 21-26 s, contre ~9 500

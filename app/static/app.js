@@ -3097,6 +3097,7 @@
     const omissions = (resultat && resultat.omissions) || [];
     const inventions = (resultat && resultat.inventions) || [];
     const confiance = (resultat && resultat.confiance) || '';
+    const review = (resultat && resultat.review) || null;
 
     if (!resultat) {
       audit.classList.add('hidden');
@@ -3119,6 +3120,27 @@
     }
     if (confiance) {
       lignes.push('', `*${T('secondpass.confidence')} : ${confiance}*`);
+    }
+    // Revue clinique : section SÉPARÉE et visuellement distincte de l'audit.
+    // L'audit dit « ceci est faux » ; la revue dit « voici une piste » — les
+    // mêler laisserait croire que les suggestions sont des constats.
+    if (review) {
+      const interactions = review.interactions || [];
+      const considerations = review.considerations || [];
+      lignes.push('', '---', '', `## ${T('secondpass.review_title')}`);
+      lignes.push('', `*${T('secondpass.review_disclaimer')}*`);
+      if (!interactions.length && !considerations.length) {
+        lignes.push('', `*${T('secondpass.review_empty')}*`);
+      } else {
+        if (interactions.length) {
+          lignes.push('', `**${T('secondpass.interactions')}**`);
+          for (const item of interactions) lignes.push(`- ${item}`);
+        }
+        if (considerations.length) {
+          lignes.push('', `**${T('secondpass.considerations')}**`);
+          for (const item of considerations) lignes.push(`- ${item}`);
+        }
+      }
     }
     audit.innerHTML = markdownToHtml(lignes.join('\n'));
     audit.classList.remove('hidden');
@@ -3214,7 +3236,41 @@
     extraireListe('omissions');
     extraireListe('inventions');
     extraireConfiance();
-    if (donnees.omissions.length || donnees.inventions.length || donnees.confiance) {
+    // Revue clinique (forme combinée) : ses listes vivent sous « review ».
+    // On les récupère dans un objet séparé pour que le rendu progressif les
+    // affiche au fil de l'eau, exactement comme l'audit.
+    const review = { interactions: [], considerations: [] };
+    const donneesReview = { interactions: review.interactions, considerations: review.considerations };
+    const extraireListeReview = (cle) => {
+      const posCle = texte.indexOf(`"${cle}"`);
+      if (posCle < 0) return;
+      const posDeuxPoints = texte.indexOf(':', posCle + cle.length + 2);
+      if (posDeuxPoints < 0) return;
+      const posCrochet = texte.indexOf('[', posDeuxPoints);
+      if (posCrochet < 0) return;
+      let i = posCrochet + 1;
+      while (i < texte.length) {
+        const c = texte[i];
+        if (c === ']') return;
+        if (c === ',') { i++; continue; }
+        if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { i++; continue; }
+        if (c === '"') {
+          const item = lireChaine(i);
+          if (item === null) return;
+          donneesReview[cle].push(item.valeur);
+          i = item.fin;
+        } else {
+          return;
+        }
+      }
+    };
+    extraireListeReview('interactions');
+    extraireListeReview('considerations');
+    if (review.interactions.length || review.considerations.length) {
+      donnees.review = review;
+    }
+    if (donnees.omissions.length || donnees.inventions.length || donnees.confiance
+        || donnees.review) {
       return donnees;
     }
     return null;

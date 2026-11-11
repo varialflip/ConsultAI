@@ -336,6 +336,29 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "In the note, but absent from the source",
     ),
     "secondpass.confidence": ("Confiance de l'audit", "Audit confidence"),
+    "secondpass.review_title": (
+        "Revue clinique — pistes à évaluer",
+        "Clinical review — leads to evaluate",
+    ),
+    "secondpass.review_disclaimer": (
+        "Suggestions du modèle, à titre indicatif : elles ne remplacent pas "
+        "votre jugement clinique et ne constituent ni un diagnostic ni une "
+        "recommandation.",
+        "Model suggestions, for information only: they do not replace your "
+        "clinical judgement and are neither a diagnosis nor a recommendation.",
+    ),
+    "secondpass.interactions": (
+        "Interactions médicamenteuses",
+        "Drug interactions",
+    ),
+    "secondpass.considerations": (
+        "À considérer",
+        "Worth considering",
+    ),
+    "secondpass.review_empty": (
+        "Aucune piste relevée.",
+        "No leads found.",
+    ),
     "validation.med_region": (
         "Zone médicaments (LLM)",
         "Medication region (LLM)",
@@ -2366,6 +2389,27 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "After each note, compare it against the dictation audio and flag "
         "discrepancies (omissions, inventions). Costs a second model call "
         "(the audio is sent again); off by default. Applies to all users.",
+    ),
+    "set.clinical_review_enabled.label": (
+        "Revue clinique (interactions et pistes)",
+        "Clinical review (interactions and leads)",
+    ),
+    "set.clinical_review_enabled.help": (
+        "Signaler les interactions médicamenteuses et les éléments cliniques "
+        "à considérer (diagnostic différentiel, bilan manquant, risque pour "
+        "l'aidant) que la note ne mentionne pas. Ne coûte PAS d'appel "
+        "supplémentaire : la revue part dans le même appel que la Validation, "
+        "après elle, l'audio n'étant envoyé qu'une fois. Nécessite la "
+        "Validation activée. Les éléments sont des PISTES à évaluer, jamais "
+        "des conclusions — le jugement reste au clinicien. Désactivée par "
+        "défaut ; s'applique à tous les usagers.",
+        "Flag drug interactions and clinical elements worth considering "
+        "(differential, missing workup, caregiver risk) that the note does "
+        "not mention. Costs NO extra call: the review runs in the same request "
+        "as Validation, after it, with the audio sent only once. Requires "
+        "Validation to be enabled. Items are LEADS to evaluate, never "
+        "conclusions — judgement stays with the clinician. Off by default; "
+        "applies to all users.",
     ),
     "set.show_thinking_users.help": (
         "Même affichage transitoire du raisonnement (thinking), pour les "

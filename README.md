@@ -321,6 +321,27 @@ direct** (tranche par tranche) que pour les **enregistrements importés**
 > **« Validation - 2e passe »** — se présentent en simple markdown, comme le
 > reste de l'application. Les brouillons antérieurs qui portent encore la
 > rubrique dans leur note la font réextraire à l'ouverture.
+>
+> **🩺 Revue clinique — pistes à évaluer.** Second interrupteur GLOBAL
+> (onglet Note, « Revue clinique (interactions et pistes) »,
+> `clinical_review_enabled`, désactivé par défaut), indépendant de la
+> Validation mais sans effet sans elle. Quand il est actif, l'audit et la
+> revue partent dans le **même appel** : l'audit garde sa consigne intacte et
+> passe en premier, puis une barrière explicite (« fin de la phase 1 ») fait
+> changer de rôle au modèle, qui relit la note en clinicien avec ses
+> connaissances générales. L'audio n'est donc envoyé **qu'une fois** et les
+> jetons de l'audit précèdent ceux de la revue — la revue ne peut pas
+> contaminer l'audit (mesuré : audit identique, +11 s sur une dictée de
+> 275 s). La revue reçoit aussi le bloc **documents**, qui porte des
+> informations ne figurant pas dans la note (liste de médicaments
+> photographiée, par exemple). Elle renvoie deux listes — **interactions
+> médicamenteuses** et **éléments à considérer** (diagnostic différentiel non
+> évoqué, bilan manquant, risque pour l'aidant) — chaque élément préfixé
+> `[note]` ou `[document]` selon sa provenance et formulé comme une **piste à
+> évaluer**, jamais comme une conclusion. Elle s'affiche sous l'audit, dans sa
+> propre section, avec un avertissement explicite : suggestions indicatives,
+> ni diagnostic ni recommandation. Stockage dans le même
+> `consultations.verification_json`, sous la clé `review`.
 > Les suggestions phonétiques gériatriques (échelles MMSE, MoCA, ISO-SMAF —
 > cf. § Termes gériatriques) apparaissent en haut de l'onglet, sous la rubrique
 > **« Termes gériatriques à valider »**, à côté de la liste des médicaments

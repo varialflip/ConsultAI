@@ -3979,7 +3979,7 @@ def _refresh_med_merge(db: Session, consultation: Consultation) -> None:
     langue = "fr"
     if consultation.template_name:
         gabarit = db.scalars(
-            select(Template).where(Template.name == consultation.template_name)
+            select(TemplateModel).where(TemplateModel.name == consultation.template_name)
         ).first()
         if gabarit and gabarit.language:
             langue = gabarit.language
@@ -4134,8 +4134,11 @@ def _documents_context(
             if not item.get("included", True):
                 continue
             # Déjà couverts par la liste réconciliée, qui les fusionne et les
-            # dose : renvoyer aussi la ligne brute les ferait doubler.
-            if item.get("kind") == "medications" and reconciliees:
+            # dose : renvoyer aussi la ligne brute les ferait doubler. Le test
+            # porte sur la PRÉSENCE d'une liste, pas sur son contenu : toutes
+            # les lignes décochées (ou écartées par la fusion) ne doivent pas
+            # faire réapparaître les lignes brutes.
+            if item.get("kind") == "medications" and extraction_stockee.get("med_list"):
                 continue
             par_document.setdefault(item.get("document_id") or "d1", []).append(item["text"])
         for observation in extraction_stockee.get("observations", []):

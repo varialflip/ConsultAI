@@ -91,6 +91,9 @@ que la lecture.*
   Résultat stocké sur la consultation (`med_merged_json`), recalculé à chaque
   lecture ou suppression ; la note ne reçoit qu'une liste, suivie des
   divergences. Sous deux listes, rien n'est fusionné.
+- **Correctif** : une liste dont toutes les lignes sont décochées (ou écartée
+  par la fusion) ne fait plus réapparaître les lignes brutes dans la note — le
+  garde-fou porte sur la présence d'une liste, pas sur son contenu.
 
 ## 2026-11-06 — Documents photographiés : listes de médicaments, bilans, rapports
 

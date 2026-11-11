@@ -393,6 +393,19 @@ direct** (tranche par tranche) que pour les **enregistrements importés**
 > cours, et **mécanisme exigé** pour une interaction (une association seulement
 > « plausible » n'est pas signalée). Sur la même note : 10 éléments / 397 mots
 > → 5 éléments / 122 mots.
+>
+> **Cadrage « consultant ».** Le lecteur est un médecin **consultant** : il
+> donne un avis, un autre médecin assure les soins courants et la gestion du
+> séjour. Tout ce qui relève de l'équipe traitante — prescrire un bilan,
+> décider une transfusion, planifier une chirurgie, organiser un congé,
+> ajuster un antihypertenseur pour la cible tensionnelle — est **hors
+> périmètre** et n'est plus signalé, même si c'est pertinent pour le patient.
+> Le test imposé au modèle : *un gériatre consultant changerait-il son
+> évaluation, sa recommandation, ou sa conversation avec la famille ?* Restent
+> dans le périmètre le jugement gériatrique — pertinence et déprescription des
+> médicaments, chute et delirium, cognition et capacité décisionnelle,
+> fragilité, nutrition, objectifs de soins, soutien de l'aidant, et les risques
+> gériatriques d'une transition de soins (non sa logistique).
 
 ---
 

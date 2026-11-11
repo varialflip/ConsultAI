@@ -35,6 +35,18 @@ interactions médicamenteuses et pistes à évaluer.*
   Résultat sur la même note : 10 éléments / 397 mots → **5 éléments / 122
   mots**, sans perte de contenu utile (et un nouveau constat : congé annoncé
   alors que la chirurgie plastique est en attente).
+- **Cadrage « consultant » (2026-11-11)** : le lecteur est un médecin
+  CONSULTANT — il donne un avis, un autre médecin assure les soins courants.
+  Tout ce qui relève de l'équipe traitante (prescrire un bilan, décider une
+  transfusion, planifier une chirurgie, organiser un congé, ajuster un
+  antihypertenseur pour la cible) est explicitement **hors périmètre** : la
+  revue ne le signale plus, même si c'est pertinent pour le patient. Le test
+  imposé au modèle : *un gériatre consultant changerait-il son évaluation, sa
+  recommandation, ou sa conversation avec la famille ?* Restent dans le
+  périmètre le jugement gériatrique — pertinence et déprescription des
+  médicaments, chute et delirium, cognition et capacité, fragilité, nutrition,
+  objectifs de soins, soutien de l'aidant, et les risques gériatriques d'une
+  transition de soins (non sa logistique).
 - **Appel SÉPARÉ, sans audio** : la note et les documents suffisent à un regard
   clinique, l'audio ne servant qu'à vérifier la fidélité. Mesuré sur une
   consultation réelle : ~1 400 jetons de prompt et 21-26 s, contre ~9 500

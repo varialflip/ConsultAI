@@ -1323,20 +1323,6 @@ def verification_capable(provider: Optional[str] = None) -> bool:
     return True
 
 
-def clinical_review_enabled() -> bool:
-    """
-    La revue clinique est-elle activée ?
-
-    Ce n'est PAS une passe supplémentaire : quand elle est active, l'audit
-    « Validation » et la revue clinique partent dans le MÊME appel (l'audio
-    n'est envoyé qu'une fois), l'audit d'abord puis la revue — voir
-    ``_review_messages``. Elle est donc indépendante de
-    ``second_pass_enabled``, qui commande l'existence même de l'audit.
-    """
-    return runtime_config.value("clinical_review_enabled") == "true"
-
-
-
 #: Réglage « modèle de 2e passe », par fournisseur. Suffixe « _verify_model »,
 #: comme les autres réglages propres de la note (``cohere_llm_temperature``,
 #: ``custom_llm_base_url``…).
@@ -1580,125 +1566,6 @@ _AUDITOR_TRANSCRIPT_PROMPTS = {
 }
 
 
-#: Consignes de la REVUE CLINIQUE, ajoutées à la suite de l'audit quand la
-#: revue est activée (``clinical_review_enabled``). Un SEUL appel : l'audit
-#: d'abord (l'audio fait foi), puis la revue — le modèle change explicitement
-#: de rôle entre les deux, ce qui évite de lui demander de tenir deux
-#: épistémologies contradictoires en même temps.
-#:
-#: Pourquoi deux phases plutôt qu'un prompt unique : l'audit exige « ne signale
-#: que ce que tu peux prouver dans l'audio », la revue exige « raisonne au-delà
-#: de ce qui est écrit ». Fusionnés sans barrière, on obtient un modèle qui
-#: signale des inventions plausibles ou qui n'ose plus rien suggérer. La
-#: barrière explicite (« oublie l'audio ») rend les deux tâches séquentielles et
-#: indépendantes ; mesuré sur une dictée réelle (2026-11-11) : aucune dégradation
-#: de l'audit, +11 s, audio envoyé une seule fois.
-#:
-#: La revue reçoit la NOTE et, le cas échéant, les DOCUMENTS : ceux-ci portent
-#: des informations qui ne finissent pas dans la note (une liste de médicaments
-#: photographiée, par exemple) et qui changent l'analyse. Chaque élément est
-#: préfixé « [note] » ou « [document] » pour que le médecin sache d'où vient le
-#: signalement — sans quoi il ne peut pas juger de sa portée.
-_REVIEW_PROMPTS = {
-    "fr": (
-        "\n"
-        "--- FIN DE LA PHASE 1 ---\n"
-        "\n"
-        "PHASE 2 — REVUE CLINIQUE. Tu changes maintenant de rôle. L'audio et la "
-        "transcription ne font plus partie de cette phase : ne les consulte "
-        "plus. Tu es un clinicien expérimenté qui relit la NOTE ci-dessus comme "
-        "un document clinique, avec ses connaissances médicales générales. Ici "
-        "tu PEUX et DOIS raisonner au-delà de ce qui a été dicté.\n"
-        "\n"
-        "- « interactions » : interactions médicamenteuses cliniquement "
-        "pertinentes entre les médicaments de la note, ou entre un médicament "
-        "et l'état décrit (insuffisance rénale, chutes, troubles cognitifs, "
-        "hypotension orthostatique, dénutrition…). Nomme les médicaments, la "
-        "nature du risque et la conduite à envisager. Aucun médicament listé → "
-        "liste vide.\n"
-        "- « considerations » : éléments cliniques que le clinicien pourrait "
-        "vouloir considérer et qui ne figurent PAS dans la note — diagnostic "
-        "différentiel non évoqué, bilan manquant, facteur de risque non "
-        "documenté, suivi à prévoir, risque pour l'aidant. Formule chaque "
-        "élément comme une QUESTION ou une PISTE à évaluer, JAMAIS comme une "
-        "conclusion ni une recommandation ferme.\n"
-        "\n"
-        "Chaque élément commence par « [note] » s'il découle de ce qui est "
-        "écrit dans la note, ou par « [document] » s'il découle d'un document "
-        "fourni. Au plus 5 éléments par liste. Si tu n'as rien de solide, "
-        "laisse la liste VIDE : une suggestion creuse est pire qu'aucune "
-        "suggestion, et le médecin n'a pas à trier du bruit. Tu ne poses aucun "
-        "diagnostic et tu ne remplaces pas son jugement.\n"
-        "\n"
-        "RÉPONSE OBLIGATOIRE : UNIQUEMENT un objet JSON strict, sans aucun "
-        "autre texte ni commentaire, de la forme : "
-        "{\"audit\": {\"omissions\": [\"...\"], \"inventions\": [\"...\"], "
-        "\"confiance\": \"haute\"}, \"review\": {\"interactions\": [\"...\"], "
-        "\"considerations\": [\"...\"]}}"
-    ),
-    "en": (
-        "\n"
-        "--- END OF PHASE 1 ---\n"
-        "\n"
-        "PHASE 2 — CLINICAL REVIEW. You now change roles. The audio and the "
-        "transcript are no longer part of this phase: do not consult them. You "
-        "are an experienced clinician rereading the NOTE above as a clinical "
-        "document, using your general medical knowledge. Here you MAY and MUST "
-        "reason beyond what was dictated.\n"
-        "\n"
-        "- \"interactions\": clinically relevant drug interactions between the "
-        "medications in the note, or between a medication and the described "
-        "condition (renal impairment, falls, cognitive impairment, orthostatic "
-        "hypotension, malnutrition…). Name the drugs, the nature of the risk "
-        "and the action to consider. No medication listed → empty list.\n"
-        "- \"considerations\": clinical elements the clinician may wish to "
-        "consider that are NOT in the note — an unmentioned differential, a "
-        "missing workup, an undocumented risk factor, follow-up to plan, "
-        "caregiver risk. Phrase each one as a QUESTION or a LEAD to evaluate, "
-        "NEVER as a conclusion or a firm recommendation.\n"
-        "\n"
-        "Each item starts with \"[note]\" if it follows from what is written in "
-        "the note, or \"[document]\" if it follows from a supplied document. At "
-        "most 5 items per list. If you have nothing solid, leave the list "
-        "EMPTY: a hollow suggestion is worse than none, and the physician "
-        "should not have to sift noise. You make no diagnosis and do not "
-        "replace their judgement.\n"
-        "\n"
-        "MANDATORY RESPONSE: ONLY a strict JSON object, no other text: "
-        "{\"audit\": {\"omissions\": [\"...\"], \"inventions\": [\"...\"], "
-        "\"confiance\": \"haute\"}, \"review\": {\"interactions\": [\"...\"], "
-        "\"considerations\": [\"...\"]}}"
-    ),
-}
-
-
-def _review_messages(
-    note_markdown: str,
-    langue: str,
-    audio: Optional[Tuple[bytes, str]],
-    transcript: Optional[str],
-    system_instruction: str,
-    documents_block: str = "",
-) -> Tuple[str, str, Optional[Tuple[bytes, str]]]:
-    """
-    Requête d'audit + revue clinique en UN seul appel.
-
-    Reprend exactement ``_verification_messages`` (mêmes balises, même audio,
-    mêmes documents) et remplace la consigne de réponse finale par la phase 2 :
-    l'audit garde sa consigne intacte, la revue s'y ajoute APRÈS, ce qui
-    préserve la qualité de l'audit (mesuré : aucune dégradation).
-    """
-    system, user, audio_reel = _verification_messages(
-        note_markdown, langue, audio, transcript, system_instruction, documents_block
-    )
-    langue_norm = i18n.normalize(langue)
-    revue = _REVIEW_PROMPTS.get(langue_norm, _REVIEW_PROMPTS["fr"])
-    # La consigne d'audit se termine par sa propre exigence de réponse JSON ;
-    # on la laisse, puis on enchaîne : le modèle produit d'abord l'audit, ce
-    # qui garantit que ses jetons précèdent la revue (aucune contamination).
-    return system, user + "\n\n" + revue, audio_reel
-
-
 def _verification_messages(
     note_markdown: str,
     langue: str,
@@ -1788,10 +1655,6 @@ def _extraire_json(brut: str) -> Optional[dict]:
     clôture de code markdown ou l'entourer de prose. On nettoie les clôtures
     puis on tente le JSON complet ; en dernier recours, la tranche du premier
     « { » au dernier « } ».
-
-    Flux interrompu : la réponse combinée (``{"audit": {...}, "review": {...}}``)
-    peut être coupée en pleine revue. L'audit, lui, est déjà complet — on le
-    récupère en refermant l'objet à la main plutôt que de tout perdre.
     """
     texte = (brut or "").strip()
     texte = re.sub(r"^```(?:json)?\s*", "", texte, flags=re.IGNORECASE)
@@ -1806,25 +1669,7 @@ def _extraire_json(brut: str) -> Optional[dict]:
         try:
             return json.loads(texte[debut:fin + 1])
         except ValueError:
-            pass
-    # Dernier recours : l'audit imbriqué est peut-être intact alors que la
-    # revue est tronquée. On isole l'objet « audit » et on le referme.
-    if debut != -1:
-        pos = texte.find('"audit"')
-        if pos != -1:
-            ouvrante = texte.find("{", pos)
-            if ouvrante != -1:
-                profondeur = 0
-                for i in range(ouvrante, len(texte)):
-                    if texte[i] == "{":
-                        profondeur += 1
-                    elif texte[i] == "}":
-                        profondeur -= 1
-                        if profondeur == 0:
-                            try:
-                                return json.loads(texte[ouvrante:i + 1])
-                            except ValueError:
-                                break
+            return None
     return None
 
 
@@ -1838,13 +1683,6 @@ def _assainir_verification(
 
     ``None`` si la réponse n'est pas un JSON exploitable. Partagé par l'appel
     simple et le flux : la source de vérité reste la même dans les deux cas.
-
-    Deux formes acceptées : l'audit seul (``{"omissions", "inventions",
-    "confiance"}``) et la forme combinée de la revue clinique
-    (``{"audit": {...}, "review": {...}}``). Dans le second cas, l'audit est
-    assaini exactement comme dans le premier, et la revue est assainie à part —
-    elle n'a PAS de garde-fou de recoupement, ses éléments venant par
-    construction de connaissances extérieures à la note.
     """
     donnees = _extraire_json(brut)
     if donnees is None:
@@ -1856,13 +1694,6 @@ def _assainir_verification(
             return []
         propres = [str(item).strip() for item in valeur if str(item).strip()]
         return propres[:8]
-
-    # Forme combinée : l'audit est imbriqué, la revue à côté. On aplatit pour
-    # que l'appelant reçoive TOUJOURS la même forme (audit à la racine), et la
-    # revue sous la clé « review » quand elle existe.
-    revue_brute = donnees.get("review") if isinstance(donnees.get("review"), dict) else None
-    if isinstance(donnees.get("audit"), dict):
-        donnees = donnees["audit"]
 
     confiance = str(donnees.get("confiance") or "").strip().lower()
     resultat = {
@@ -1884,14 +1715,6 @@ def _assainir_verification(
         resultat["inventions"] = [
             e for e in resultat["inventions"] if not _element_deja_porte(e, transcript, seuil=0.5)
         ]
-    # Revue clinique : aucun garde-fou de recoupement — ses éléments viennent
-    # par construction de connaissances extérieures à la note, donc les
-    # chercher dans la note n'aurait pas de sens. On borne seulement la taille.
-    if revue_brute is not None:
-        resultat["review"] = {
-            "interactions": _liste(revue_brute.get("interactions")),
-            "considerations": _liste(revue_brute.get("considerations")),
-        }
     return resultat
 
 
@@ -1928,14 +1751,9 @@ def verify_note(
     if not nom_modele:
         logger.warning("« Validation » ignoré : aucun modèle de 2e passe pour %s", provider)
         return None, {}
-    if clinical_review_enabled():
-        system, user, audio_reel = _review_messages(
-            note_markdown, langue, audio, transcript, system_instruction, documents_block
-        )
-    else:
-        system, user, audio_reel = _verification_messages(
-            note_markdown, langue, audio, transcript, system_instruction, documents_block
-        )
+    system, user, audio_reel = _verification_messages(
+        note_markdown, langue, audio, transcript, system_instruction, documents_block
+    )
 
     t0 = time.monotonic()
     try:
@@ -1993,14 +1811,9 @@ def verify_note_stream(
     if not nom_modele:
         logger.warning("« Validation » ignoré : aucun modèle de 2e passe pour %s", provider)
         return None, {}
-    if clinical_review_enabled():
-        system, user, audio_reel = _review_messages(
-            note_markdown, langue, audio, transcript, system_instruction, documents_block
-        )
-    else:
-        system, user, audio_reel = _verification_messages(
-            note_markdown, langue, audio, transcript, system_instruction, documents_block
-        )
+    system, user, audio_reel = _verification_messages(
+        note_markdown, langue, audio, transcript, system_instruction, documents_block
+    )
 
     t0 = time.monotonic()
     parties: List[str] = []

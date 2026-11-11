@@ -854,17 +854,6 @@ SETTINGS: Tuple[Setting, ...] = (
         help_key="set.second_pass_enabled.help",
     ),
 
-    # Revue clinique : interactions médicamenteuses et pistes à considérer.
-    # Ce n'est PAS une passe de plus — quand la bascule est ON, l'audit
-    # « Validation » et la revue partent dans le MÊME appel (audio envoyé une
-    # seule fois), l'audit d'abord puis la revue. Désactivée par défaut : elle
-    # ajoute des suggestions non autoritatives à la note.
-    Setting(
-        "clinical_review_enabled", "choice", "group.note",
-        default=lambda: "false", choices=ON_OFF,
-        help_key="set.clinical_review_enabled.help",
-    ),
-
     # --- Consigne générale ---------------------------------------------------
     # Une consigne par langue. C'est la LANGUE DU GABARIT qui décide laquelle
     # est employée — voir llm.build_system_prompt. Les valeurs livrées viennent

@@ -2,35 +2,6 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
-## 2026-11-11 — Validation : revue clinique dans le même appel
-
-*L'audit factuel dit « ceci n'est pas dans l'audio ». Il ne dit pas « ceci
-mérite votre attention ». La revue clinique ajoute cette seconde lecture —
-sans second appel, donc sans renvoyer l'audio.*
-
-- **Revue clinique** (nouveau réglage `clinical_review_enabled`, désactivé par
-  défaut) : signale les **interactions médicamenteuses** pertinentes et les
-  **éléments à considérer** absents de la note (diagnostic différentiel non
-  évoqué, bilan manquant, risque pour l'aidant, facteur de risque non
-  documenté). Chaque élément est préfixé `[note]` ou `[document]` selon sa
-  provenance, et formulé comme une **piste à évaluer** — jamais comme une
-  conclusion.
-- **Un seul appel, deux phases** : l'audit garde sa consigne intacte et passe
-  en premier ; une barrière explicite (« fin de la phase 1 ») fait ensuite
-  changer de rôle au modèle. L'audio n'est envoyé qu'une fois et les jetons de
-  l'audit précèdent ceux de la revue, donc la revue ne peut pas contaminer
-  l'audit. Mesuré sur une dictée réelle de 275 s : audit identique, +11 s,
-  6 825 jetons audio envoyés une seule fois.
-- **Les documents comptent** : la revue reçoit le bloc documents, qui porte des
-  informations ne figurant pas dans la note (une liste de médicaments
-  photographiée, par exemple) et qui changent l'analyse.
-- **Affichage séparé** : la revue apparaît sous l'audit, dans sa propre
-  section, avec un avertissement explicite — suggestions indicatives, ni
-  diagnostic ni recommandation.
-- **Robustesse du flux** : une réponse combinée tronquée en pleine revue
-  conserve l'audit complet au lieu de tout perdre (`_extraire_json` referme
-  l'objet `audit`).
-
 ## 2026-11-10 — Dictée : la sonde STT ne se contredit plus
 
 *L'instance de test annonçait « service vocal indisponible » au milieu d'une

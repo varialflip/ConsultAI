@@ -4003,8 +4003,38 @@ def _documents_context(
         "Médecin de famille imprimé en tête du document (à utiliser pour le "
         "champ du même nom) : {valeur}"
     )
+    entete_divergences = (
+        "Divergences with the other list (write them as prose right after the "
+        "medication list, no heading, no bullets): {texte}"
+        if anglais else
+        "Divergences avec l'autre liste (à écrire en prose juste après la "
+        "liste des médicaments, sans titre ni énumération) : {texte}"
+    )
+    #: Plusieurs listes (DSQ + séjour en cours) : la liste d'hospitalisation
+    #: est la référence, les écarts s'écrivent en prose.
+    entete_plusieurs = (
+        "SEVERAL medication lists below (each title in brackets). Use the "
+        "CURRENT INPATIENT list as the list that applies today; the medication "
+        "section shows it, then states in prose — no heading, no bullets — "
+        "what differs from the other list: added, stopped, dose changed."
+        if anglais else
+        "PLUSIEURS listes de médicaments ci-dessous (chaque titre entre "
+        "crochets). Celle de l'HOSPITALISATION EN COURS est la liste qui "
+        "s'applique aujourd'hui : c'est elle que montre la rubrique des "
+        "médicaments. Écris ensuite en prose — sans titre ni énumération — ce "
+        "qui diffère de l'autre liste : ajouté, cessé, dose changée."
+    )
     blocs: List[str] = []
-    for document in documents_service.for_consultation(db, consultation_id):
+    documents = list(documents_service.for_consultation(db, consultation_id))
+    listes = 0
+    for document in documents:
+        stockee = _stored_extraction(document)
+        if stockee and (stockee.get("med_list") or []):
+            listes += 1
+    if listes > 1:
+        blocs.append(entete_plusieurs)
+        blocs.append("")
+    for document in documents:
         extraction_stockee = _stored_extraction(document)
         if not extraction_stockee:
             continue
@@ -4033,8 +4063,18 @@ def _documents_context(
                     continue
             reconciliees.append(entry)
         if reconciliees:
-            blocs.append(entete_liste)
+            titre_doc = str(document.title or "").strip()
+            # Plusieurs listes : le titre du document les distingue ; une seule
+            # liste garde l'en-tête simple (rien à comparer).
+            if listes > 1 and titre_doc:
+                blocs.append(f"[{titre_doc}] {entete_liste}")
+            else:
+                blocs.append(entete_liste)
             blocs.extend(entry["line"] for entry in reconciliees)
+            blocs.append("")
+        divergences = str(extraction_stockee.get("med_divergences") or "").strip()
+        if divergences:
+            blocs.append(entete_divergences.format(texte=divergences))
             blocs.append("")
         par_document: dict = {}
         for item in items:

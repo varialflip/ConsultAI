@@ -1538,6 +1538,14 @@ invention » (ils ne figurent pas dans la dictée) — et un garde-fou quand auc
 dictée n'accompagne les documents. L'audit « Validation » reçoit le même bloc,
 sinon il signalerait la liste du médecin comme une invention.
 
+**Deux listes : le séjour en cours fait foi.** Quand un même brouillon porte le
+DSQ et la liste du séjour en cours (deux envois : un PDF et des photos ne
+peuvent pas être un seul document), la note écrit la liste de
+**l'hospitalisation** — celle qui s'applique aujourd'hui — puis, en prose, ce
+qui diffère de l'autre : ajouté, cessé, dose changée. Le bloc le dit au modèle
+dès qu'il y a plus d'une liste, et chaque liste porte son titre entre
+crochets pour qu'elles ne se confondent pas.
+
 **Rétention.** Les documents s'effacent avec le brouillon — suppression
 manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers
 sans ligne correspondante tourne à chaque purge. `DOCUMENTS_DIR` (défaut

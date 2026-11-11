@@ -195,6 +195,13 @@ dernier. C'est l'ordre du gabarit « Gériatrie | Inversé ». ``group`` est une
 métadonnée interne : elle n'est jamais recopiée dans la note, et le \
 regroupement final appartient au gabarit.
 
+**Deux listes dans le même envoi.** Quand les pages portent une liste \
+d'HOSPITALISATION EN COURS et un DSQ, ``med_list`` est la liste de \
+l'hospitalisation — celle qui s'applique aujourd'hui. ``med_divergences`` \
+décrit alors en une ou deux phrases ce qui diffère de l'autre liste : ajouté, \
+cessé, dose changée. Rien à dire sur ce qui concorde, et rien quand il n'y a \
+qu'une liste.
+
 - **Un médicament, une ligne.** Une molécule garde UNE ligne, quels que soient \
 ses schémas ; les prises se joignent par « et », celles d'un même moment \
 s'additionnent : ``2 × 50 mg + 1 × 25 mg au coucher`` → ``Prégabaline 125 mg \
@@ -376,6 +383,12 @@ laxatives, vitamin D + calcium, and completed courses last. This is the \
 "Gériatrie | Inversé" template order. ``group`` is internal metadata: it is \
 never copied into the note, and the final grouping belongs to the template.
 
+**Two lists in one upload.** When the pages carry a CURRENT INPATIENT list and \
+a DSQ, ``med_list`` is the inpatient list — the one that applies today. \
+``med_divergences`` then describes in one or two sentences what differs from \
+the other list: added, stopped, dose changed. Nothing about what matches, and \
+nothing when there is only one list.
+
 - **One medication, one line.** A molecule keeps ONE line whatever its \
 schedules; intakes are joined by "and", those at the same moment are added: \
 ``2 × 50 mg + 1 × 25 mg at bedtime`` → ``Pregabalin 125 mg PO HS``; \
@@ -519,6 +532,9 @@ _SCHEMA = {
             },
             "required": ["name", "type"],
         },
+        #: Écarts entre deux listes du même envoi (hospitalisation en cours et
+        #: DSQ) : en prose, pour la note. Vide quand il n'y a qu'une liste.
+        "med_divergences": {"type": "STRING"},
         "coverage": {
             "type": "ARRAY",
             "items": {
@@ -1033,6 +1049,9 @@ def _normalize(payload: dict, count: int) -> dict:
         # qu'un médicament perdu. Seules les sources connues servent à
         # appliquer les cases cochées du médecin.
         "med_list": med_list,
+        "med_divergences": re.sub(
+            r"\s+", " ", str(payload.get("med_divergences") or "")
+        ).strip()[:600],
         "prescriber": _prescripteur(payload.get("prescriber")),
         "coverage": coverage,
         # Pages non rendues : affichées dans l'onglet, jamais bloquantes.

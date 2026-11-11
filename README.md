@@ -381,6 +381,18 @@ direct** (tranche par tranche) que pour les **enregistrements importés**
 > recommandation. Diffusion en direct (SSE `review_chunk` puis
 > `review_result`), stockage propre (`consultations.review_json`), réaffichage
 > silencieux au chargement et filet de relecture si le flux SSE se rompt.
+>
+> **Réglage du bruit.** La première version rendait 10 éléments et ~400 mots
+> pour un seul patient, avec un même problème compté trois fois et des rappels
+> de gériatrie de base — le lecteur étant un gériatre, c'est du bruit. Depuis :
+> **plafond de 5 éléments au total** (3 interactions au plus, appliqué côté
+> serveur et pas seulement dans la consigne), **trois conditions obligatoires**
+> pour signaler (spécifique à ce patient ; non déjà tranché par le Plan ou
+> l'Impression ; cela changerait la conduite aujourd'hui ou avant le congé),
+> **une phrase de 25 mots maximum** sans question rhétorique ni explication de
+> cours, et **mécanisme exigé** pour une interaction (une association seulement
+> « plausible » n'est pas signalée). Sur la même note : 10 éléments / 397 mots
+> → 5 éléments / 122 mots.
 
 ---
 

@@ -15,6 +15,26 @@ interactions médicamenteuses et pistes à évaluer.*
   autonomie surestimée). Chaque élément est préfixé `[note]` ou `[document]`
   selon sa provenance et formulé comme une **piste à évaluer** — jamais comme
   une conclusion.
+- **Réglage du bruit (2026-11-11, après la première note réelle)** : la
+  première version rendait 10 éléments et ~400 mots pour un seul patient, avec
+  un même problème compté trois fois et des rappels de gériatrie de base. Le
+  lecteur est un gériatre : il connaît son métier. Quatre corrections :
+  - **plafond de 5 éléments AU TOTAL** (3 interactions au plus, les
+    considérations remplissent le reste) — appliqué côté serveur, pas seulement
+    dans la consigne, un modèle bavard ignorant la limite ;
+  - **trois conditions obligatoires** pour signaler : spécifique à ce patient,
+    non déjà tranché par le Plan ou l'Impression, et cela changerait la
+    conduite aujourd'hui ou avant le congé ;
+  - **une phrase de 25 mots maximum**, constat puis action, sans question
+    rhétorique ni explication de cours ;
+  - **mécanisme exigé** pour une interaction (QT, saignement, sédation
+    cumulative, accumulation rénale, hyponatrémie…) : une association seulement
+    « plausible » n'est pas signalée — c'est ce qui produisait le faux positif
+    « hydromorphone + insuffisance rénale » alors que l'hydromorphone est
+    justement le choix sûr à ClCr 54.
+  Résultat sur la même note : 10 éléments / 397 mots → **5 éléments / 122
+  mots**, sans perte de contenu utile (et un nouveau constat : congé annoncé
+  alors que la chirurgie plastique est en attente).
 - **Appel SÉPARÉ, sans audio** : la note et les documents suffisent à un regard
   clinique, l'audio ne servant qu'à vérifier la fidélité. Mesuré sur une
   consultation réelle : ~1 400 jetons de prompt et 21-26 s, contre ~9 500

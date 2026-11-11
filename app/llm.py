@@ -1589,77 +1589,89 @@ _AUDITOR_TRANSCRIPT_PROMPTS = {
 #: énuméré les médicaments.
 _REVIEW_PROMPTS = {
     "fr": (
-        "Tu es un clinicien expérimenté. On te donne la NOTE d'une "
-        "consultation, rédigée à partir d'une dictée. Tu ne disposes PAS de "
-        "l'audio ni de la transcription : ta tâche n'est pas de vérifier la "
-        "fidélité de la note, mais d'apporter un regard clinique sur ce "
-        "qu'elle contient.\n"
+        "Tu es un gériatre senior qui relit la note d'un collègue gériatre "
+        "avant qu'il ne la signe. Il connaît son métier : ne lui explique pas "
+        "les principes de base de la gériatrie, ne les lui rappelle pas, et ne "
+        "signale rien qu'un gériatre considère déjà par réflexe.\n"
         "\n"
-        "Tu PEUX et DOIS raisonner avec tes connaissances médicales générales. "
-        "Tu ne poses aucun diagnostic et tu ne remplaces pas le jugement du "
-        "médecin : tu signales des pistes qu'il pourrait vouloir évaluer.\n"
+        "Tu ne disposes PAS de l'audio ni de la transcription : ta tâche n'est "
+        "pas de vérifier la fidélité de la note, mais d'apporter un regard "
+        "clinique sur ce qu'elle contient.\n"
         "\n"
-        "MÉTHODE : 1) lis la note en entier ; 2) relève TOUS les médicaments "
-        "avec leurs doses ; 3) pour chacun, demande-toi avec quels autres "
-        "médicaments ou quelles conditions décrites il interagit ; 4) ensuite "
-        "seulement, cherche ce qui manque.\n"
+        "CE QUI MÉRITE D'ÊTRE SIGNALÉ — trois conditions, toutes obligatoires :\n"
+        "1. C'est SPÉCIFIQUE à ce patient : un médicament nommé, une valeur "
+        "chiffrée, une combinaison précise. Jamais un principe général.\n"
+        "2. Le Plan et l'Impression ne l'ont PAS déjà tranché. Si la note a "
+        "décidé, c'est réglé : ne le signale pas, même pour approuver.\n"
+        "3. Cela changerait quelque chose dans ce que le médecin fait "
+        "aujourd'hui ou avant le congé.\n"
         "\n"
-        "- « interactions » : interactions médicamenteuses cliniquement "
-        "pertinentes entre les médicaments de la note, OU entre un médicament "
-        "et l'état décrit (âge avancé, chutes, troubles cognitifs, hypotension "
-        "orthostatique, insuffisance rénale, dénutrition, déglutition). Nomme "
-        "les médicaments concernés, la nature du risque et la conduite à "
-        "envisager. Une liste VIDE n'est justifiée que si la note ne contient "
-        "AUCUN médicament ou qu'aucune interaction ne s'applique.\n"
-        "- « considerations » : éléments cliniques que le médecin pourrait "
-        "vouloir considérer et qui ne figurent PAS dans la note — diagnostic "
-        "différentiel non évoqué, bilan manquant, facteur de risque non "
-        "documenté, risque pour l'aidant, suivi à prévoir. Formule chaque "
-        "élément comme une QUESTION à évaluer, jamais comme une conclusion. "
-        "N'y répète PAS ce que la note dit déjà avoir prévu : si un élément y "
-        "est déjà recommandé, demande plutôt s'il est suffisant.\n"
+        "Pour une interaction médicamenteuse, exige un mécanisme connu et "
+        "nommable (allongement du QT, risque hémorragique, sédation "
+        "cumulative, accumulation rénale, hyponatrémie, hypotension "
+        "orthostatique…). Une association seulement « plausible », sans "
+        "mécanisme précis, n'est pas une interaction : ne la signale pas.\n"
         "\n"
-        "Chaque élément commence par « [note] » s'il découle de ce qui est "
-        "écrit, ou par « [document] » s'il découle d'un document fourni. Au "
-        "plus 5 éléments par liste.\n"
+        "TRI : produis au plus 5 éléments AU TOTAL, toutes rubriques "
+        "confondues. S'il y en a davantage, garde les plus décisifs. Si un "
+        "même problème touche plusieurs médicaments, c'est UN seul élément, "
+        "pas un par médicament.\n"
+        "\n"
+        "FORME : une seule phrase par élément, 25 mots au maximum. Le constat "
+        "d'abord, puis l'action. Pas de question rhétorique, pas d'explication "
+        "de cours, pas de « il serait pertinent de ». Commence chaque élément "
+        "par « [note] » ou « [document] ».\n"
+        "\n"
+        "- « interactions » : le risque et la conduite à envisager.\n"
+        "- « considerations » : ce que la note ne couvre pas et qui compte "
+        "pour ce patient.\n"
+        "\n"
+        "Si rien ne remplit les trois conditions, renvoie deux listes vides. "
+        "C'est un résultat normal et attendu.\n"
         "\n"
         "RÉPONSE OBLIGATOIRE : UNIQUEMENT un objet JSON strict, sans aucun "
         "autre texte ni commentaire, de la forme : "
         "{\"interactions\": [\"...\"], \"considerations\": [\"...\"]}"
     ),
     "en": (
-        "You are an experienced clinician. You are given the NOTE of a "
-        "consultation, written from a dictation. You do NOT have the audio or "
-        "the transcript: your task is not to verify the note's fidelity but to "
-        "bring a clinical eye to what it contains.\n"
+        "You are a senior geriatrician rereading a colleague's note before "
+        "they sign it. They know their job: do not explain basic geriatric "
+        "principles to them, do not remind them of them, and do not flag "
+        "anything a geriatrician already considers by reflex.\n"
         "\n"
-        "You MAY and MUST reason with your general medical knowledge. You make "
-        "no diagnosis and do not replace the physician's judgement: you flag "
-        "leads they may wish to evaluate.\n"
+        "You do NOT have the audio or the transcript: your task is not to "
+        "verify the note's fidelity but to bring a clinical eye to what it "
+        "contains.\n"
         "\n"
-        "METHOD: 1) read the whole note; 2) list EVERY medication with its "
-        "dose; 3) for each, ask which other medications or described "
-        "conditions it interacts with; 4) only then look for what is "
-        "missing.\n"
+        "WHAT DESERVES FLAGGING — three conditions, all mandatory:\n"
+        "1. It is SPECIFIC to this patient: a named drug, a numeric value, a "
+        "precise combination. Never a general principle.\n"
+        "2. The Plan and Impression have NOT already settled it. If the note "
+        "has decided, it is closed: do not flag it, not even to approve.\n"
+        "3. It would change something in what the physician does today or "
+        "before discharge.\n"
         "\n"
-        "- \"interactions\": clinically relevant drug interactions between the "
-        "note's medications, OR between a medication and the described "
-        "condition (advanced age, falls, cognitive impairment, orthostatic "
-        "hypotension, renal impairment, malnutrition, swallowing). Name the "
-        "drugs involved, the nature of the risk and the action to consider. An "
-        "EMPTY list is justified only if the note contains NO medication or no "
-        "interaction applies.\n"
-        "- \"considerations\": clinical elements the physician may wish to "
-        "consider that are NOT in the note — an unmentioned differential, a "
-        "missing workup, an undocumented risk factor, caregiver risk, "
-        "follow-up to plan. Phrase each one as a QUESTION to evaluate, never "
-        "as a conclusion. Do NOT repeat what the note already says it has "
-        "planned: if something is already recommended there, ask instead "
-        "whether it is sufficient.\n"
+        "For a drug interaction, require a known and nameable mechanism (QT "
+        "prolongation, bleeding risk, cumulative sedation, renal accumulation, "
+        "hyponatremia, orthostatic hypotension…). A merely \"plausible\" "
+        "association without a precise mechanism is not an interaction: do not "
+        "flag it.\n"
         "\n"
-        "Each item starts with \"[note]\" if it follows from what is written, "
-        "or \"[document]\" if it follows from a supplied document. At most 5 "
-        "items per list.\n"
+        "TRIAGE: produce at most 5 items IN TOTAL, across both sections. If "
+        "there are more, keep the most decisive. If one problem involves "
+        "several drugs, that is ONE item, not one per drug.\n"
+        "\n"
+        "FORM: a single sentence per item, 25 words maximum. The finding "
+        "first, then the action. No rhetorical questions, no lecturing, no "
+        "\"it would be relevant to\". Start each item with \"[note]\" or "
+        "\"[document]\".\n"
+        "\n"
+        "- \"interactions\": the risk and the action to consider.\n"
+        "- \"considerations\": what the note does not cover and that matters "
+        "for this patient.\n"
+        "\n"
+        "If nothing meets all three conditions, return two empty lists. That "
+        "is a normal and expected outcome.\n"
         "\n"
         "MANDATORY RESPONSE: ONLY a strict JSON object, no other text: "
         "{\"interactions\": [\"...\"], \"considerations\": [\"...\"]}"
@@ -1720,21 +1732,30 @@ def _review_messages(
 
 
 def _assainir_revue(brut: str) -> Optional[dict]:
-    """Parse et borne la réponse JSON de la revue clinique."""
+    """
+    Parse et borne la réponse JSON de la revue clinique.
+
+    Le plafond est appliqué ICI et pas seulement dans la consigne : un modèle
+    bavard ignore la limite de 5 éléments, et une revue de 10 paragraphes se
+    transforme en bruit que le médecin doit trier lui-même (constaté sur une
+    vraie note : 10 éléments, ~1 400 mots, un même problème compté trois fois).
+
+    Les interactions passent en premier (elles sont vérifiables et
+    falsifiables) ; les considérations remplissent ce qui reste.
+    """
     donnees = _extraire_json(brut)
     if donnees is None:
         logger.warning("Revue clinique : réponse non JSON ignorée (%d caractères)", len(brut or ""))
         return None
 
-    def _liste(valeur: object) -> List[str]:
+    def _liste(valeur: object, maxi: int) -> List[str]:
         if not isinstance(valeur, list):
             return []
-        return [str(i).strip() for i in valeur if str(i).strip()][:8]
+        return [str(i).strip() for i in valeur if str(i).strip()][:maxi]
 
-    return {
-        "interactions": _liste(donnees.get("interactions")),
-        "considerations": _liste(donnees.get("considerations")),
-    }
+    interactions = _liste(donnees.get("interactions"), 3)
+    considerations = _liste(donnees.get("considerations"), max(0, 5 - len(interactions)))
+    return {"interactions": interactions, "considerations": considerations}
 
 
 def review_note_stream(

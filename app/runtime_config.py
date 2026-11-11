@@ -854,6 +854,15 @@ SETTINGS: Tuple[Setting, ...] = (
         help_key="set.second_pass_enabled.help",
     ),
 
+    # Revue clinique : appel SÉPARÉ, sans audio (note + documents seulement).
+    # Indépendante de « Validation » : elle ne renvoie pas l'audio, donc elle
+    # coûte ~1 200 jetons de prompt au lieu de ~9 500.
+    Setting(
+        "clinical_review_enabled", "choice", "group.note",
+        default=lambda: "false", choices=ON_OFF,
+        help_key="set.clinical_review_enabled.help",
+    ),
+
     # --- Consigne générale ---------------------------------------------------
     # Une consigne par langue. C'est la LANGUE DU GABARIT qui décide laquelle
     # est employée — voir llm.build_system_prompt. Les valeurs livrées viennent

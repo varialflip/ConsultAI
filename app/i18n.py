@@ -336,6 +336,27 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "In the note, but absent from the source",
     ),
     "secondpass.confidence": ("Confiance de l'audit", "Audit confidence"),
+    "secondpass.review_title": (
+        "Revue clinique — pistes à évaluer",
+        "Clinical review — leads to evaluate",
+    ),
+    "secondpass.review_disclaimer": (
+        "Suggestions du modèle, à titre indicatif : elles ne remplacent pas "
+        "votre jugement clinique et ne constituent ni un diagnostic ni une "
+        "recommandation.",
+        "Model suggestions, for information only: they do not replace your "
+        "clinical judgement and are neither a diagnosis nor a recommendation.",
+    ),
+    "secondpass.interactions": (
+        "Interactions médicamenteuses",
+        "Drug interactions",
+    ),
+    "secondpass.considerations": ("À considérer", "Worth considering"),
+    "secondpass.review_empty": ("Aucune piste relevée.", "No leads found."),
+    "secondpass.review_pending": (
+        "Revue clinique en cours…",
+        "Clinical review in progress…",
+    ),
     "validation.med_region": (
         "Zone médicaments (LLM)",
         "Medication region (LLM)",
@@ -2366,6 +2387,27 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "After each note, compare it against the dictation audio and flag "
         "discrepancies (omissions, inventions). Costs a second model call "
         "(the audio is sent again); off by default. Applies to all users.",
+    ),
+    "set.clinical_review_enabled.label": (
+        "Revue clinique (interactions et pistes)",
+        "Clinical review (interactions and leads)",
+    ),
+    "set.clinical_review_enabled.help": (
+        "Après chaque note, un appel SÉPARÉ relit la note en clinicien et "
+        "signale les interactions médicamenteuses et les éléments à considérer "
+        "(diagnostic différentiel non évoqué, bilan manquant, risque pour "
+        "l'aidant). Cet appel ne renvoie PAS l'audio — la note et les documents "
+        "suffisent — donc il coûte bien moins qu'une Validation. Indépendant de "
+        "la Validation. Les éléments sont des PISTES à évaluer, jamais des "
+        "conclusions : le jugement reste au clinicien. Désactivée par défaut ; "
+        "s'applique à tous les usagers.",
+        "After each note, a SEPARATE call rereads the note as a clinician and "
+        "flags drug interactions and clinical elements worth considering "
+        "(unmentioned differential, missing workup, caregiver risk). This call "
+        "does NOT resend the audio — the note and documents suffice — so it "
+        "costs far less than Validation. Independent of Validation. Items are "
+        "LEADS to evaluate, never conclusions: judgement stays with the "
+        "clinician. Off by default; applies to all users.",
     ),
     "set.show_thinking_users.help": (
         "Même affichage transitoire du raisonnement (thinking), pour les "

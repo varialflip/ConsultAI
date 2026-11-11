@@ -299,6 +299,11 @@ class Consultation(Base):
     # côté interface, comme si absent. Suit la note qu'il audite et meurt
     # avec le brouillon, comme elle.
     verification_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Résultat de la REVUE CLINIQUE (interactions + pistes à évaluer),
+    # sérialisé JSON. Appel séparé de « Validation », sans audio. Nullable :
+    # absent = jamais demandé ou revue désactivée. Suit la note et meurt avec
+    # le brouillon, comme elle.
+    review_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Rubrique « Corrections et éléments à valider », retirée du corps de la
     # note à la génération et montrée dans l'onglet « Validation ». Même
     # rétention que la note : vit et meurt avec le brouillon.
@@ -394,6 +399,7 @@ class Consultation(Base):
                     "generated_markdown": self.generated_markdown,
                     "edited_markdown": self.edited_markdown,
                     "verification_json": self.verification_json,
+                    "review_json": self.review_json,
                     "corrections_markdown": self.corrections_markdown,
                     "med_grounding_json": self.med_grounding_json,
                     "med_region_json": self.med_region_json,
@@ -3090,6 +3096,7 @@ _ADDED_COLUMNS = {
         ("generation_seconds", "FLOAT"),
         ("transcript_used", "BOOLEAN NOT NULL DEFAULT 1"),
         ("verification_json", "TEXT"),
+        ("review_json", "TEXT"),
         ("corrections_markdown", "TEXT"),
         ("med_grounding_json", "TEXT"),
         ("transcript_conf", "TEXT"),

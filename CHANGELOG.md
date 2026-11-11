@@ -2,6 +2,40 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-11 — Revue clinique : un appel séparé, sans audio
+
+*L'audit factuel dit « ceci n'est pas dans l'audio ». Il ne dit pas « ceci
+mérite votre attention ». La revue clinique ajoute cette seconde lecture —
+interactions médicamenteuses et pistes à évaluer.*
+
+- **Revue clinique** (nouveau réglage `clinical_review_enabled`, désactivé par
+  défaut) : relit la note en clinicien et signale les **interactions
+  médicamenteuses** et les **éléments à considérer** absents de la note
+  (diagnostic différentiel non évoqué, bilan manquant, risque pour l'aidant,
+  autonomie surestimée). Chaque élément est préfixé `[note]` ou `[document]`
+  selon sa provenance et formulé comme une **piste à évaluer** — jamais comme
+  une conclusion.
+- **Appel SÉPARÉ, sans audio** : la note et les documents suffisent à un regard
+  clinique, l'audio ne servant qu'à vérifier la fidélité. Mesuré sur une
+  consultation réelle : ~1 400 jetons de prompt et 21-26 s, contre ~9 500
+  jetons si l'audio était renvoyé. **Indépendante de « Validation »**.
+- **Deux approches mesurées puis écartées** (A/B hors application, 2026-11-11) :
+  - *dans l'appel de génération* : la revue hérite de la posture « n'invente
+    rien » de la mise en forme et rend des listes vides — 0 interaction sur une
+    patiente sous donépézil + candésartan pourtant à risque de chute ;
+  - *dans l'appel d'audit* : la qualité est bonne mais impose de renvoyer
+    l'audio et lie la revue à `second_pass_enabled`.
+  L'appel séparé donne la meilleure qualité des trois (2 interactions, dont une
+  réévaluation de la pertinence du donépézil argumentée).
+- **Méthode imposée au modèle** : relever d'abord TOUS les médicaments avec
+  leurs doses, puis chercher les interactions — corrige le biais où le modèle
+  concluait « aucune interaction » sans avoir énuméré les médicaments.
+- **Affichage séparé** : section distincte sous l'audit, liseré ambre, avec un
+  avertissement explicite — suggestions indicatives, ni diagnostic ni
+  recommandation. Diffusion en direct (SSE `review_chunk` / `review_result`),
+  stockage propre (`consultations.review_json`), filet de relecture au
+  rechargement comme l'audit.
+
 ## 2026-11-10 — Dictée : la sonde STT ne se contredit plus
 
 *L'instance de test annonçait « service vocal indisponible » au milieu d'une

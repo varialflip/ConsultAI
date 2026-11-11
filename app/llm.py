@@ -1566,6 +1566,246 @@ _AUDITOR_TRANSCRIPT_PROMPTS = {
 }
 
 
+#: Consignes de la REVUE CLINIQUE — appel SÉPARÉ, sans audio.
+#:
+#: Pourquoi un appel séparé plutôt qu'une phase ajoutée à l'audit ou à la
+#: génération (les deux ont été mesurés puis écartés le 2026-11-11) :
+#:
+#: * dans l'appel de GÉNÉRATION, la revue hérite de la posture « n'invente
+#:   rien » de la mise en forme et rend des listes vides (0 interaction sur
+#:   une patiente sous donépézil + candésartan, pourtant à risque de chute) ;
+#: * dans l'appel d'AUDIT, elle fonctionne mais impose de renvoyer l'audio
+#:   (~9 500 jetons de prompt) et la lie à ``second_pass_enabled``.
+#:
+#: En appel séparé, sans audio : 1 233 jetons de prompt, 33 s, et la meilleure
+#: qualité des trois (2 interactions, dont une déprescription de donépézil
+#: argumentée). La note et les documents suffisent — l'audio n'apporte rien à
+#: un regard clinique, il ne sert qu'à vérifier la fidélité.
+#:
+#: Le texte est volontairement plus direct que celui de l'audit : ici on veut
+#: des pistes, pas une liste vide par prudence. La méthode imposée (relever
+#: d'abord TOUS les médicaments, puis chercher les interactions) corrige le
+#: biais observé où le modèle concluait « aucune interaction » sans avoir
+#: énuméré les médicaments.
+_REVIEW_PROMPTS = {
+    "fr": (
+        "Tu es un clinicien expérimenté. On te donne la NOTE d'une "
+        "consultation, rédigée à partir d'une dictée. Tu ne disposes PAS de "
+        "l'audio ni de la transcription : ta tâche n'est pas de vérifier la "
+        "fidélité de la note, mais d'apporter un regard clinique sur ce "
+        "qu'elle contient.\n"
+        "\n"
+        "Tu PEUX et DOIS raisonner avec tes connaissances médicales générales. "
+        "Tu ne poses aucun diagnostic et tu ne remplaces pas le jugement du "
+        "médecin : tu signales des pistes qu'il pourrait vouloir évaluer.\n"
+        "\n"
+        "MÉTHODE : 1) lis la note en entier ; 2) relève TOUS les médicaments "
+        "avec leurs doses ; 3) pour chacun, demande-toi avec quels autres "
+        "médicaments ou quelles conditions décrites il interagit ; 4) ensuite "
+        "seulement, cherche ce qui manque.\n"
+        "\n"
+        "- « interactions » : interactions médicamenteuses cliniquement "
+        "pertinentes entre les médicaments de la note, OU entre un médicament "
+        "et l'état décrit (âge avancé, chutes, troubles cognitifs, hypotension "
+        "orthostatique, insuffisance rénale, dénutrition, déglutition). Nomme "
+        "les médicaments concernés, la nature du risque et la conduite à "
+        "envisager. Une liste VIDE n'est justifiée que si la note ne contient "
+        "AUCUN médicament ou qu'aucune interaction ne s'applique.\n"
+        "- « considerations » : éléments cliniques que le médecin pourrait "
+        "vouloir considérer et qui ne figurent PAS dans la note — diagnostic "
+        "différentiel non évoqué, bilan manquant, facteur de risque non "
+        "documenté, risque pour l'aidant, suivi à prévoir. Formule chaque "
+        "élément comme une QUESTION à évaluer, jamais comme une conclusion. "
+        "N'y répète PAS ce que la note dit déjà avoir prévu : si un élément y "
+        "est déjà recommandé, demande plutôt s'il est suffisant.\n"
+        "\n"
+        "Chaque élément commence par « [note] » s'il découle de ce qui est "
+        "écrit, ou par « [document] » s'il découle d'un document fourni. Au "
+        "plus 5 éléments par liste.\n"
+        "\n"
+        "RÉPONSE OBLIGATOIRE : UNIQUEMENT un objet JSON strict, sans aucun "
+        "autre texte ni commentaire, de la forme : "
+        "{\"interactions\": [\"...\"], \"considerations\": [\"...\"]}"
+    ),
+    "en": (
+        "You are an experienced clinician. You are given the NOTE of a "
+        "consultation, written from a dictation. You do NOT have the audio or "
+        "the transcript: your task is not to verify the note's fidelity but to "
+        "bring a clinical eye to what it contains.\n"
+        "\n"
+        "You MAY and MUST reason with your general medical knowledge. You make "
+        "no diagnosis and do not replace the physician's judgement: you flag "
+        "leads they may wish to evaluate.\n"
+        "\n"
+        "METHOD: 1) read the whole note; 2) list EVERY medication with its "
+        "dose; 3) for each, ask which other medications or described "
+        "conditions it interacts with; 4) only then look for what is "
+        "missing.\n"
+        "\n"
+        "- \"interactions\": clinically relevant drug interactions between the "
+        "note's medications, OR between a medication and the described "
+        "condition (advanced age, falls, cognitive impairment, orthostatic "
+        "hypotension, renal impairment, malnutrition, swallowing). Name the "
+        "drugs involved, the nature of the risk and the action to consider. An "
+        "EMPTY list is justified only if the note contains NO medication or no "
+        "interaction applies.\n"
+        "- \"considerations\": clinical elements the physician may wish to "
+        "consider that are NOT in the note — an unmentioned differential, a "
+        "missing workup, an undocumented risk factor, caregiver risk, "
+        "follow-up to plan. Phrase each one as a QUESTION to evaluate, never "
+        "as a conclusion. Do NOT repeat what the note already says it has "
+        "planned: if something is already recommended there, ask instead "
+        "whether it is sufficient.\n"
+        "\n"
+        "Each item starts with \"[note]\" if it follows from what is written, "
+        "or \"[document]\" if it follows from a supplied document. At most 5 "
+        "items per list.\n"
+        "\n"
+        "MANDATORY RESPONSE: ONLY a strict JSON object, no other text: "
+        "{\"interactions\": [\"...\"], \"considerations\": [\"...\"]}"
+    ),
+}
+
+
+def clinical_review_enabled() -> bool:
+    """
+    La revue clinique est-elle activée ?
+
+    Appel SÉPARÉ, indépendant de ``second_pass_enabled`` : il ne renvoie pas
+    l'audio (la note et les documents suffisent), donc il ne coûte pas le prix
+    d'un audit.
+    """
+    return runtime_config.value("clinical_review_enabled") == "true"
+
+
+def review_model(provider: Optional[str] = None) -> str:
+    """
+    Modèle de la revue clinique pour le fournisseur donné (ou actif).
+
+    Réglage ``<fournisseur>_review_model`` ; vide → le modèle principal.
+    """
+    provider = provider or active_provider()
+    key = _VERIFY_MODEL_KEYS.get(provider, "gemini_verify_model").replace(
+        "_verify_model", "_review_model"
+    )
+    try:
+        return runtime_config.value(key) or active_model(provider)
+    except KeyError:
+        # Pas de réglage dédié pour ce fournisseur : modèle principal.
+        return active_model(provider)
+
+
+def _review_messages(
+    note_markdown: str,
+    langue: str,
+    documents_block: str = "",
+) -> Tuple[str, str]:
+    """Consigne système et message utilisateur de la revue clinique."""
+    langue_norm = i18n.normalize(langue)
+    system = _REVIEW_PROMPTS.get(langue_norm, _REVIEW_PROMPTS["fr"])
+    blocs = [f"<NOTE>\n{(note_markdown or '').strip()}\n</NOTE>"]
+    if (documents_block or "").strip():
+        consigne = (
+            "Éléments provenant de documents fournis par le médecin — ils "
+            "peuvent contenir des informations qui ne sont PAS dans la note :"
+            if langue_norm != "en" else
+            "Items coming from documents supplied by the physician — they may "
+            "contain information that is NOT in the note:"
+        )
+        blocs.append(
+            f"<DOCUMENTS_FOURNIS>\n{consigne}\n{documents_block.strip()}\n"
+            "</DOCUMENTS_FOURNIS>"
+        )
+    return system, "\n\n".join(blocs)
+
+
+def _assainir_revue(brut: str) -> Optional[dict]:
+    """Parse et borne la réponse JSON de la revue clinique."""
+    donnees = _extraire_json(brut)
+    if donnees is None:
+        logger.warning("Revue clinique : réponse non JSON ignorée (%d caractères)", len(brut or ""))
+        return None
+
+    def _liste(valeur: object) -> List[str]:
+        if not isinstance(valeur, list):
+            return []
+        return [str(i).strip() for i in valeur if str(i).strip()][:8]
+
+    return {
+        "interactions": _liste(donnees.get("interactions")),
+        "considerations": _liste(donnees.get("considerations")),
+    }
+
+
+def review_note_stream(
+    note_markdown: str,
+    langue: str = "fr",
+    documents_block: str = "",
+    model: Optional[str] = None,
+    provider: Optional[str] = None,
+    on_chunk: Optional[Callable[[str], None]] = None,
+) -> Tuple[Optional[dict], Dict[str, Optional[int]]]:
+    """
+    Revue clinique en flux : note + documents, SANS audio.
+
+    Diffuse le JSON brut au fil de l'eau (``on_chunk`` reçoit le texte
+    ACCUMULÉ, jamais des deltas) puis renvoie ``(résultat, usage)``. ``None``
+    au moindre doute — l'appelant traite cela comme « rien à afficher ».
+    """
+    provider = provider or active_provider()
+    nom_modele = model or review_model(provider)
+    if not nom_modele:
+        logger.warning("Revue clinique ignorée : aucun modèle pour %s", provider)
+        return None, {}
+    if not (note_markdown or "").strip():
+        logger.info("Revue clinique ignorée : note vide")
+        return None, {}
+
+    system, user = _review_messages(note_markdown, langue, documents_block)
+
+    t0 = time.monotonic()
+    parties: List[str] = []
+    stream = None
+    try:
+        stream = complete_stream(
+            system, user,
+            model=nom_modele, temperature=active_temperature(),
+            max_tokens=settings.gemini_max_output_tokens,
+            json_mode=False, provider=provider, audio=None,
+        )
+        while True:
+            try:
+                fragment = next(stream)
+            except StopIteration as stop:
+                completion = stop.value
+                break
+            if fragment:
+                parties.append(fragment)
+                if on_chunk is not None:
+                    on_chunk("".join(parties))
+    except Exception as exc:
+        logger.warning("Revue clinique impossible (%s / %s) : %s", provider, nom_modele, exc)
+        return None, {}
+    finally:
+        if stream is not None:
+            fermeture = getattr(stream, "close", None)
+            if callable(fermeture):
+                try:
+                    fermeture()
+                except Exception:
+                    pass
+
+    usage = completion.usage
+    brut = "".join(parties)
+    logger.info(
+        "Revue clinique %s (%s, flux) : %d jetons de prompt, %d en réponse, "
+        "%.1f s, %d caractères",
+        provider, nom_modele, usage.get("prompt_tokens"),
+        usage.get("output_tokens"), time.monotonic() - t0, len(brut),
+    )
+    return _assainir_revue(brut), usage
+
+
 def _verification_messages(
     note_markdown: str,
     langue: str,

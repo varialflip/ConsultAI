@@ -3042,6 +3042,22 @@
     secondPassRunning = false;
   }
 
+  /**
+   * Retient le jeton de la revue clinique pour CE lancement.
+   *
+   * La revue est un appel séparé, sans audio : elle peut revenir avant l'audit,
+   * voire avant la fin de la réponse de /api/generate sur une note courte. Le
+   * jeton est donc capturé avant le POST, et le filet ne s'arme qu'à l'arrivée
+   * du premier morceau (voir ``onReviewChunk``).
+   */
+  function captureReviewToken() {
+    clearTimeout(reviewTimeout);
+    reviewTimeout = null;
+    reviewPendingToken = state.generationToken;
+    reviewRunning = false;
+    renderClinicalReview(null);
+  }
+
   /** Remise à zéro de la vue « Validation » au début d'une nouvelle tentative. */
   function clearSecondPassView() {
     clearTimeout(secondPassTimeout);
@@ -3058,6 +3074,12 @@
       audit.classList.add('hidden');
       audit.innerHTML = '';
     }
+    // Revue clinique : même remise à zéro, elle est indépendante de l'audit.
+    clearTimeout(reviewTimeout);
+    reviewTimeout = null;
+    reviewPendingToken = null;
+    reviewRunning = false;
+    renderClinicalReview(null);
     renderMedRegion(null);
   }
 
@@ -3309,8 +3331,115 @@
     }
   }
 
+  /* =========================================================================
+   * 9 ter. REVUE CLINIQUE (appel séparé, sans audio)
+   * ========================================================================
+   * Distincte de « Validation » : elle relit la NOTE en clinicien et rend des
+   * pistes (interactions, éléments à considérer). Elle ne renvoie pas l'audio,
+   * donc elle arrive souvent APRÈS l'audit sans le retarder. Même jeton de
+   * génération, mêmes garde-fous : seul l'onglet émetteur applique le résultat.
+   * ====================================================================== */
+  let reviewPendingToken = null;
+  let reviewRunning = false;
+  let reviewTimeout = null;
+
+  function armerFiletReview() {
+    clearTimeout(reviewTimeout);
+    // 180 s comme l'audit : la revue est plus courte (~33 s mesurées), mais le
+    // filet doit couvrir un modèle lent ou une file saturée.
+    reviewTimeout = setTimeout(() => {
+      reviewPendingToken = null;
+      reviewRunning = false;
+      renderClinicalReview(null);
+    }, 180000);
+  }
+
+  function onReviewChunk(evt) {
+    let donnees;
+    try {
+      donnees = JSON.parse(evt.data || '{}');
+    } catch {
+      return;
+    }
+    if (String(donnees.consultation_id) !== String(state.consultationId)) return;
+    if (reviewPendingToken && donnees.generation_token !== reviewPendingToken) return;
+    // Premier morceau : la revue tourne vraiment — on arme le filet une fois.
+    if (!reviewRunning) {
+      reviewRunning = true;
+      armerFiletReview();
+    }
+    const partiel = parseProgressiveReview(donnees.text || '');
+    if (partiel) renderClinicalReview(partiel);
+  }
+
+  function onReviewResult(evt) {
+    let donnees;
+    try {
+      donnees = JSON.parse(evt.data || '{}');
+    } catch {
+      return;
+    }
+    if (String(donnees.consultation_id) !== String(state.consultationId)) return;
+    if (reviewPendingToken && donnees.generation_token !== reviewPendingToken) return;
+    reviewPendingToken = null;
+    reviewRunning = false;
+    clearTimeout(reviewTimeout);
+    if (donnees.skipped) {
+      renderClinicalReview(null);
+      return;
+    }
+    renderClinicalReview({
+      interactions: Array.isArray(donnees.interactions) ? donnees.interactions : [],
+      considerations: Array.isArray(donnees.considerations) ? donnees.considerations : [],
+    });
+  }
+
+  /**
+   * Parse progressif de la revue (schéma plat, plus simple que l'audit).
+   * Réutilise ``parseProgressiveJson`` en l'enveloppant dans la forme
+   * ``{review: ...}`` qu'il sait déjà reconstruire.
+   */
+  function parseProgressiveReview(texte) {
+    const enveloppe = parseProgressiveJson(`{"audit":{},"review":${texte}}`);
+    if (enveloppe && enveloppe.review) return enveloppe.review;
+    return null;
+  }
+
+  /**
+   * Rend la revue clinique sous l'audit. ``null`` efface la section.
+   * Section distincte et visuellement séparée : l'audit dit « ceci est faux »,
+   * la revue dit « voici une piste » — les mêler laisserait croire que les
+   * suggestions sont des constats.
+   */
+  function renderClinicalReview(resultat) {
+    const bloc = $('clinicalReview');
+    if (!bloc) return;
+    if (!resultat) {
+      bloc.classList.add('hidden');
+      bloc.innerHTML = '';
+      return;
+    }
+    const interactions = resultat.interactions || [];
+    const considerations = resultat.considerations || [];
+    const lignes = [`## ${T('secondpass.review_title')}`];
+    lignes.push('', `*${T('secondpass.review_disclaimer')}*`);
+    if (!interactions.length && !considerations.length) {
+      lignes.push('', `*${T('secondpass.review_empty')}*`);
+    } else {
+      if (interactions.length) {
+        lignes.push('', `**${T('secondpass.interactions')}**`);
+        for (const item of interactions) lignes.push(`- ${item}`);
+      }
+      if (considerations.length) {
+        lignes.push('', `**${T('secondpass.considerations')}**`);
+        for (const item of considerations) lignes.push(`- ${item}`);
+      }
+    }
+    bloc.innerHTML = markdownToHtml(lignes.join('\n'));
+    bloc.classList.remove('hidden');
+  }
+
   async function generateNote() {
-    // Une dictée encore active (enregistrement ou pause) doit d'abord être
     // conclue : les dernières secondes — celles dites juste avant une pause —
     // attendent encore dans le tampon du MediaRecorder et manquent à la
     // transcription. Conclure d'abord, générer ensuite, comme si le médecin
@@ -3397,6 +3526,10 @@
       // l'onglet aussi) ; on ne fait ici que retenir le jeton — le
       // « skipped » sans audio est publié par le serveur dès le début.
       if (state.secondPass) captureSecondPassToken();
+      // Revue clinique : appel séparé, armé indépendamment de « Validation ».
+      // On retient le jeton AVANT le POST pour ne pas rater un résultat publié
+      // très tôt (note courte → revue rapide).
+      captureReviewToken();
       const result = await api('/api/generate', {
         method: 'POST',
         signal: controller.signal,
@@ -5033,6 +5166,17 @@
         }
       } else {
         renderSecondPass(null, false);
+      }
+
+      // Revue clinique : réaffichage silencieux, même logique que l'audit.
+      if (draft.review_json) {
+        try {
+          renderClinicalReview(JSON.parse(draft.review_json));
+        } catch {
+          renderClinicalReview(null);
+        }
+      } else {
+        renderClinicalReview(null);
       }
 
       // « Correction des médicaments » : restaurer la liste pointée persistée.
@@ -8074,6 +8218,23 @@
       .catch(() => { /* Relecture au mieux : jamais bloquante. */ });
   }
 
+  /**
+   * Même filet pour la revue clinique : si le flux SSE s'est rompu pendant son
+   * calcul, on relit la consultation persistée. Indépendant de l'audit — les
+   * deux appels sont séparés et peuvent revenir dans n'importe quel ordre.
+   */
+  function recoverMissedReview() {
+    if (!state.consultationId || reviewPendingToken === null) return;
+    api(`/api/consultations/${state.consultationId}`)
+      .then((draft) => {
+        if (!draft || !draft.review_json) return;
+        try {
+          renderClinicalReview(JSON.parse(draft.review_json));
+        } catch (_) { /* JSON invalide : le filet reste maître. */ }
+      })
+      .catch(() => { /* Relecture au mieux : jamais bloquante. */ });
+  }
+
   /** Ouvre (ou rouvre) le flux SSE de cet usager. Un seul à la fois. */
   function connectLiveEvents() {
     if (liveSource) liveSource.close();
@@ -8092,6 +8253,8 @@
     liveSource.addEventListener('generation_started', onGenerationStarted);
     liveSource.addEventListener('verification_chunk', onVerificationChunk);
     liveSource.addEventListener('verification_result', onVerificationResult);
+    liveSource.addEventListener('review_chunk', onReviewChunk);
+    liveSource.addEventListener('review_result', onReviewResult);
     liveSource.addEventListener('transcript_correct', onTranscriptCorrect);
     liveSource.addEventListener('med_grounding', onMedGrounding);
     liveSource.addEventListener('med_grounding_result', onMedGroundingResult);
@@ -8103,7 +8266,7 @@
     liveSource.addEventListener('consultation_abandoned', onSyncConsultationAbandoned);
     // À chaque (ré)ouverture du flux : un « Verification » qui attendait encore
     // pendant une coupure reçoit ici son résultat déjà persisté.
-    liveSource.onopen = recoverMissedVerification;
+    liveSource.onopen = () => { recoverMissedVerification(); recoverMissedReview(); };
     // EventSource se reconnecte déjà tout seul (avec le délai « retry: » du
     // serveur) : on se contente de journaliser plutôt que de dupliquer cette
     // logique.

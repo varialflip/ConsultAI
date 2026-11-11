@@ -350,6 +350,38 @@ direct** (tranche par tranche) que pour les **enregistrements importés**
 > portée par la transcription (le seuil est conservateur : un vrai écart a
 > toujours un terme absent, il n'est donc jamais effacé).
 
+> **🩺 Revue clinique — pistes à évaluer.** Interrupteur GLOBAL distinct
+> (onglet Note, « Revue clinique (interactions et pistes) »,
+> `clinical_review_enabled`, désactivé par défaut), **indépendant de la
+> Validation**. Après chaque note, un **appel séparé** relit la note en
+> clinicien et renvoie deux listes : **interactions médicamenteuses** (entre
+> médicaments, ou entre un médicament et l'état décrit — chutes, troubles
+> cognitifs, hypotension orthostatique, dénutrition) et **éléments à
+> considérer** absents de la note (diagnostic différentiel non évoqué, bilan
+> manquant, risque pour l'aidant, autonomie surestimée). Chaque élément est
+> préfixé `[note]` ou `[document]` selon sa provenance et formulé comme une
+> **piste à évaluer**, jamais comme une conclusion.
+>
+> Cet appel **ne renvoie PAS l'audio** : la note et les documents suffisent à
+> un regard clinique, l'audio ne servant qu'à vérifier la fidélité (c'est le
+> rôle de la Validation). Il coûte donc ~1 400 jetons de prompt et ~21-26 s,
+> contre ~9 500 jetons s'il fallait renvoyer l'audio. Il reçoit en revanche le
+> bloc **documents**, qui porte des informations ne figurant pas dans la note
+> (liste de médicaments photographiée, par exemple).
+>
+> Deux approches ont été mesurées puis écartées : dans l'appel de
+> **génération**, la revue hérite de la posture « n'invente rien » de la mise
+> en forme et rend des listes vides (0 interaction sur une patiente sous
+> donépézil + candésartan) ; dans l'appel d'**audit**, la qualité est bonne
+> mais impose de renvoyer l'audio et lie la revue à `second_pass_enabled`.
+> L'appel séparé donne la meilleure qualité des trois.
+>
+> Le résultat s'affiche sous l'audit, dans sa propre section (liseré ambre)
+> avec un avertissement explicite — suggestions indicatives, ni diagnostic ni
+> recommandation. Diffusion en direct (SSE `review_chunk` puis
+> `review_result`), stockage propre (`consultations.review_json`), réaffichage
+> silencieux au chargement et filet de relecture si le flux SSE se rompt.
+
 ---
 
 ## 4. Le proxy inverse

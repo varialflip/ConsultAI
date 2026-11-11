@@ -3097,6 +3097,109 @@ async def _run_second_pass(
     )
 
 
+async def _run_clinical_review(
+    *,
+    owner_key: str,
+    consultation_id: int,
+    generation_seq: int,
+    generation_token: str,
+    origin_tab: str,
+    note_markdown: str,
+    langue: str,
+    provider: str,
+    model_name: Optional[str],
+) -> None:
+    """
+    Revue clinique : appel SÉPARÉ, sans audio — note + documents seulement.
+
+    Lancée APRÈS la persistance de la note, en tâche de fond ; ne bloque jamais
+    l'usager. Le JSON brut est diffusé en direct (SSE ``review_chunk``, texte
+    accumulé) puis le résultat rejoint la consultation (``review_json``) et
+    part en évènement SSE final ``review_result`` — même jeton de génération
+    que l'audit, pour que l'onglet émetteur seul les applique.
+
+    Distincte de « Validation » : elle ne renvoie pas l'audio (1 200 jetons de
+    prompt contre ~9 500) et ne dépend pas de ``second_pass_enabled``.
+    """
+    if not _generation_guard.is_current(consultation_id, generation_seq):
+        return
+
+    def _travail():
+        derniere = {"t": float("-inf")}
+
+        def _publier_chunk(texte: str) -> None:
+            if not _generation_guard.is_current(consultation_id, generation_seq):
+                return
+            maintenant = time.monotonic()
+            if maintenant - derniere["t"] < 0.2:
+                return
+            derniere["t"] = maintenant
+            live.publish(owner_key, "review_chunk", {
+                "consultation_id": consultation_id,
+                "generation_token": generation_token,
+                "origin_tab": origin_tab,
+                "text": texte,
+            })
+
+        with SessionLocal() as doc_db:
+            documents_block = _documents_context(doc_db, consultation_id, langue)
+        resultat, usage_revue = llm.review_note_stream(
+            note_markdown,
+            langue=langue,
+            documents_block=documents_block,
+            model=model_name,
+            provider=provider,
+            on_chunk=_publier_chunk,
+        )
+        if resultat is None:
+            return None, usage_revue
+        with SessionLocal() as db:
+            if not _generation_guard.is_current(consultation_id, generation_seq):
+                return None, usage_revue
+            consultation = db.get(Consultation, consultation_id)
+            if consultation is None:
+                return resultat, usage_revue
+            consultation.review_json = json.dumps(resultat, ensure_ascii=False)
+            try:
+                usage.log_llm_usage(
+                    db, owner=owner_key, consultation_id=consultation_id,
+                    provider=provider, model=model_name or "",
+                    prompt_tokens=usage_revue.get("prompt_tokens"),
+                    output_tokens=usage_revue.get("output_tokens"),
+                    audio_prompt_tokens=usage_revue.get("audio_prompt_tokens"),
+                    cached_tokens=usage_revue.get("cached_tokens"),
+                )
+            except Exception:  # pragma: no cover — statistiques au mieux
+                logger.exception("Usage de la revue clinique non journalisé (%s)", consultation_id)
+            db.commit()
+        return resultat, usage_revue
+
+    try:
+        resultat, _usage = await run_in_threadpool(_travail)
+    except Exception:  # pragma: no cover — jamais bloquant
+        logger.exception("Revue clinique impossible (consultation %s)", consultation_id)
+        return
+
+    if resultat is None:
+        live.publish(owner_key, "review_result", {
+            "consultation_id": consultation_id,
+            "generation_token": generation_token,
+            "origin_tab": origin_tab,
+            "skipped": True,
+        })
+        return
+    live.publish(owner_key, "review_result", {
+        "consultation_id": consultation_id,
+        "generation_token": generation_token,
+        "origin_tab": origin_tab,
+        **resultat,
+    })
+    logger.info(
+        "Revue clinique publiée (consultation %s) : %d interaction(s), %d piste(s)",
+        consultation_id, len(resultat["interactions"]), len(resultat["considerations"]),
+    )
+
+
 @app.post("/api/generate")
 async def api_generate(
     payload: GenerateIn,
@@ -3617,6 +3720,28 @@ async def api_generate(
         ))
         _taches_fond.add(tache_verif)
         tache_verif.add_done_callback(_taches_fond.discard)
+
+    # Revue clinique : appel SÉPARÉ, sans audio (note + documents seulement).
+    # Indépendante de « Validation » — elle ne renvoie pas l'audio et coûte
+    # donc ~1 200 jetons de prompt, pas ~9 500.
+    if (
+        llm.clinical_review_enabled()
+        and payload.consultation_id
+        and (result["markdown"] or "").strip()
+    ):
+        tache_revue = asyncio.create_task(_run_clinical_review(
+            owner_key=user.owner_key,
+            consultation_id=consultation.id,
+            generation_seq=generation_seq,
+            generation_token=payload.generation_token,
+            origin_tab=request.headers.get("x-consultai-tab", ""),
+            note_markdown=result["markdown"],
+            langue=template_row.language,
+            provider=llm.active_provider(),
+            model_name=llm.review_model(),
+        ))
+        _taches_fond.add(tache_revue)
+        tache_revue.add_done_callback(_taches_fond.discard)
 
     return {
         "markdown": result["markdown"],

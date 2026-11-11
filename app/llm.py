@@ -753,10 +753,19 @@ def get_client(provider: Optional[str] = None):
     return client
 
 
-#: Modèles Gemini que Vertex AI sert sans les exposer dans ``models.list()``
-#: pour toutes les régions. Constaté à Montréal : ``gemini-3.5-flash`` génère
-#: (texte comme audio) mais n'apparaît pas dans la liste régionale — sans cette
-#: injection, le bouton « Modèles disponibles » du panneau le tairait.
+#: Modèles Gemini que Vertex AI sert sans les exposer dans ``models.list()``.
+#: Servait à injecter ``gemini-3.5-flash``, qui n'apparaissait pas dans la liste
+#: régionale de Montréal. Vérifié le 2026-11-11 : il y figure désormais
+#: (``publishers/google/models`` → gemini-2.5-flash, gemini-2.5-pro,
+#: gemini-3.5-flash, …), l'injection est donc sans effet mais reste inoffensive
+#: (dédoublonnage par ``set``). Conservée au cas où une région la tairait encore.
+#:
+#: ⚠ Rappel pour la bascule de modèle : les Gemini ≥ 3.6 (3.6, 3.7, 3.8, 4-argon)
+#: ne sont PAS servis en PayGo au Canada. Leur carte de modèle ne liste
+#: ``northamerica-northeast1`` que sous « Provisioned Throughput » (et « ML
+#: processing ») ; le PayGo standard n'y couvre que ``global``, ``us`` et ``eu``.
+#: Un appel régional depuis ce projet renvoie donc 404 NOT_FOUND alors que
+#: ``global`` répond 200 — c'est un choix de SKU, pas un problème de droits.
 _GEMINI_MODELS_HORS_LISTE = ("gemini-3.5-flash",)
 
 

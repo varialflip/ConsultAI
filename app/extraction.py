@@ -208,7 +208,8 @@ s'additionnent : ``2 × 50 mg + 1 × 25 mg au coucher`` → ``Prégabaline 125 m
 po hs`` ; ``Clonidine 0,05 mg po bid et 0,1 mg po hs``. Deux forces de la même \
 molécule aux mêmes prises se fondent en une ligne, force puis nombre, sans la \
 voie : ``Lévodopa/bensérazide 100/25 mg 1 co tid + 50/12,5 mg 1 co tid``. Une \
-ligne qui n'est pas un médicament (bandelettes, matériel) ne produit aucune \
+ligne qui n'est pas un médicament (bandelettes, matériel, consigne \
+d'ajustement du genre « ajuster la dose selon le RIN ») ne produit aucune \
 ligne.
 - **Remplacement.** Deux lignes de la même molécule, forces différentes — même \
 si le nom commercial diffère : compare la colonne « Dernière délivrance » du \
@@ -398,7 +399,8 @@ schedules; intakes are joined by "and", those at the same moment are added: \
 ``Clonidine 0.05 mg PO BID and 0.1 mg PO HS``. Two strengths of the same \
 molecule at the same intakes merge into one line, strength then count, without \
 the route: ``Levodopa/benserazide 100/25 mg 1 tab TID + 50/12.5 mg 1 tab TID``. \
-A line that is not a medication (test strips, supplies) produces no line.
+A line that is not a medication (test strips, supplies, a titration \
+instruction such as "adjust the dose according to INR") produces no line.
 - **Replacement.** Two lines of the same molecule with different strengths — \
 even when the brand name differs: compare the "Dernière délivrance" column of \
 the document. The most recent REPLACES the other — one line, the one with the \
@@ -759,9 +761,13 @@ _MERGE_PROMPT_FR = """\
 Tu reçois plusieurs listes de médicaments du même dossier, chacune précédée du
 titre de son document.
 
-Décide laquelle s'applique AUJOURD'HUI : une liste d'HOSPITALISATION EN COURS
+Décide laquelle s'applique AUJOURD'HUI. Une liste d'HOSPITALISATION EN COURS
 prime sur le DSQ de la pharmacie (« médicaments actifs ou complétés derniers
 30 jours »), qui peut être plus ancien.
+
+La référence doit être une LISTE de médicaments complète (ordonnance active,
+profil pharmacologique, liste de séjour, DSQ). Une note de consultation qui ne
+cite qu'un ou deux médicaments n'est PAS une liste : ne la choisis jamais.
 
 Réponds uniquement par un objet JSON :
 {"reference_document_id": <id du document de référence>,
@@ -773,8 +779,12 @@ _MERGE_PROMPT_EN = """\
 You receive several medication lists from the same chart, each preceded by its
 document title.
 
-Decide which one applies TODAY: a CURRENT INPATIENT list prevails over the
+Decide which one applies TODAY. A CURRENT INPATIENT list prevails over the
 pharmacy DSQ ("active or completed in the last 30 days"), which may be older.
+
+The reference must be a COMPLETE medication list (active prescription,
+pharmacological profile, inpatient list, DSQ). A consultation note mentioning
+only one or two drugs is NOT a list: never choose it.
 
 Answer with a single JSON object:
 {"reference_document_id": <id of the reference document>,
@@ -848,6 +858,20 @@ def merge_medication_lists(
     if reference not in connus:
         logger.warning("Fusion : document de référence inconnu (%s)", reference)
         return None
+
+    # Garde-fou : une note de consultation qui ne cite qu'un médicament n'est
+    # pas une liste. Quand la référence retenue tient sur une seule ligne et
+    # qu'une vraie liste existe à côté, c'est la vraie liste qui sert.
+    tailles = {identifiant: len(lignes) for identifiant, _, lignes in listes}
+    if tailles.get(reference, 0) <= 1:
+        complete = max(tailles, key=lambda identifiant: tailles[identifiant])
+        if tailles[complete] >= 5:
+            logger.info(
+                "Fusion : référence %s (%d ligne) remplacée par %s (%d lignes)",
+                reference, tailles[reference], complete, tailles[complete],
+            )
+            reference = complete
+
     return {
         "reference_id": reference,
         "divergences": re.sub(

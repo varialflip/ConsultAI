@@ -21,7 +21,7 @@ n'est retiré : les règles visent la prose que le modèle ajoute.*
   SCPD, DB type 2…), sauf ambiguïté (« MI » seul) ou diagnostic nommé.
 - **Le nom du patient ne figure jamais** dans la note : l'exemple de la règle
   d'ellipse du sujet l'enseignait (« M. Bouchard ») et est réécrit.
-- Coût : +2 036 caractères (~580 jetons) sur la consigne générale.
+- Coût : +2 473 caractères (~707 jetons) sur la consigne générale (20 642 → 23 115).
 
 ## 2026-11-13 — Documents : le rôle et la date décident, pas le titre
 

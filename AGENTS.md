@@ -67,8 +67,11 @@ immédiatement, sans tag ni pull.
    ```
 
    `pull` seulement si une nouvelle image est attendue (dépendances changées) ;
-   régénérer la feuille Tailwind avant seulement si `tailwind-src.css` a
-   changé (artefact absent du dépôt).
+   **régénérer la feuille Tailwind dès qu'un gabarit gagne une classe
+   utilitaire nouvelle**, ou que `tailwind-src.css` change (artefact absent
+   du dépôt). Une classe absente de la feuille compilée ne s'applique pas
+   du tout : le 2026-11-13, un `opacity-0` manquant a rendu le voile de la
+   caméra opaque et masqué l'aperçu.
 4. Pas de bump de version ni de tag sur ce chemin. La CI publie bien
    `latest` + `sha-…` à chaque push (image de référence), mais la pile reste
    épinglée à la dernière release.

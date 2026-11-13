@@ -570,6 +570,9 @@
             <div class="relative flex-1 min-h-0">
               <video id="cameraVideo" class="absolute inset-0 w-full h-full object-contain"
                      playsinline muted autoplay></video>
+              <!-- Voile blanc d'un appui : la capture est immédiate, mais
+                   sans retour on croit qu'elle n'a pas pris et on bouge. -->
+              <div id="cameraFlash" class="pointer-events-none absolute inset-0 bg-white opacity-0"></div>
               <p id="cameraHint" class="absolute inset-x-0 top-3 text-center text-xs text-white/70 px-6"></p>
             </div>
             <div class="px-3 py-3 flex items-center justify-center gap-4 bg-black">

@@ -2,6 +2,21 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-13 — Documents : la photo est prise à l'instant de l'appui
+
+*Cinq pages sur dix sont revenues filées alors que l'aperçu était net : la
+capture partait après l'appui, quand le téléphone bougeait déjà.*
+
+- **Android : l'image vient du flux** (canvas) au moment de l'appui, et non de
+  `ImageCapture.takePhoto()`, qui reconfigure la caméra et déclenche 300 à
+  800 ms plus tard — le temps de passer à la page suivante.
+- **Voile blanc** à chaque prise : sans retour immédiat, on croit que l'appui
+  n'a pas pris et on bouge.
+- **Aperçu demandé en 4:3** (4032×3024) plutôt qu'en 16:9 : une page y tient
+  en entier, sans bandes.
+- **Safari et ordinateur inchangés** : `takePhoto()` y reste la voie native,
+  avec le canvas en repli.
+
 ## 2026-11-13 — Documents : choix de l'objectif de la caméra
 
 *Sur Android, l'aperçu ouvrait l'ultra grand-angle : une page photographiée y

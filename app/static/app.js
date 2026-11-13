@@ -8435,7 +8435,8 @@
   }
 
   function openCameraStream(deviceId) {
-    const video = { width: { ideal: 3840 }, height: { ideal: 2160 } };
+    // 4:3, l'aspect du capteur : une page y tient en entier, sans bandes.
+    const video = { width: { ideal: 4032 }, height: { ideal: 3024 } };
     if (deviceId) video.deviceId = { exact: deviceId };
     else video.facingMode = { ideal: 'environment' };
     return navigator.mediaDevices.getUserMedia({ video, audio: false });
@@ -8610,32 +8611,60 @@
     await renderPendingDocuments();
   }
 
+  // Chrome sur Android reconfigure la caméra pour takePhoto() : la capture
+  // part 300 à 800 ms APRÈS l'appui, quand le téléphone a déjà bougé vers la
+  // page suivante — d'où des pages floues alors que l'aperçu était net (relevé
+  // le 2026-11-13 : 5 pages sur 10, filées verticalement). Sur Android on
+  // prend donc l'image du flux à l'instant de l'appui, exactement ce que le
+  // médecin voit. Ailleurs (Safari, ordinateur), takePhoto() reste la voie
+  // native, plus définie.
+  const CAPTURE_DEPUIS_FLUX = /Android/i.test(navigator.userAgent || '');
+
+  /** Image du flux, prise maintenant : aucune latence, aucun bougé. */
+  async function frameFromVideo() {
+    const video = $('cameraVideo');
+    if (!video) return null;
+    const largeur = video.videoWidth;
+    const hauteur = video.videoHeight;
+    if (!largeur || !hauteur) return null;
+    const echelle = Math.min(1, DOC_MAX_SIDE / Math.max(largeur, hauteur));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(largeur * echelle);
+    canvas.height = Math.round(hauteur * echelle);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  }
+
+  /** Voile blanc : sans retour immédiat, on croit que l'appui n'a pas pris. */
+  function flashCamera() {
+    const flash = $('cameraFlash');
+    if (!flash) return;
+    flash.style.transition = 'none';
+    flash.style.opacity = '0.85';
+    requestAnimationFrame(() => {
+      flash.style.transition = 'opacity 220ms ease-out';
+      flash.style.opacity = '0';
+    });
+  }
+
   async function takePhoto() {
     const bouton = $('btnCameraShutter');
     if (bouton) bouton.disabled = true;
+    flashCamera();
     try {
       let blob = null;
-      if (camera.capture) {
+      if (!CAPTURE_DEPUIS_FLUX && camera.capture) {
         try {
           blob = await camera.capture.takePhoto();
         } catch (_) {
           blob = null; // flux sans photo native : on retombe sur le canvas
         }
       }
-      if (!blob) {
-        const video = $('cameraVideo');
-        const largeur = video.videoWidth;
-        const hauteur = video.videoHeight;
-        if (!largeur || !hauteur) return;
-        const echelle = Math.min(1, DOC_MAX_SIDE / Math.max(largeur, hauteur));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(largeur * echelle);
-        canvas.height = Math.round(hauteur * echelle);
-        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-        blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-      }
+      if (!blob) blob = await frameFromVideo();
       if (!blob) return;
-      const jpeg = await documentToJpeg(blob);
+      // L'image du flux est déjà un JPEG à la bonne taille : la repasser dans
+      // documentToJpeg la ré-encoderait une deuxième fois (0,92 → 0,85).
+      const jpeg = CAPTURE_DEPUIS_FLUX ? blob : await documentToJpeg(blob);
       await pendingDocs.put({
         id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()),
         createdAt: Date.now(),

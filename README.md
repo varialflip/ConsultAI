@@ -1569,13 +1569,19 @@ génère la note.
 **Plusieurs pages, sans rouvrir la caméra.** Le bouton caméra ouvre un
 **aperçu intégré** (`getUserMedia`) : un seul flux, autant de prises qu'on veut,
 chacune ajoutée à la file ; une croix retire une prise pour la reprendre. La
-photo vient de `ImageCapture.takePhoto()` quand il existe (Safari 18.4+,
-Chrome 60+), sinon d'une image du flux dessinée dans un canvas. Le champ de
-fichier reste le chemin de secours et l'import de PDF — **sans `capture`** :
-cet attribut ouvrait l'application caméra du système, qui ne rend qu'une photo
-et redemande, sur Android, quelle application employer à chaque fois. L'écran
-est maintenu allumé pendant la prise de vue (`wakeLock`), et le flux est coupé
-dès que l'application passe en arrière-plan.
+photo est **l'image du flux à l'instant de l'appui** (canvas), confirmée par un
+voile blanc. Sur Android, `ImageCapture.takePhoto()` est écarté : Chrome
+reconfigure la caméra et déclenche 300 à 800 ms après l'appui, quand le
+téléphone bouge déjà vers la page suivante — le 2026-11-13, 5 pages sur 10 sont
+revenues filées alors que l'aperçu était net. Ailleurs (Safari 18.4+,
+ordinateur), `takePhoto()` reste employé, plus défini, avec le canvas en repli.
+L'aperçu est demandé en **4:3** (4032×3024), l'aspect du capteur : une page y
+tient en entier, sans bandes. Le champ de fichier reste le chemin de secours et
+l'import de PDF — **sans `capture`** : cet attribut ouvrait l'application caméra
+du système, qui ne rend qu'une photo et redemande, sur Android, quelle
+application employer à chaque fois. L'écran est maintenu allumé pendant la
+prise de vue (`wakeLock`), et le flux est coupé dès que l'application passe en
+arrière-plan.
 Les prises restent dans le navigateur (IndexedDB) jusqu'à « Envoyer » : rien
 n'est téléversé avant ce geste, et un téléphone qui s'endort ne perd rien.
 

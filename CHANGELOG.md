@@ -2,6 +2,22 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-13 — Documents : choix de l'objectif de la caméra
+
+*Sur Android, l'aperçu ouvrait l'ultra grand-angle : une page photographiée y
+perdait de sa netteté, et rien ne permettait d'en changer.*
+
+- **Sélecteur d'objectif** dans l'aperçu de prise de vue : « Objectif 1/2 ».
+  Un appui passe à la lentille suivante ; le choix est mémorisé dans le
+  navigateur et repris à l'ouverture suivante.
+- **Grand-angle principal par défaut** : Chrome sur Android expose chaque
+  lentille arrière comme une caméra et, avec `facingMode: environment`, ouvre
+  souvent `camera2 2` (ultra grand-angle) plutôt que `camera2 0`. L'application
+  demande désormais explicitement le principal au premier usage.
+- **Aucun changement sur iOS ni sur ordinateur** : le bouton n'apparaît que si
+  l'appareil expose plusieurs objectifs arrière, et la bascule automatique est
+  réservée aux appareils qui numérotent leurs lentilles (`camera2 N`).
+
 ## 2026-11-13 — Consigne générale : registre québécois, abréviations, pas de nom de patient
 
 *Les notes gagnent en densité et perdent le ton littéraire. Aucun contenu dicté

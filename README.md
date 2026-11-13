@@ -1579,6 +1579,16 @@ dès que l'application passe en arrière-plan.
 Les prises restent dans le navigateur (IndexedDB) jusqu'à « Envoyer » : rien
 n'est téléversé avant ce geste, et un téléphone qui s'endort ne perd rien.
 
+**L'objectif se choisit.** Chrome sur Android expose chaque lentille arrière
+comme une caméra distincte et, quand on ne demande que `facingMode:
+environment`, ouvre souvent l'**ultra grand-angle** (`camera2 2`) plutôt que le
+grand-angle principal (`camera2 0`) — une page y perd de sa netteté. L'aperçu
+liste donc les objectifs arrière, ouvre le principal par défaut et affiche
+« Objectif 1/2 » dans son en-tête : un appui passe au suivant, et le choix est
+mémorisé dans le navigateur. Le bouton n'apparaît que si l'appareil expose
+plusieurs objectifs arrière ; la bascule automatique est réservée aux appareils
+qui numérotent leurs lentilles (`camera2 N`), donc jamais sur iOS.
+
 **Un document, pas une photo.** Les photos d'un même envoi sont assemblées en
 un **PDF multipage** (Python pur, sans dépendance ; un PDF exporté du DME passe
 tel quel). Le modèle reçoit un document cohérent — ordre des pages, en-tête,

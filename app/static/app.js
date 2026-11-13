@@ -8394,7 +8394,109 @@
   // ImageCapture.takePhoto() donne l'image native plein format quand il
   // existe (Safari 18.4+, Chrome 60+) ; sinon on dessine une image du flux
   // dans un canvas — même résultat, un peu moins fidèle.
-  const camera = { stream: null, capture: null, wakeLock: null };
+  const camera = { stream: null, capture: null, wakeLock: null, lenses: [], lensIndex: 0 };
+
+  // Chrome sur Android expose chaque objectif arrière comme une caméra
+  // distincte (« camera2 0, facing back », « camera2 2, facing back »…) et,
+  // quand on ne demande que facingMode, ouvre souvent l'ultra grand-angle —
+  // moins net pour lire une page. On liste donc les objectifs arrière, on
+  // ouvre le principal par défaut, et on laisse basculer ; le choix est
+  // mémorisé, une bascule ne se fait qu'une fois.
+  const LENS_STORAGE = 'consultai.camera.lens';
+
+  function lensRank(label) {
+    const m = /camera2 (\d+)/i.exec(label || '');
+    return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+  }
+
+  async function rearLenses() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
+    let appareils = [];
+    try {
+      appareils = await navigator.mediaDevices.enumerateDevices();
+    } catch (_) {
+      return [];
+    }
+    return appareils
+      .filter((d) => d.kind === 'videoinput' && d.deviceId
+        && /facing back|back camera|arri[eè]re/i.test(d.label || ''))
+      .map((d) => ({ id: d.deviceId, label: d.label || '' }))
+      // « camera2 0 » est l'objectif principal sur la quasi-totalité des
+      // Android : le tri par numéro le met en tête.
+      .sort((a, b) => lensRank(a.label) - lensRank(b.label));
+  }
+
+  function preferredLens() {
+    try { return localStorage.getItem(LENS_STORAGE); } catch (_) { return null; }
+  }
+
+  function rememberLens(id) {
+    try { localStorage.setItem(LENS_STORAGE, id); } catch (_) { /* mode privé */ }
+  }
+
+  function openCameraStream(deviceId) {
+    const video = { width: { ideal: 3840 }, height: { ideal: 2160 } };
+    if (deviceId) video.deviceId = { exact: deviceId };
+    else video.facingMode = { ideal: 'environment' };
+    return navigator.mediaDevices.getUserMedia({ video, audio: false });
+  }
+
+  function renderLensButton() {
+    const bouton = $('btnCameraLens');
+    if (!bouton) return;
+    const total = camera.lenses.length;
+    bouton.classList.toggle('hidden', total < 2);
+    if (total < 2) return;
+    bouton.textContent = T('doc.cam_lens', { n: camera.lensIndex + 1, total });
+    bouton.title = T('doc.cam_lens_title');
+  }
+
+  /** Bascule sur un objectif : l'aperçu et la capture suivent le nouveau flux. */
+  async function applyLens(index) {
+    const cible = camera.lenses[index];
+    if (!cible) return;
+    const bouton = $('btnCameraLens');
+    if (bouton) bouton.disabled = true;
+    const ancien = camera.stream;
+    const anciennePiste = ancien ? ancien.getVideoTracks()[0] : null;
+    const ancienId = anciennePiste ? anciennePiste.getSettings().deviceId : null;
+    // Android refuse souvent deux flux caméra à la fois : on rend l'objectif
+    // avant d'en demander un autre, et on revient au précédent si l'ouverture
+    // échoue — l'aperçu ne doit pas rester noir.
+    if (ancien) ancien.getTracks().forEach((t) => t.stop());
+    let flux = null;
+    try {
+      flux = await openCameraStream(cible.id);
+    } catch (err) {
+      try {
+        flux = await openCameraStream(ancienId || null);
+        camera.stream = flux;
+        const video = $('cameraVideo');
+        if (video) video.srcObject = flux;
+        const piste = flux.getVideoTracks()[0];
+        camera.capture = (typeof window.ImageCapture === 'function' && piste)
+          ? new window.ImageCapture(piste) : null;
+      } catch (_) { /* plus de flux : le message ci-dessous suffit */ }
+      toast(T('doc.cam_failed') + ' ' + ((err && err.message) || ''), 'error');
+      if (bouton) bouton.disabled = false;
+      return;
+    }
+    camera.stream = flux;
+    const video = $('cameraVideo');
+    if (video) video.srcObject = flux;
+    const piste = flux.getVideoTracks()[0];
+    camera.capture = (typeof window.ImageCapture === 'function' && piste)
+      ? new window.ImageCapture(piste) : null;
+    camera.lensIndex = index;
+    rememberLens(cible.id);
+    renderLensButton();
+    if (bouton) bouton.disabled = false;
+  }
+
+  function switchLens() {
+    if (camera.lenses.length < 2) return;
+    applyLens((camera.lensIndex + 1) % camera.lenses.length);
+  }
 
   async function renderCameraThumbs() {
     const zone = $('cameraThumbs');
@@ -8452,31 +8554,48 @@
     }
     const hint = $('cameraHint');
     if (hint) hint.textContent = T('doc.cam_hint');
-    try {
-      camera.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 3840 },
-          height: { ideal: 2160 },
-        },
-        audio: false,
-      });
-    } catch (err) {
-      // Refus de permission ou caméra absente : on rend la main à l'import,
-      // qui reste le chemin sûr.
-      toast(
-        (err && err.name === 'NotAllowedError' ? T('doc.cam_denied') : T('doc.cam_failed'))
-        + ' ' + ((err && err.message) || ''),
-        'error',
-      );
-      return;
+    // L'objectif mémorisé est demandé d'emblée ; s'il a disparu (autre
+    // téléphone, identifiant régénéré), on retombe sur le comportement
+    // ordinaire plutôt que d'échouer.
+    let flux = null;
+    const prefere = preferredLens();
+    if (prefere) {
+      try { flux = await openCameraStream(prefere); } catch (_) { flux = null; }
     }
-    video.srcObject = camera.stream;
+    if (!flux) {
+      try {
+        flux = await openCameraStream(null);
+      } catch (err) {
+        // Refus de permission ou caméra absente : on rend la main à l'import,
+        // qui reste le chemin sûr.
+        toast(
+          (err && err.name === 'NotAllowedError' ? T('doc.cam_denied') : T('doc.cam_failed'))
+          + ' ' + ((err && err.message) || ''),
+          'error',
+        );
+        return;
+      }
+    }
+    camera.stream = flux;
+    video.srcObject = flux;
     sheet.classList.remove('hidden');
-    const track = camera.stream.getVideoTracks()[0];
+    camera.lenses = await rearLenses();
+    const track = flux.getVideoTracks()[0];
+    const reglages = track ? track.getSettings() : {};
+    const rang = camera.lenses.findIndex((l) => l.id === reglages.deviceId);
+    camera.lensIndex = rang >= 0 ? rang : 0;
     camera.capture = (typeof window.ImageCapture === 'function' && track)
       ? new window.ImageCapture(track)
       : null;
+    renderLensButton();
+    // Premier usage sur Android : si le navigateur a ouvert un autre objectif
+    // que le principal, on y bascule une fois — le choix est ensuite mémorisé.
+    // Le garde-fou « camera2 » évite de le faire sur iOS, où l'ordre des
+    // objectifs n'a pas cette signification. Un objectif mémorisé devenu
+    // introuvable repart du principal.
+    const numerote = camera.lenses.some((l) => /camera2 \d+/i.test(l.label));
+    if (prefere && rang < 0 && camera.lenses.length) await applyLens(0);
+    else if (!prefere && numerote && camera.lensIndex > 0) await applyLens(0);
     // L'écran ne doit pas s'éteindre entre deux pages d'une même liste.
     try {
       if (navigator.wakeLock) camera.wakeLock = await navigator.wakeLock.request('screen');
@@ -9140,6 +9259,9 @@
     }
     if ($('btnCameraClose')) {
       $('btnCameraClose').addEventListener('click', closeCameraSheet);
+    }
+    if ($('btnCameraLens')) {
+      $('btnCameraLens').addEventListener('click', switchLens);
     }
     // iOS coupe le flux quand l'application passe en arrière-plan : on ferme
     // proprement plutôt que de garder une vidéo figée et une caméra active.

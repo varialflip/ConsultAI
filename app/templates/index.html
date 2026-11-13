@@ -551,12 +551,21 @@
                Masqué par défaut ; ouvert par le bouton caméra quand
                getUserMedia est disponible. -->
           <div id="cameraSheet" class="hidden fixed inset-0 z-[60] bg-black flex flex-col">
-            <div class="flex items-center justify-between px-3 py-2 text-white">
+            <div class="flex items-center justify-between gap-2 px-3 py-2 text-white">
               <span id="cameraCount" class="text-sm tabular-nums">0</span>
-              <button id="btnCameraClose" type="button"
-                      class="px-3 py-1 rounded-md bg-white/15 hover:bg-white/25 text-sm">
-                {{ t('doc.cam_done') }}
-              </button>
+              <div class="flex items-center gap-2">
+                <!-- Objectif : visible seulement quand le téléphone en expose
+                     plusieurs (Chrome Android liste chaque lentille arrière).
+                     Un appui passe au suivant ; le choix est mémorisé. -->
+                <button id="btnCameraLens" type="button"
+                        class="hidden px-3 py-1 rounded-md bg-white/15 hover:bg-white/25 text-sm">
+                  {{ t('doc.cam_lens', n=1, total=2) }}
+                </button>
+                <button id="btnCameraClose" type="button"
+                        class="px-3 py-1 rounded-md bg-white/15 hover:bg-white/25 text-sm">
+                  {{ t('doc.cam_done') }}
+                </button>
+              </div>
             </div>
             <div class="relative flex-1 min-h-0">
               <video id="cameraVideo" class="absolute inset-0 w-full h-full object-contain"

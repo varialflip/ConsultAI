@@ -396,6 +396,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Photograph a document (medication list, lab report, imaging report)",
     ),
     "doc.cam_done": ("Terminer", "Done"),
+    "doc.cam_lens": ("Objectif {n}/{total}", "Lens {n}/{total}"),
+    "doc.cam_lens_title": (
+        "Changer d'objectif (ultra grand-angle / grand-angle)",
+        "Switch lens (ultra wide / wide)",
+    ),
     "doc.cam_shoot": ("Prendre la photo", "Take the photo"),
     "doc.cam_hint": (
         "Cadrez la page, puis appuyez sur le déclencheur. Chaque prise s'ajoute "

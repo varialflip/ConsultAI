@@ -8693,6 +8693,18 @@
     }
     if (vide) vide.classList.toggle('hidden', docs.length > 0);
     liste.innerHTML = '';
+    // Un seul médecin de famille pour la consultation : la fusion l'a résolu
+    // (médecin nommé > clinique, puis document le plus récent). Il s'affiche
+    // une fois, en tête — les blocs gardent le prescripteur de chaque
+    // document, qui est une provenance et peut être une clinique.
+    const famille = state.medMerge && state.medMerge.family_doctor;
+    if (famille && famille.name) {
+      const bandeau = document.createElement('div');
+      bandeau.className = 'text-[11px] text-slate-600 px-1';
+      const permis = famille.license ? ` (${famille.license})` : '';
+      bandeau.textContent = `${T('doc.family_doctor')} ${famille.name}${permis}`;
+      liste.appendChild(bandeau);
+    }
     docs.forEach((doc) => liste.appendChild(renderDocumentBlock(doc)));
   }
 
@@ -8741,7 +8753,7 @@
       const med = document.createElement('span');
       med.className = 'text-[11px] text-slate-500';
       const libelle = prescripteur.type === 'clinique'
-        ? T('doc.clinic') : T('doc.family_doctor');
+        ? T('doc.clinic') : T('doc.prescriber');
       const permis = prescripteur.license ? ` (${prescripteur.license})` : '';
       med.textContent = `${libelle} ${prescripteur.name}${permis}`;
       med.title = med.textContent;

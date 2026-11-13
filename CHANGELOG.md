@@ -2,6 +2,29 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-13 — Documents : le rôle et la date décident, pas le titre
+
+*Un DSQ et une note de consultation se ressemblent pour le modèle : tous deux
+parlent de médicaments. Ce qui les distingue, c'est ce qu'ils SONT et la date
+qu'ils portent.*
+
+- **`role` et `date` par document** : DSQ, séjour en cours, ordonnance active,
+  profil pharmacologique, consultation, résumé de sortie, bilan, imagerie. La
+  date du document tranche la fusion.
+- **Seuls les documents qui font foi donnent une liste** : une consultation ou
+  un résumé de sortie ne produit plus de `med_list`, et ses médicaments
+  arrivent décochés. C'est ce qui avait fait disparaître la liste du
+  2026-11-12 (une note d'une ligne retenue comme référence).
+- **Antécédents** : dans une consultation ou un résumé de sortie, les
+  diagnostics de l'impression deviennent des antécédents ; le plan et les
+  recommandations n'en sont pas.
+- **Médecin de famille résolu une fois** : médecin nommé > clinique « (GAP) » ;
+  champ « MDF : » explicite > en-tête du DSQ ; à rang égal, document le plus
+  récent. Un médecin privé nommé dans une vieille consultation n'est plus
+  effacé par un DSQ qui n'imprime qu'une clinique.
+- **Fusion par date** : la liste la plus récente est la référence, et le code
+  vérifie la comparaison — le modèle n'écrit que les écarts.
+
 ## 2026-11-13 — Documents : prise de vue multiple dans l'application
 
 *Le sélecteur de fichiers du système ne peut pas garder la caméra ouverte :

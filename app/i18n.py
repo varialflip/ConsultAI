@@ -488,6 +488,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Médecin de famille",
         "Family physician",
     ),
+    "doc.prescriber": (
+        "Prescripteur",
+        "Prescriber",
+    ),
     "doc.clinic": (
         "Clinique",
         "Clinic",

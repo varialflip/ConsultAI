@@ -53,6 +53,32 @@ logger = logging.getLogger(__name__)
 #: bloquer.
 KINDS: Tuple[str, ...] = ("medications", "history", "labs", "imaging", "other")
 
+#: Ce que le document EST, au-delà de ce qu'il contient. Un DSQ et une note de
+#: consultation sont tous deux « medications » pour leurs items ; seul le
+#: premier fait foi sur les médicaments. C'est ce rôle qui décide quelles
+#: listes entrent dans la note et laquelle s'applique aujourd'hui.
+ROLES: Tuple[str, ...] = (
+    "dsq",
+    "sejour_cours",
+    "ordonnance_active",
+    "profil_pharmacologique",
+    "consultation",
+    "resume_discharge",
+    "bilan",
+    "imagerie",
+    "autre",
+)
+
+#: Rôles dont la liste de médicaments FAIT FOI. Une consultation ou un résumé
+#: de sortie n'en sont pas : des erreurs s'y glissent, et le DSQ ou l'ordonnance
+#: active reste la référence.
+ROLES_SOURCE_MEDICAMENTS = (
+    "dsq",
+    "sejour_cours",
+    "ordonnance_active",
+    "profil_pharmacologique",
+)
+
 KIND_LABELS = {
     "medications": ("Médicaments", "Medications"),
     "history": ("Antécédents", "Medical history"),
@@ -96,6 +122,17 @@ document et donne dans ``pages`` les numéros de PAGE dans l'ordre de lecture : 
 pour un PDF, le numéro de page DANS LE FICHIER (1 = première page) ; pour une \
 simple photo, son numéro d'entrée.
 
+Pour chaque document, donne aussi son ``role`` — ce qu'il EST, pas ce qu'il \
+contient : ``dsq`` (liste de la pharmacie, « médicaments actifs ou complétés \
+derniers 30 jours »), ``sejour_cours`` (liste de médicaments du séjour en \
+cours), ``ordonnance_active`` (ordonnance en vigueur), \
+``profil_pharmacologique`` (profil du pharmacien), ``consultation`` (note de \
+consultation, la tienne ou celle d'une autre spécialité), ``resume_discharge`` \
+(résumé de sortie d'hospitalisation), ``bilan``, ``imagerie``, ``autre`` — et \
+sa ``date``, celle DU document (date d'impression, de consultation, de sortie) \
+au format ``AAAA-MM-JJ``. Elle est toujours imprimée, et c'est elle qui dit \
+quelle liste est la plus récente.
+
 ## 2. COUVERTURE — OBLIGATOIRE
 Chaque PAGE reçue doit apparaître EXACTEMENT UNE FOIS, soit dans \
 ``coverage`` (champ ``page``), soit dans ``unreadable`` (champ ``page``). Une \
@@ -115,6 +152,12 @@ sont utiles : recueille-les dans ``prescriber`` — ``name``, ``license`` (le \
 numéro imprimé près du nom, souvent suivi de « M.D. ») et ``type`` \
 (``medecin`` ou ``clinique``). Si c'est une clinique, ``name`` est son nom \
 suivi de « (GAP) ». Le nom du patient, lui, reste interdit.
+
+**Le médecin de famille NOMMÉ.** Quand un document nomme explicitement le \
+médecin de famille (« MDF : », « Médecin de famille : », « Médecin \
+traitant : »), recueille-le dans ``family_doctor``, mêmes champs que \
+``prescriber``. C'est lui qui fait foi, même si un autre document n'imprime \
+qu'une clinique « (GAP) » ou aucun médecin.
 
 ## 4. TRANSCRIPTION FIDÈLE
 Transcris ce qui est IMPRIMÉ, sans corriger, sans compléter, sans traduire. \
@@ -159,6 +202,11 @@ de vie quotidienne (AVQ, AVD, habitudes, situation de vie) — celles-là vont e
 ``other``. Un constat d'examen rattaché à un problème reste UN item, et un \
 problème cité deux fois n'en fait qu'un, celui qui en dit le plus.
 
+Dans une ``consultation`` ou un ``resume_discharge``, les diagnostics de \
+l'impression (ou de la conclusion) sont des ANTÉCÉDENTS : ils précèdent la \
+rencontre d'aujourd'hui. Le plan, les recommandations et les prescriptions \
+n'en sont pas.
+
 **labs** — un item par analyte : ``text``, ``fields`` = {``analyte``, \
 ``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
 ``pertinence`` vaut ``pertinent``, ``routine`` ou ``anormal``.
@@ -201,6 +249,13 @@ l'hospitalisation — celle qui s'applique aujourd'hui. ``med_divergences`` \
 décrit alors en une ou deux phrases ce qui diffère de l'autre liste : ajouté, \
 cessé, dose changée. Rien à dire sur ce qui concorde, et rien quand il n'y a \
 qu'une liste.
+
+**Seuls les documents qui font foi donnent une liste.** ``med_list`` n'est \
+produite que si le document a un ``role`` de source : ``dsq``, \
+``sejour_cours``, ``ordonnance_active`` ou ``profil_pharmacologique``. Une \
+``consultation`` ou un ``resume_discharge`` ne produit AUCUNE ligne — ses \
+médicaments restent des items, décochés, parce qu'une note de consultation \
+n'est pas une source de vérité sur ce que prend le patient.
 
 - **Un médicament, une ligne.** Une molécule garde UNE ligne, quels que soient \
 ses schémas ; les prises se joignent par « et », celles d'un même moment \
@@ -267,6 +322,7 @@ Un seul objet JSON, aucun texte autour, aucune clôture de code, AUCUNE
 indentation ni saut de ligne (JSON compact, sur une seule ligne) :
 {
   "documents": [{"id": "d1", "kind": "medications|history|labs|imaging|other",
+                 "role": "dsq|sejour_cours|…", "date": "AAAA-MM-JJ",
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
   "items": [{"id": "i1", "document_id": "d1", "kind": "…", "text": "…",
              "fields": {}, "source_page": 1}],
@@ -353,6 +409,10 @@ identifier, a section heading, or daily-life data (ADL, IADL, habits, living \
 situation) — those go to ``other``. An examination finding attached to a \
 problem stays ONE item, and a problem stated twice is one item, the fuller one.
 
+In a ``consultation`` or a ``resume_discharge``, the diagnoses of the \
+impression (or conclusion) are HISTORY: they precede today's encounter. The \
+plan, recommendations and prescriptions are not.
+
 **labs** — one item per analyte: ``text``, ``fields`` = {``analyte``, \
 ``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
 ``pertinence`` is ``pertinent``, ``routine`` or ``anormal``.
@@ -392,6 +452,12 @@ a DSQ, ``med_list`` is the inpatient list — the one that applies today. \
 ``med_divergences`` then describes in one or two sentences what differs from \
 the other list: added, stopped, dose changed. Nothing about what matches, and \
 nothing when there is only one list.
+
+**Only source documents give a list.** ``med_list`` is produced only when the \
+document has a source ``role``: ``dsq``, ``sejour_cours``, ``ordonnance_active`` \
+or ``profil_pharmacologique``. A ``consultation`` or a ``resume_discharge`` \
+produces NO line — its medications stay as items, unchecked, because a \
+consultation note is not a source of truth about what the patient takes.
 
 - **One medication, one line.** A molecule keeps ONE line whatever its \
 schedules; intakes are joined by "and", those at the same moment are added: \
@@ -454,6 +520,7 @@ A single JSON object, no surrounding text, no code fence, NO indentation or
 line break (compact JSON, on a single line):
 {
   "documents": [{"id": "d1", "kind": "medications|history|labs|imaging|other",
+                 "role": "dsq|sejour_cours|…", "date": "AAAA-MM-JJ",
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
   "items": [{"id": "i1", "document_id": "d1", "kind": "…", "text": "…",
              "fields": {}, "source_page": 1}],
@@ -487,11 +554,17 @@ _SCHEMA = {
                 "properties": {
                     "id": {"type": "STRING"},
                     "kind": {"type": "STRING", "enum": list(KINDS)},
+                    #: Ce que le document EST — pas ce qu'il contient. C'est
+                    #: lui qui décide quelles listes font foi, et l'ordre de
+                    #: fusion entre deux listes de médicaments.
+                    "role": {"type": "STRING", "enum": list(ROLES)},
+                    #: Date DU document (impression, consultation, sortie).
+                    "date": {"type": "STRING"},
                     "pages": {"type": "ARRAY", "items": {"type": "INTEGER"}},
                     "title": {"type": "STRING"},
                     "confidence": {"type": "NUMBER"},
                 },
-                "required": ["id", "kind", "pages"],
+                "required": ["id", "kind", "pages", "role", "date"],
             },
         },
         "items": {
@@ -543,6 +616,17 @@ _SCHEMA = {
         #: Écarts entre deux listes du même envoi (hospitalisation en cours et
         #: DSQ) : en prose, pour la note. Vide quand il n'y a qu'une liste.
         "med_divergences": {"type": "STRING"},
+        #: Médecin de famille NOMMÉ dans un document (« MDF : »), distinct du
+        #: prescripteur imprimé en tête d'une liste de médicaments.
+        "family_doctor": {
+            "type": "OBJECT",
+            "properties": {
+                "name": {"type": "STRING"},
+                "license": {"type": "STRING"},
+                "type": {"type": "STRING", "enum": ["medecin", "clinique"]},
+            },
+            "required": ["name", "type"],
+        },
         "coverage": {
             "type": "ARRAY",
             "items": {
@@ -759,15 +843,20 @@ def _prescripteur(brut: object) -> dict:
 #: Fusion de plusieurs listes de médicaments (DSQ + hospitalisation en cours).
 _MERGE_PROMPT_FR = """\
 Tu reçois plusieurs listes de médicaments du même dossier, chacune précédée du
-titre de son document.
+titre de son document et de la date de ce document.
 
-Décide laquelle s'applique AUJOURD'HUI. Une liste d'HOSPITALISATION EN COURS
-prime sur le DSQ de la pharmacie (« médicaments actifs ou complétés derniers
-30 jours »), qui peut être plus ancien.
+La liste qui s'applique AUJOURD'HUI est la plus RÉCENTE : celle du séjour en
+cours ou de l'ordonnance active prime sur le DSQ de la pharmacie
+(« médicaments actifs ou complétés derniers 30 jours »), qui peut être plus
+ancien. Si le document le plus récent porte une date antérieure à l'autre, c'est
+l'autre qui s'applique.
 
 La référence doit être une LISTE de médicaments complète (ordonnance active,
-profil pharmacologique, liste de séjour, DSQ). Une note de consultation qui ne
-cite qu'un ou deux médicaments n'est PAS une liste : ne la choisis jamais.
+profil pharmacologique, liste de séjour, DSQ). Une note de consultation ou un
+résumé de sortie n'est PAS une liste : ne le choisis jamais.
+
+Écris les écarts en nommant les deux documents et leur date, sans énumérer ce
+qui concorde.
 
 Réponds uniquement par un objet JSON :
 {"reference_document_id": <id du document de référence>,
@@ -777,14 +866,19 @@ Réponds uniquement par un objet JSON :
 
 _MERGE_PROMPT_EN = """\
 You receive several medication lists from the same chart, each preceded by its
-document title.
+document title and that document's date.
 
-Decide which one applies TODAY. A CURRENT INPATIENT list prevails over the
-pharmacy DSQ ("active or completed in the last 30 days"), which may be older.
+The list that applies TODAY is the most RECENT one: the current inpatient list
+or active prescription prevails over the pharmacy DSQ ("active or completed in
+the last 30 days"), which may be older. If the most recent document carries an
+earlier date than the other, it is the other one that applies.
 
 The reference must be a COMPLETE medication list (active prescription,
-pharmacological profile, inpatient list, DSQ). A consultation note mentioning
-only one or two drugs is NOT a list: never choose it.
+pharmacological profile, inpatient list, DSQ). A consultation note or a
+discharge summary is NOT a list: never choose it.
+
+Write the differences naming both documents and their dates, without listing
+what matches.
 
 Answer with a single JSON object:
 {"reference_document_id": <id of the reference document>,
@@ -803,12 +897,14 @@ _MERGE_SCHEMA = {
 
 
 def merge_medication_lists(
-    listes: Sequence[Tuple[int, str, Sequence[str]]], language: str = "fr"
+    listes: Sequence[Tuple[int, str, str, Sequence[str]]], language: str = "fr"
 ) -> Optional[dict]:
     """
     Choisit la liste qui s'applique aujourd'hui et décrit les écarts.
 
-    ``listes`` — (id du document, titre, lignes). Retourne
+    ``listes`` — (id du document, titre, date, lignes). La liste la plus
+    RÉCENTE est la référence : la date du document tranche, et l'application la
+    vérifie elle-même — le modèle n'écrit que les écarts. Retourne
     ``{"reference_id": int, "divergences": str}``, ou ``None`` s'il y a moins de
     deux listes (rien à fusionner) ou si le modèle échoue : l'appelant garde
     alors les listes séparées.
@@ -817,8 +913,11 @@ def merge_medication_lists(
         return None
     anglais = (language or "").strip().lower().startswith("en")
     blocs: List[str] = []
-    for identifiant, titre, lignes in listes:
-        blocs.append(f"document {identifiant} — {titre or '(sans titre)'}")
+    for identifiant, titre, date_doc, lignes in listes:
+        entete = f"document {identifiant} — {titre or '(sans titre)'}"
+        if date_doc:
+            entete += f" — daté {date_doc}"
+        blocs.append(entete)
         blocs.extend(f"- {ligne}" for ligne in lignes)
         blocs.append("")
     contenu = "\n".join(blocs).strip()
@@ -850,27 +949,35 @@ def merge_medication_lists(
         logger.warning("Fusion : réponse illisible")
         return None
 
-    connus = {identifiant for identifiant, _, _ in listes}
-    try:
-        reference = int(payload.get("reference_document_id"))
-    except (TypeError, ValueError):
-        reference = None
-    if reference not in connus:
-        logger.warning("Fusion : document de référence inconnu (%s)", reference)
-        return None
+    connus = {identifiant for identifiant, _, _, _ in listes}
+    dates = {identifiant: date_doc for identifiant, _, date_doc, _ in listes}
+    tailles = {identifiant: len(lignes) for identifiant, _, _, lignes in listes}
 
-    # Garde-fou : une note de consultation qui ne cite qu'un médicament n'est
-    # pas une liste. Quand la référence retenue tient sur une seule ligne et
-    # qu'une vraie liste existe à côté, c'est la vraie liste qui sert.
-    tailles = {identifiant: len(lignes) for identifiant, _, lignes in listes}
-    if tailles.get(reference, 0) <= 1:
-        complete = max(tailles, key=lambda identifiant: tailles[identifiant])
-        if tailles[complete] >= 5:
-            logger.info(
-                "Fusion : référence %s (%d ligne) remplacée par %s (%d lignes)",
-                reference, tailles[reference], complete, tailles[complete],
-            )
-            reference = complete
+    # La date tranche : la liste la plus récente est celle qui s'applique. Le
+    # modèle ne fait que proposer ; quand toutes les dates sont là, c'est le
+    # code qui décide — il ne se trompe pas sur une comparaison de dates.
+    dated = {identifiant: date for identifiant, date in dates.items() if date}
+    if len(dated) == len(listes):
+        reference = max(dated, key=lambda identifiant: dated[identifiant])
+        logger.info("Fusion : référence %s (la plus récente, %s)", reference, dated[reference])
+    else:
+        try:
+            reference = int(payload.get("reference_document_id"))
+        except (TypeError, ValueError):
+            reference = None
+        if reference not in connus:
+            logger.warning("Fusion : document de référence inconnu (%s)", reference)
+            return None
+        # Sans date, garde-fou : une note de consultation qui ne cite qu'un
+        # médicament n'est pas une liste.
+        if tailles.get(reference, 0) <= 1:
+            complete = max(tailles, key=lambda identifiant: tailles[identifiant])
+            if tailles[complete] >= 5:
+                logger.info(
+                    "Fusion : référence %s (%d ligne) remplacée par %s (%d lignes)",
+                    reference, tailles[reference], complete, tailles[complete],
+                )
+                reference = complete
 
     return {
         "reference_id": reference,
@@ -960,6 +1067,17 @@ def _normalize(payload: dict, count: int) -> dict:
         pages = [p for p in pages if 1 <= p <= count] or list(range(1, count + 1))
         doc["id"] = identifiant
         doc["kind"] = kind
+        role = str(doc.get("role") or "autre").strip().lower()
+        doc["role"] = role if role in ROLES else "autre"
+        date_brute = str(doc.get("date") or "").strip()
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_brute):
+            doc["date"] = date_brute
+        else:
+            annee = re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_brute)
+            doc["date"] = (
+                f"{annee.group(1)}-{int(annee.group(2)):02d}-{int(annee.group(3)):02d}"
+                if annee else ""
+            )
         doc["pages"] = pages
         doc["title"] = str(doc.get("title") or "")[:200]
         try:
@@ -1152,9 +1270,25 @@ def _normalize(payload: dict, count: int) -> dict:
         })
 
     # Liste réconciliée construite dans le même appel que la lecture.
+    #
+    # Garde-fou : une note de consultation ou un résumé de sortie ne fait pas
+    # foi sur les médicaments. Si AUCUN document de l'envoi n'est une source
+    # (DSQ, séjour, ordonnance, profil), la liste est jetée et ses items
+    # arrivent décochés — visibles, mais jamais versés d'office dans la note.
+    roles = {doc["role"] for doc in documents}
+    non_sources = {"consultation", "resume_discharge", "bilan", "imagerie"}
+    # « autre » = rôle inconnu : on ne dégrade pas le comportement d'avant, on
+    # n'applique le garde-fou que si TOUS les documents sont explicitement
+    # d'un type qui ne fait pas foi sur les médicaments.
+    source_medicaments = not (roles and roles <= non_sources)
+    if not source_medicaments:
+        for item in propres:
+            if item["kind"] == "medications":
+                item["included"] = False
+
     med_list = []
     connu = {item["id"] for item in propres if item["kind"] == "medications"}
-    for entry in (payload.get("med_list") or []):
+    for entry in (payload.get("med_list") or []) if source_medicaments else []:
         if not isinstance(entry, dict):
             continue
         ligne = re.sub(r"\s+", " ", html.unescape(str(entry.get("line") or ""))).strip()
@@ -1185,6 +1319,7 @@ def _normalize(payload: dict, count: int) -> dict:
             r"\s+", " ", str(payload.get("med_divergences") or "")
         ).strip()[:600],
         "prescriber": _prescripteur(payload.get("prescriber")),
+        "family_doctor": _prescripteur(payload.get("family_doctor")),
         "coverage": coverage,
         # Pages non rendues : affichées dans l'onglet, jamais bloquantes.
         "missing": manquantes,

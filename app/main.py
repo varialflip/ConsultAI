@@ -4079,27 +4079,73 @@ def _document_payload(document: Document) -> dict:
     return payload
 
 
+def _date_document(extraction_stockee: dict) -> str:
+    """Date du document qui fait foi (DSQ, séjour, ordonnance, profil)."""
+    documents = extraction_stockee.get("documents") or []
+    for doc in documents:
+        if doc.get("role") in extraction.ROLES_SOURCE_MEDICAMENTS and doc.get("date"):
+            return str(doc["date"])
+    for doc in documents:
+        if doc.get("date"):
+            return str(doc["date"])
+    return ""
+
+
+def _resoudre_medecin_famille(documents_extraits) -> dict:
+    """
+    Un seul médecin de famille pour la consultation.
+
+    Un médecin NOMMÉ l'emporte sur une clinique « (GAP) » ; un champ
+    « MDF : » explicite l'emporte sur l'en-tête du DSQ ; à rang égal, le
+    document le plus récent. C'est ce qui permet à un médecin privé nommé dans
+    une vieille consultation de survivre à un DSQ qui n'imprime qu'une clinique.
+    """
+    candidats = []
+    for document, extraction_stockee in documents_extraits:
+        date_doc = _date_document(extraction_stockee)
+        for source in ("family_doctor", "prescriber"):
+            brut = extraction_stockee.get(source) or {}
+            nom = str(brut.get("name") or "").strip()
+            if not nom:
+                continue
+            type_ = str(brut.get("type") or "medecin").strip().lower()
+            rang = (0 if source == "family_doctor" else 1) if type_ == "medecin" else 2
+            candidats.append((rang, date_doc, nom, str(brut.get("license") or ""), type_))
+    if not candidats:
+        return {}
+    rang_min = min(candidat[0] for candidat in candidats)
+    memes = [candidat for candidat in candidats if candidat[0] == rang_min]
+    memes.sort(key=lambda candidat: candidat[1], reverse=True)
+    _, _, nom, permis, type_ = memes[0]
+    return {"name": nom, "license": permis, "type": type_}
+
+
 def _refresh_med_merge(db: Session, consultation: Consultation) -> None:
     """
-    Fusionne les listes de médicaments quand plusieurs documents en portent.
+    Fusionne les listes de médicaments et résout le médecin de famille.
 
     Le médecin photographie le DSQ, puis la liste du séjour : deux documents,
-    deux listes. La note n'en écrit qu'une — celle qui s'applique aujourd'hui —
-    et l'autre sert à écrire les écarts. Recalculée à chaque lecture ou
-    suppression de document ; ``None`` sous deux listes.
+    deux listes. La note n'en écrit qu'une — la plus RÉCENTE, la date du
+    document tranche — et l'autre sert à écrire les écarts. Recalculée à chaque
+    lecture ou suppression de document.
     """
-    listes = []
+    documents_extraits = []
     for document in documents_service.for_consultation(db, consultation.id):
         extraction_stockee = _stored_extraction(document)
-        if not extraction_stockee:
-            continue
+        if extraction_stockee:
+            documents_extraits.append((document, extraction_stockee))
+
+    listes = []
+    for document, extraction_stockee in documents_extraits:
         lignes = [
             str(entry.get("line") or "").strip()
             for entry in extraction_stockee.get("med_list") or []
             if str(entry.get("line") or "").strip()
         ]
         if lignes:
-            listes.append((document.id, document.title or "", lignes))
+            listes.append(
+                (document.id, document.title or "", _date_document(extraction_stockee), lignes)
+            )
 
     langue = "fr"
     if consultation.template_name:
@@ -4110,9 +4156,13 @@ def _refresh_med_merge(db: Session, consultation: Consultation) -> None:
             langue = gabarit.language
 
     fusion = extraction.merge_medication_lists(listes, langue)
-    consultation.med_merged_json = (
-        json.dumps(fusion, ensure_ascii=False) if fusion else None
-    )
+    medecin = _resoudre_medecin_famille(documents_extraits)
+    if not fusion and not medecin:
+        consultation.med_merged_json = None
+    else:
+        contenu = dict(fusion or {})
+        contenu["family_doctor"] = medecin or None
+        consultation.med_merged_json = json.dumps(contenu, ensure_ascii=False)
     db.commit()
 
 
@@ -4198,6 +4248,17 @@ def _documents_context(
         except ValueError:
             fusion = {}
     reference_id = fusion.get("reference_id")
+    # Un seul médecin de famille pour la consultation : la fusion l'a résolu
+    # (médecin nommé > clinique, puis document le plus récent). Sans fusion
+    # (données antérieures), on retombe sur l'en-tête de chaque document.
+    medecin_famille = fusion.get("family_doctor") or {}
+    if str(medecin_famille.get("name") or "").strip():
+        nom = str(medecin_famille["name"]).strip()
+        permis = str(medecin_famille.get("license") or "").strip()
+        blocs.append(
+            entete_prescripteur.format(valeur=f"{nom} — permis {permis}" if permis else nom)
+        )
+        blocs.append("")
     listes = 0
     for document in documents:
         stockee = _stored_extraction(document)
@@ -4210,12 +4271,15 @@ def _documents_context(
         extraction_stockee = _stored_extraction(document)
         if not extraction_stockee:
             continue
-        prescripteur = extraction_stockee.get("prescriber") or {}
-        nom_prescripteur = str(prescripteur.get("name") or "").strip()
-        if nom_prescripteur:
-            permis = str(prescripteur.get("license") or "").strip()
-            valeur = f"{nom_prescripteur} — permis {permis}" if permis else nom_prescripteur
-            blocs.append(entete_prescripteur.format(valeur=valeur))
+        if not str(medecin_famille.get("name") or "").strip():
+            # Données antérieures à la résolution : on garde l'en-tête du
+            # document, faute de mieux.
+            prescripteur = extraction_stockee.get("prescriber") or {}
+            nom_prescripteur = str(prescripteur.get("name") or "").strip()
+            if nom_prescripteur:
+                permis = str(prescripteur.get("license") or "").strip()
+                valeur = f"{nom_prescripteur} — permis {permis}" if permis else nom_prescripteur
+                blocs.append(entete_prescripteur.format(valeur=valeur))
         items = extraction_stockee.get("items", [])
         par_id = {item.get("id"): item for item in items}
         # Liste réconciliée : une ligne dont TOUTES les sources sont décochées

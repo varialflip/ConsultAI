@@ -1621,12 +1621,26 @@ sinon il signalerait la liste du médecin comme une invention.
 
 **Deux listes : fusionnées à l'import.** Quand un second document porte une
 liste de médicaments (le DSQ et la liste du séjour en cours), une passe de
-fusion choisit la liste qui s'applique **aujourd'hui** — l'hospitalisation
-prime sur le DSQ — et écrit les écarts en prose (ajouté, cessé, dose changée).
-Le résultat est stocké sur la consultation (`med_merged_json`) et recalculé à
+fusion choisit la liste **la plus récente** — la date du document tranche, pas
+son titre — et écrit les écarts en prose (ajouté, cessé, dose changée). Le
+résultat est stocké sur la consultation (`med_merged_json`) et recalculé à
 chaque lecture ou suppression de document ; la note ne reçoit qu'une liste,
-suivie des divergences. Sous deux listes, rien n'est fusionné et les listes
-restent séparées, chacune avec son titre.
+suivie des divergences. Sous deux listes, rien n'est fusionné.
+
+**Ce que le document EST.** Chaque document reçoit un `role` (DSQ, séjour en
+cours, ordonnance active, profil pharmacologique, consultation, résumé de
+sortie, bilan, imagerie) et sa `date`. Seuls les rôles qui font foi sur les
+médicaments produisent une liste : une consultation ou un résumé de sortie
+n'en donne aucune, et ses médicaments restent des items décochés — ce ne sont
+pas des sources de vérité. Dans une consultation ou un résumé de sortie, les
+diagnostics de l'impression deviennent des antécédents.
+
+**Le médecin de famille, une seule fois.** La fusion résout un seul médecin de
+famille pour la consultation : un médecin nommé l'emporte sur une clinique
+« (GAP) », un champ « MDF : » explicite l'emporte sur l'en-tête du DSQ, et à
+rang égal le document le plus récent tranche. Le DSQ reste la réponse usuelle,
+mais un médecin privé nommé dans une vieille consultation n'est plus effacé
+par un DSQ qui n'imprime qu'une clinique.
 
 **Rétention.** Les documents s'effacent avec le brouillon — suppression
 manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers

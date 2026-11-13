@@ -37,7 +37,7 @@
        tailwind.config.js) plutôt que compilée en JIT dans le navigateur par
        cdn.tailwindcss.com — Tailwind lui-même déconseille cette voie CDN en
        production. -->
-  <link rel="stylesheet" href="/static/tailwind.css">
+  <link rel="stylesheet" href="/static/tailwind.css?v={{ asset_hash }}">
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
@@ -1608,6 +1608,6 @@
     i18n: {{ i18n_catalog | tojson }}
   };
 </script>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{ asset_hash }}"></script>
 </body>
 </html>

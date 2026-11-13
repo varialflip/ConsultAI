@@ -1347,6 +1347,12 @@ async def index(request: Request):
             "app_title": settings.app_title,
             "user": user.to_dict(),
             "version": __version__,
+            # Empreinte des actifs du shell : app.js et tailwind.css portent
+            # ?v=<empreinte> dans la page. Sans elle, un déploiement « commit
+            # simple » laissait le navigateur sur un JavaScript périmé — le
+            # service worker ne se met à jour qu'à la navigation suivante, et
+            # l'interface mentait devant un serveur à jour.
+            "asset_hash": _SW_EMPREINTE,
             # « t » est une fonction et non un dictionnaire : le gabarit écrit
             # t('cle') plutôt que t['cle'], ce qui permet de passer des champs
             # à remplir et de ne pas lever sur une clé absente.

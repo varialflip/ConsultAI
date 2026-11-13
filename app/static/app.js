@@ -8935,6 +8935,13 @@
     // réponse, personne ne l'affichait. Mieux vaut le voir avant de chercher
     // un médicament manquant dans la note.
     const nbPages = Number(doc.pages || 1);
+    // Pages que le modèle a déclarées illisibles : on les nomme, avec sa
+    // raison (« floue »), pour que la reprise soit évidente. Sans cela, une
+    // page sautée ressemblait à une page sans contenu.
+    const illisibles = {};
+    (extractionData.unreadable || []).forEach((row) => {
+      if (row && row.page) illisibles[Number(row.page)] = row.reason || '';
+    });
     if (nbPages > 1 || total > 0) {
       const carte = document.createElement('div');
       carte.className = 'flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-[11px] text-slate-500 border-b border-slate-100';
@@ -8948,12 +8955,16 @@
           .filter((d) => (d.pages || []).map(Number).includes(page))
           .map((d) => documentKindLabel(d.kind));
         const morceau = document.createElement('span');
+        const floue = illisibles[page] !== undefined;
         const vide = surPage.length === 0 && nbPages > 1;
-        morceau.className = vide ? 'text-amber-600 font-medium' : '';
-        morceau.textContent = vide
-          ? `${T('doc.page')} ${page} — ${T('doc.page_nothing')}`
-          : `${T('doc.page')} ${page} · ${typesPage[0] || T('doc.other_doc')} (${surPage.length})`;
+        morceau.className = (floue || vide) ? 'text-amber-600 font-medium' : '';
+        morceau.textContent = floue
+          ? `${T('doc.page')} ${page} — ${T('doc.page_unreadable')}`
+          : vide
+            ? `${T('doc.page')} ${page} — ${T('doc.page_nothing')}`
+            : `${T('doc.page')} ${page} · ${typesPage[0] || T('doc.other_doc')} (${surPage.length})`;
         if (notes[page]) morceau.title = notes[page];
+        else if (floue) morceau.title = illisibles[page];
         carte.appendChild(morceau);
       }
       entete.appendChild(carte);
@@ -8967,6 +8978,18 @@
       oubli.className = 'text-[11px] text-amber-600';
       oubli.textContent = `${T('doc.missing_pages')} ${manquantes.join(', ')}`;
       barre.appendChild(oubli);
+    }
+    // Pages déclarées illisibles : le document reste utilisable, mais la
+    // reprise doit sauter aux yeux — une page floue, c'est du contenu absent
+    // de la note sans que rien ne le dise.
+    const pagesIllisibles = Object.keys(illisibles).map(Number).sort((a, b) => a - b);
+    if (pagesIllisibles.length) {
+      const avertissement = document.createElement('span');
+      avertissement.className = 'text-[11px] text-amber-600 font-medium';
+      avertissement.textContent = T('doc.unreadable_pages', { pages: pagesIllisibles.join(', ') });
+      avertissement.title = pagesIllisibles
+        .map((page) => `${page} : ${illisibles[page] || '—'}`).join(' · ');
+      barre.appendChild(avertissement);
     }
 
     const select = document.createElement('select');

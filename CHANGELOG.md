@@ -2,6 +2,17 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-13 — Documents : les pages illisibles sont nommées
+
+*Cinq pages déclarées floues par le modèle ne se voyaient nulle part : la
+lecture semblait complète alors qu'elle sautait la moitié du document.*
+
+- L'onglet Documents affiche « Pages illisibles : 5, 6, 8, 9, 10 —
+  reprenez-les », et page par page « Page 5 — illisible » avec la raison
+  donnée par le modèle (« floue »).
+- Une page illisible n'échoue pas : le reste du document reste utilisable,
+  mais la reprise saute aux yeux.
+
 ## 2026-11-13 — Documents : la photo est prise à l'instant de l'appui
 
 *Cinq pages sur dix sont revenues filées alors que l'aperçu était net : la

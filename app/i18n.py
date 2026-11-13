@@ -481,6 +481,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "rien d'exploitable — vérifier la photo",
         "nothing usable — check the photo",
     ),
+    "doc.page_unreadable": ("illisible", "unreadable"),
+    "doc.unreadable_pages": (
+        "Pages illisibles : {pages} — reprenez-les",
+        "Unreadable pages: {pages} — retake them",
+    ),
     "doc.other_doc": (
         "autre",
         "other",

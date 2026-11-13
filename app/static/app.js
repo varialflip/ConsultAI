@@ -8765,8 +8765,11 @@
     // alors qu'une seule entre dans la note.
     const fusion = state.medMerge || null;
     const estReference = Boolean(fusion && String(fusion.reference_id) === String(doc.id));
+    // « Comparée » suppose une vraie fusion : `med_merged_json` existe aussi
+    // quand il ne porte que le médecin de famille, et la liste unique se
+    // retrouvait alors repliée, sans cases.
     const estComparee = Boolean(
-      fusion && !estReference && (extractionData.med_list || []).length,
+      fusion && fusion.reference_id && !estReference && (extractionData.med_list || []).length,
     );
     if (estReference || estComparee) {
       const badge = document.createElement('span');

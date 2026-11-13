@@ -8340,6 +8340,17 @@
         return [];
       }
     },
+    async remove(id) {
+      try {
+        const db = await openDocDb();
+        await new Promise((resolve) => {
+          const store = db.transaction('pending', 'readwrite').objectStore('pending');
+          const r = store.delete(id);
+          r.onsuccess = () => resolve();
+          r.onerror = () => resolve();
+        });
+      } catch (_) { /* rien à retirer */ }
+    },
     async clear() {
       try {
         const db = await openDocDb();
@@ -8371,6 +8382,152 @@
       // createImageBitmap absent ou refusé : le serveur refusera un format
       // inattendu plutôt que d'inventer une conversion.
       return file;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Prise de vue dans l'application
+  // ---------------------------------------------------------------------
+  // Un seul flux caméra, autant de prises qu'on veut : le sélecteur de
+  // fichiers du système ne peut pas garder la caméra ouverte (iOS la referme
+  // après chaque photo, Android redemande quelle application employer).
+  // ImageCapture.takePhoto() donne l'image native plein format quand il
+  // existe (Safari 18.4+, Chrome 60+) ; sinon on dessine une image du flux
+  // dans un canvas — même résultat, un peu moins fidèle.
+  const camera = { stream: null, capture: null, wakeLock: null };
+
+  async function renderCameraThumbs() {
+    const zone = $('cameraThumbs');
+    if (!zone) return;
+    const rows = await pendingDocs.all();
+    const compte = $('cameraCount');
+    if (compte) compte.textContent = String(rows.length);
+    zone.innerHTML = '';
+    rows.forEach((row) => {
+      if (row.type === 'application/pdf') return;
+      const figure = document.createElement('figure');
+      figure.className = 'relative shrink-0 w-14';
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(row.blob);
+      img.className = 'w-14 h-[4.5rem] object-cover rounded border border-white/40';
+      img.alt = '';
+      figure.appendChild(img);
+      const croix = document.createElement('button');
+      croix.type = 'button';
+      croix.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white text-slate-900 '
+        + 'text-[11px] leading-none grid place-items-center shadow';
+      croix.textContent = '×';
+      croix.title = T('doc.retake');
+      croix.addEventListener('click', async () => {
+        await pendingDocs.remove(row.id);
+        await renderCameraThumbs();
+        await renderPendingDocuments();
+      });
+      figure.appendChild(croix);
+      zone.appendChild(figure);
+    });
+  }
+
+  async function stopCamera() {
+    if (camera.stream) {
+      camera.stream.getTracks().forEach((track) => track.stop());
+      camera.stream = null;
+    }
+    camera.capture = null;
+    const video = $('cameraVideo');
+    if (video) video.srcObject = null;
+    if (camera.wakeLock) {
+      try { await camera.wakeLock.release(); } catch (_) { /* déjà rendu */ }
+      camera.wakeLock = null;
+    }
+  }
+
+  async function openCameraSheet() {
+    const sheet = $('cameraSheet');
+    const video = $('cameraVideo');
+    if (!sheet || !video) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast(T('doc.cam_unavailable'), 'error');
+      return;
+    }
+    const hint = $('cameraHint');
+    if (hint) hint.textContent = T('doc.cam_hint');
+    try {
+      camera.stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+        },
+        audio: false,
+      });
+    } catch (err) {
+      // Refus de permission ou caméra absente : on rend la main à l'import,
+      // qui reste le chemin sûr.
+      toast(
+        (err && err.name === 'NotAllowedError' ? T('doc.cam_denied') : T('doc.cam_failed'))
+        + ' ' + ((err && err.message) || ''),
+        'error',
+      );
+      return;
+    }
+    video.srcObject = camera.stream;
+    sheet.classList.remove('hidden');
+    const track = camera.stream.getVideoTracks()[0];
+    camera.capture = (typeof window.ImageCapture === 'function' && track)
+      ? new window.ImageCapture(track)
+      : null;
+    // L'écran ne doit pas s'éteindre entre deux pages d'une même liste.
+    try {
+      if (navigator.wakeLock) camera.wakeLock = await navigator.wakeLock.request('screen');
+    } catch (_) { /* non critique */ }
+    await renderCameraThumbs();
+  }
+
+  async function closeCameraSheet() {
+    const sheet = $('cameraSheet');
+    if (sheet) sheet.classList.add('hidden');
+    await stopCamera();
+    await renderPendingDocuments();
+  }
+
+  async function takePhoto() {
+    const bouton = $('btnCameraShutter');
+    if (bouton) bouton.disabled = true;
+    try {
+      let blob = null;
+      if (camera.capture) {
+        try {
+          blob = await camera.capture.takePhoto();
+        } catch (_) {
+          blob = null; // flux sans photo native : on retombe sur le canvas
+        }
+      }
+      if (!blob) {
+        const video = $('cameraVideo');
+        const largeur = video.videoWidth;
+        const hauteur = video.videoHeight;
+        if (!largeur || !hauteur) return;
+        const echelle = Math.min(1, DOC_MAX_SIDE / Math.max(largeur, hauteur));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(largeur * echelle);
+        canvas.height = Math.round(hauteur * echelle);
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+      }
+      if (!blob) return;
+      const jpeg = await documentToJpeg(blob);
+      await pendingDocs.put({
+        id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()),
+        createdAt: Date.now(),
+        name: 'photo.jpg',
+        type: 'image/jpeg',
+        blob: jpeg,
+      });
+      await renderCameraThumbs();
+      await renderPendingDocuments();
+    } finally {
+      if (bouton) bouton.disabled = false;
     }
   }
 
@@ -8407,7 +8564,7 @@
     rows.forEach((row) => {
       const url = URL.createObjectURL(row.blob);
       const figure = document.createElement('figure');
-      figure.className = 'shrink-0 w-16';
+      figure.className = 'relative shrink-0 w-16';
       if (row.type === 'application/pdf') {
         figure.innerHTML = `<div class="w-16 h-20 rounded border border-amber-300 bg-white grid place-items-center text-[10px] text-amber-800">PDF</div>`;
       } else {
@@ -8417,6 +8574,20 @@
         img.alt = row.name || '';
         figure.appendChild(img);
       }
+      // Retirer une prise : c'est le geste de reprise, et il vaut pour les
+      // deux chemins (aperçu caméra ou import).
+      const croix = document.createElement('button');
+      croix.type = 'button';
+      croix.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-800 text-white '
+        + 'text-[11px] leading-none grid place-items-center shadow';
+      croix.textContent = '×';
+      croix.title = T('doc.retake');
+      croix.addEventListener('click', async () => {
+        await pendingDocs.remove(row.id);
+        await renderPendingDocuments();
+        await renderCameraThumbs();
+      });
+      figure.appendChild(croix);
       liste.appendChild(figure);
     });
   }
@@ -8936,6 +9107,27 @@
         event.target.value = '';
       });
     }
+    // Le bouton caméra ouvre l'aperçu intégré quand la capture vidéo est
+    // disponible ; sinon il laisse le champ de fichier faire son travail
+    // (sélecteur système, import de PDF).
+    if ($('documentInputLabel')) {
+      $('documentInputLabel').addEventListener('click', (event) => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+        event.preventDefault();
+        openCameraSheet();
+      });
+    }
+    if ($('btnCameraShutter')) {
+      $('btnCameraShutter').addEventListener('click', takePhoto);
+    }
+    if ($('btnCameraClose')) {
+      $('btnCameraClose').addEventListener('click', closeCameraSheet);
+    }
+    // iOS coupe le flux quand l'application passe en arrière-plan : on ferme
+    // proprement plutôt que de garder une vidéo figée et une caméra active.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && camera.stream) closeCameraSheet();
+    });
     if ($('btnDocumentsSend')) {
       $('btnDocumentsSend').addEventListener('click', sendPendingDocuments);
     }
@@ -8943,6 +9135,7 @@
       $('btnDocumentsClear').addEventListener('click', async () => {
         await pendingDocs.clear();
         await renderPendingDocuments();
+        await renderCameraThumbs();
       });
     }
     renderPendingDocuments();

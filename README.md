@@ -1551,6 +1551,17 @@ est dans la barre d'outils, à gauche du micro.
 (une case par **ligne réconciliée** pour les médicaments, texte éditable + case
 par élément pour l'historique, le laboratoire et l'imagerie) → on dicte → on
 génère la note.
+
+**Plusieurs pages, sans rouvrir la caméra.** Le bouton caméra ouvre un
+**aperçu intégré** (`getUserMedia`) : un seul flux, autant de prises qu'on veut,
+chacune ajoutée à la file ; une croix retire une prise pour la reprendre. La
+photo vient de `ImageCapture.takePhoto()` quand il existe (Safari 18.4+,
+Chrome 60+), sinon d'une image du flux dessinée dans un canvas. Le champ de
+fichier reste le chemin de secours et l'import de PDF — **sans `capture`** :
+cet attribut ouvrait l'application caméra du système, qui ne rend qu'une photo
+et redemande, sur Android, quelle application employer à chaque fois. L'écran
+est maintenu allumé pendant la prise de vue (`wakeLock`), et le flux est coupé
+dès que l'application passe en arrière-plan.
 Les prises restent dans le navigateur (IndexedDB) jusqu'à « Envoyer » : rien
 n'est téléversé avant ce geste, et un téléphone qui s'endort ne perd rien.
 

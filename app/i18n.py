@@ -395,6 +395,32 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Photographier un document (liste de médicaments, bilan, rapport)",
         "Photograph a document (medication list, lab report, imaging report)",
     ),
+    "doc.cam_done": ("Terminer", "Done"),
+    "doc.cam_shoot": ("Prendre la photo", "Take the photo"),
+    "doc.cam_hint": (
+        "Cadrez la page, puis appuyez sur le déclencheur. Chaque prise s'ajoute "
+        "à la file ; vous pouvez en prendre plusieurs à la suite.",
+        "Frame the page, then press the shutter. Each shot is added to the "
+        "queue; you can take several in a row.",
+    ),
+    "doc.cam_unavailable": (
+        "Caméra indisponible dans ce navigateur : utilisez le bouton "
+        "d'import.",
+        "Camera unavailable in this browser: use the import button.",
+    ),
+    "doc.cam_denied": (
+        "Accès à la caméra refusé : autorisez-le dans les réglages du "
+        "navigateur, ou utilisez l'import.",
+        "Camera access denied: allow it in the browser settings, or use import.",
+    ),
+    "doc.cam_failed": (
+        "La caméra n'a pas démarré :",
+        "The camera did not start:",
+    ),
+    "doc.retake": (
+        "Retirer cette prise",
+        "Remove this shot",
+    ),
     "doc.pending_hint": (
         "en attente d'envoi — rien n'est parti au serveur",
         "waiting to be sent — nothing has reached the server yet",

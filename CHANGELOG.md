@@ -2,6 +2,24 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-13 — Documents : prise de vue multiple dans l'application
+
+*Le sélecteur de fichiers du système ne peut pas garder la caméra ouverte :
+iOS la referme après chaque photo, Android redemande à chaque fois quelle
+application employer. La prise de vue se fait maintenant dans l'application.*
+
+- **Aperçu caméra intégré** (`getUserMedia`) : un seul flux, autant de prises
+  qu'on veut, chacune ajoutée à la file d'attente ; une croix retire une prise
+  pour la reprendre.
+- **`ImageCapture.takePhoto()`** quand il existe (Safari 18.4+, Chrome 60+),
+  sinon une image du flux dessinée dans un canvas — même résultat, un peu moins
+  fidèle.
+- **`capture="environment"` retiré** du champ de fichier : c'est lui qui
+  ouvrait l'application caméra du système et provoquait le choix d'application
+  sur Android. Le champ reste le chemin de secours et l'import de PDF.
+- **Écran maintenu allumé** pendant la prise de vue (`wakeLock`), flux coupé
+  dès que l'application passe en arrière-plan.
+
 ## 2026-11-11 — Revue clinique : un appel séparé, sans audio
 
 *L'audit factuel dit « ceci n'est pas dans l'audio ». Il ne dit pas « ceci

@@ -536,9 +536,40 @@
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
               <circle cx="12" cy="13" r="4"/>
             </svg>
+            <!-- PAS de capture="environment" : cet attribut ouvre l'application
+                 caméra du système et n'en rapporte qu'UNE photo (iOS la referme
+                 après chaque prise, Android demande à chaque fois quelle
+                 caméra employer). Le bouton reste le chemin de secours et
+                 l'import de PDF ; la prise de vue multiple se fait dans
+                 l'aperçu intégré (voir openCameraSheet). -->
             <input id="documentFileInput" type="file" multiple
-                   accept="image/jpeg,application/pdf" capture="environment" class="hidden">
+                   accept="image/jpeg,application/pdf" class="hidden">
           </label>
+
+          <!-- Prise de vue dans l'application : un seul flux caméra, autant de
+               photos qu'on veut, chaque prise ajoutée à la file d'attente.
+               Masqué par défaut ; ouvert par le bouton caméra quand
+               getUserMedia est disponible. -->
+          <div id="cameraSheet" class="hidden fixed inset-0 z-[60] bg-black flex flex-col">
+            <div class="flex items-center justify-between px-3 py-2 text-white">
+              <span id="cameraCount" class="text-sm tabular-nums">0</span>
+              <button id="btnCameraClose" type="button"
+                      class="px-3 py-1 rounded-md bg-white/15 hover:bg-white/25 text-sm">
+                {{ t('doc.cam_done') }}
+              </button>
+            </div>
+            <div class="relative flex-1 min-h-0">
+              <video id="cameraVideo" class="absolute inset-0 w-full h-full object-contain"
+                     playsinline muted autoplay></video>
+              <p id="cameraHint" class="absolute inset-x-0 top-3 text-center text-xs text-white/70 px-6"></p>
+            </div>
+            <div class="px-3 py-3 flex items-center justify-center gap-4 bg-black">
+              <button id="btnCameraShutter" type="button"
+                      class="w-16 h-16 rounded-full border-4 border-white bg-white/20 active:bg-white/50 disabled:opacity-40"
+                      aria-label="{{ t('doc.cam_shoot') }}"></button>
+            </div>
+            <div id="cameraThumbs" class="flex gap-2 overflow-x-auto px-3 pb-3 bg-black"></div>
+          </div>
 
           <button id="btnRecord" type="button"
                   class="flex-1 lg:flex-none lg:w-40 inline-flex items-center justify-center gap-2
@@ -626,7 +657,7 @@
             {{ t('doc.clear') }}
           </button>
         </div>
-        <div id="documentsThumbs" class="flex gap-2 overflow-x-auto thin-scroll"></div>
+        <div id="documentsThumbs" class="flex gap-2 overflow-x-auto thin-scroll pt-1"></div>
       </div>
 
       <!-- Détails : tout ce qui ne sert pas à chaque dictée.

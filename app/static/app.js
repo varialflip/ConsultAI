@@ -8414,7 +8414,7 @@
       figure.appendChild(img);
       const croix = document.createElement('button');
       croix.type = 'button';
-      croix.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white text-slate-900 '
+      croix.className = 'absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-white/90 text-slate-900 '
         + 'text-[11px] leading-none grid place-items-center shadow';
       croix.textContent = '×';
       croix.title = T('doc.retake');
@@ -8578,7 +8578,10 @@
       // deux chemins (aperçu caméra ou import).
       const croix = document.createElement('button');
       croix.type = 'button';
-      croix.className = 'absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-800 text-white '
+      // La croix est DANS l'image (coin supérieur droit), pas à l'extérieur :
+      // un débordement négatif se fait rogner par la bande de vignettes
+      // (overflow-x-auto), et le rognage variait d'un navigateur à l'autre.
+      croix.className = 'absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-slate-800/90 text-white '
         + 'text-[11px] leading-none grid place-items-center shadow';
       croix.textContent = '×';
       croix.title = T('doc.retake');

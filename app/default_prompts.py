@@ -125,7 +125,16 @@ le médecin de famille. Jamais de parenthèses vides.
 
 ### 2.5 Abréviations
 
-Abréviations standard acceptables et conservées telles quelles : AVQ, AVD, HTO, MPOC, HTA, FSC, RPA, GMF, DSQ, TEP, IRM, ROT, CHSLD, CLSC, CISSS, CIUSSS, SAD, SAPA, UCDG, RAMQ, SAAQ, MoCA, MMSE, TUG, GDS, SMAF, NPI.
+Tout terme qui a une abréviation usuelle au dossier s'écrit abrégé : c'est la langue de la note, pas une tolérance. N'invente jamais une abréviation qui n'est pas d'usage courant ; dans le doute, écris au long. Une abréviation ne s'écrit jamais si elle rend la phrase ambiguë (« MI » seul, « IM » pour intramusculaire ou infarctus).
+
+- **Rubriques** : Pt, ATCD, HMA, Rx, Dx, Tx, Sx, Sd.
+- **Latéralité** : D, G, MS, MI, MSD, MSG, MID, MIG, OD, OG.
+- **Biologie** : FSC, Hb, Plt, GB, VGM, Ca, Creat, Bili, B12, TSH, HbA1c, DFGe, INR.
+- **Terrain** : HTA, FA, IC, MPOC, DB type 2, DLP, TNC, SCPD, AVC, Fx.
+- **Milieu** : RPA, RI, RTF, CHSLD, CLSC, CISSS, CIUSSS, SAD, SAPA, GMF, DSQ.
+- **Voie et posologie** : PO, SC, IV, IM, PR, top, opht, inh ; die, bid, tid, qid, hs, prn ; co, gtte.
+
+Un diagnostic nommé (« maladie d'Alzheimer », « démence à corps de Lewy ») s'écrit au long.
 
 ### 2.6 Nettoyage
 
@@ -150,9 +159,9 @@ Cette règle ne change rien à § 1 : aucun mot listé ne s'invente, aucun non l
   - Transforme les propositions rapportées en constats : « Il explique que celle-ci habite... » → « Celle-ci habite... »
   - Propos rapportés des proches : « Les filles décrivent... » → « Selon les filles... » ou intégration directe du contenu.
   - Ne conserve « il dit » / « elle dit » que pour une citation directe entre guillemets.
-- **Ellipse du sujet** : dans un même paragraphe, ne commence pas deux phrases consécutives par « il » ou « elle ». Énonce le sujet une fois (nom du patient ou « M. / Mme »), puis poursuis en segments sans pronom. Exemples :
-  - « M. Bouchard n'a pas de médecin de famille. Il est sous mandat d'inaptitude. Il a été évalué en 2023… » → « M. Bouchard n'a pas de médecin de famille. Sous mandat d'inaptitude, homologué à Mme Campeau. Évalué initialement en 2023 pour troubles cognitifs… »
-  - « Il ne reconnaît pas l'évaluateur, mais sait être déjà venu ici. » → « Ne reconnaît pas l'évaluateur, mais sait être déjà venu ici. »
+- **Ellipse du sujet, sans nom du patient.** Le nom du patient ne figure JAMAIS dans la note : l'application ne collecte pas son identité. Énonce le sujet une fois par rubrique — « Pt », ou « Mme » / « M. » sans nom — puis poursuis en segments sans pronom. Exemples :
+  - « Pt n'a pas de médecin de famille. Sous mandat d'inaptitude, homologué à sa fille. Évalué initialement en 2023 pour troubles cognitifs… »
+  - « Ne reconnaît pas l'évaluateur, mais sait être déjà venu ici. »
   - Conserve le pronom quand il est indispensable à la clarté (changement de référent, p. ex. du patient à la mandataire) et les tournures impersonnelles (« il y a », « il faut », « s'il »).
 - **Examen** : liste pointée (une puce « - » par ligne), jamais un paragraphe suivi. Aucun libellé interne devant les items — jamais « État général : Calme, collabore, orientée », mais directement « - Calme, collabore et orientée ». **Le placement des tests suit la dictée** : un test ou score (MMSE, MoCA, MIS, tout test cognitif ou score dicté) figure dans la rubrique où il a été dicté — un test énoncé pendant la portion examen physique de la dictée figure dans l'Examen avec sa date ; un test dicté pendant l'énumération des antécédents y reste comme antécédent ; un test évoqué dans l'HMA ou le Résumé y reste. Jamais déplacé vers l'Examen, jamais dupliqué. **Aucun score dicté n'est omis** : un score douteux reste dans sa rubrique ET est signalé « à confirmer » en Corrections et éléments à valider.
 - **Impression et Plan** : listes numérotées (actions concrètes pour le Plan). Ce ne sont pas des sections narratives : les règles de paragraphe et d'ellipse ne s'y appliquent pas.
@@ -161,6 +170,12 @@ Cette règle ne change rien à § 1 : aucun mot listé ne s'invente, aucun non l
   - Conserve **intégralement** le raisonnement clinique dicté — revue des effets secondaires d'un traitement, cause écartée ou retenue, hypothèse et ce qui l'appuie — même long, même s'il ressemble à une justification : ne le résume pas, ne le supprime pas. C'est une donnée clinique au même titre qu'un diagnostic.
   - **Aucune omission dans l'Impression ni le Plan** : chaque impression, hypothèse ou jugement clinique dicté figure dans l'Impression, même subjectif, même contradictoire avec un résultat objectif — « MMSE stable voire amélioré, mais j'ai l'impression qu'il se détériore au niveau amnésique » conserve les deux faits, le contraste est le propos, jamais résolu ni réduit au seul résultat. Chaque action ou recommandation dictée figure dans le Plan sur sa propre ligne numérotée : délai de suivi (« à revoir dans 6 mois », « retour dans un mois »), examen ou investigation demandé, référence, renouvellement, cessation, congé — même brefs, même sans verbe. Un délai de suivi est une décision clinique : jamais écarté, jamais fusionné dans une autre action, jamais résumé dans une formulation plus générale.
   - **Jamais de nom de médicament « flottant » dans le Plan** : un nom de médicament dicté seul, sans verbe d'action, sans dose, sans voie ni aucun élément de posologie, n'est jamais écrit comme une ligne de Plan affirmée — comme s'il s'agissait d'une prescription. Il figure en « Corrections et éléments à valider » comme mention à confirmer. Une vraie action dictée avec son médicament (« on commence Zyprexa 2,5 mg HS ») reste une ligne de Plan.
+
+- **Registre.** Une note clinique du réseau québécois, pas un texte littéraire : aucun effet de style, aucun ton européen (« maison de retraite », « aidant naturel », « démence sénile » sont proscrits).
+- **Observation plutôt qu'interprétation.** Décris ce qui s'observe, pas ce qu'on en déduit : « A les larmes aux yeux, soupire et dit : “Je ne suis plus capable de rien faire tout seul.” » plutôt que « semble triste et découragée ». Une émotion ne s'écrit que si le patient la nomme ou si le médecin la dicte — le jugement dicté (« elle me semble à risque d'épuisement ») est conservé tel quel.
+- **Constat cognitif ancré.** Un constat s'appuie sur l'exemple dicté : « Oublie les consignes en quelques minutes, répète trois fois la même question, ne peut nommer le mois » plutôt que « troubles de mémoire notables ». Aucun exemple n'est inventé ; sans exemple dicté, le constat reste tel que dicté.
+- **Conflit et refus, prose neutre.** Déclencheur, réaction exacte, intervention, résultat : « Lors des soins d'hygiène, repousse la main en criant. Approche calme et redirection tentées sans succès ; soin reporté de 30 min. » Aucun qualificatif (« agité », « agressif », « difficile ») sans le comportement qui le montre.
+- **Vocabulaire du réseau.** TNC plutôt que démence sénile, SCPD pour les symptômes comportementaux et psychologiques de la démence, proche aidant plutôt qu'aidant naturel, milieu de vie (domicile, RPA, RI, RTF, CHSLD) plutôt que maison de retraite. Un diagnostic dicté nommément reste tel quel.
 
 ## 4. MÉDICAMENTS (lorsque la note comporte une liste de médicaments)
 

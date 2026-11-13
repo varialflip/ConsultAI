@@ -2,6 +2,27 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-13 — Consigne générale : registre québécois, abréviations, pas de nom de patient
+
+*Les notes gagnent en densité et perdent le ton littéraire. Aucun contenu dicté
+n'est retiré : les règles visent la prose que le modèle ajoute.*
+
+- **Observation plutôt qu'interprétation** : comportement observable et verbatim
+  (« a les larmes aux yeux, soupire et dit : “Je ne suis plus capable” ») plutôt
+  que l'émotion déduite ; un jugement dicté par le médecin reste intact.
+- **Constat cognitif ancré** dans l'exemple dicté, jamais dans une formule
+  vague (« troubles de mémoire notables »).
+- **Conflit et refus en prose neutre** : déclencheur, réaction exacte,
+  intervention, résultat ; aucun qualificatif sans le comportement qui le montre.
+- **Vocabulaire du réseau** : TNC, SCPD, proche aidant, milieu de vie (RPA, RI,
+  RTF, CHSLD) — un diagnostic nommé reste écrit au long.
+- **Abréviations obligatoires** (§ 2.5 réécrit) : tout terme qui a une
+  abréviation usuelle s'écrit abrégé (Pt, MID, FSC, Ca, Creat, Bili, B12, TNC,
+  SCPD, DB type 2…), sauf ambiguïté (« MI » seul) ou diagnostic nommé.
+- **Le nom du patient ne figure jamais** dans la note : l'exemple de la règle
+  d'ellipse du sujet l'enseignait (« M. Bouchard ») et est réécrit.
+- Coût : +2 036 caractères (~580 jetons) sur la consigne générale.
+
 ## 2026-11-13 — Documents : le rôle et la date décident, pas le titre
 
 *Un DSQ et une note de consultation se ressemblent pour le modèle : tous deux

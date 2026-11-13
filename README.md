@@ -779,6 +779,20 @@ d'en-tête sans valeur dictée (médecin de famille, lieu) ; le marqueur
 rubrique qui produit par ailleurs du contenu — il ne remplace jamais une rubrique
 ou une ligne vide.
 
+**Registre québécois et abréviations.** La consigne générale (§ 2.5 et § 3,
+2026-11-13) impose le registre d'une note du réseau, pas d'un texte littéraire :
+**observation plutôt qu'interprétation** (« a les larmes aux yeux, soupire et
+dit : “Je ne suis plus capable” » plutôt que « semble triste »), **constat
+cognitif ancré** dans l'exemple dicté, **prose neutre** en cas de conflit ou de
+refus (déclencheur, réaction, intervention, résultat), et **vocabulaire du
+réseau** (TNC, SCPD, proche aidant, milieu de vie). Un jugement dicté par le
+médecin est conservé tel quel : la règle vise la prose que le modèle ajoute,
+jamais le contenu dicté. Les **abréviations** sont la langue de la note : tout
+terme qui a une abréviation usuelle s'écrit abrégé (Pt, MID, FSC, Ca, Creat,
+B12, TNC, SCPD, DB type 2…), sauf si elle rend la phrase ambiguë (« MI » seul)
+ou s'il s'agit d'un diagnostic nommé, qui s'écrit au long. Le **nom du patient
+ne figure jamais** dans la note — l'application ne collecte pas son identité.
+
 **Correction de la transcription.** La consigne générale (§ 2.0, ajouté le
 2026-08-28) rappelle que la transcription vient d'une reconnaissance vocale,
 pas d'un texte tapé : ses erreurs sont **phonétiques** (homophones — souvent

@@ -206,7 +206,7 @@ Avant d'émettre le rapport, dernière passe destinée à écarter toute inventi
 - Tout contenu du gabarit non renseigné par la dictée est supprimé — jamais complété, jamais désigné par un texte de remplissage.
 - Interdiction de réutiliser comme donnée un exemple cité dans les consignes : les exemples (noms, phrases types) ne sont jamais des données à reporter.
 - Aucun nom de patient ne figure dans le rapport, et le sujet s'écrit « Pt » — jamais « la patiente » ni « le patient ». Les abréviations de § 2.5 sont employées, sans variante inventée.
-- Relis chaque paragraphe : aucune phrase n'y commence par « il » ou « elle » après la première. Si c'est le cas, réécris la phrase en segment sans pronom (« Elle a été évaluée en chirurgie » → « Évaluée en chirurgie »).
+- **Compte les phrases qui commencent par « il » ou « elle »** : il ne doit y en avoir AUCUNE, sauf la toute première phrase d'une rubrique. Pour chacune des autres, supprime le pronom et garde le verbe en tête (« Elle est hospitalisée depuis » → « Hospitalisée depuis » ; « Elle présente des difficultés auditives » → « Présente des difficultés auditives » ; « Il se dit sans difficulté » → « Se dit sans difficulté »). Seules exceptions : « il y a », « il faut », « il s'agit », « il semble », « il est » impersonnel.
 
 Termine **toujours** par la section des éléments à valider, jamais omise :
 

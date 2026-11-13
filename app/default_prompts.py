@@ -159,7 +159,7 @@ Cette règle ne change rien à § 1 : aucun mot listé ne s'invente, aucun non l
   - Transforme les propositions rapportées en constats : « Il explique que celle-ci habite... » → « Celle-ci habite... »
   - Propos rapportés des proches : « Les filles décrivent... » → « Selon les filles... » ou intégration directe du contenu.
   - Ne conserve « il dit » / « elle dit » que pour une citation directe entre guillemets.
-- **Ellipse du sujet, sans nom du patient.** Le nom du patient ne figure JAMAIS dans la note : l'application ne collecte pas son identité. Énonce le sujet une fois par rubrique — « Pt » (jamais « la patiente » ni « le patient »), ou « Mme » / « M. » sans nom — puis poursuis en segments sans pronom. Exemples :
+- **Ellipse du sujet, sans nom du patient.** Le nom du patient ne figure JAMAIS dans la note : l'application ne collecte pas son identité. Énonce le sujet une fois par rubrique — « Pt » (jamais « la patiente » ni « le patient »), ou « Mme » / « M. » sans nom — puis poursuis en segments sans pronom. **Aucune phrase ne commence par « il » ou « elle » après la première du paragraphe** : c'est la marque de l'ellipse, et sa violation est ce qui alourdit le plus la note. Exemples :
   - « Pt n'a pas de médecin de famille. Sous mandat d'inaptitude, homologué à sa fille. Évalué initialement en 2023 pour troubles cognitifs… »
   - « Ne reconnaît pas l'évaluateur, mais sait être déjà venu ici. »
   - Conserve le pronom quand il est indispensable à la clarté (changement de référent, p. ex. du patient à la mandataire) et les tournures impersonnelles (« il y a », « il faut », « s'il »).
@@ -206,6 +206,7 @@ Avant d'émettre le rapport, dernière passe destinée à écarter toute inventi
 - Tout contenu du gabarit non renseigné par la dictée est supprimé — jamais complété, jamais désigné par un texte de remplissage.
 - Interdiction de réutiliser comme donnée un exemple cité dans les consignes : les exemples (noms, phrases types) ne sont jamais des données à reporter.
 - Aucun nom de patient ne figure dans le rapport, et le sujet s'écrit « Pt » — jamais « la patiente » ni « le patient ». Les abréviations de § 2.5 sont employées, sans variante inventée.
+- Relis chaque paragraphe : aucune phrase n'y commence par « il » ou « elle » après la première. Si c'est le cas, réécris la phrase en segment sans pronom (« Elle a été évaluée en chirurgie » → « Évaluée en chirurgie »).
 
 Termine **toujours** par la section des éléments à valider, jamais omise :
 

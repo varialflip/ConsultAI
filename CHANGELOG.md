@@ -21,7 +21,8 @@ n'est retiré : les règles visent la prose que le modèle ajoute.*
   SCPD, DB type 2…), sauf ambiguïté (« MI » seul) ou diagnostic nommé.
 - **Le nom du patient ne figure jamais** dans la note : l'exemple de la règle
   d'ellipse du sujet l'enseignait (« M. Bouchard ») et est réécrit.
-- Coût : +2 473 caractères (~707 jetons) sur la consigne générale (20 642 → 23 115).
+- **Régression corrigée le même jour** : la réécriture de la règle d'ellipse avait fait disparaître l'interdiction testable (« ne commence pas deux phrases consécutives par il/elle »), remplacée par « poursuis en segments sans pronom ». Les notes se sont remises à répéter le pronom (8 paires consécutives sur la note 85). L'interdiction est rétablie, avec un exemple de conversion dans la vérification finale.
+- Coût : +2 866 caractères (~819 jetons) sur la consigne générale (20 642 → 23 508).
 
 ## 2026-11-13 — Documents : le rôle et la date décident, pas le titre
 

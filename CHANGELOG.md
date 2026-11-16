@@ -2,6 +2,30 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-16 — Dictée : un seul bouton, la pause clôt le passage
+
+*Le mode dictaphone parti, la barre d'outils restait un mini-lecteur média :
+Enregistrer, Pause/Reprendre, Terminer, Arrêter. Il ne reste qu'un bouton, et
+la transcription se poursuit en arrière-plan pendant que le médecin continue
+de dicter.*
+
+- **Un seul contrôle** : `Enregistrer` / `Pause` / `Reprendre`. Aucun bouton
+  « Terminer » ni « Arrêter sans envoyer » ; quitter pendant une dictée la
+  laisse simplement devenir abandonnée.
+- **La pause clôt le passage après 3 s** : reprendre avant continue le même
+  passage ; après, le passage est mis en file et un nouveau démarre. La
+  transcription du passage précédent rattrape pendant la dictée du suivant.
+- **File ordonnée** : un seul passage est transcrit à la fois, dans l'ordre,
+  pour que le transcript et le brouillon restent alignés. Un passage qui
+  démarre derrière un autre enregistre localement puis rattrape en direct.
+- **« Mettre en forme » bloque la dictée** : il clôt le passage actif, attend
+  la fin de la file, puis génère. Le bouton principal est désactivé ; seul un
+  nouveau clic sur « Mettre en forme » relance la génération.
+- **Enregistrements séparés** : chaque passage clôturé devient un
+  enregistrement distinct dans la liste.
+- **Échec** : la file s'arrête sur le passage en échec et un bouton
+  « Réessayer » apparaît dans la ligne d'état ; la dictée peut continuer.
+
 ## 2026-11-16 — Retrait du mode dictaphone
 
 *Le calque plein écran « téléphone retourné » est retiré de l'instance de

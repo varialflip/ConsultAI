@@ -1042,7 +1042,28 @@ manuelle.
 Le service worker ne met en cache que des ressources statiques et anonymes. Ni la
 page `/`, ni les appels `/api/` — ils contiennent des renseignements de santé.
 
-### 7.7 Temps réel de la dictée
+### 7.7 Contrôles de dictée — un seul bouton
+
+La barre d'outils n'expose plus qu'un contrôle d'enregistrement :
+**Enregistrer / Pause / Reprendre**. Il n'y a ni bouton « Terminer » ni
+« Arrêter sans envoyer ».
+
+- Une **pause** arrête la capture immédiatement. Reprendre dans les **3 s**
+  continue le même passage ; au-delà, le passage est **clos**, mis en file de
+  transcription, et le bouton redevient « Enregistrer ».
+- La transcription se poursuit **en arrière-plan**, un passage à la fois et
+  dans l'ordre. Un passage qui démarre derrière un autre enregistre
+  localement, puis rattrape en direct quand la file se vide.
+- Chaque passage clos devient un **enregistrement distinct** dans la liste.
+- **« Mettre en forme »** clôt le passage actif, attend la fin de la file,
+  puis génère. Le bouton d'enregistrement est désactivé pendant l'opération ;
+  un nouveau clic sur « Mettre en forme » relance la génération.
+- Quitter pendant une dictée ou avec des passages en file les laisse devenir
+  **abandonnés** : aucun geste d'abandon n'est demandé.
+- En cas d'échec d'un passage, la file s'arrête et la ligne d'état propose
+  **« Réessayer »** ; la dictée peut continuer pendant ce temps.
+
+### 7.8 Temps réel de la dictée
 
 Le batch fiable reste l'épine dorsale : l'audio est téléversé par fragments,
 copié localement (IndexedDB) et conservé en entier sur le serveur — rien ne
@@ -1151,7 +1172,7 @@ exposés qu'avant, noyés qu'ils étaient dans une tranche de 10 s : le seuil
 retente au « Terminer » sans garantie — comportement assumé, à reconsidérer si
 le gain de latence ne compense pas ces interjections.
 
-### 7.8 Correction des médicaments (grounding, liste pointée)
+### 7.9 Correction des médicaments (grounding, liste pointée)
 
 Réglage admin `DICTATION_GROUNDING` (groupe **Dictée**, section « Correction
 des médicaments », défaut `false`). Une fois activé :
@@ -1555,7 +1576,7 @@ redondants doublant un nom correct dicté sortent, le nom correct reste).
 
 ---
 
-### 7.9 Documents photographiés (listes, bilans, rapports)
+### 7.10 Documents photographiés (listes, bilans, rapports)
 
 La revue du dossier précède la consultation : plutôt que de retaper une liste
 de médicaments ou de dicter un bilan, on **photographie la page**. La caméra

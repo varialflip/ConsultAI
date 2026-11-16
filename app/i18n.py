@@ -191,8 +191,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "identity.logout": ("Se déconnecter", "Sign out"),
     "identity.logout_busy": (
-        "Terminez ou arrêtez la dictée en cours avant de vous déconnecter.",
-        "Finish or stop the current dictation before signing out.",
+        "Attendez la fin de la dictée et de sa transcription avant de vous déconnecter.",
+        "Wait for the dictation and its transcription to finish before signing out.",
     ),
     "identity.logout_progress": (
         "Déconnexion du fournisseur d'identité…",
@@ -203,13 +203,13 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "toolbar.template_aria": ("Gabarit de consultation", "Consultation template"),
     "toolbar.loading": ("Chargement…", "Loading…"),
     "rec.record": ("Enregistrer", "Record"),
-    "rec.recording": ("Enregistrement…", "Recording…"),
     "rec.paused": ("En pause", "Paused"),
     "rec.pause": ("Pause", "Pause"),
     "rec.resume": ("Reprendre", "Resume"),
-    "rec.pause_title": ("Pause / Reprendre", "Pause / Resume"),
-    "rec.finish_title": ("Terminer et transcrire", "Finish and transcribe"),
-    "rec.abort_title": ("Arrêter sans envoyer", "Stop without sending"),
+    "rec.starting": ("Autorisation…", "Requesting…"),
+    "rec.stopping": ("Arrêt…", "Stopping…"),
+    "rec.formatting": ("Mise en forme…", "Formatting…"),
+    "rec.transcribing": ("Transcription…", "Transcribing…"),
     "rec.import_title": ("Importer un fichier audio", "Import an audio file"),
     "rec.level_aria": ("Niveau sonore du micro", "Microphone level"),
 
@@ -839,25 +839,34 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "dictation.drain_failed": (
         "{count} fragment(s) n'ont pas pu être envoyés. La dictée reste "
-        "conservée dans le navigateur : réessayez depuis la bannière.",
+        "conservée dans le navigateur : réessayez avec « Réessayer ».",
         "{count} chunk(s) could not be sent. The dictation is still kept in "
-        "the browser: retry from the banner.",
+        "the browser: retry with “Retry”.",
     ),
-    "dictation.too_short": (
-        "Enregistrement trop court — rien à transcrire.",
-        "Recording too short — nothing to transcribe.",
+    "dictation.recording_waiting": (
+        "Enregistrement — {count} passage(s) en attente de transcription.",
+        "Recording — {count} passage(s) waiting to be transcribed.",
     ),
-    "dictation.finishing": (
-        "Transcription des dernières secondes…",
-        "Transcribing the last few seconds…",
+    "dictation.queue": (
+        "Transcription en cours ({count}).",
+        "Transcribing ({count}).",
     ),
-    "dictation.finished": (
-        "Dictée terminée — {count} caractères transcrits.",
-        "Dictation finished — {count} characters transcribed.",
+    "dictation.failed": (
+        "Échec de la transcription d'un passage.",
+        "A passage could not be transcribed.",
     ),
-    "dictation.no_speech": (
-        "Aucune parole n'a été détectée dans cette dictée.",
-        "No speech was detected in this dictation.",
+    "dictation.retry": ("Réessayer", "Retry"),
+    "dictation.close_failed": (
+        "La clôture du passage a échoué — réessayez.",
+        "Closing the passage failed — please retry.",
+    ),
+    "dictation.busy_import": (
+        "Attendez la fin de la dictée et de sa transcription avant d'importer.",
+        "Wait for the dictation and its transcription to finish before importing.",
+    ),
+    "dictation.busy_retranscribe": (
+        "Attendez la fin de la dictée et de sa transcription avant de retranscrire.",
+        "Wait for the dictation and its transcription to finish before re-transcribing.",
     ),
 
     # --- Changement de gabarit et retranscription -------------------------
@@ -928,33 +937,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "language; those already transcribed stay in {ancienne}. You can "
         "re-transcribe everything once the dictation is finished.",
     ),
-    "dictation.confirm_abort_transcribed": (
-        "Arrêter sans envoyer ?\n\nL'enregistrement sera supprimé du serveur "
-        "et du navigateur. Le texte déjà transcrit reste dans la "
-        "transcription — videz-la si vous ne le voulez pas.",
-        "Stop without sending?\n\nThe recording will be deleted from the "
-        "server and the browser. Text already transcribed stays in the "
-        "transcript — clear it if you do not want it.",
-    ),
-    "dictation.confirm_abort": (
-        "Arrêter sans envoyer ?\n\nL'enregistrement sera supprimé, sans "
-        "transcription.",
-        "Stop without sending?\n\nThe recording will be deleted, with no "
-        "transcription.",
-    ),
-    "dictation.aborted": (
-        "Dictée arrêtée, enregistrement supprimé.",
-        "Dictation stopped, recording deleted.",
-    ),
-    "dictation.cancel_failed": (
-        "Annulation côté serveur impossible :",
-        "Server-side cancellation failed:",
-    ),
     "dictation.server_unreachable": (
         "Serveur injoignable : la dictée est enregistrée dans le navigateur "
-        "et sera envoyée à la fin. ({error})",
+        "et sera envoyée dès que possible. ({error})",
         "Server unreachable: the dictation is stored in the browser and will "
-        "be sent at the end. ({error})",
+        "be sent as soon as possible. ({error})",
     ),
     "dictation.stt_unavailable": (
         "Service de reconnaissance vocale indisponible : le texte n'arrive "
@@ -994,22 +981,16 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Microphone recovered — the dictation continues.",
     ),
     "dictation.mic_lost_after_resume": (
-        "Le téléphone a repris le micro pendant l'absence et il ne revient pas. La dictée n'est pas perdue : « Terminer » transcrit tout ce qui a déjà été reçu.",
-        "The phone took the microphone while you were away and it is not coming back. The dictation is not lost: « Finish » transcribes everything already received.",
+        "Le téléphone a repris le micro pendant l'absence et il ne revient pas. "
+        "La dictée n'est pas perdue : la transcription reprendra avec ce qui a "
+        "déjà été reçu.",
+        "The phone took the microphone while you were away and it is not coming "
+        "back. The dictation is not lost: transcription will resume with what "
+        "was already received.",
     ),
     "mic.recorder_error": (
         "Erreur d'enregistrement : {error}",
         "Recording error: {error}",
-    ),
-
-    # --- Récupération d'une dictée interrompue -----------------------------
-    "recovery.no_chunks": (
-        "Aucun fragment audio conservé pour cette dictée.",
-        "No audio chunk kept for this dictation.",
-    ),
-    "recovery.uploading": (
-        "Envoi de la dictée conservée — {current}/{total}…",
-        "Sending the stored dictation — {current}/{total}…",
     ),
 
     # --- Transcription et mise en forme ------------------------------------
@@ -1243,13 +1224,13 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     ),
     "drafts.deleted": ("Brouillon supprimé.", "Draft deleted."),
     "drafts.busy_open": (
-        "Terminez ou arrêtez la dictée en cours avant d'ouvrir un brouillon.",
-        "Finish or stop the current dictation before opening a draft.",
+        "Attendez la fin de la dictée et de sa transcription avant d'ouvrir un brouillon.",
+        "Wait for the dictation and its transcription to finish before opening a draft.",
     ),
     "drafts.loaded": ("Brouillon « {title} » chargé.", "Draft “{title}” loaded."),
     "drafts.busy_new": (
-        "Terminez ou arrêtez la dictée en cours avant de changer de consultation.",
-        "Finish or stop the current dictation before switching consultation.",
+        "Attendez la fin de la dictée et de sa transcription avant de changer de consultation.",
+        "Wait for the dictation and its transcription to finish before switching consultation.",
     ),
     "drafts.confirm_new": (
         "Commencer une nouvelle consultation ? Le brouillon courant reste "

@@ -587,42 +587,24 @@
             <div id="cameraThumbs" class="flex gap-2 overflow-x-auto px-3 pb-3 bg-black"></div>
           </div>
 
+          <!-- UN SEUL contrôle d'enregistrement : le libellé dit toujours
+               l'action (Enregistrer / Pause / Reprendre). La pause ferme le
+               passage après une courte fenêtre de grâce ; la transcription
+               continue en arrière-plan. Aucun bouton Terminer ni Abort. -->
           <button id="btnRecord" type="button"
                   class="flex-1 lg:flex-none lg:w-40 inline-flex items-center justify-center gap-2
                          px-4 py-3 lg:py-1.5 rounded-lg bg-red-600 text-white font-semibold
                          text-[15px] lg:text-sm hover:bg-red-700 active:bg-red-800 transition
                          shadow-sm disabled:opacity-40">
-            <span class="w-2.5 h-2.5 rounded-full bg-white"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-white" aria-hidden="true"></span>
             <span id="btnRecordLabel">{{ t('rec.record') }}</span>
           </button>
 
-          <button id="btnPause" type="button" disabled title="{{ t('rec.pause_title') }}"
-                  class="w-12 lg:w-10 grid place-items-center rounded-lg border transition disabled:opacity-30 border-slate-300 hover:bg-slate-50 active:bg-slate-100">
-            <svg id="iconPause" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>
-            </svg>
-          </button>
-
-          <!-- Terminer : conclut la dictée et transcrit ce qui reste. -->
-          <button id="btnFinish" type="button" disabled title="{{ t('rec.finish_title') }}"
-                   class="w-12 lg:w-10 grid place-items-center rounded-lg border transition disabled:opacity-30 accent-btn-ghost hover:accent-bg-subtle">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-          </button>
-
-          <!-- Arrêter sans envoyer : n'apparaît que pendant l'enregistrement,
-               où il prend la place du bouton d'import. Les deux ne servent
-               jamais en même temps. -->
-          <button id="btnAbort" type="button" title="{{ t('rec.abort_title') }}"
-                  class="hidden w-12 lg:w-10 place-items-center rounded-lg border border-red-300
-                         text-red-600 hover:bg-red-50 active:bg-red-100 transition">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                 stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </button>
-
           <label id="importAudioLabel" title="{{ t('rec.import_title') }}"
+                 aria-label="{{ t('rec.import_title') }}"
                  class="w-12 lg:w-10 grid place-items-center rounded-lg border transition disabled:opacity-30 border-slate-300 hover:bg-slate-50 active:bg-slate-100 cursor-pointer">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round">
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
             <input id="audioFileInput" type="file" accept="audio/*" class="hidden">
           </label>
@@ -641,8 +623,17 @@
 
       <p id="templateDescription" class="hidden text-[11px] text-slate-500 px-0.5"></p>
 
-      <!-- État du téléversement : seul signe visible d'une coupure réseau. -->
-      <p id="dictationStatus" class="hidden text-xs px-1"></p>
+      <!-- État de la dictée et file de transcription. « Réessayer » n'apparaît
+           que si le passage en tête a échoué. -->
+      <div id="dictationStatus" class="hidden text-xs px-1 flex items-center gap-2"
+           aria-live="polite">
+        <span id="dictationStatusText"></span>
+        <button id="btnRetryPassage" type="button"
+                class="hidden px-2 py-0.5 rounded border border-amber-300 text-amber-800
+                       hover:bg-amber-100 transition">
+          {{ t('dictation.retry') }}
+        </button>
+      </div>
 
       <!-- Prises en attente d'envoi. Elles vivent en IndexedDB : un
            téléphone qui s'endort ne doit pas emporter six pages de liste de
@@ -781,7 +772,8 @@
         </div>
         <div class="ml-auto flex items-center gap-2 h-8 shrink-0">
           <button id="btnClearTranscript" type="button"
-                  class="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600">
+                  class="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50
+                         text-slate-600 disabled:opacity-40">
             {{ t('pane.clear') }}
           </button>
           <!-- Grisé plutôt que masqué (voir updateActionButtons()) : sans
@@ -1113,7 +1105,8 @@
               flex items-center gap-2">
     <button id="btnClearTranscriptMobile" type="button" title="{{ t('pane.clear_title') }}"
             class="w-12 h-11 grid place-items-center rounded-xl border border-slate-300
-                   hover:bg-slate-50 active:bg-slate-100 transition text-slate-600">
+                   hover:bg-slate-50 active:bg-slate-100 transition text-slate-600
+                   disabled:opacity-40">
       <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>

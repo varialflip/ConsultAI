@@ -526,11 +526,14 @@
   // perdrait la queue non dévoilée. Le serveur écrit de toute façon la
   // version durable (scheduleSave ignore raw_transcript pendant la dictée).
   let committedText = '';
-  //: Miroir de la transcription par tranches (session.parts), maintenu côté
-  //: client pour pouvoir CORRIGER PAR L'ARRIÈRE au fil des événements
-  //: ``transcript_correct`` (remplacement d'un bloc d'index donné) sans
-  //: dépendre du texte accumulé final plus long à reconstruire.
-  let committedParts = [];
+  //: Texte présent avant la première dictée (brouillon rouvert, import…).
+  //: La transcription affichée est reconstruite dans l'ordre :
+  //: ``transcriptBase`` puis les passages, chacun avec ses parts.
+  let transcriptBase = '';
+  //: Passages de dictée, dans l'ordre de création. Chaque passage porte ses
+  //: ``parts`` ; les passages clos restent ici pour que l'ordre du transcript
+  //: ne dépende pas de l'ordre d'arrivée des réponses du serveur.
+  let transcriptPassages = [];
   //: Registre des corrections termiques (gériatriques) pour le
   //: surlignage du transcrit : liste {garble, correct, confidence}.
   //: Alimenté par les événements ``med_grounding`` / ``med_grounding_result``
@@ -559,45 +562,66 @@
     committedText = $('transcript').value;
     renderTranscriptHtml(committedText);
     // Le texte est remplacé en bloc (retranscription, ouverture, reprise) :
-    // on re-synchronise le tableau des parts sur ce nouveau contenu.
-    committedParts = committedText ? [committedText] : [];
+    // la base repart de ce contenu et aucun passage n'est encore rattaché.
+    transcriptBase = committedText;
+    transcriptPassages = [];
   }
 
   /**
-   * Reconstruit ``committedText`` depuis ``committedParts`` et réaffiche. Le
-   * petit flash signale le « le texte se corrige par l'arrière ».
+   * Reconstruit ``committedText`` depuis la base et les passages, puis
+   * réaffiche. Le petit flash signale le « le texte se corrige par l'arrière ».
    */
   function rebuildCommittedText({ pulse = false } = {}) {
-    // Fenêtre glissante : le provisoire (dictation.windowText) s'affiche À LA
-    // SUITE des parts confirmées et est REMPLACÉ à chaque passe — les
-    // dernières secondes restent révisables par la fenêtre suivante.
-    const base = committedParts.join(' ').replace(/\s+/g, ' ');
-    const avecProvisoire = (dictation.windowText && dictation.active)
-      ? `${base} ${dictation.windowText}`.replace(/\s+/g, ' ') : base;
-    committedText = formatSentences(avecProvisoire);
+    const pieces = [];
+    if (transcriptBase) pieces.push(transcriptBase);
+    // Fenêtre glissante : le provisoire du passage ACTIF s'affiche À LA SUITE
+    // de ses parts — mais seulement quand ce passage est en tête de file.
+    // Derrière un passage encore en cours de transcription, son texte live
+    // arriverait avant celui du passage précédent : on le masque, le statut
+    // dit qu'il attend.
+    const head = !pipeline.queue.length && !pipeline.failed;
+    for (const passage of transcriptPassages) {
+      if (passage.parts && passage.parts.length) pieces.push(...passage.parts);
+      if (passage === dictation && dictation.active && head && dictation.windowText) {
+        pieces.push(dictation.windowText);
+      }
+    }
+    committedText = formatSentences(pieces.join(' ').replace(/\s+/g, ' '));
     transcriptReveal.set(committedText);
     if (pulse) flashElement('transcript');
   }
 
   /**
    * Applique une correction par l'arrière du transcript (SSE ``transcript_correct``).
-   * Le serveur envoie la liste complète et AUTORITATIVE des parts (les blocs
-   * remplacés ont déjà été réécrits de son côté) : on la reprend telle quelle,
-   * ce qui évite toute gestion d'index fragile quand le nombre de parts change.
+   * Le serveur envoie la liste complète et AUTORITATIVE des parts du passage
+   * concerné : on remplace ses parts, puis on reconstruit le transcript dans
+   * l'ordre des passages.
    */
   function applyTranscriptCorrection(payload) {
     if (!payload || !Array.isArray(payload.parts)) return;
-    committedParts = payload.parts.slice();
-    if (Array.isArray(payload.corrections)) {
-      transcriptCorrections = payload.corrections.slice();
+    const passage = transcriptPassages.find(
+      (p) => p.sessionId && p.sessionId === payload.session_id,
+    );
+    if (passage) {
+      passage.parts = payload.parts.slice();
+      if (Array.isArray(payload.corrections)) {
+        transcriptCorrections = payload.corrections.slice();
+      }
+      rebuildCommittedText({ pulse: true });
+      updateActionButtons();
+      return;
     }
-    if (payload.session_id && payload.session_id === dictation.sessionId) {
-      // Notre onglet : resynchronise la borne des parts déjà consommées pour
-      // que applyDictationParts ne reprenne pas une version déjà remplacée.
-      dictation.appliedParts = committedParts.length;
+    // Session inconnue (autre onglet, passage déjà détaché) : si aucun
+    // passage n'est suivi ici, on peut repartir de la liste autoritative.
+    // Sinon on l'ignore pour ne pas effacer les passages de cet onglet.
+    if (!transcriptPassages.length) {
+      transcriptBase = payload.parts.join(' ');
+      if (Array.isArray(payload.corrections)) {
+        transcriptCorrections = payload.corrections.slice();
+      }
+      rebuildCommittedText({ pulse: true });
+      updateActionButtons();
     }
-    rebuildCommittedText({ pulse: true });
-    updateActionButtons();
   }
 
   /* --- Miroir HTML du transcrit : corrections surlignées + rollover -----*
@@ -923,7 +947,23 @@
     extractingId: null,
     recording: false,
     paused: false,
+    //: Pause en cours de clôture (arrêt local du MediaRecorder) : le bouton
+    //: principal reste désactivé le temps de récupérer le dernier fragment.
+    stopping: false,
+    //: Démarrage en cours (autorisation micro, ouverture de session).
+    starting: false,
+    //: Génération « Mettre en forme » en cours — le bouton principal est
+    //: désactivé, seul « Mettre en forme » reste actionnable (régénérer).
+    generating: false,
+    //: Import d'un fichier audio ou retranscription en cours — une opération
+    //: qui écrit la transcription et bloque l'enregistrement.
+    importing: false,
+    //: Horodatage de la pause, pour clore le passage même si le minuteur a
+    //: été étranglé par un onglet en arrière-plan.
+    pausedAt: 0,
     recordedSeconds: 0,
+    //: Somme des durées des enregistrements déjà rattachés au brouillon.
+    recordingsSeconds: 0,
     lastSavedSnapshot: '',
     // Nombre d'enregistrements conservés pour ce brouillon — décide si
     // « Retranscrire » a quelque chose à renvoyer au service vocal (voir
@@ -984,34 +1024,61 @@
     mimeType: '',
     wakeLock: null,
     //: Vrai quand la piste micro a été reprise par le système (iOS en pause +
-    //: changement d'application). L'interface le dit : « Terminer » reste
-    //: possible, l'audio déjà reçu n'est pas perdu.
+    //: changement d'application). L'interface le dit, l'audio déjà reçu n'est
+    //: pas perdu.
     microPerche: false,
   };
 
   /**
-   * Dictée en cours, côté transport.
+   * Un passage de dictée, côté transport.
    *
-   * L'audio ne s'accumule plus dans l'onglet jusqu'au dernier moment : chaque
-   * fragment produit par MediaRecorder est écrit dans IndexedDB puis poussé
-   * vers le serveur. `queue` ne contient donc que ce qui n'est pas encore
-   * accusé de réception — sur un réseau qui tombe, elle grossit, et se vide
-   * dès le retour sans que le médecin ait à intervenir.
+   * Chaque passage possède sa propre session serveur et sa propre file de
+   * fragments. Un passage clos est finalisé en arrière-plan, dans l'ordre,
+   * pendant que le suivant peut déjà être enregistré.
    */
-  const dictation = {
-    localId: null,        // clé de la copie locale (IndexedDB)
-    sessionId: null,      // session côté serveur, null si sa création a échoué
-    consultationId: null,
-    seq: 0,               // numéro du prochain fragment à produire
-    queue: [],            // fragments en attente d'accusé de réception
-    sending: false,
-    failures: 0,
-    retryHandle: null,
-    appliedParts: 0,      // tranches déjà recopiées dans la transcription
-    pollHandle: null,
-    active: false,
-    windowText: '',       // fenêtre glissante : texte provisoire (révisable)
+  function newPassage() {
+    return {
+      localId: null,        // clé de la copie locale (IndexedDB)
+      sessionId: null,      // session côté serveur, null tant qu'il est local
+      consultationId: null,
+      seq: 0,               // numéro du prochain fragment à produire
+      queue: [],            // fragments en attente d'accusé de réception
+      sending: false,
+      failures: 0,
+      retryHandle: null,
+      pollHandle: null,
+      active: false,
+      parts: [],            // tranches confirmées de CE passage
+      windowText: '',       // fenêtre glissante : texte provisoire (révisable)
+      status: 'idle',       // idle | recording | closing | queued | uploading | failed | done
+      error: '',
+      mimeType: '',
+      startedAt: 0,
+      closedAt: 0,
+      livePromise: null,    // création de session live en cours
+    };
+  }
+
+  /** Passage en cours d'enregistrement (ou en pause dans sa fenêtre de grâce). */
+  let dictation = newPassage();
+
+  /**
+   * File des passages clos à transcrire, dans l'ordre. Un seul worker à la
+   * fois : le serveur ajoute le texte au brouillon dans l'ordre où les
+   * sessions sont traitées, donc on ne lance jamais deux passages ensemble.
+   */
+  const pipeline = {
+    queue: [],
+    failed: null,
+    promise: null,
+    running: false,
   };
+
+  /** Durée de la fenêtre de grâce après une pause avant de clore le passage. */
+  const PASSAGE_GRACE_MS = 3000;
+  let pauseTimer = null;
+  let closePromise = null;
+  let generationRun = 0;
 
   /** Cadences réglées par le serveur (/api/config), avec des valeurs de repli. */
   const dictationConfig = { chunkSeconds: 5, segmentSeconds: 10 };
@@ -1107,14 +1174,19 @@
     const nouvelle = languageName(tpl.language);
     const avant = languageName(ancienne);
 
-    // Dictée en cours : l'audio vit encore dans la session, pas dans le
-    // brouillon — il n'y a rien à retranscrire depuis les enregistrements. On
-    // rattache la session au nouveau gabarit pour que la SUITE parte dans la
-    // bonne langue, et on annonce l'écart qui subsiste.
-    if (dictation.active) {
-      if (dictation.sessionId) {
+    // Dictée en cours (ou transcription en arrière-plan) : l'audio vit
+    // encore dans les sessions, pas dans le brouillon — il n'y a rien à
+    // retranscrire depuis les enregistrements. On rattache les sessions au
+    // nouveau gabarit pour que la SUITE parte dans la bonne langue, et on
+    // annonce l'écart qui subsiste.
+    if (recordingBusy()) {
+      const ids = new Set(
+        transcriptPassages.map((p) => p.sessionId).filter(Boolean),
+      );
+      if (dictation.sessionId) ids.add(dictation.sessionId);
+      for (const id of ids) {
         try {
-          await api(`/api/dictation/${dictation.sessionId}`, {
+          await api(`/api/dictation/${id}`, {
             method: 'PATCH', body: { template_id: tpl.id },
           });
         } catch (err) {
@@ -1238,6 +1310,10 @@
    */
   async function runRetranscription(tpl, message) {
     if (!state.consultationId) return;
+    if (recordingBusy() || state.generating || state.importing) {
+      toast(T('dictation.busy_retranscribe'), 'warning');
+      return;
+    }
     if (!window.confirm(message)) return;
 
     const langue = languageName(
@@ -1250,6 +1326,9 @@
     if (pendingRetranscribe) pendingRetranscribe.abort();
     const controller = new AbortController();
     pendingRetranscribe = controller;
+    state.importing = true;
+    updateRecordingUI();
+    updateActionButtons();
 
     // Barre persistante : la retranscription d'un long enregistrement peut
     // prendre plusieurs minutes, aucun toast à durée fixe ne doit expirer
@@ -1267,6 +1346,7 @@
       if (data.superseded) return;
       $('transcript').value = formatSentences(data.transcript);
       resetTranscriptReveal();
+      resetPipeline();
       if (data.geriatric || data.med_items) {
         transcriptCorrections = buildTranscriptCorrections(data.geriatric, data.med_items);
         renderTranscriptHtml($('transcript').value);
@@ -1308,6 +1388,9 @@
       if (pendingRetranscribe === controller) {
         pendingRetranscribe = null;
         progressToast = null;
+        state.importing = false;
+        updateRecordingUI();
+        updateActionButtons();
       }
     }
   }
@@ -1459,30 +1542,54 @@
 
   function updateDictationStatus() {
     const line = $('dictationStatus');
+    const text = $('dictationStatusText');
+    const retry = $('btnRetryPassage');
+    if (!line || !text) return;
+
+    const BASE = 'text-xs px-1 flex flex-wrap items-center gap-2';
+    const queueCount = pipeline.queue.length;
     const pending = dictation.queue.length;
+    let message = '';
+    let tone = 'text-slate-500';
+    let showRetry = false;
 
-    if (!dictation.active && !pending) {
-      line.classList.add('hidden');
-      return;
+    if (state.generating) {
+      message = T('rec.formatting');
+    } else if (state.importing) {
+      message = T('rec.transcribing');
+    } else if (state.starting) {
+      message = T('rec.starting');
+    } else if (state.stopping) {
+      message = T('rec.stopping');
+    } else if (pipeline.failed) {
+      message = T('dictation.failed');
+      tone = 'text-amber-700 font-medium';
+      showRetry = true;
+    } else if (state.recording) {
+      if (state.paused) {
+        message = T('rec.paused');
+      } else if (queueCount) {
+        message = T('dictation.recording_waiting', { count: queueCount });
+      } else if (pending) {
+        const seconds = Math.round(pending * dictationConfig.chunkSeconds);
+        if (dictation.failures > 0) {
+          message = T('dictation.retrying', { count: pending, seconds });
+          tone = 'text-amber-700 font-medium';
+        } else {
+          message = T('dictation.sending', { count: pending });
+        }
+      } else if (!dictation.sessionId) {
+        message = T('dictation.local_only');
+      } else {
+        message = T('dictation.streaming');
+      }
+    } else if (queueCount) {
+      message = T('dictation.queue', { count: queueCount });
     }
-    line.classList.remove('hidden');
 
-    if (!pending) {
-      line.className = 'text-xs px-1 text-slate-500';
-      line.textContent = dictation.sessionId
-        ? T('dictation.streaming')
-        : T('dictation.local_only');
-      return;
-    }
-
-    const seconds = Math.round(pending * dictationConfig.chunkSeconds);
-    if (dictation.failures > 0) {
-      line.className = 'text-xs px-1 text-amber-700 font-medium';
-      line.textContent = T('dictation.retrying', { count: pending, seconds });
-    } else {
-      line.className = 'text-xs px-1 text-slate-500';
-      line.textContent = T('dictation.sending', { count: pending });
-    }
+    line.className = message ? `${BASE} ${tone}` : `${BASE} hidden`;
+    text.textContent = message;
+    if (retry) retry.classList.toggle('hidden', !showRetry);
   }
 
   /**
@@ -1500,29 +1607,17 @@
     syncTranscriptScroll();
   }
 
-  /** Recopie dans la transcription les tranches que le serveur vient de rendre. */
-  function applyDictationParts(session) {
-    if (!session || !Array.isArray(session.parts)) return;
-    // Fenêtre glissante : le texte provisoire (window_text) est replacé à
-    // chaque mise à jour — il complète les parts confirmées sans jamais s'y
-    // accumuler. Absent (serveur sans fenêtres) → comportement historique.
-    let provisoireChange = false;
-    if (typeof session.window_text === 'string'
-        && session.window_text !== dictation.windowText) {
-      dictation.windowText = session.window_text;
-      provisoireChange = true;
+  /**
+   * Recopie dans la transcription les tranches que le serveur vient de rendre
+   * pour un passage. Le passage porte ses propres parts ; le transcript est
+   * reconstruit dans l'ordre des passages, jamais dans l'ordre d'arrivée.
+   */
+  function applyDictationParts(session, passage = dictation) {
+    if (!session || !Array.isArray(session.parts) || !passage) return;
+    passage.parts = session.parts.slice();
+    if (passage === dictation && typeof session.window_text === 'string') {
+      passage.windowText = session.window_text;
     }
-    const fresh = session.parts.slice(dictation.appliedParts);
-    if (!fresh.length) {
-      if (provisoireChange) rebuildCommittedText();
-      return;
-    }
-    dictation.appliedParts = session.parts.length;
-
-    // La base est ``committedText``, jamais la valeur live de la boîte (un
-    // préfixe pendant une révélation en cours). La révélation dévoile le
-    // texte progressivement, comme la note structurée.
-    for (const part of fresh) committedParts.push(part);
     rebuildCommittedText();
     updateTranscriptMeta({ duration_seconds: session.transcribed_seconds });
     updateActionButtons();
@@ -1537,68 +1632,69 @@
   }
 
   /**
-   * Vide la file, un fragment à la fois et dans l'ordre.
+   * Vide la file d'un passage, un fragment à la fois et dans l'ordre.
    *
    * L'ordre est impératif : le serveur concatène les fragments tels quels,
    * un fragment sauté laisserait un blanc au milieu de la consultation. En
    * cas d'échec on garde donc le fragment en tête de file et on réessaie,
    * avec un délai qui double à chaque tentative.
    */
-  function pumpQueue() {
-    if (dictation.sending || !dictation.sessionId || !dictation.queue.length) {
+  function pumpQueue(passage = dictation) {
+    if (!passage || passage.sending || !passage.sessionId || !passage.queue.length) {
       updateDictationStatus();
       return;
     }
-    dictation.sending = true;
-    const item = dictation.queue[0];
+    passage.sending = true;
+    const item = passage.queue[0];
 
-    postChunk(dictation.sessionId, item.seq, item.blob, item.durationMs)
+    postChunk(passage.sessionId, item.seq, item.blob, item.durationMs)
       .then((session) => {
-        dictation.queue.shift();
-        dictation.failures = 0;
-        applyDictationParts(session);
+        passage.queue.shift();
+        passage.failures = 0;
+        applyDictationParts(session, passage);
       })
       .catch((err) => {
-        dictation.failures += 1;
+        passage.failures += 1;
         console.warn(`Fragment ${item.seq} non transmis :`, err);
-        clearTimeout(dictation.retryHandle);
-        dictation.retryHandle = setTimeout(
-          pumpQueue, Math.min(30000, 1000 * Math.pow(2, dictation.failures)),
+        clearTimeout(passage.retryHandle);
+        passage.retryHandle = setTimeout(
+          () => pumpQueue(passage),
+          Math.min(30000, 1000 * Math.pow(2, passage.failures)),
         );
       })
       .finally(() => {
-        dictation.sending = false;
+        passage.sending = false;
         updateDictationStatus();
-        if (dictation.queue.length && dictation.failures === 0) pumpQueue();
+        if (passage.queue.length && passage.failures === 0) pumpQueue(passage);
       });
   }
 
   /** Attend que tout soit accusé de réception ; lève si l'envoi ne passe pas. */
-  async function drainQueue(maxWaitMs = 60000) {
+  async function drainQueue(passage = dictation, maxWaitMs = 60000) {
     const deadline = Date.now() + maxWaitMs;
-    clearTimeout(dictation.retryHandle);
-    dictation.failures = 0;
-    pumpQueue();
+    clearTimeout(passage.retryHandle);
+    passage.failures = 0;
+    pumpQueue(passage);
 
-    while (dictation.queue.length) {
+    while (passage.queue.length) {
       if (Date.now() > deadline) {
-        throw new Error(T('dictation.drain_failed', { count: dictation.queue.length }));
+        throw new Error(T('dictation.drain_failed', { count: passage.queue.length }));
       }
       await new Promise((resolve) => setTimeout(resolve, 400));
-      if (!dictation.sending) pumpQueue();
+      if (!passage.sending) pumpQueue(passage);
     }
   }
 
-  function startDictationPolling() {
-    stopDictationPolling();
+  function startDictationPolling(passage = dictation) {
+    stopDictationPolling(passage);
     // Filet pour les moments sans téléversement — pause, ou fin de dictée
     // pendant que le serveur découpe encore : la réponse d'un fragment suffit
     // le reste du temps à rapatrier les nouvelles tranches.
-    dictation.pollHandle = setInterval(async () => {
-      if (!dictation.sessionId || dictation.sending) return;
+    passage.pollHandle = setInterval(async () => {
+      if (!passage.sessionId || passage.sending) return;
       try {
-        const session = await api(`/api/dictation/${dictation.sessionId}`);
-        applyDictationParts(session);
+        const session = await api(`/api/dictation/${passage.sessionId}`);
+        applyDictationParts(session, passage);
         // Le service vocal est redevenu joignable : on retire l'avis. On ne
         // RECRÉE jamais l'avis ici — seule l'alarme initiale (ou le SSE
         // stt_unavailable d'un échec réel) le déclenche ; une scrutation qui
@@ -1613,31 +1709,197 @@
     }, 7000);
   }
 
-  function stopDictationPolling() {
-    if (dictation.pollHandle) clearInterval(dictation.pollHandle);
-    dictation.pollHandle = null;
+  function stopDictationPolling(passage = dictation) {
+    if (passage && passage.pollHandle) clearInterval(passage.pollHandle);
+    if (passage) passage.pollHandle = null;
   }
 
-  function resetDictationState() {
-    clearTimeout(dictation.retryHandle);
-    stopDictationPolling();
-    clearLiveLines();
-    // La base ``committedText`` repart de la boîte TELLE QUELLE : une dictée
-    // peut s'ouvrir sur un brouillon déjà transcrit, et les appends suivants
-    // doivent s'y ajouter (comportement historique d'applyDictationParts).
-    resetTranscriptReveal();
-    dictation.localId = null;
-    dictation.sessionId = null;
-    dictation.consultationId = null;
-    dictation.seq = 0;
-    dictation.queue = [];
-    dictation.sending = false;
-    dictation.failures = 0;
-    dictation.retryHandle = null;
-    dictation.appliedParts = 0;
-    dictation.active = false;
-    dictation.windowText = '';
-    updateDictationStatus();
+  /**
+   * Ouvre la session serveur d'un passage qui devient la tête de file et
+   * pousse les fragments déjà bufferisés. Appelé au démarrage quand la file
+   * est vide, ou quand le passage actif devient la tête après la clôture des
+   * précédents.
+   */
+  async function startLivePassage(passage) {
+    if (!passage || passage.sessionId) return passage && passage.livePromise;
+    if (passage.livePromise) return passage.livePromise;
+    passage.livePromise = (async () => {
+      const consultationId = passage.consultationId || await ensureConsultation();
+      passage.consultationId = consultationId;
+      const tpl = currentTemplate();
+      const session = await api('/api/dictation', {
+        method: 'POST',
+        body: {
+          consultation_id: consultationId,
+          template_id: tpl ? tpl.id : null,
+          mime_type: passage.mimeType || 'audio/webm',
+        },
+      });
+      passage.sessionId = session.session_id;
+      if (session && session.stt_available === false) {
+        updateSttAvailabilityNotice(T('dictation.stt_unavailable'));
+      }
+      await bestEffort(() => audioStore.patchSession(passage.localId, {
+        serverSessionId: passage.sessionId,
+        consultationId,
+      }), 'session serveur');
+      pumpQueue(passage);
+      startDictationPolling(passage);
+      updateDictationStatus();
+    })().finally(() => { passage.livePromise = null; });
+    return passage.livePromise;
+  }
+
+  /** Clôt un passage : drain de sa file, /finish, application du texte. */
+  async function finalizePassage(passage) {
+    stopDictationPolling(passage);
+    if (!passage.sessionId) {
+      const consultationId = passage.consultationId || await ensureConsultation();
+      passage.consultationId = consultationId;
+      const tpl = currentTemplate();
+      const session = await api('/api/dictation', {
+        method: 'POST',
+        body: {
+          consultation_id: consultationId,
+          template_id: tpl ? tpl.id : null,
+          mime_type: passage.mimeType || 'audio/webm',
+        },
+      });
+      passage.sessionId = session.session_id;
+      if (session && session.stt_available === false) {
+        updateSttAvailabilityNotice(T('dictation.stt_unavailable'));
+      }
+    }
+    await drainQueue(passage);
+    const result = await api(`/api/dictation/${passage.sessionId}/finish`, { method: 'POST' });
+    applyDictationParts(result, passage);
+    passage.windowText = '';
+    if (result.stt_language) state.transcriptLanguage = result.stt_language;
+    showTranscriptEngine(result.stt_used);
+    await bestEffort(() => audioStore.remove(passage.localId), 'nettoyage');
+    await loadRecordings();
+    return result;
+  }
+
+  /**
+   * Worker unique de la file des passages clos. Un passage à la fois, dans
+   * l'ordre : le serveur ajoute le texte au brouillon dans l'ordre où les
+   * sessions sont traitées.
+   */
+  function pumpPipeline() {
+    if (pipeline.promise) return pipeline.promise;
+    const run = (async () => {
+      pipeline.running = true;
+      try {
+        while (pipeline.queue.length) {
+          const passage = pipeline.queue[0];
+          if (passage.status === 'failed') {
+            pipeline.failed = passage;
+            break;
+          }
+          passage.status = 'uploading';
+          updateDictationStatus();
+          try {
+            await finalizePassage(passage);
+            passage.status = 'done';
+            pipeline.queue.shift();
+            pipeline.failed = null;
+          } catch (err) {
+            passage.status = 'failed';
+            passage.error = (err && err.message) ? err.message : String(err);
+            pipeline.failed = passage;
+            console.warn('Passage non transcrit :', err);
+            break;
+          }
+          updateDictationStatus();
+          updateActionButtons();
+        }
+      } finally {
+        pipeline.running = false;
+        updateRecordingUI();
+        updateActionButtons();
+        updateBeforeUnload();
+        // La file est vide : le passage actif peut enfin devenir la tête et
+        // rattraper son retard en direct, sans interrompre la dictée.
+        if (!pipeline.queue.length && dictation.active && !dictation.sessionId) {
+          startLivePassage(dictation).catch((err) => {
+            console.warn('Passage actif non basculé en direct :', err);
+          });
+        }
+      }
+    })();
+    pipeline.promise = run.finally(() => {
+      pipeline.promise = null;
+      updateRecordingUI();
+      updateActionButtons();
+      updateBeforeUnload();
+      // Un passage a pu être mis en file pendant que ce worker se terminait :
+      // on relance un tour plutôt que de le laisser attendre un autre événement.
+      if (pipeline.queue.length && !pipeline.failed) pumpPipeline().catch(() => {});
+    });
+    return pipeline.promise;
+  }
+
+  /** Attend que la file soit vidée ; false si un passage a échoué. */
+  async function drainPipeline() {
+    for (;;) {
+      try {
+        await pumpPipeline();
+      } catch (err) {
+        console.warn('File de transcription interrompue :', err);
+        return false;
+      }
+      if (pipeline.failed) return false;
+      if (!pipeline.queue.length) return true;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  /** Relance le passage en tête après un échec (bouton « Réessayer »). */
+  function retryFailedPassage() {
+    const failed = pipeline.failed;
+    if (!failed) return;
+    failed.status = 'queued';
+    failed.error = '';
+    pipeline.failed = null;
+    updateRecordingUI();
+    updateActionButtons();
+    const start = () => pumpPipeline().catch(() => {});
+    // Le worker vient peut-être de se terminer : on attend sa promesse avant
+    // d'en relancer un, sinon le nouveau démarrage serait avalé par l'ancien.
+    if (pipeline.promise) pipeline.promise.then(start, start).catch(() => {});
+    else start();
+  }
+
+  /** Remise à zéro complète de la file (changement de brouillon, nouveau). */
+  function resetPipeline() {
+    clearTimeout(pauseTimer);
+    pauseTimer = null;
+    state.pausedAt = 0;
+    pipeline.queue = [];
+    pipeline.failed = null;
+    pipeline.promise = null;
+    pipeline.running = false;
+    dictation = newPassage();
+    updateRecordingUI();
+    updateBeforeUnload();
+  }
+
+  /** Vrai dès qu'une dictée, une clôture ou une transcription est en cours. */
+  function recordingBusy() {
+    return Boolean(
+      state.starting || state.stopping || state.recording || dictation.active
+      || pipeline.queue.length || pipeline.promise,
+    );
+  }
+
+  /** Le quittage de page n'est armé que s'il reste de l'audio à traiter. */
+  function updateBeforeUnload() {
+    const needed = Boolean(
+      state.recording || state.stopping || pipeline.queue.length || pipeline.promise,
+    );
+    if (needed) window.addEventListener('beforeunload', warnBeforeUnload);
+    else window.removeEventListener('beforeunload', warnBeforeUnload);
   }
 
   /* -------------------------------------------------------------------------
@@ -1790,8 +2052,9 @@
    * attendre le prochain fragment.
    */
   function signalUtteranceEnded() {
-    if (!dictation.sessionId || !dictation.active) return;
-    api(`/api/dictation/${dictation.sessionId}/utterance_ended`, {
+    const passage = dictation;
+    if (!passage.sessionId || !passage.active) return;
+    api(`/api/dictation/${passage.sessionId}/utterance_ended`, {
       method: 'POST',
     }).catch((err) => {
       console.warn('Fin d\'énoncé non transmise :', err);
@@ -1800,9 +2063,9 @@
     // texte committé un peu plus tard, plutôt que d'attendre le prochain
     // fragment ou la scrutation.
     setTimeout(async () => {
-      if (!dictation.sessionId) return;
+      if (!passage.sessionId) return;
       try {
-        applyDictationParts(await api(`/api/dictation/${dictation.sessionId}`));
+        applyDictationParts(await api(`/api/dictation/${passage.sessionId}`), passage);
       } catch (_) {
         /* le prochain fragment ou la scrutation reprendra le relais */
       }
@@ -1920,43 +2183,67 @@
     recorder.timerHandle = null;
   }
 
-  // Icônes du bouton pause/reprise. Le bouton contient un SVG et non du
-  // texte : on remplace donc son contenu, sans jamais utiliser textContent
-  // qui effacerait l'icône.
-  const ICON_PAUSE = '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">'
-    + '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
-  const ICON_RESUME = '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">'
-    + '<path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l10.7-6.86a1 1 0 0 0 0-1.7L9.53 4.29A1 1 0 0 0 8 5.14z"/></svg>';
+  // Classe de base du bouton principal : un seul contrôle d'enregistrement,
+  // dont le libellé dit toujours l'action (Enregistrer / Pause / Reprendre).
+  const REC_BASE = 'flex-1 lg:flex-none lg:w-40 inline-flex items-center justify-center gap-2 '
+    + 'px-4 py-3 lg:py-1.5 rounded-lg text-white font-semibold text-[15px] lg:text-sm '
+    + 'transition shadow-sm disabled:opacity-40';
+  const REC_RED = 'bg-red-600 hover:bg-red-700 active:bg-red-800';
+  const REC_AMBER = 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700';
+  const REC_BUSY = 'bg-slate-400';
 
   function updateRecordingUI() {
     const dot = $('recDot');
     const label = $('btnRecordLabel');
+    const button = $('btnRecord');
+    if (!button || !label || !dot) return;
 
-    $('btnPause').disabled = !state.recording;
-    $('btnFinish').disabled = !state.recording;
-    $('btnRecord').disabled = state.recording;
+    const busy = state.starting || state.stopping || state.generating || state.importing;
+    button.disabled = busy;
 
-    // « Arrêter sans envoyer » et l'import se relaient : le premier n'a de
-    // sens qu'en cours de dictée, le second n'en a qu'à l'arrêt.
-    $('btnAbort').classList.toggle('hidden', !state.recording);
-    $('btnAbort').classList.toggle('grid', state.recording);
-    $('importAudioLabel').classList.toggle('hidden', state.recording);
-
-    if (state.recording && !state.paused) {
-      dot.className = 'w-3 h-3 rounded-full bg-red-600 rec-dot shrink-0';
-      label.textContent = T('rec.recording');
-      $('btnPause').innerHTML = ICON_PAUSE;
-      $('btnPause').title = T('rec.pause');
-    } else if (state.recording && state.paused) {
-      dot.className = 'w-3 h-3 rounded-full bg-amber-500 shrink-0';
-      label.textContent = T('rec.paused');
-      $('btnPause').innerHTML = ICON_RESUME;
-      $('btnPause').title = T('rec.resume');
-    } else {
+    let background = REC_RED;
+    if (state.starting) {
+      label.textContent = T('rec.starting');
+      background = REC_BUSY;
       dot.className = 'w-3 h-3 rounded-full bg-slate-300 shrink-0';
+    } else if (state.stopping) {
+      label.textContent = T('rec.stopping');
+      background = REC_BUSY;
+      dot.className = 'w-3 h-3 rounded-full bg-slate-300 shrink-0';
+    } else if (state.generating) {
+      label.textContent = T('rec.formatting');
+      background = REC_BUSY;
+      dot.className = 'w-3 h-3 rounded-full bg-slate-300 shrink-0';
+    } else if (state.importing) {
+      label.textContent = T('rec.transcribing');
+      background = REC_BUSY;
+      dot.className = 'w-3 h-3 rounded-full bg-slate-300 shrink-0';
+    } else if (state.recording && !state.paused) {
+      label.textContent = T('rec.pause');
+      dot.className = 'w-3 h-3 rounded-full bg-red-600 rec-dot shrink-0';
+    } else if (state.recording && state.paused) {
+      label.textContent = T('rec.resume');
+      background = REC_AMBER;
+      dot.className = 'w-3 h-3 rounded-full bg-amber-500 shrink-0';
+    } else {
       label.textContent = T('rec.record');
-      $('btnPause').innerHTML = ICON_PAUSE;
+      dot.className = 'w-3 h-3 rounded-full bg-slate-300 shrink-0';
     }
+    button.className = `${REC_BASE} ${background}`;
+
+    // L'import n'a de sens qu'à l'arrêt, et jamais pendant une opération ou
+    // tant qu'un passage attend sa transcription.
+    const importLabel = $('importAudioLabel');
+    const importInput = $('audioFileInput');
+    const importBusy = busy || pipeline.queue.length > 0
+      || Boolean(pipeline.failed) || Boolean(pipeline.promise);
+    if (importLabel) {
+      const hideImport = state.recording || importBusy;
+      importLabel.classList.toggle('hidden', hideImport);
+      importLabel.classList.toggle('pointer-events-none', importBusy);
+      importLabel.classList.toggle('opacity-40', importBusy);
+    }
+    if (importInput) importInput.disabled = importBusy;
 
     // Le texte d'aide cède la place à l'état de la dictée : tant que la
     // première tranche n'est pas revenue, la zone vide doit dire ce qui se
@@ -1964,6 +2251,8 @@
     $('transcript').placeholder = state.recording
       ? T('transcript.placeholder_recording')
       : T('transcript.placeholder');
+
+    updateDictationStatus();
   }
 
   /* -------------------------------------------------------------------------
@@ -2000,10 +2289,18 @@
     // Retour d'arrière-plan : iOS a presque toujours libéré le micro pendant
     // l'absence. On le voit ICI, pas au clic sur lecture — le médecin doit
     // retrouver son micro prêt, et savoir que la dictée n'a pas été perdue.
-    if (document.visibilityState === 'visible' && state.recording
+    // Une dictée en pause n'est pas réarmée : la fenêtre de grâce fait son
+    // travail, et reprendre appartient à l'usager.
+    if (document.visibilityState === 'visible' && state.recording && !state.paused
         && (!recorderVivant() || !microVivant())) {
       console.warn('Dictée : micro perdu pendant l\'absence, réarmement');
       rearmCapture().then((ok) => { if (ok) updateRecordingUI(); });
+    }
+    // Minuteur étranglé par un onglet en arrière-plan : au retour, la pause a
+    // largement dépassé sa fenêtre de grâce, on clôt le passage tout de suite.
+    if (document.visibilityState === 'visible' && state.recording && state.paused
+        && state.pausedAt && Date.now() - state.pausedAt >= PASSAGE_GRACE_MS) {
+      closePassage('grace');
     }
     // Filet de sécurité : EventSource se reconnecte tout seul, mais une mise
     // en veille prolongée (Safari iOS notamment) peut la tuer sans jamais
@@ -2015,34 +2312,28 @@
   });
 
   /**
-   * Arme le MediaRecorder sur le flux déjà ouvert et branche ses évènements.
+   * Branche les évènements d'un MediaRecorder sur SON passage.
    *
-   * Fonction séparée parce qu'elle sert DEUX fois : au démarrage d'une dictée,
-   * et au RÉARMEMENT quand iOS a repris le micro (pause + changement
-   * d'application). Dans les deux cas les fragments continuent la même
-   * session : ``ondataavailable`` incrémente le même compteur ``dictation.seq``.
-   *
-   * Rend ``false`` si le recorder ne peut pas être créé (l'appelant décide
-   * alors quoi faire de l'interface).
-   */
-  /**
-   * Branche les évènements d'un MediaRecorder recémment créé.
+   * Le passage est capturé dans la fermeture : quand un passage est clos et
+   * qu'un nouveau démarre aussitôt, le dernier fragment du précédent doit
+   * encore atterrir dans sa file, jamais dans celle du nouveau.
    *
    * À la réarmement, iOS a pu tuer la piste micro : on surveille ``ended`` /
    * ``mute`` pour ne PAS se retrouver avec une dictée « en cours » dont le
    * micro est mort (l'état figé qui obligeait à tout recommencer).
    */
-  function installerEvenementsRecorder() {
+  function installerEvenementsRecorder(passage) {
     recorder.mediaRecorder.ondataavailable = (event) => {
       if (!event.data || event.data.size === 0) return;
-      const seq = dictation.seq;
-      dictation.seq += 1;
+      const seq = passage.seq;
+      passage.seq += 1;
       const durationMs = dictationConfig.chunkSeconds * 1000;
 
-      dictation.queue.push({ seq, blob: event.data, durationMs });
-      bestEffort(() => audioStore.putChunk(dictation.localId, seq, event.data),
+      passage.queue.push({ seq, blob: event.data, durationMs });
+      bestEffort(() => audioStore.putChunk(passage.localId, seq, event.data),
                  `écriture du fragment ${seq}`);
-      pumpQueue();
+      if (passage.sessionId) pumpQueue(passage);
+      updateDictationStatus();
     };
     recorder.mediaRecorder.onerror = (event) => {
       toast(T('mic.recorder_error', { error: event.error && event.error.name }), 'error');
@@ -2054,7 +2345,7 @@
           // iOS a repris le micro (app en arrière-plan, autre appel audio…).
           console.warn('Dictée : piste micro terminée pendant la dictée');
           recorder.microPerche = true;
-          if (state.recording) rearmCapture();
+          if (state.recording && !state.paused && dictation === passage) rearmCapture();
         };
         track.onmute = () => {
           console.warn('Dictée : micro coupé (mute)');
@@ -2064,7 +2355,7 @@
     }
   }
 
-  async function armerRecorder() {
+  async function armerRecorder(passage) {
     try {
       recorder.mediaRecorder = recorder.mimeType
         ? new MediaRecorder(recorder.stream, { mimeType: recorder.mimeType, audioBitsPerSecond: 64000 })
@@ -2074,105 +2365,130 @@
       recorder.stream.getTracks().forEach((track) => track.stop());
       return false;
     }
-    installerEvenementsRecorder();
+    installerEvenementsRecorder(passage);
     return true;
   }
 
   async function startRecording() {
+    if (state.starting || state.recording || dictation.active
+        || state.generating || state.importing) return;
+    clearTimeout(pauseTimer);
+    pauseTimer = null;
+    state.pausedAt = 0;
     // getUserMedia exige un contexte sécurisé : HTTPS ou localhost.
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       toast(T('mic.insecure'), 'error', 9000);
       return;
     }
 
-    try {
-      recorder.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-    } catch (err) {
-      let message;
-      if (err && err.name === 'NotAllowedError') {
-        message = T('mic.denied');
-      } else {
-        message = T('mic.unavailable', { error: err && err.message ? err.message : err });
-      }
-      // Certaines versions d'iOS refusent le micro à une application lancée
-      // depuis l'écran d'accueil : l'indiquer évite un long dépannage.
-      if (isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
-        message += T('mic.ios_standalone');
-      }
-      toast(message, 'error', 11000);
-      return;
-    }
-
-    recorder.mimeType = pickMimeType();
-
-    if (!(await armerRecorder())) return;
-
-    // --- Ouverture de la session côté serveur ------------------------------
-    // Le brouillon existe avant la première seconde d'audio : c'est lui qui
-    // recevra le texte, et il survit à la fermeture de l'onglet.
-    resetDictationState();
-    dictation.active = true;
-    dictation.localId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    resetVad();
-
-    try {
-      dictation.consultationId = await ensureConsultation();
-      const tpl = currentTemplate();
-      const session = await api('/api/dictation', {
-        method: 'POST',
-        body: {
-          consultation_id: dictation.consultationId,
-          template_id: tpl ? tpl.id : null,
-          mime_type: recorder.mimeType || 'audio/webm',
-        },
-      });
-      dictation.sessionId = session.session_id;
-      // Disponibilité immédiate du service STT (sonde au démarrage) : on
-      // prévient l'utilisateur d'emblée si la reconnaissance n'est pas
-      // joignable, sans attendre le premier échec de transcription.
-      if (session && session.stt_available === false) {
-        updateSttAvailabilityNotice(T('dictation.stt_unavailable'));
-      }
-    } catch (err) {
-      // Serveur injoignable : on enregistre quand même. Les fragments
-      // s'accumulent localement et partiront à « Terminer », ou plus tard
-      // depuis la bannière de récupération. Refuser de dicter parce que le
-      // Wi-Fi est tombé serait le pire des deux mondes.
-      toast(T('dictation.server_unreachable', { error: err.message }), 'warning', 9000);
-    }
-
-    await bestEffort(() => audioStore.createSession({
-      localId: dictation.localId,
-      serverSessionId: dictation.sessionId,
-      consultationId: dictation.consultationId,
-      mimeType: recorder.mimeType || 'audio/webm',
-      label: buildTitle(),
-    }), 'création de la session');
-
-
-    // Un fragment toutes les quelques secondes : c'est l'unité de
-    // téléversement, donc aussi le pire cas de perte sur une panne franche.
-    recorder.mediaRecorder.start(dictationConfig.chunkSeconds * 1000);
-
-    state.recording = true;
-    state.paused = false;
-    state.recordedSeconds = 0;
-    $('timer').textContent = '00:00';
-
-    startTimer();
-    startWaveform(recorder.stream);
-    acquireWakeLock();          // empêche la mise en veille pendant la dictée
-    startDictationPolling();
+    state.starting = true;
     updateRecordingUI();
-    updateDictationStatus();
-    window.addEventListener('beforeunload', warnBeforeUnload);
+    try {
+      try {
+        recorder.stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (err) {
+        let message;
+        if (err && err.name === 'NotAllowedError') {
+          message = T('mic.denied');
+        } else {
+          message = T('mic.unavailable', { error: err && err.message ? err.message : err });
+        }
+        // Certaines versions d'iOS refusent le micro à une application lancée
+        // depuis l'écran d'accueil : l'indiquer évite un long dépannage.
+        if (isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
+          message += T('mic.ios_standalone');
+        }
+        toast(message, 'error', 11000);
+        return;
+      }
+
+      recorder.mimeType = pickMimeType();
+
+      // Nouveau passage : il garde sa propre session et sa propre file.
+      const passage = newPassage();
+      passage.localId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      passage.mimeType = recorder.mimeType || 'audio/webm';
+      passage.active = true;
+      passage.status = 'recording';
+      passage.startedAt = Date.now();
+      dictation = passage;
+      transcriptPassages.push(passage);
+      resetVad();
+
+      if (!(await armerRecorder(passage))) {
+        const idx = transcriptPassages.indexOf(passage);
+        if (idx >= 0) transcriptPassages.splice(idx, 1);
+        dictation = newPassage();
+        return;
+      }
+
+      // --- Ouverture de la session côté serveur ----------------------------
+      // Seul le passage en TÊTE de file parle au serveur en direct. Derrière
+      // un passage en cours de transcription, on enregistre localement : le
+      // worker ouvrira la session quand la file sera vidée, et rattrapera
+      // les fragments déjà bufferisés sans interrompre la dictée.
+      try {
+        passage.consultationId = await ensureConsultation();
+        if (!pipeline.queue.length) {
+          await startLivePassage(passage);
+        }
+      } catch (err) {
+        // Serveur injoignable : on enregistre quand même. Les fragments
+        // s'accumulent localement et le worker les enverra plus tard.
+        toast(T('dictation.server_unreachable', { error: err.message }), 'warning', 9000);
+      }
+
+      await bestEffort(() => audioStore.createSession({
+        localId: passage.localId,
+        serverSessionId: passage.sessionId,
+        consultationId: passage.consultationId,
+        mimeType: passage.mimeType,
+        label: buildTitle(),
+      }), 'création de la session');
+
+      // Un fragment toutes les quelques secondes : c'est l'unité de
+      // téléversement, donc aussi le pire cas de perte sur une panne franche.
+      recorder.mediaRecorder.start(dictationConfig.chunkSeconds * 1000);
+
+      state.recording = true;
+      state.paused = false;
+      state.pausedAt = 0;
+      state.recordedSeconds = 0;
+      $('timer').textContent = '00:00';
+
+      startTimer();
+      startWaveform(recorder.stream);
+      acquireWakeLock();          // empêche la mise en veille pendant la dictée
+      updateBeforeUnload();
+    } catch (err) {
+      console.warn('Démarrage de la dictée impossible :', err);
+      toast(T('mic.recorder_failed', { error: err.message }), 'error');
+      if (recorder.stream) {
+        recorder.stream.getTracks().forEach((track) => track.stop());
+        recorder.stream = null;
+      }
+      recorder.mediaRecorder = null;
+      const failedPassage = dictation;
+      if (failedPassage.sessionId) {
+        api(`/api/dictation/${failedPassage.sessionId}/cancel`, { method: 'POST' })
+          .catch(() => {});
+      }
+      await bestEffort(() => audioStore.remove(failedPassage.localId), 'nettoyage');
+      const idx = transcriptPassages.indexOf(failedPassage);
+      if (idx >= 0) transcriptPassages.splice(idx, 1);
+      dictation = newPassage();
+    } finally {
+      state.starting = false;
+      updateRecordingUI();
+      updateActionButtons();
+    }
   }
 
   /** Le micro est-il encore utilisable ? (piste vivante et audible) */
@@ -2222,7 +2538,7 @@
           autoGainControl: true,
         },
       });
-      if (!(await armerRecorder())) {
+      if (!(await armerRecorder(dictation))) {
         await abandonApresEchecMicro();
         return false;
       }
@@ -2230,6 +2546,7 @@
       // réarme en enregistrement, l'état de pause sera remis par l'appelant.
       recorder.mediaRecorder.start(dictationConfig.chunkSeconds * 1000);
       state.paused = false;
+      state.pausedAt = 0;
       startWaveform(recorder.stream);
       acquireWakeLock();
       updateRecordingUI();
@@ -2246,8 +2563,9 @@
 
   /**
    * Le micro n'est pas revenu : on le DIT et on ne laisse jamais un bouton
-   * mort. La dictée n'est pas perdue — l'audio déjà reçu est sur le serveur,
-   * et « Terminer » le transcrit.
+   * mort. La dictée n'est pas perdue — l'audio déjà reçu reste sur le serveur
+   * ou dans le navigateur, et la transcription reprendra avec ce qui a été
+   * reçu.
    */
   async function abandonApresEchecMicro(err) {
     recorder.microPerche = true;
@@ -2258,14 +2576,24 @@
     toast(message, 'warning', 12000);
   }
 
-  function togglePause() {
-    if (!state.recording) return;
+  /** Le seul contrôle d'enregistrement : Enregistrer / Pause / Reprendre. */
+  function toggleRecording() {
+    if (state.starting || state.stopping || state.generating || state.importing) return;
+    if (!state.recording) {
+      // État résiduel (clôture interrompue) : on termine le passage avant
+      // d'en démarrer un autre, plutôt que de l'orpheliner.
+      if (dictation.active) {
+        closePassage('recover');
+        return;
+      }
+      startRecording();
+      return;
+    }
     if (state.paused) {
       reprendreEnregistrement();
-    } else {
-      mettreEnPauseEnregistrement();
+      return;
     }
-    updateRecordingUI();
+    mettreEnPauseEnregistrement();
   }
 
   /**
@@ -2275,10 +2603,14 @@
    * une exception ici gelait l'interface sans le moindre message.
    */
   async function reprendreEnregistrement() {
+    clearTimeout(pauseTimer);
+    pauseTimer = null;
+    state.pausedAt = 0;
     if (!recorderVivant() || !microVivant()) {
       if (!(await rearmCapture())) return;
       resetVad();
       updateRecordingUI();
+      updateDictationStatus();
       return;
     }
     try {
@@ -2291,30 +2623,43 @@
       resetVad();
     }
     updateRecordingUI();
+    updateDictationStatus();
   }
 
-  /** Mettre en pause, sans jamais lever : un pause() refusé n'est pas une panne. */
+  /**
+   * Mettre en pause, sans jamais lever : un pause() refusé n'est pas une
+   * panne. La pause ouvre la fenêtre de grâce : reprendre avant son terme
+   * continue le même passage, la laisser expirer le clôt et le met en file.
+   */
   function mettreEnPauseEnregistrement() {
     try {
       if (recorder.mediaRecorder && recorder.mediaRecorder.state === 'recording') {
         recorder.mediaRecorder.pause();
       }
       state.paused = true;
+      state.pausedAt = Date.now();
       resetVad();
     } catch (err) {
       console.warn('pause() refusé :', err);
       state.paused = true;
+      state.pausedAt = Date.now();
     }
+    clearTimeout(pauseTimer);
+    pauseTimer = setTimeout(() => {
+      if (state.recording && state.paused) closePassage('grace');
+    }, PASSAGE_GRACE_MS);
+    updateRecordingUI();
+    updateDictationStatus();
   }
 
   /**
-   * Arrête le micro et attend le tout dernier fragment.
+   * Arrête le micro et attend le tout dernier fragment du passage.
    *
    * MediaRecorder émet un « ondataavailable » final après stop() : sans cette
    * attente, les dernières secondes de la dictée seraient perdues — exactement
    * le passage où le médecin conclut.
    */
-  function stopMicrophone() {
+  function stopMicrophone(passage) {
     return new Promise((resolve) => {
       const stopTracks = () => {
         if (recorder.stream) {
@@ -2325,12 +2670,13 @@
       const cleanup = () => {
         state.recording = false;
         state.paused = false;
+        state.pausedAt = 0;
         stopTimer();
         stopWaveform();
         releaseWakeLock();
-        updateRecordingUI();
-        window.removeEventListener('beforeunload', warnBeforeUnload);
+        recorder.mediaRecorder = null;
         stopTracks();
+        updateRecordingUI();
         resolve();
       };
 
@@ -2344,160 +2690,66 @@
   }
 
   /**
-   * Conclut proprement la dictée encore active et rapatrie la transcription
-   * COMPLÈTE.
+   * Clôt le passage actif : arrêt local, mise en file, retour immédiat au
+   * bouton « Enregistrer ». La transcription se poursuit en arrière-plan.
    *
-   * Arrêter le micro est ce qui vide le tampon du MediaRecorder : les
-   * dernières secondes — celles dites juste avant une pause — y attendent
-   * encore, hors de la transcription. « Terminer » et « Mettre en forme »
-   * doivent tous deux vider ce tampon avant de continuer.
-   *
-   * Renvoie false si la dictée était trop courte pour mériter une session,
-   * ou si la finalisation a échoué (la bannière de récupération reprend
-   * alors le relais).
+   * Un passage sans aucun fragment (démarrage avorté, micro muet) est
+   * simplement abandonné : rien à transcrire, rien à rattacher.
    */
-  async function completeDictation() {
-    await stopMicrophone();
-
-    if (!dictation.seq) {
-      toast(T('dictation.too_short'), 'warning');
-      await bestEffort(() => audioStore.remove(dictation.localId), 'nettoyage');
-      resetDictationState();
-      return false;
-    }
-
-    const finishToast = showProgressToast(T('dictation.finishing'));
-    try {
-      if (!dictation.sessionId) {
-        // La session n'a jamais pu être ouverte : tout est encore local, on
-        // rejoue l'enregistrement complet.
-        await uploadStoredSession(dictation.localId, { silent: true });
-      } else {
-        await drainQueue();
-        const result = await api(`/api/dictation/${dictation.sessionId}/finish`, { method: 'POST' });
-        applyDictationParts(result);
-        if (result.stt_language) state.transcriptLanguage = result.stt_language;
-        showTranscriptEngine(result.stt_used);
-        await bestEffort(() => audioStore.remove(dictation.localId), 'nettoyage');
-      }
-      // L'audio vient d'être rattaché au brouillon par le serveur : à
-      // rafraîchir AVANT de décider si on peut générer (audio-only).
-      await loadRecordings();
-      return true;
-    } catch (err) {
-      toast(err.message, 'error', 12000);
-      // L'audio reste sur le serveur et dans le navigateur : le brouillon
-      // garde les tranches déjà transcrites, le reste partira avec la purge.
-      resetDictationState();
-      return false;
-    } finally {
-      finishToast.dismiss();
-      resetDictationState();
-    }
-  }
-
-  /** « Terminer » : conclut la dictée et rapatrie le texte restant. */
-  async function finishRecording() {
-    if (!state.recording && !dictation.active) return;
-    if (!(await completeDictation())) return;
-
-    const transcript = $('transcript').value.trim();
-    if (transcript) {
-      // La transcription vient du serveur : la marquer comme sauvegardée
-      // évite une réécriture inutile, mais on force un enregistrement pour
-      // que le titre et les métadonnées suivent.
-      state.lastSavedSnapshot = '';
-      scheduleSave();
-      flashElement('transcriptFooter');
-      toast(T('dictation.finished', { count: transcript.length }), 'success');
-    } else if (audioOnlyReady()) {
-      // Contournement du STT actif (Gemini / Qwen Omni en audio direct) :
-      // c'est le fonctionnement NORMAL de ce réglage, pas un échec — il n'y
-      // a jamais de transcription à attendre, l'audio suffit. On enchaîne
-      // directement sur la mise en forme, comme si le médecin avait cliqué
-      // lui-même.
-      await generateNote();
-    } else {
-      toast(T('dictation.no_speech'), 'warning', 8000);
-    }
-  }
-
-  /** « Arrêter sans envoyer » : la dictée est abandonnée et son audio effacé. */
-  async function abortRecording() {
-    if (!state.recording && !dictation.active) return;
-
-    const alreadyTranscribed = dictation.appliedParts > 0;
-    const message = alreadyTranscribed
-      ? T('dictation.confirm_abort_transcribed')
-      : T('dictation.confirm_abort');
-    if (!window.confirm(message)) return;
-
-    await stopMicrophone();
-    const { sessionId, localId } = dictation;
-    dictation.queue = [];
-    resetDictationState();
-
-    if (sessionId) {
+  function closePassage(reason = 'pause') {
+    if (closePromise) return closePromise;
+    if (!dictation.active) return Promise.resolve(true);
+    closePromise = (async () => {
+      const passage = dictation;
+      state.stopping = true;
+      clearTimeout(pauseTimer);
+      pauseTimer = null;
+      state.pausedAt = 0;
+      updateRecordingUI();
       try {
-        await api(`/api/dictation/${sessionId}/cancel`, { method: 'POST' });
+        await stopMicrophone(passage);
+        passage.active = false;
+        passage.closedAt = Date.now();
+        state.recording = false;
+        state.paused = false;
+        if (passage.livePromise) await passage.livePromise.catch(() => {});
+        if (!passage.seq) {
+          if (passage.sessionId) {
+            try {
+              await api(`/api/dictation/${passage.sessionId}/cancel`, { method: 'POST' });
+            } catch (_) { /* session vide : le nettoyage serveur s'en charge */ }
+          }
+          await bestEffort(() => audioStore.remove(passage.localId), 'nettoyage');
+          const idx = transcriptPassages.indexOf(passage);
+          if (idx >= 0) transcriptPassages.splice(idx, 1);
+          dictation = newPassage();
+          return true;
+        }
+        passage.status = 'queued';
+        pipeline.queue.push(passage);
+        dictation = newPassage();
+        pumpPipeline();
+        return true;
       } catch (err) {
-        console.warn(T('dictation.cancel_failed'), err);
+        console.warn(`Clôture du passage (${reason}) impossible :`, err);
+        toast(T('dictation.close_failed'), 'warning', 9000);
+        return false;
+      } finally {
+        state.stopping = false;
+        updateRecordingUI();
+        updateDictationStatus();
+        updateActionButtons();
+        updateBeforeUnload();
+        closePromise = null;
       }
-    }
-    await bestEffort(() => audioStore.remove(localId), 'suppression');
-    toast(T('dictation.aborted'), 'info');
+    })();
+    return closePromise;
   }
 
   function warnBeforeUnload(event) {
     event.preventDefault();
     event.returnValue = '';
     return '';
-  }
-
-  /**
-   * Rejoue une dictée qui n'a jamais atteint le serveur : nouvelle session,
-   * tous les fragments dans l'ordre, puis clôture.
-   */
-  async function uploadStoredSession(localId, options = {}) {
-    const chunks = await audioStore.chunks(localId);
-    if (!chunks.length) throw new Error(T('recovery.no_chunks'));
-
-    const local = (await audioStore.listSessions()).find((row) => row.localId === localId);
-    const consultationId = (local && local.consultationId) || await ensureConsultation();
-    const tpl = currentTemplate();
-
-    const session = await api('/api/dictation', {
-      method: 'POST',
-      body: {
-        consultation_id: consultationId,
-        template_id: tpl ? tpl.id : null,
-        mime_type: (local && local.mimeType) || 'audio/webm',
-      },
-    });
-
-    const upload = showProgressToast(
-      T('recovery.uploading', { current: 1, total: chunks.length }),
-    );
-    for (const row of chunks) {
-      upload.setPercent(((row.seq + 1) / chunks.length) * 100);
-      await postChunk(session.session_id, row.seq, row.blob, dictationConfig.chunkSeconds * 1000);
-    }
-
-    // L'avancement n'est plus connu : piste indéterminée jusqu'à la réponse.
-    upload.setMessage(T('transcribe.busy_short'));
-    upload.setPercent(null);
-    const result = await api(`/api/dictation/${session.session_id}/finish`, { method: 'POST' });
-    upload.dismiss();
-    await bestEffort(() => audioStore.remove(localId), 'nettoyage');
-
-    if (options.silent && result.consultation_id === state.consultationId) {
-      // On est déjà sur la bonne consultation : on ajoute simplement le texte.
-      dictation.appliedParts = 0;
-      applyDictationParts(result);
-    } else {
-      await loadDraft(result.consultation_id);
-    }
-    return result;
   }
 
   /* =========================================================================
@@ -2588,6 +2840,13 @@
   }
 
   async function sendForTranscription(blob, filename) {
+    if (recordingBusy() || state.importing) {
+      toast(T('dictation.busy_import'), 'warning');
+      return;
+    }
+    state.importing = true;
+    updateRecordingUI();
+    updateActionButtons();
     const megabytes = (blob.size / 1048576).toFixed(1);
 
     // Même logique que generateNote()/runRetranscription() : un nouvel
@@ -2632,6 +2891,7 @@
         existing ? `${existing}\n\n${result.transcript}` : result.transcript,
       );
       resetTranscriptReveal();
+      resetPipeline();
 
       if (result.geriatric || result.med_items) {
         transcriptCorrections = buildTranscriptCorrections(result.geriatric, result.med_items);
@@ -2669,6 +2929,9 @@
         // bar.dismiss() a déjà retiré le toast (succès ou échec) ; on libère
         // juste la référence pour que la prochaine opération reparte de zéro.
         progressToast = null;
+        state.importing = false;
+        updateRecordingUI();
+        updateActionButtons();
       }
     }
   }
@@ -2676,8 +2939,14 @@
   function updateTranscriptMeta(result) {
     const characters = $('transcript').value.length;
     const parts = [T('transcript.characters', { count: characters })];
-    if (result && result.duration_seconds) {
-      parts.push(T('transcript.audio', { duration: formatDuration(result.duration_seconds) }));
+    // Durée totale : celle des enregistrements déjà rattachés, plus le
+    // passage en cours. Le serveur ne renvoie que la durée du passage ; on ne
+    // s'en sert qu'en dernier recours (draft sans liste d'enregistrements).
+    const total = (state.recordingsSeconds || 0)
+      + (state.recording ? state.recordedSeconds : 0);
+    const duration = total || (result && result.duration_seconds) || 0;
+    if (duration) {
+      parts.push(T('transcript.audio', { duration: formatDuration(duration) }));
     }
     $('transcriptMeta').textContent = parts.join(' · ');
   }
@@ -3266,15 +3535,45 @@
     bloc.classList.remove('hidden');
   }
 
+  /**
+   * « Mettre en forme » : bloque la dictée, clôt le passage actif, attend la
+   * file de transcription, puis génère. Un second clic pendant l'opération
+   * annule la génération en cours et repart — c'est la seule action offerte.
+   */
   async function generateNote() {
-    // conclue : les dernières secondes — celles dites juste avant une pause —
-    // attendent encore dans le tampon du MediaRecorder et manquent à la
-    // transcription. Conclure d'abord, générer ensuite, comme si le médecin
-    // avait appuyé sur « Terminer » avant « Mettre en forme ».
-    if (state.recording || dictation.active) {
-      if (!(await completeDictation())) return;
+    if (state.starting || state.stopping) return;
+    if (state.importing) {
+      toast(T('rec.transcribing'), 'info', 4000);
+      return;
     }
+    const run = ++generationRun;
+    if (pendingGenerate) pendingGenerate.abort();
+    state.generating = true;
+    updateRecordingUI();
+    updateActionButtons();
+    try {
+      if (state.recording || dictation.active) {
+        const closed = await closePassage('generate');
+        if (closed === false) return;
+      }
+      if (run !== generationRun) return;
+      const ok = await drainPipeline();
+      if (run !== generationRun) return;
+      if (!ok) {
+        toast(T('dictation.failed'), 'warning', 9000);
+        return;
+      }
+      await generateNoteInner(run);
+    } finally {
+      if (run === generationRun) {
+        state.generating = false;
+        updateRecordingUI();
+        updateActionButtons();
+      }
+    }
+  }
 
+  async function generateNoteInner(run) {
     const transcript = $('transcript').value.trim();
     const tpl = currentTemplate();
 
@@ -3455,7 +3754,7 @@
       // exactement le comportement voulu, pas une panne. Sur toute AUTRE
       // erreur, le flux a peut-être déjà rempli l'éditeur de texte partiel :
       // on restitue la note qui s'y trouvait avant cette tentative.
-      if (err.name !== 'AbortError') {
+      if (err.name !== 'AbortError' && run === generationRun) {
         const { note } = splitCorrections(state.preGenerateMarkdown);
         $('markdownEditor').value = note;
         renderCorrections(state.preGenerateCorrections);
@@ -3478,7 +3777,9 @@
         genThoughtPhase = false;
         genTextStarted = false;
         hideThinkingIndicator();
-        setGenerating(false);
+        // Un clic plus récent a repris la main : c'est SON témoin qui doit
+        // rester affiché, pas celui de cette tentative annulée.
+        if (run === generationRun) setGenerating(false);
       }
     }
   }
@@ -3680,12 +3981,22 @@
     const hasTranscript = Boolean($('transcript').value.trim());
     const hasTemplate = Boolean(currentTemplate());
     const hasAudio = Boolean(state.consultationId) && state.recordingsCount > 0;
+    const busy = recordingBusy() || state.generating || state.importing;
 
+    // « Mettre en forme » reste actionnable pendant une génération : un
+    // second clic annule et régénère. Il est en revanche inutile pendant un
+    // import ou tant qu'un passage est en échec (le statut propose Réessayer).
     [$('btnGenerate'), $('btnGenerateMobile')].forEach((el) => {
-      if (el) el.disabled = !((hasTranscript || audioOnlyReady()) && hasTemplate);
+      if (el) {
+        el.disabled = !((hasTranscript || audioOnlyReady()) && hasTemplate)
+          || state.importing || Boolean(pipeline.failed);
+      }
     });
     [$('btnRetranscribe'), $('btnRetranscribeMobile')].forEach((el) => {
-      if (el) el.disabled = !hasAudio;
+      if (el) el.disabled = !hasAudio || busy || Boolean(pipeline.failed);
+    });
+    [$('btnClearTranscript'), $('btnClearTranscriptMobile')].forEach((el) => {
+      if (el) el.disabled = busy || Boolean(pipeline.failed);
     });
   }
 
@@ -3952,13 +4263,15 @@
         template_id: tpl ? tpl.id : null,
         raw_transcript: $('transcript').value,
         edited_markdown: $('markdownEditor').value,
-        audio_seconds: state.recordedSeconds,
       }, readMetadata());
 
-      // Pendant une dictée, c'est le serveur qui écrit la transcription,
-      // tranche par tranche. La renvoyer depuis l'écran ferait perdre celles
-      // arrivées entre le dernier rafraîchissement et cette sauvegarde.
-      if (dictation.active) delete body.raw_transcript;
+      // Pendant une dictée ou une transcription en arrière-plan, c'est le
+      // serveur qui écrit la transcription et la durée audio, tranche par
+      // tranche. La renvoyer depuis l'écran ferait perdre celles arrivées
+      // entre le dernier rafraîchissement et cette sauvegarde.
+      if (dictation.active || pipeline.queue.length || pipeline.promise) {
+        delete body.raw_transcript;
+      }
 
       await api(`/api/consultations/${consultationId}`, { method: 'PATCH', body });
       state.lastSavedSnapshot = snapshot;
@@ -4942,7 +5255,7 @@
   }
 
   async function loadDraft(id) {
-    if (state.recording) {
+    if (recordingBusy() || state.importing || state.generating) {
       toast(T('drafts.busy_open'), 'warning');
       return;
     }
@@ -4959,6 +5272,7 @@
 
       $('transcript').value = formatSentences(draft.raw_transcript);
       resetTranscriptReveal();
+      resetPipeline();
       // Toujours la dernière note GÉNÉRÉE, jamais une version éditée : une
       // régénération remplace désormais ``edited_markdown`` sans condition
       // (voir api_generate), donc les deux ne divergent plus qu'en cours de
@@ -5090,10 +5404,12 @@
     terminateFollowerGen();
     state.consultationId = null;
     state.recordedSeconds = 0;
+    state.recordingsSeconds = 0;
     state.lastSavedSnapshot = '';
     state.lastGeneratedMarkdown = '';
     $('transcript').value = '';
     resetTranscriptReveal();
+    resetPipeline();
     $('markdownEditor').value = '';
     renderCorrections('');
     $('ctxExtra').value = '';
@@ -5113,7 +5429,7 @@
   }
 
   function newConsultation() {
-    if (state.recording) {
+    if (recordingBusy() || state.importing || state.generating) {
       toast(T('drafts.busy_new'), 'warning');
       return;
     }
@@ -5132,7 +5448,7 @@
    * brouillons : c'est la même opération, vue depuis la consultation ouverte.
    */
   async function deleteCurrentConsultation() {
-    if (state.recording) {
+    if (recordingBusy() || state.importing || state.generating) {
       toast(T('drafts.busy_new'), 'warning');
       return;
     }
@@ -5266,7 +5582,9 @@
       // ici avorte la requête /api/generate en vol (observé : status 0) et
       // fait croire à une panne. On remet à plus tard — la page suivante
       // partira de toute façon sur le nouveau contrôleur.
-      if (state.recording || dictation.active || pendingGenerate) return;
+      if (state.recording || dictation.active || pipeline.queue.length
+          || pipeline.promise || pendingGenerate || state.importing
+          || state.generating) return;
       window.location.reload();
     });
   }
@@ -5290,6 +5608,8 @@
       block.classList.add('hidden');
       $('recordingsList').innerHTML = '';
       state.recordingsCount = 0;
+      state.recordingsSeconds = 0;
+      updateTranscriptMeta(null);
       updateActionButtons();
       return;
     }
@@ -5306,6 +5626,10 @@
     const block = $('recordingsBlock');
     const list = $('recordingsList');
     state.recordingsCount = rows.length;
+    state.recordingsSeconds = rows.reduce(
+      (sum, row) => sum + (Number(row.duration_seconds) || 0), 0,
+    );
+    updateTranscriptMeta(null);
 
     if (!rows.length) {
       block.classList.add('hidden');
@@ -7105,7 +7429,7 @@
    * navigation du navigateur peut suivre jusqu'au bout.
    */
   async function logout() {
-    if (state.recording) {
+    if (recordingBusy() || state.importing || state.generating) {
       showLogoutHint(T('identity.logout_busy'), 'error');
       return;
     }
@@ -7156,7 +7480,7 @@
       toggleIdentityMenu(false);
       return;
     }
-    if (state.recording) {
+    if (recordingBusy() || state.importing || state.generating) {
       showLogoutHint(T('identity.logout_busy'), 'error');
       return;
     }
@@ -7313,7 +7637,8 @@
 
   /** Y a-t-il, dans CET onglet, quelque chose qu'un rechargement ferait perdre ? */
   function hasUnsavedChanges() {
-    return dictation.active || workspaceSnapshot() !== state.lastSavedSnapshot;
+    return Boolean(dictation.active || pipeline.queue.length || pipeline.promise)
+      || workspaceSnapshot() !== state.lastSavedSnapshot;
   }
 
   /**
@@ -7337,7 +7662,10 @@
 
   function onSyncTranscript(evt) {
     const payload = JSON.parse(evt.data);
-    if (dictation.sessionId && payload.session_id === dictation.sessionId) return;
+    // Notre propre passage (actif ou en cours de transcription) : sa mise à
+    // jour passe par sa réponse HTTP / sa scrutation, jamais par le flux.
+    if (payload.session_id
+        && transcriptPassages.some((p) => p.sessionId === payload.session_id)) return;
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
     if (!payload.text) return;
 
@@ -7345,10 +7673,17 @@
       showBlockingSyncModal('sync.conflict_transcript');
       return;
     }
-    // Base = ``committedText`` (jamais la valeur live de la boîte, préfixe
-    // pendant une révélation). La révélation synchrone le snapshot au fil du
-    // dévoilement (voir transcriptReveal) : pas de faux conflit en direct.
-    committedParts.push(payload.text);
+    // Texte d'une session étrangère (autre onglet) : on l'ajoute comme un
+    // passage synthétique à la fin, pour que la reconstruction ordonnée le
+    // conserve sans écraser nos propres passages.
+    let synthetic = transcriptPassages.find(
+      (p) => p.synthetic && p.sessionId === payload.session_id,
+    );
+    if (!synthetic) {
+      synthetic = { synthetic: true, sessionId: payload.session_id, parts: [] };
+      transcriptPassages.push(synthetic);
+    }
+    synthetic.parts.push(payload.text);
     rebuildCommittedText();
     updateTranscriptMeta({ duration_seconds: payload.audio_seconds });
     updateActionButtons();
@@ -7410,10 +7745,12 @@
   function onSttUnavailable(evt) {
     const payload = JSON.parse(evt.data || '{}');
     if (String(payload.consultation_id) !== String(state.consultationId)) return;
-    // Seul l'onglet qui mène la dictée porte l'avis : un onglet suiveur qui
-    // suit une dictée d'un autre client ne doit pas afficher une alarme sur
-    // une session qu'il ne contrôle pas (il n'a pas de dictation.sessionId).
-    if (!dictation.sessionId || dictation.sessionId !== payload.session_id) return;
+    // Seul un onglet qui mène une des dictées de ce brouillon porte l'avis :
+    // un onglet suiveur qui suit la dictée d'un autre client ne doit pas
+    // afficher une alarme sur une session qu'il ne contrôle pas.
+    const known = dictation.sessionId === payload.session_id
+      || transcriptPassages.some((p) => p.sessionId === payload.session_id);
+    if (!known) return;
     updateSttAvailabilityNotice(
       payload.message || T('dictation.stt_unavailable'),
     );
@@ -7965,7 +8302,7 @@
    * supprimable dans la liste.
    */
   async function refreshAbandonedState() {
-    if (state.recording) return;
+    if (recordingBusy() || state.importing || state.generating) return;
     let data;
     try {
       data = await api('/api/dictation');
@@ -9109,7 +9446,7 @@
     $('metaDate').value = new Date().toISOString().slice(0, 10);
 
     // --- Enregistrement ---
-    $('btnRecord').addEventListener('click', startRecording);
+    $('btnRecord').addEventListener('click', toggleRecording);
     $('tabTranscript').addEventListener('click', () => selectDicteeTab('transcript'));
     $('tabSecondPass').addEventListener('click', () => selectDicteeTab('secondpass'));
     if ($('tabDocuments')) {
@@ -9158,9 +9495,9 @@
       });
     }
     renderPendingDocuments();
-    $('btnPause').addEventListener('click', togglePause);
-    $('btnFinish').addEventListener('click', finishRecording);
-    $('btnAbort').addEventListener('click', abortRecording);
+    if ($('btnRetryPassage')) {
+      $('btnRetryPassage').addEventListener('click', retryFailedPassage);
+    }
 
     // --- Miroir HTML du transcrit : sync du défilement + rollover ---
     $('transcript').addEventListener('scroll', syncTranscriptScroll);
@@ -9331,14 +9668,27 @@
     // toast dismissable à chaque chargement, tant qu'il existe.
     refreshAbandonedState().catch((err) => console.warn('Brouillons abandonnés :', err));
 
-    // Le réseau revient : la file d'attente repart sans attendre le prochain
+    // Le réseau revient : les files repartent sans attendre le prochain
     // fragment, qui pourrait ne jamais venir si le médecin est en pause.
     window.addEventListener('online', () => {
-      dictation.failures = 0;
-      pumpQueue();
+      if (dictation.sessionId) {
+        dictation.failures = 0;
+        pumpQueue(dictation);
+      }
+      // Seul le passage en TÊTE peut téléverser : les suivants attendent leur
+      // tour pour que le serveur écrive le transcript dans l'ordre.
+      const head = pipeline.queue[0];
+      if (head) {
+        head.failures = 0;
+        if (head.sessionId) pumpQueue(head);
+      }
+      if (pipeline.failed) retryFailedPassage();
+      else if (pipeline.queue.length) pumpPipeline();
       if (liveSource && liveSource.readyState === EventSource.CLOSED) connectLiveEvents();
     });
 
+    resetTranscriptReveal();
+    resetPipeline();
     updateRecordingUI();
     setupWaveform();
     showPreview();

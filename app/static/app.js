@@ -1657,7 +1657,7 @@
   const WAVE_SAMPLE_MS = 75;
 
   const wave = {
-    canvases: [],     // { canvas, ctx, capacity, resizeObserver } — barre d'outils ET dictaphone
+    canvases: [],     // { canvas, ctx, capacity, resizeObserver } — barre d'outils
     levels: [],       // historique, du plus ancien au plus récent
     peak: 0,          // crête accumulée depuis le dernier échantillon retenu
     lastSample: 0,
@@ -1689,7 +1689,7 @@
   function drawWave() {
     wave.canvases.forEach((entry) => {
       const rect = entry.canvas.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;   // calque dictaphone masqué
+      if (!rect.width || !rect.height) return;   // canvas masqué
       const { ctx } = entry;
       const width = rect.width;
       const height = rect.height;
@@ -1809,51 +1809,6 @@
     }, 1200);
   }
 
-  /** Clic mécanique organique (on/off) via Web Audio. Plutôt qu'un bip
-   *  sinusoïdal (syntonique, vite fatigant), on synthétise un court transitoire
-   *  de bruit filtré — l'équivalent d'un interrupteur physique : attaque
-   *  quasi instantanée, corps bref, décroissance rapide. « haut » est plus
-   *  brillant (filtre plus aigu), « bas » plus sourd (filtre plus grave). */
-  const CLICK_DUR = 0.035;         // 35 ms : un « tick » sec, pas un son tenu
-  const CLICK_ON_FILTER = 2200;    // clic « on » : filtre passe-bande brillant
-  const CLICK_OFF_FILTER = 1300;   // clic « off » : filtre plus grave
-  let _clickCtx = null;
-  let _clickNoiseBuffer = null;
-  function _clickNoise() {
-    const ctx = _clickCtx;
-    if (_clickNoiseBuffer && _clickNoiseBuffer.sampleRate === ctx.sampleRate) return _clickNoiseBuffer;
-    const len = Math.max(1, Math.ceil(ctx.sampleRate * CLICK_DUR));
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < len; i += 1) data[i] = Math.random() * 2 - 1;
-    _clickNoiseBuffer = buf;
-    return buf;
-  }
-  function playClick(bright) {
-    try {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!_clickCtx || _clickCtx.state === 'closed') _clickCtx = new AC();
-      if (_clickCtx.state === 'suspended') _clickCtx.resume();
-      const now = _clickCtx.currentTime;
-      const src = _clickCtx.createBufferSource();
-      src.buffer = _clickNoise();
-      // Filtre passe-bande : façonne la « couleur » du clic (aigu = on).
-      const bp = _clickCtx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = bright ? CLICK_ON_FILTER : CLICK_OFF_FILTER;
-      bp.Q.value = 1.1;
-      // Enveloppe : attaque instantanée, chute exponentielle rapide en 2 temps
-      // (un peu de corps puis éteint) pour le caractère « switch ».
-      const gain = _clickCtx.createGain();
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.35, now + 0.002);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + CLICK_DUR);
-      src.connect(bp).connect(gain).connect(_clickCtx.destination);
-      src.start(now);
-      src.stop(now + CLICK_DUR);
-    } catch (_) { /* audio feedback is cosmetic — never block */ }
-  }
-
   /** Waveform du micro — confirme visuellement que le micro capte bien. */
   function startWaveform(stream) {
     try {
@@ -1948,9 +1903,6 @@
 
   function setupWaveform() {
     registerWaveCanvas('levelWave');
-    // Miroir dans le mode dictaphone : l'historique est partagé, seul le
-    // nombre de barres affichées dépend de la largeur de chaque canvas.
-    registerWaveCanvas('dictaphoneWave');
   }
 
   function startTimer() {
@@ -1959,10 +1911,6 @@
       if (!state.paused) {
         state.recordedSeconds += 1;
         $('timer').textContent = formatDuration(state.recordedSeconds);
-        if (dphone.active) {
-          $('dictaphoneTimer').textContent = formatDuration(state.recordedSeconds);
-          refreshDictaphoneTranscript();
-        }
       }
     }, 1000);
   }
@@ -2016,115 +1964,6 @@
     $('transcript').placeholder = state.recording
       ? T('transcript.placeholder_recording')
       : T('transcript.placeholder');
-
-    syncDictaphoneUI();
-  }
-
-  /* -------------------------------------------------------------------------
-   * Mode dictaphone (téléphone retourné)
-   * ----------------------------------------------------------------------
-   * Le micro du téléphone est en bas : retourné, il fait face à qui parle.
-   * L'écran devient alors un gros bouton + un carnet de transcription.
-   *
-   * Uniquement manuel, sur tous les mobiles (à la iOS) : le bouton
-   * « Mode retourné » affiche le calque, tourné de 180° en CSS pour se lire
-   * à l'endroit une fois le téléphone retourné, et la pilule « Quitter »
-   * le ferme. Fini l'auto-détection par capteurs (deviceorientation), qui
-   * exigeait une permission Android et dont le comportement variait d'une
-   * plateforme à l'autre.
-   *
-   * Deux modes de conversation, choisis par le contrôle segmenté :
-   *  * 'tap' — toucher pour enregistrer, retoucher pour mettre en pause ;
-   *  * 'ptt' — maintenir pour enregistrer, relâcher pour mettre en pause
-   *    (push-to-talk). Relâcher ne « termine » jamais : le ■ Terminer reste
-   *    le seul moyen de conclure la dictée.
-   * ---------------------------------------------------------------------- */
-  const dphone = {
-    active: false,
-    mode: localStorage.getItem('consultai.dictaphoneMode') === 'ptt' ? 'ptt' : 'tap',
-  };
-  /** Garde-fous du push-to-talk : pas de double démarrage ni de double pause. */
-  const ptt = { held: false, starting: false };
-
-  const ICON_MIC_BIG = '<svg class="w-24 h-24" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
-    + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    + '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>'
-    + '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
-  const ICON_PAUSE_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="currentColor">'
-    + '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
-  const ICON_RESUME_BIG = '<svg class="w-20 h-20" viewBox="0 0 24 24" fill="currentColor">'
-    + '<path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l10.7-6.86a1 1 0 0 0 0-1.7L9.53 4.29A1 1 0 0 0 8 5.14z"/></svg>';
-
-  function setDictaphone(active) {
-    if (dphone.active === active) return;
-    dphone.active = active;
-    const overlay = $('dictaphoneOverlay');
-    if (!overlay) return;
-    overlay.classList.toggle('hidden', !active);
-    overlay.style.transform = active ? 'rotate(180deg)' : '';
-    if (active) syncDictaphoneUI();
-  }
-
-  /** Calque du mode dictaphone : miroir de updateRecordingUI(). */
-  function syncDictaphoneUI() {
-    const main = $('btnDictaphoneMain');
-    if (!main) return;
-    $('dictaphoneTimer').textContent = formatDuration(state.recordedSeconds);
-    // Le bouton Terminer n'a de sens qu'en cours de dictée. Affichage par
-    // visibilité (invisible), jamais display:none, pour ne pas décaler le pied.
-    const finish = $('btnDictaphoneFinish');
-    if (finish) finish.classList.toggle('invisible', !state.recording);
-    const base = 'w-64 h-64 rounded-[26%] grid place-items-center shadow-2xl active:scale-95 transition touch-none ';
-    if (state.recording && !state.paused) {
-      main.className = base + 'bg-red-600 rec-dot';
-      main.innerHTML = ICON_PAUSE_BIG;
-      main.title = T('rec.pause');
-    } else if (state.recording && state.paused) {
-      main.className = base + 'bg-amber-500';
-      main.innerHTML = ICON_RESUME_BIG;
-      main.title = T('rec.resume');
-    } else {
-      main.className = base + 'bg-red-600';
-      main.innerHTML = ICON_MIC_BIG;
-      main.title = T('rec.record');
-    }
-    renderDictaphoneMode();
-    refreshDictaphoneTranscript();
-  }
-
-  /** Segments du mode de conversation : actif en pastille claire + aide. */
-  function renderDictaphoneMode() {
-    const tap = $('btnDphoneModeTap');
-    const pttBtn = $('btnDphoneModePtt');
-    const hint = $('dictaphoneHint');
-    const active = 'px-3 h-8 rounded-full text-xs font-medium text-slate-900 bg-white transition';
-    const idle = 'px-3 h-8 rounded-full text-xs font-medium text-slate-300 transition';
-    if (tap) tap.className = dphone.mode === 'tap' ? active : idle;
-    if (pttBtn) pttBtn.className = dphone.mode === 'ptt' ? active : idle;
-    if (hint) hint.textContent = dphone.mode === 'ptt'
-      ? T('dictaphone.hold_hint')
-      : T('dictaphone.tap_hint');
-  }
-
-  /** Carnet du mode dictaphone : les 3 dernières lignes (committé + provisoire). */
-  function refreshDictaphoneTranscript() {
-    const box = $('dictaphoneTranscript');
-    if (!box) return;
-    let text = $('transcript').value;
-    const live = liveLinesBox();
-    if (live) {
-      const parts = [];
-      live.querySelectorAll('.live-line').forEach((el) => {
-        const t = el.textContent.trim();
-        if (t) parts.push(t);
-      });
-      if (parts.length) text = text ? `${text} ${parts.join(' ')}` : parts.join(' ');
-    }
-    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-    const shown = lines.slice(-3).join('\n');
-    box.textContent = shown;
-    const empty = $('dictaphoneTranscriptEmpty');
-    if (empty) empty.classList.toggle('hidden', Boolean(shown));
   }
 
   /* -------------------------------------------------------------------------
@@ -2320,9 +2159,6 @@
 
     // Un fragment toutes les quelques secondes : c'est l'unité de
     // téléversement, donc aussi le pire cas de perte sur une panne franche.
-    // Le clic de démarrage (mode dictaphone uniquement) passe par les
-    // haut-parleurs AVANT le start(): il ne peut pas entrer dans l'enregistrement.
-    if (dphone.active) playClick(true);
     recorder.mediaRecorder.start(dictationConfig.chunkSeconds * 1000);
 
     state.recording = true;
@@ -2425,13 +2261,8 @@
   function togglePause() {
     if (!state.recording) return;
     if (state.paused) {
-      if (dphone.active) playClick(true);   // reprise = « clic on »
       reprendreEnregistrement();
     } else {
-      // Mise en pause = « clic off », joué avant pause() tant que le micro
-      // enregistre encore côté navigateur — il sort par les haut-parleurs,
-      // jamais capturé (le pause() survient juste après).
-      if (dphone.active) playClick(false);
       mettreEnPauseEnregistrement();
     }
     updateRecordingUI();
@@ -2499,10 +2330,6 @@
         releaseWakeLock();
         updateRecordingUI();
         window.removeEventListener('beforeunload', warnBeforeUnload);
-        // Clic d'arrêt (dictaphone uniquement) : joué après mediaRecorder.stop()
-        // (l'enregistrement est clos, le clic ne peut pas y entrer) mais tant
-        // que les pistes du micro sont encore vivantes.
-        if (dphone.active) playClick(false);
         stopTracks();
         resolve();
       };
@@ -9353,63 +9180,6 @@
       $('transcriptHtml').addEventListener('pointerout', hideTranscriptTooltip);
     }
     if ($('transcriptTooltip')) hideTranscriptTooltip();
-
-    // --- Mode dictaphone (téléphone retourné) ---
-    const dphoneMain = $('btnDictaphoneMain');
-    // Toucher : un clic démarre / met en pause.
-    dphoneMain.addEventListener('click', () => {
-      if (dphone.mode !== 'tap') return;
-      if (!state.recording) startRecording();
-      else togglePause();
-    });
-    // Maintenir (push-to-talk) : presser = enregistrer/reprendre, relâcher
-    // ou glisser hors du bouton = pause. Relâcher ne conclut jamais : le
-    // ■ Terminer reste le seul moyen de clore la dictée.
-    const onPTTDown = () => {
-      if (dphone.mode !== 'ptt' || ptt.held) return;
-      ptt.held = true;
-      if (state.recording) {
-        if (state.paused) togglePause();
-        return;
-      }
-      if (ptt.starting) return;
-      ptt.starting = true;
-      startRecording().finally(() => { ptt.starting = false; });
-    };
-    const onPTTUp = () => {
-      ptt.held = false;
-      if (dphone.mode !== 'ptt') return;
-      if (state.recording && !state.paused) togglePause();
-    };
-    dphoneMain.addEventListener('pointerdown', onPTTDown);
-    dphoneMain.addEventListener('pointerup', onPTTUp);
-    dphoneMain.addEventListener('pointerleave', onPTTUp);
-    dphoneMain.addEventListener('pointercancel', onPTTUp);
-    dphoneMain.addEventListener('contextmenu', (e) => e.preventDefault());
-
-    $('btnDictaphoneFinish').addEventListener('click', finishRecording);
-
-    // Contrôle segmenté du mode de conversation : Toucher / Maintenir.
-    const setDictaphoneMode = (mode) => {
-      dphone.mode = mode;
-      localStorage.setItem('consultai.dictaphoneMode', mode);
-      renderDictaphoneMode();
-    };
-    const tapSeg = $('btnDphoneModeTap');
-    const pttSeg = $('btnDphoneModePtt');
-    if (tapSeg) tapSeg.addEventListener('click', () => setDictaphoneMode('tap'));
-    if (pttSeg) pttSeg.addEventListener('click', () => setDictaphoneMode('ptt'));
-    renderDictaphoneMode();
-
-    // Manuel sur tous les mobiles (à la iOS) : le bouton « Mode retourné »
-    // affiche le calque renversé de 180°, la pilule « Quitter » le ferme.
-    const flipBtn = $('btnFlipMode');
-    const exitBtn = $('btnDictaphoneExit');
-    if (flipBtn) {
-      flipBtn.addEventListener('click', () => setDictaphone(!dphone.active));
-      if (matchMedia('(pointer: coarse)').matches) flipBtn.classList.remove('hidden');
-    }
-    if (exitBtn) exitBtn.addEventListener('click', () => setDictaphone(false));
 
     // --- Import d'un fichier audio existant ---
     $('audioFileInput').addEventListener('change', async (event) => {

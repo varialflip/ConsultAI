@@ -2,6 +2,19 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-16 — Retrait du mode dictaphone
+
+*Le calque plein écran « téléphone retourné » est retiré de l'instance de
+test : l'enregistrement se fait uniquement par la barre d'outils habituelle.*
+
+- Suppression du bouton « Mode retourné » de la barre d'outils et du calque
+  plein écran (gros bouton, minuteur, waveform, carnet de transcription,
+  pilule « Quitter », bouton Terminer).
+- Suppression des modes Toucher / Maintenir (push-to-talk), du réglage
+  mémorisé `consultai.dictaphoneMode` et des clics mécaniques de
+  démarrage / pause / arrêt qui accompagnaient le calque.
+- Aucun changement de données : les dictées existantes restent intactes.
+
 ## 2026-11-13 — Documents : les pages illisibles sont nommées
 
 *Cinq pages déclarées floues par le modèle ne se voyaient nulle part : la

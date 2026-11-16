@@ -3577,7 +3577,7 @@
     const transcript = $('transcript').value.trim();
     const tpl = currentTemplate();
 
-    if (!transcript && !audioOnlyReady()) {
+    if (!transcript && !audioOnlyReady() && !documentsReady()) {
       toast(T('generate.empty'), 'warning');
       return;
     }
@@ -3970,6 +3970,37 @@
   }
 
   /**
+   * Y a-t-il des éléments de documents cochés à envoyer au modèle ? Les
+   * documents seuls suffisent à générer une note (revue du dossier avant la
+   * dictée) : on regarde ce qui entrera réellement dans la note, pas la simple
+   * présence d'un fichier.
+   */
+  function documentsReady() {
+    return (state.documents || []).some((doc) => {
+      const extraction = doc.extraction || {};
+      const items = extraction.items || [];
+      const parId = {};
+      items.forEach((item) => { if (item && item.id) parId[item.id] = item; });
+      const medList = extraction.med_list || [];
+      const medsIncluded = medList.length
+        ? medList.some((line) => {
+            if (!line) return false;
+            if ('included' in line) return line.included !== false;
+            const sources = (line.sources || []).map((id) => parId[id]).filter(Boolean);
+            return !sources.length || sources.some((item) => item.included !== false);
+          })
+        : items.some((item) => item && item.kind === 'medications' && item.included !== false);
+      const otherIncluded = items.some(
+        (item) => item && item.kind !== 'medications' && item.included !== false,
+      );
+      const observationsIncluded = (extraction.observations || []).some(
+        (obs) => obs && obs.included,
+      );
+      return medsIncluded || otherIncluded || observationsIncluded;
+    });
+  }
+
+  /**
    * Grise (plutôt que masque) « Retranscrire » et « Mettre en forme » quand
    * l'action n'a rien à faire — pas de transcription, pas de gabarit choisi,
    * pas d'audio conservé. Appelée à chaque événement qui peut changer l'une
@@ -3981,14 +4012,18 @@
     const hasTranscript = Boolean($('transcript').value.trim());
     const hasTemplate = Boolean(currentTemplate());
     const hasAudio = Boolean(state.consultationId) && state.recordingsCount > 0;
+    const hasDocuments = documentsReady();
     const busy = recordingBusy() || state.generating || state.importing;
 
     // « Mettre en forme » reste actionnable pendant une génération : un
     // second clic annule et régénère. Il est en revanche inutile pendant un
     // import ou tant qu'un passage est en échec (le statut propose Réessayer).
+    // Les documents seuls suffisent : la revue du dossier peut précéder la
+    // dictée, et exiger un enregistrement pour activer le bouton obligerait à
+    // dicter pour rien.
     [$('btnGenerate'), $('btnGenerateMobile')].forEach((el) => {
       if (el) {
-        el.disabled = !((hasTranscript || audioOnlyReady()) && hasTemplate)
+        el.disabled = !((hasTranscript || audioOnlyReady() || hasDocuments) && hasTemplate)
           || state.importing || Boolean(pipeline.failed);
       }
     });
@@ -9018,6 +9053,10 @@
       liste.appendChild(bandeau);
     }
     docs.forEach((doc) => liste.appendChild(renderDocumentBlock(doc)));
+    // Les cases des documents changent ce qui entrera dans la note : le
+    // bouton « Mettre en forme » doit s'activer dès qu'un élément est coché,
+    // même sans transcription.
+    updateActionButtons();
   }
 
   function renderDocumentBlock(doc) {

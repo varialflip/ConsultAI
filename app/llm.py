@@ -163,7 +163,9 @@ _USER_PROMPT_LABELS = {
             "ci-dessus sont la SEULE source. Ne produis que les rubriques "
             "qu'ils remplissent réellement, supprime les autres sans texte de "
             "remplacement, et n'invente ni motif, ni histoire, ni examen, ni "
-            "plan, ni résultat."
+            "plan, ni résultat. Si le gabarit porte une mention de dictée ou "
+            "de reconnaissance vocale, ne la recopie pas : cette note est "
+            "établie à partir des documents."
         ),
         "documents": (
             "DOCUMENTS FOURNIS PAR LE MÉDECIN — lus sur des photographies et "
@@ -220,7 +222,9 @@ _USER_PROMPT_LABELS = {
             "NO DICTATION ACCOMPANIES THIS CONSULTATION: the documents above "
             "are the ONLY source. Produce only the headings they actually "
             "fill, remove the others without placeholder text, and invent no "
-            "reason, history, examination, plan or result."
+            "reason, history, examination, plan or result. If the layout "
+            "contains a dictation or speech-recognition mention, do not copy "
+            "it: this note is built from the documents."
         ),
         "documents": (
             "DOCUMENTS SUPPLIED BY THE PHYSICIAN — read from photographs and "

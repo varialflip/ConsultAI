@@ -1011,8 +1011,8 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "transcript.characters": ("{count} caractères", "{count} characters"),
     "transcript.audio": ("{duration} d'audio", "{duration} of audio"),
     "generate.empty": (
-        "La transcription est vide : dictez ou collez un texte d'abord.",
-        "The transcript is empty: dictate or paste text first.",
+        "Rien à mettre en forme : dictez, importez un audio ou cochez des éléments de documents.",
+        "Nothing to format: dictate, import audio, or check document items.",
     ),
     "generate.confirm_overwrite": (
         "La note affichée a été modifiée depuis la dernière mise en forme. "

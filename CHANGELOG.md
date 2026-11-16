@@ -2,6 +2,20 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-16 — Documents seuls : la note se génère sans dictée
+
+*La revue du dossier précède la dictée : les photos et PDF lus, il fallait
+encore dicter pour activer « Mettre en forme ». Les éléments cochés suffisent
+désormais.*
+
+- « Mettre en forme » s'active dès qu'au moins un élément de document est
+  coché (médicament, résultat, imagerie, observation), même sans transcription
+  ni audio.
+- Le serveur recevait déjà les documents seuls ; seul le bouton les ignorait.
+- Le message « rien à mettre en forme » mentionne les documents, et la note
+  générée depuis les documents ne recopie pas la mention de reconnaissance
+  vocale du gabarit.
+
 ## 2026-11-16 — Documents : une page lue sans élément n'est plus « rien d'exploitable »
 
 *Les pages 3 et 9 d'un PDF de 12 pages s'affichaient en ambre « rien

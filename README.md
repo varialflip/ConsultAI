@@ -1637,6 +1637,11 @@ ressemblait à une page sans contenu. Une page **lue** qui ne produit aucun
 « (0) » — le modèle doit en donner la note — et non comme une photo ratée ;
 l'alerte ambre reste réservée aux pages illisibles ou non rendues.
 
+**Documents seuls.** Les éléments cochés dans l'onglet Documents suffisent à
+« Mettre en forme » : la note peut être générée avant la dictée, à partir des
+documents seuls. Le modèle ne produit alors que les rubriques qu'ils
+remplissent réellement et n'invente ni motif, ni histoire, ni examen, ni plan.
+
 **Ce que le modèle n'a pas le droit de faire.** Il transcrit, il ne conclut
 pas : « 0 renouvellement » n'est pas « cessé », une date de dernière
 distribution n'est pas une date d'arrêt. Le statut n'est repris que s'il est

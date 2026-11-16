@@ -9110,25 +9110,53 @@
       const carte = document.createElement('div');
       carte.className = 'flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-[11px] text-slate-500 border-b border-slate-100';
       const notes = {};
+      const couvertureParPage = {};
       (extractionData.coverage || []).forEach((row) => {
-        if (row && row.page) notes[row.page] = row.note || '';
+        if (!row || !row.page) return;
+        const page = Number(row.page);
+        notes[page] = row.note || '';
+        couvertureParPage[page] = row;
       });
+      const documentsParId = {};
+      (extractionData.documents || []).forEach((d) => {
+        if (d && d.id) documentsParId[d.id] = d;
+      });
+      const pagesManquantes = new Set((extractionData.missing || []).map(Number));
       for (let page = 1; page <= nbPages; page += 1) {
         const surPage = tous.filter((i) => Number(i.source_page) === page);
-        const typesPage = (extractionData.documents || [])
-          .filter((d) => (d.pages || []).map(Number).includes(page))
-          .map((d) => documentKindLabel(d.kind));
+        const couverture = couvertureParPage[page];
+        const docPage = couverture && couverture.document_id
+          ? documentsParId[couverture.document_id] : null;
+        const typesPage = docPage
+          ? [documentKindLabel(docPage.kind)]
+          : (extractionData.documents || [])
+            .filter((d) => (d.pages || []).map(Number).includes(page))
+            .map((d) => documentKindLabel(d.kind));
         const morceau = document.createElement('span');
         const floue = illisibles[page] !== undefined;
+        const lue = Boolean(couverture);
+        const manquante = pagesManquantes.has(page);
         const vide = surPage.length === 0 && nbPages > 1;
-        morceau.className = (floue || vide) ? 'text-amber-600 font-medium' : '';
-        morceau.textContent = floue
-          ? `${T('doc.page')} ${page} — ${T('doc.page_unreadable')}`
-          : vide
-            ? `${T('doc.page')} ${page} — ${T('doc.page_nothing')}`
-            : `${T('doc.page')} ${page} · ${typesPage[0] || T('doc.other_doc')} (${surPage.length})`;
-        if (notes[page]) morceau.title = notes[page];
-        else if (floue) morceau.title = illisibles[page];
+        // Une page LUE qui ne produit aucun élément n'est pas une photo ratée :
+        // elle peut être une continuation de liste ou un doublon. On l'affiche
+        // avec le type du document et « (0) », sans alarme ; le motif éventuel
+        // du modèle est en infobulle. Seule une page NON couverte (ou déclarée
+        // illisible) mérite « rien d'exploitable — vérifier la photo ».
+        const alerte = floue || (vide && !lue);
+        morceau.className = alerte ? 'text-amber-600 font-medium' : '';
+        if (floue) {
+          morceau.textContent = `${T('doc.page')} ${page} — ${T('doc.page_unreadable')}`;
+          morceau.title = illisibles[page];
+        } else if (vide && !lue) {
+          morceau.textContent = manquante
+            ? `${T('doc.page')} ${page} — ${T('doc.page_missing')}`
+            : `${T('doc.page')} ${page} — ${T('doc.page_nothing')}`;
+          morceau.title = manquante ? T('doc.page_missing') : T('doc.page_nothing');
+        } else {
+          morceau.textContent = `${T('doc.page')} ${page} · ${typesPage[0] || T('doc.other_doc')} (${surPage.length})`;
+          if (notes[page]) morceau.title = notes[page];
+          else if (vide && lue) morceau.title = T('doc.page_read_nothing');
+        }
         carte.appendChild(morceau);
       }
       entete.appendChild(carte);

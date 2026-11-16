@@ -2,6 +2,21 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-16 — Documents : une page lue sans élément n'est plus « rien d'exploitable »
+
+*Les pages 3 et 9 d'un PDF de 12 pages s'affichaient en ambre « rien
+d'exploitable — vérifier la photo » alors que le modèle les avait lues : la
+page 3 reprenait des doublons de venlafaxine, la page 9 portait la conclusion
+de l'angioscan.*
+
+- Une page présente dans `coverage` mais sans élément affiche désormais son
+  type et « (0) », avec l'infobulle « page lue — aucun élément extrait » (ou
+  la note du modèle). L'alerte ambre reste réservée aux pages illisibles ou
+  non rendues.
+- Le prompt d'extraction exige une note pour une page lue sans élément
+  (continuation, doublons, page de garde) et la conclusion complète d'un
+  rapport d'imagerie, même imprimée sur la dernière page.
+
 ## 2026-11-16 — Dictée : un seul bouton, la pause clôt le passage
 
 *Le mode dictaphone parti, la barre d'outils restait un mini-lecteur média :

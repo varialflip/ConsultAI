@@ -138,7 +138,13 @@ Chaque PAGE reçue doit apparaître EXACTEMENT UNE FOIS, soit dans \
 ``coverage`` (champ ``page``), soit dans ``unreadable`` (champ ``page``). Une \
 page que tu n'as pas lue doit y être déclarée avec sa raison (« page \
 tournée », « floue », « vide », « page de garde »). Ne l'omets JAMAIS en \
-silence : c'est la seule erreur qu'on ne peut pas réparer après coup.
+silence : c'est la seule erreur qu'on ne peut pas réparer après coup. Une page \
+que tu as LUE mais qui ne produit aucun élément (page de garde, continuation \
+sans nouvel élément, doublons) reste dans ``coverage`` avec une ``note`` \
+courte qui l'explique (« continuation », « doublons », « page de garde »). Une \
+page qui contient du texte clinique (médicament, résultat, antécédent, \
+conclusion d'imagerie) doit produire au moins un item : ne la laisse pas dans \
+``coverage`` sans item ni note.
 
 ## 3. EN-TÊTES ADMINISTRATIFS — NE PAS EXTRAIRE
 Le nom du patient, la date de naissance, le NAS, l'adresse, le numéro de \
@@ -225,7 +231,8 @@ global — deux valeurs d'une même analyte à deux dates sont deux faits, pas u
 **imaging** — UN seul item par rapport : ``text`` = la CONCLUSION du rapport \
 telle qu'imprimée (2 à 4 lignes, c'est ce qui entre dans la note), \
 ``fields`` = {``study``, ``date``, ``body`` = le texte intégral des résultats, \
-verbatim}.
+verbatim}. Si le rapport s'étend sur plusieurs pages, la conclusion complète — \
+même imprimée sur la dernière page — doit figurer dans cet unique item.
 
 **other** — un item par bloc de texte cohérent.
 
@@ -353,7 +360,11 @@ Every PAGE must appear EXACTLY ONCE, either in ``coverage`` (field ``page``) \
 or in ``unreadable`` (field ``page``). A page you did not read must be \
 declared there with a reason ("upside down", "blurry", "blank", "cover \
 page"). NEVER drop one silently: it is the one error that cannot be repaired \
-afterwards.
+afterwards. A page you READ but that yields no item (cover page, continuation \
+with nothing new, duplicates) stays in ``coverage`` with a short ``note`` \
+explaining it ("continuation", "duplicates", "cover page"). A page containing \
+clinical text (medication, result, history, imaging conclusion) must produce \
+at least one item: do not leave it in ``coverage`` without an item or a note.
 
 ## 3. ADMINISTRATIVE HEADERS — DO NOT EXTRACT
 The patient's name, date of birth, health insurance number, address, record \
@@ -430,7 +441,9 @@ two values of one analyte at two dates are two facts, not one.
 
 **imaging** — ONE item per report: ``text`` = the report's CONCLUSION as \
 printed (2 to 4 lines, this is what goes into the note), ``fields`` = \
-{``study``, ``date``, ``body`` = the full findings text, verbatim}.
+{``study``, ``date``, ``body`` = the full findings text, verbatim}. If the \
+report spans several pages, the full conclusion — even if printed on the last \
+page — must be in that single item.
 
 **other** — one item per coherent block of text.
 

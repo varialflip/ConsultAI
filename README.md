@@ -1632,7 +1632,10 @@ message — une page oubliée en silence serait une ligne de moins dans une list
 de médicaments. Une page **déclarée illisible** n'échoue pas, mais elle est
 nommée : « Pages illisibles : 5, 6, 8 — reprenez-les », et page par page
 « Page 5 — illisible » avec la raison du modèle. Sans cela, une page floue
-ressemblait à une page sans contenu.
+ressemblait à une page sans contenu. Une page **lue** qui ne produit aucun
+élément (continuation, doublons, page de garde) est affichée avec son type et
+« (0) » — le modèle doit en donner la note — et non comme une photo ratée ;
+l'alerte ambre reste réservée aux pages illisibles ou non rendues.
 
 **Ce que le modèle n'a pas le droit de faire.** Il transcrit, il ne conclut
 pas : « 0 renouvellement » n'est pas « cessé », une date de dernière

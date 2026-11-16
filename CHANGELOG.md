@@ -22,7 +22,8 @@ de dicter.*
   la fin de la file, puis génère. Le bouton principal est désactivé ; seul un
   nouveau clic sur « Mettre en forme » relance la génération.
 - **Enregistrements séparés** : chaque passage clôturé devient un
-  enregistrement distinct dans la liste.
+  enregistrement distinct dans la liste ; la durée du brouillon reste la
+  somme des passages.
 - **Échec** : la file s'arrête sur le passage en échec et un bouton
   « Réessayer » apparaît dans la ligne d'état ; la dictée peut continuer.
 

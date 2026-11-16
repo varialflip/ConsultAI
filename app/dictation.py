@@ -1191,7 +1191,15 @@ def _store_part(
             consultation.raw_transcript = f"{existing} {text}".strip() if existing else text
             consultation.status = "transcrit"
         _merge_conf_into(consultation, conf_part)
-        consultation.audio_seconds = int(round(session.offset_seconds))
+        # Durée totale du brouillon : les enregistrements déjà rattachés
+        # (passages précédents, imports) plus le passage en cours. Écrire
+        # simplement ``session.offset_seconds`` écraserait le total à chaque
+        # nouveau passage.
+        previous_seconds = sum(
+            (recording.duration_seconds or 0)
+            for recording in recordings.for_consultation(db, consultation.id)
+        )
+        consultation.audio_seconds = previous_seconds + int(round(session.offset_seconds))
         # Dernière tranche gagnante : changer de service en pleine dictée est
         # possible, et c'est alors celui qui a fait le plus de travail qu'on
         # veut voir — pas celui de la première tranche.

@@ -20,6 +20,9 @@ l'apixaban et le pantoprazole.*
 - **Onglet Documents** : le délai s'affiche sous la ligne, en ambre quand il
   dépasse le seuil.
 - **« En att » n'est pas un arrêt** : un statut imprimé ne pèse jamais contre une délivrance récente. Vitamine D3 et B12, servies le 05/11 avec un renouvellement demandé le 11/11, s'étaient retrouvées « non renouvelées ». Une ligne « En att » sans délivrance récente rejoint désormais une phrase distincte : « En attente de délivrance ».
+- **Couverture, pas un seuil** : la quantité délivrée et les unités par jour sont lues, et le code calcule les jours de couverture. Sertraline (11 comprimés à 1 par jour, délivrée il y a 166 jours) sort de la liste courante ; un seuil fixe de 180 jours la laissait passer.
+- **Ordonnance remplacée** : deux lignes de la même molécule sont tranchées par la date de dernière délivrance — furosémide 20 mg du 09/11 et « ½ en plus du 20 mg » du 2025-11-30 donnent 20 mg, pas 30 ni 50. Un « terminé le » inventé sur la vieille ligne est retiré.
+- **Produit combiné** : les deux valeurs se gardent (sacubitril/valsartan 39/36 mg, jamais 39 mg seul).
 - **Dose doublée, règle renforcée** : « 1 co 2 fois par jour » de 75 mg
   sortait `150 mg po bid` sur quatre lectures consécutives (apixaban 5 mg →
   10 mg sur l'une d'elles). La règle dit maintenant que la fréquence ne

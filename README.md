@@ -1682,20 +1682,30 @@ dictée n'accompagne les documents. L'audit « Validation » reçoit le même bl
 sinon il signalerait la liste du médecin comme une invention.
 
 **Une ligne non délivrée n'est pas un médicament courant.** Le DSQ imprime,
-pour chaque ligne, la **dernière délivrance**, le **délai** et la **quantité** ;
-sa propre note de bas de page dit que la colonne sert à repérer les médicaments
-« qui pourraient ne plus être pris par l'usager ». La lecture recopie la date
-(`last_fill`) et le statut imprimé (`status`, « En att ») ; **le code** calcule
-l'écart contre la date du document, jamais le modèle. Au-delà de **180 jours**
-— ou dès qu'un statut d'arrêt est imprimé (« Cessé », « Refusé ») — la ligne
-ne s'écrit plus dans la liste courante : la note la reçoit à part et l'écrit
-en une phrase juste après la liste, avec sa date — « Non renouvelés :
-cyclobenzaprine (2025-10-02), dimenhydrinate (2025-12-17) ». La date est un
-fait, pas une conclusion : « cessé » ne s'écrit jamais à sa place. Un statut
-« En att » ne pèse jamais contre une délivrance récente — la date tranche, et
-le renouvellement demandé reste une note ; sans délivrance récente, la ligne
-part dans une phrase distincte, « En attente de délivrance ». Dans l'onglet,
-la ligne porte son délai en ambre.
+pour chaque ligne, la **dernière délivrance**, le **délai**, la **quantité** et
+un **statut** ; sa propre note de bas de page dit que la colonne du délai sert
+à repérer les médicaments « qui pourraient ne plus être pris par l'usager ». La
+lecture recopie la date (`last_fill`), le statut (`status`), la quantité
+(`qty`) et les unités prises par jour (`units_per_day`) ; **le code** calcule
+la couverture (quantité ÷ unités par jour) et l'écart contre la date du
+document. Une ligne dont la couverture ne peut pas atteindre l'écart — deux
+fois la couverture, plus un mois de marge — sort de la liste courante : la note
+l'écrit en une phrase juste après la liste, avec sa date — « Non renouvelés :
+cyclobenzaprine (2025-10-02), dimenhydrinate (2025-12-17) ». C'est ce qui
+attrape la sertraline (11 comprimés à 1 par jour, délivrée il y a 166 jours) et
+laisse passer le furosémide (7 comprimés, 7 jours). Une ligne « En att » sans
+délivrance récente part dans une phrase distincte, « En attente de
+délivrance » ; un cours terminé garde sa mention et sa place en fin de liste.
+La date est un fait, pas une conclusion : « cessé » ne s'écrit jamais à sa
+place. Dans l'onglet, la ligne porte son délai en ambre.
+
+**Une ordonnance remplacée ne s'additionne pas.** Deux lignes de la même
+molécule sont tranchées par la date de dernière délivrance : la plus récente
+remplace l'autre, jamais ne s'y ajoute. Le DSQ du 2026-11-09 portait un
+furosémide 20 mg délivré le 09/11 et un « ½ comprimé en plus du 20 mg » délivré
+le 2025-11-30 : la dose du jour est 20 mg, pas 30. Quand le modèle transforme
+la vieille ligne en « terminé le » que le document n'imprime pas, le code la
+retire — même molécule, ligne marquée terminée, délivrance plus ancienne.
 
 **Deux listes : fusionnées à l'import.** Quand un second document porte une
 liste de médicaments (le DSQ et la liste du séjour en cours), une passe de

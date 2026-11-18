@@ -261,6 +261,47 @@ class TestDerniereDelivrance(unittest.TestCase):
         self.assertTrue(lignes[2]["pending"])
         self.assertFalse(lignes[2]["stale"])
 
+    def test_ordonnance_remplacee_ne_devient_pas_un_cours_termine(self):
+        # DSQ réel : furosémide 20 mg délivré le 2026-11-09, et l'ancienne
+        # ordonnance (30 mg, 2025-11-30) que le modèle affuble d'un
+        # « terminé le » que le document n'imprime pas.
+        lignes = [
+            {"line": "Furosémide 20 mg po die", "last_fill": "2026-11-09"},
+            {"line": "Furosémide 30 mg po die (terminé le 30 novembre 2025)",
+             "last_fill": "2025-11-30"},
+        ]
+        gardees = extraction._fusionner_cours_remplaces(lignes)
+        self.assertEqual([ligne["line"] for ligne in gardees],
+                         ["Furosémide 20 mg po die"])
+
+    def test_un_vrai_cours_termine_reste(self):
+        lignes = [
+            {"line": "Nitrofurantoïne 100 mg po bid, terminé le 22 juin 2026",
+             "last_fill": "2026-06-15"},
+        ]
+        self.assertEqual(len(extraction._fusionner_cours_remplaces(lignes)), 1)
+
+    def test_couverture_epuisee_rend_la_ligne_non_renouvelee(self):
+        # Sertraline : 11 comprimés à 1 par jour, délivrée il y a 166 jours —
+        # à sec depuis juin. Furosémide : 7 comprimés délivrés il y a 7 jours.
+        from app import main
+
+        stockee = {
+            "documents": [{"id": "d1", "kind": "medications", "role": "dsq",
+                           "date": "2026-11-09", "pages": [1]}],
+            "med_list": [
+                {"line": "Sertraline 25 mg po die", "last_fill": "2026-05-27",
+                 "status": "", "qty": 11, "units_per_day": 1},
+                {"line": "Furosémide 20 mg po die", "last_fill": "2026-11-02",
+                 "status": "", "qty": 7, "units_per_day": 1},
+            ],
+        }
+        main._marquer_delais(stockee)
+        sertraline, furosemide = stockee["med_list"]
+        self.assertEqual(sertraline["supply_days"], 11)
+        self.assertTrue(sertraline["stale"])
+        self.assertFalse(furosemide["stale"])
+
     def test_statut_ne_pese_pas_contre_une_delivrance_recente(self):
         # DSQ du 2026-11-12 : vitamine D3 « En att » pour un renouvellement
         # daté du 11/11, alors que la délivrance du 11/05 est à la ligne

@@ -4139,16 +4139,40 @@ def _marquer_delais(extraction_stockee: dict) -> None:
                 jours = (reference - datetime.strptime(valeur, "%Y-%m-%d").date()).days
             except ValueError:
                 jours = None
+        # Couverture = quantité délivrée ÷ unités par jour. C'est elle qui dit
+        # si l'ordonnance pouvait encore couvrir le délai écoulé : sertraline,
+        # 11 comprimés à 1 par jour et délivrée il y a 166 jours, est à sec
+        # depuis juin — un seuil fixe en jours la laissait passer.
+        qty = float(entry.get("qty") or 0)
+        rate = float(entry.get("units_per_day") or 0)
+        couverture = (qty / rate) if (qty > 0 and rate > 0) else None
+        entry["supply_days"] = round(couverture, 1) if couverture is not None else None
         entry["delay_days"] = jours
+        # Un cours terminé porte sa fin dans la ligne (« terminé le 22 juin
+        # 2026 ») : ce n'est pas une ordonnance non renouvelée, et c'est la
+        # règle des cours qui le place en fin de liste.
+        ligne = str(entry.get("line") or "").lower()
+        terminee = ("terminé le" in ligne or "termine le" in ligne
+                    or "completed on" in ligne)
         attente = bool(re.search(r"en\s*att", statut, re.IGNORECASE))
         if attente:
             # Renouvellement demandé : la date récente dit que le médicament a
             # bien été servi ; une date ancienne est celle de l'ordonnance.
             entry["pending"] = jours is None or jours >= MED_DELAI_EN_ATTENTE
             entry["stale"] = False
+        elif terminee:
+            entry["pending"] = False
+            entry["stale"] = False
         elif valeur:
             entry["pending"] = False
-            entry["stale"] = bool(jours is not None and jours >= MED_DELAI_NON_RENOUVELE)
+            if couverture is not None:
+                # Le double de la couverture, plus un mois : une ordonnance se
+                # renouvelle parfois en retard, et un « prn » dort des semaines
+                # dans l'armoire. Un furosémide délivré il y a 7 jours en est
+                # loin ; une sertraline à sec depuis 5 mois en est dehors.
+                entry["stale"] = bool(jours is not None and jours > couverture * 2 + 30)
+            else:
+                entry["stale"] = bool(jours is not None and jours >= MED_DELAI_NON_RENOUVELE)
         else:
             entry["pending"] = False
             entry["stale"] = bool(statut)

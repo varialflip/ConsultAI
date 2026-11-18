@@ -273,11 +273,21 @@ voie : ``Lévodopa/bensérazide 100/25 mg 1 co tid + 50/12,5 mg 1 co tid``. Une 
 ligne qui n'est pas un médicament (bandelettes, matériel, consigne \
 d'ajustement du genre « ajuster la dose selon le RIN ») ne produit aucune \
 ligne.
-- **Remplacement.** Deux lignes de la même molécule, forces différentes — même \
-si le nom commercial diffère : compare la colonne « Dernière délivrance » du \
-document. La plus récente REMPLACE l'autre — une seule ligne, celle de la date \
-la plus récente. Des dates identiques signifient une association : garde les \
-deux.
+- **Remplacement.** Deux lignes de la même molécule — mêmes forces ou non, même \
+si le nom commercial diffère — se tranchent par la colonne « Dernière \
+délivrance » : la plus récente REMPLACE l'autre, et leurs posologies ne \
+s'ADDITIONNENT jamais. ``Furosémide 20 mg 1 co die`` délivré le 2026-11-09 et \
+``½ co die en plus du 20 mg`` délivré le 2025-11-30 → une seule ligne, ``20 mg \
+po die`` : la vieille mention « en plus du 20 mg » décrit l'ordonnance \
+remplacée, pas la dose d'aujourd'hui. Des dates IDENTIQUES signifient une \
+association : garde les deux et additionne.
+- **Couverture.** Recopie dans ``qty`` la quantité délivrée imprimée (nombre de \
+comprimés, capsules, grammes — ``14``) et dans ``units_per_day`` le nombre d'unités \
+prises par jour selon la posologie (``1 co 2 fois par jour`` → ``2`` ; ``½ co die`` → \
+``0,5`` ; ``2 co aux 6 heures`` → ``8`` ; un « prn » se compte à son maximum \
+imprimé). ``0`` quand l'un des deux n'est pas lisible, et **``0`` aussi quand les \
+unités diffèrent** (``5 ml`` de gouttes pour « 1 goutte 2 fois par jour » : les deux \
+champs incommensurables) : la couverture se calcule en code, jamais à l'œil.
 - **Dernière délivrance.** Recopie dans ``last_fill`` la SEULE date imprimée \
 dans la colonne « Dernière délivrance » (``AAAA-MM-JJ``). **Ne recopie JAMAIS \
 la date « Ord. »** : une ligne dont la colonne « Dernière délivrance » est \
@@ -307,7 +317,9 @@ prise ; seule une quantité supérieure à 1 dans la même prise multiplie \
 décimale et espace des milliers (``650 mg``, ``12,5 mg``, ``10 000 UI`` ; \
 jamais ``10000``). Injectable : volume × concentration → ``210 mg``, voie \
 ``SC`` ; durée imprimée conservée avec le caractère ``×`` (jamais la lettre x) : \
-``210 mg SC q mois × 12 mois``. LÉVODOPA : jamais la dose totale ni la voie, \
+``210 mg SC q mois × 12 mois``. Un produit COMBINÉ garde ses DEUX valeurs : \
+``Valsartan + sacubitril 26+24 mg`` à 1½ comprimé → ``Sacubitril/valsartan 39/36 \
+mg`` — jamais ``39 mg`` seul. LÉVODOPA : jamais la dose totale ni la voie, \
 le nombre s'écrit ``1 co``, la plus forte force d'abord — exemple ci-dessus.
 - **Fréquence seulement** : die, bid, tid, qid, hs, qsem, q mois, q8h, prn. \
 Supprime le moment (« aux repas », « au déjeuner », « le matin », « matin et \
@@ -496,10 +508,20 @@ molecule at the same intakes merge into one line, strength then count, without \
 the route: ``Levodopa/benserazide 100/25 mg 1 tab TID + 50/12.5 mg 1 tab TID``. \
 A line that is not a medication (test strips, supplies, a titration \
 instruction such as "adjust the dose according to INR") produces no line.
-- **Replacement.** Two lines of the same molecule with different strengths — \
-even when the brand name differs: compare the "Dernière délivrance" column of \
-the document. The most recent REPLACES the other — one line, the one with the \
-latest date. Identical dates mean a combination: keep both.
+- **Replacement.** Two lines of the same molecule — same strength or not, even \
+when the brand name differs — are settled by the "Dernière délivrance" column: \
+the most recent REPLACES the other, and their directions are NEVER added. \
+``Furosemide 20 mg 1 tab daily`` dispensed 2026-11-09 and ``½ tab daily on top \
+of the 20 mg`` dispensed 2025-11-30 → one line, ``20 mg PO daily``: the old \
+"on top of the 20 mg" describes the replaced prescription, not today's dose. \
+IDENTICAL dates mean a combination: keep both and add them up.
+- **Coverage.** Copy the printed dispensed quantity into ``qty`` (number of tablets, \
+capsules, grams — ``14``) and the number of units taken per day into \
+``units_per_day`` (``1 tab twice a day`` → ``2``; ``½ tab daily`` → ``0.5``; \
+``2 tabs every 6 hours`` → ``8``; a "PRN" counts at its printed maximum). ``0`` \
+when either is unreadable, and **``0`` when the units differ** (``5 ml`` of \
+drops for "1 drop twice a day": the two fields are incommensurable). Coverage is \
+computed in code, never by eye.
 - **Last dispensed.** Copy into ``last_fill`` the ONLY date printed in the \
 "Dernière délivrance" column (``YYYY-MM-DD``) — never the prescription date \
 ("Ord."), never today's. A status printed in the "Statut" column ("En att", \
@@ -527,8 +549,10 @@ SINGLE intake; only a quantity above 1 in the same intake multiplies \
 point and a space in thousands (``650 mg``, ``12.5 mg``, ``10 000 IU``; never \
 ``10000``). Injectable: volume × concentration → ``210 mg``, route ``SC``; \
 printed duration kept with the ``×`` character (never the letter x): \
-``210 mg SC monthly × 12 months``. LEVODOPA: never the total dose nor the \
-route, the count is ``1 tab``, strongest strength first — example above.
+``210 mg SC monthly × 12 months``. A COMBINATION product keeps BOTH values: \
+``Valsartan + sacubitril 26+24 mg`` at 1½ tabs → ``Sacubitril/valsartan 39/36 \
+mg`` — never ``39 mg`` alone. LEVODOPA: never the total dose nor the route, \
+the count is ``1 tab``, strongest strength first — example above.
 - **Frequency only**: daily, BID, TID, QID, HS, weekly, monthly, q8h, PRN. \
 Drop the moment ("with meals", "at lunch", "in the morning", "morning and \
 supper", "regularly", "(Sunday)"). "At bedtime" → ``HS`` when the evening dose \
@@ -646,8 +670,13 @@ _SCHEMA = {
                     #: qu'un médicament n'a pas été délivré depuis un an.
                     "last_fill": {"type": "STRING"},
                     "status": {"type": "STRING"},
+                    #: Quantité délivrée et unités par jour : la couverture
+                    #: (jours) se calcule en code, pas par le modèle.
+                    "qty": {"type": "NUMBER"},
+                    "units_per_day": {"type": "NUMBER"},
                 },
-                "required": ["line", "sources", "group", "last_fill", "status"],
+                "required": ["line", "sources", "group", "last_fill", "status",
+                                  "qty", "units_per_day"],
             },
         },
         #: Prescripteur imprimé en tête de la liste (médecin + permis, ou
@@ -1085,6 +1114,16 @@ def _inclus_par_defaut(kind: str, champs: dict) -> bool:
     return True
 
 
+def _nombre(valeur: object) -> float:
+    """Nombre positif ou 0 : le modèle écrit ``0,5`` comme ``0.5``."""
+    texte = str(valeur if valeur is not None else "").replace(",", ".").strip()
+    try:
+        nombre = float(texte)
+    except ValueError:
+        return 0.0
+    return nombre if nombre > 0 else 0.0
+
+
 def _date_iso(valeur: object) -> str:
     """
     Date ``AAAA-MM-JJ``, ou chaîne vide.
@@ -1099,6 +1138,44 @@ def _date_iso(valeur: object) -> str:
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
     return ""
+
+
+def _fusionner_cours_remplaces(med_list: list) -> list:
+    """
+    Une ordonnance remplacée ne s'écrit pas comme un cours terminé.
+
+    Le modèle produit parfois deux lignes pour la même molécule : la récente,
+    et l'ancienne affublée d'un « terminé le » que le document n'imprime pas
+    (furosémide 20 mg délivré le 2026-11-09, et 30 mg délivré le 2025-11-30).
+    La ligne remplacée disparaît — mais seulement quand les trois conditions
+    sont réunies : même molécule, ligne marquée terminée, et dernière
+    délivrance plus ancienne que celle de l'autre. Un vrai cours (durée
+    imprimée, sans jumelle) reste intact.
+    """
+    def molecule(ligne: str) -> str:
+        return re.split(r"[\s,(]", ligne.strip().lower(), maxsplit=1)[0]
+
+    def terminee(ligne: str) -> bool:
+        return bool(re.search(r"termin[ée]e?\s+le|completed on", ligne, re.IGNORECASE))
+
+    gardees = []
+    for entry in med_list:
+        ligne = str(entry.get("line") or "")
+        if terminee(ligne):
+            jumelle = next(
+                (autre for autre in med_list
+                 if autre is not entry
+                 and not terminee(str(autre.get("line") or ""))
+                 and molecule(str(autre.get("line") or "")) == molecule(ligne)),
+                None,
+            )
+            if jumelle is not None:
+                ancienne = str(entry.get("last_fill") or "")
+                recente = str(jumelle.get("last_fill") or "")
+                if not ancienne or not recente or ancienne < recente:
+                    continue
+        gardees.append(entry)
+    return gardees
 
 
 def _normalize(payload: dict, count: int) -> dict:
@@ -1363,10 +1440,16 @@ def _normalize(payload: dict, count: int) -> dict:
             # est calculé en code (main.py), jamais par le modèle.
             "last_fill": _date_iso(entry.get("last_fill")),
             "status": re.sub(r"\s+", " ", str(entry.get("status") or "")).strip()[:40],
+            # Quantité délivrée et unités par jour : des nombres, jamais
+            # une conclusion. 0 = non lisible.
+            "qty": _nombre(entry.get("qty")),
+            "units_per_day": _nombre(entry.get("units_per_day")),
             # L'unité d'arbitrage est désormais la LIGNE, pas l'item : c'est
             # elle qui entre dans la note, et une case la coche.
             "included": True,
         })
+
+    med_list = _fusionner_cours_remplaces(med_list)
 
     return {
         "documents": documents,
@@ -1454,8 +1537,11 @@ def extract_documents(
     # par ailleurs borné : lire une page est une tâche mécanique, le budget de
     # réflexion du panneau est réglé pour la rédaction clinique.
     plafond = max(int(settings.gemini_max_output_tokens), 16384)
+    # Température 0 : une lecture est une transcription, pas une rédaction —
+    # deux lectures du même DSQ doivent rendre la même liste. C'est le
+    # furosémide à 30 mg un coup sur trois qui l'a fait passer à zéro.
     config_kwargs = dict(
-        temperature=0.1,
+        temperature=0.0,
         max_output_tokens=plafond,
         safety_settings=llm._safety_settings(),
         response_mime_type="application/json",

@@ -12,13 +12,14 @@ l'apixaban et le pantoprazole.*
   `med_list`, repris des colonnes « Dernière délivrance » et « Statut » du DSQ.
   Le délai est calculé en code contre la date du document, jamais par le
   modèle.
-- **Au-delà de 180 jours**, ou dès qu'un statut est imprimé (« En att »,
-  « Cessé »), la ligne sort de la liste courante : la note l'écrit en une
+- **Au-delà de 180 jours**, ou dès qu'un statut d'arrêt est imprimé (« Cessé »,
+  « Refusé »), la ligne sort de la liste courante : la note l'écrit en une
   phrase juste après la liste — « Non renouvelés : cyclobenzaprine
   (2025-10-02), dimenhydrinate (2025-12-17) ». Aucun jugement : « cessé » ne
   s'écrit jamais à la place de la date.
 - **Onglet Documents** : le délai s'affiche sous la ligne, en ambre quand il
   dépasse le seuil.
+- **« En att » n'est pas un arrêt** : un statut imprimé ne pèse jamais contre une délivrance récente. Vitamine D3 et B12, servies le 05/11 avec un renouvellement demandé le 11/11, s'étaient retrouvées « non renouvelées ». Une ligne « En att » sans délivrance récente rejoint désormais une phrase distincte : « En attente de délivrance ».
 - **Dose doublée, règle renforcée** : « 1 co 2 fois par jour » de 75 mg
   sortait `150 mg po bid` sur quatre lectures consécutives (apixaban 5 mg →
   10 mg sur l'une d'elles). La règle dit maintenant que la fréquence ne

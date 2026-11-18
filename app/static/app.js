@@ -9364,12 +9364,16 @@
             ? T('doc.fill_info', { date: entry.last_fill, days: jours })
             : T('doc.fill_date', { date: entry.last_fill }));
         }
-        if (entry.status) {
-          details.push(/^en\s*att/i.test(entry.status) ? T('doc.fill_pending') : entry.status);
+        // La date tranche : un statut imprimé à côté d'une délivrance récente
+        // ne décrit qu'un renouvellement à venir (« En att » sur le DSQ).
+        if (entry.pending) {
+          details.push(T('doc.fill_pending'));
+        } else if (!entry.last_fill && entry.status) {
+          details.push(entry.status);
         }
         if (details.length) {
           const info = document.createElement('div');
-          info.className = entry.stale
+          info.className = (entry.stale || entry.pending)
             ? 'text-[10px] font-medium text-amber-600'
             : 'text-[10px] text-slate-400';
           info.textContent = details.join(' · ');

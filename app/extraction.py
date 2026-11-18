@@ -278,12 +278,17 @@ si le nom commercial diffère : compare la colonne « Dernière délivrance » d
 document. La plus récente REMPLACE l'autre — une seule ligne, celle de la date \
 la plus récente. Des dates identiques signifient une association : garde les \
 deux.
-- **Dernière délivrance.** Recopie dans ``last_fill`` la date imprimée dans la \
-colonne « Dernière délivrance » (``AAAA-MM-JJ``) — la date de l'ordonnance ne \
-la remplace pas. Un statut imprimé dans la colonne « Statut » (« En att », \
-« Cessé », « Refusé ») se recopie tel quel dans ``status``. Colonne absente ou \
-vide : les deux champs restent vides. Cette date est un FAIT, jamais un arrêt : \
-n'en déduis rien, ne la commente pas dans la ligne.
+- **Dernière délivrance.** Recopie dans ``last_fill`` la SEULE date imprimée \
+dans la colonne « Dernière délivrance » (``AAAA-MM-JJ``). **Ne recopie JAMAIS \
+la date « Ord. »** : une ligne dont la colonne « Dernière délivrance » est \
+vide garde ``last_fill`` VIDE, quelle que soit la date « Ord. » — c'est le cas \
+de toute ligne « En att » qui n'a pas encore été servie. Un statut imprimé \
+dans la colonne « Statut » (« En att », « Cessé », « Refusé ») se recopie tel \
+quel dans ``status``, et lui seul porte alors l'information. Deux lignes de la \
+même molécule, l'une délivrée et l'autre « En att » : garde la ligne \
+DÉLIVRÉE, sa date et sa quantité ; « En att » ne décrit que le renouvellement \
+à venir, jamais une absence de traitement. Cette date est un FAIT, jamais un \
+arrêt : n'en déduis rien, ne la commente pas dans la ligne.
 - **Posologie complète.** Une posologie en deux temps s'écrit en entier sur la \
 même ligne : ``½ co (= 0,05 mg) matin et dîner, puis 1 co au coucher`` → \
 ``Clonidine 0,05 mg po bid et 0,1 mg po hs``. Une condition (« si \
@@ -495,12 +500,15 @@ instruction such as "adjust the dose according to INR") produces no line.
 even when the brand name differs: compare the "Dernière délivrance" column of \
 the document. The most recent REPLACES the other — one line, the one with the \
 latest date. Identical dates mean a combination: keep both.
-- **Last dispensed.** Copy the printed "Dernière délivrance" date into \
-``last_fill`` (``YYYY-MM-DD``) — the prescription date does not replace it. A \
-status printed in the "Statut" column ("En att", "Cessé", "Refusé") is copied \
-as-is into ``status``. Missing or empty column: both fields stay empty. That \
-date is a FACT, never a stop: infer nothing from it, do not comment on it in \
-the line.
+- **Last dispensed.** Copy into ``last_fill`` the ONLY date printed in the \
+"Dernière délivrance" column (``YYYY-MM-DD``) — never the prescription date \
+("Ord."), never today's. A status printed in the "Statut" column ("En att", \
+"Cessé", "Refusé") is copied as-is into ``status``. Empty column (an "En att" \
+line not dispensed yet): ``last_fill`` stays empty — ``status`` then carries \
+the information. Two lines of the same molecule, one dispensed and one \
+"En att": keep the DISPENSED line, its date and its quantity; "En att" only \
+describes the coming renewal, never an absence of treatment. That date is a \
+FACT, never a stop: infer nothing from it.
 - **Complete directions.** A two-part schedule is written in full on the same \
 line: ``½ tab (= 0.05 mg) morning and supper, then 1 tab at bedtime`` → \
 ``Clonidine 0.05 mg PO BID and 0.1 mg PO HS``. A condition ("if constipated", \

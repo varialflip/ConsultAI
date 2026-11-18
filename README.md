@@ -1687,12 +1687,15 @@ sa propre note de bas de page dit que la colonne sert à repérer les médicamen
 « qui pourraient ne plus être pris par l'usager ». La lecture recopie la date
 (`last_fill`) et le statut imprimé (`status`, « En att ») ; **le code** calcule
 l'écart contre la date du document, jamais le modèle. Au-delà de **180 jours**
-— ou dès qu'un statut est imprimé — la ligne ne s'écrit plus dans la liste
-courante : la note la reçoit à part et l'écrit en une phrase juste après la
-liste, avec sa date — « Non renouvelés : cyclobenzaprine (2025-10-02),
-dimenhydrinate (2025-12-17) ». La date est un fait, pas une conclusion :
-« cessé » ne s'écrit jamais à sa place. Dans l'onglet, la ligne porte son délai
-en ambre.
+— ou dès qu'un statut d'arrêt est imprimé (« Cessé », « Refusé ») — la ligne
+ne s'écrit plus dans la liste courante : la note la reçoit à part et l'écrit
+en une phrase juste après la liste, avec sa date — « Non renouvelés :
+cyclobenzaprine (2025-10-02), dimenhydrinate (2025-12-17) ». La date est un
+fait, pas une conclusion : « cessé » ne s'écrit jamais à sa place. Un statut
+« En att » ne pèse jamais contre une délivrance récente — la date tranche, et
+le renouvellement demandé reste une note ; sans délivrance récente, la ligne
+part dans une phrase distincte, « En attente de délivrance ». Dans l'onglet,
+la ligne porte son délai en ambre.
 
 **Deux listes : fusionnées à l'import.** Quand un second document porte une
 liste de médicaments (le DSQ et la liste du séjour en cours), une passe de

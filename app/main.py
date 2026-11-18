@@ -4095,19 +4095,31 @@ def _document_payload(document: Document) -> dict:
 #: 211 jours pour trois lignes, 1 jour pour toutes les autres.
 MED_DELAI_NON_RENOUVELE = 180
 
+#: Avec le statut « En att », une date de délivrance plus vieille que ce délai
+#: est l'ordonnance d'origine que le modèle a recopiée, pas une délivrance :
+#: on renouvelle avant d'être à sec. Mesuré sur le DSQ du 2026-11-12 : les
+#: lignes « En att » portaient la date d'ordonnance (11/11 pour D3 et B12,
+#: 23/06 pour le polyéthylène glycol), alors que la délivrance réelle — quand
+#: elle existait — datait du 05/11.
+MED_DELAI_EN_ATTENTE = 90
+
 
 def _marquer_delais(extraction_stockee: dict) -> None:
     """
-    Ajoute ``delay_days`` et ``stale`` à chaque ligne de médicament.
+    Ajoute ``delay_days``, ``pending`` et ``stale`` à chaque ligne.
 
-    L'écart se calcule entre la dernière délivrance imprimée et la date du
-    document (celle que le DSQ porte en tête), jamais « aujourd'hui » : la
-    ligne reste vraie quelle que soit la date de relecture. Le modèle recopie
-    une date ; l'arithmétique se fait ici.
+    Trois états, et un seul fait les sépare : la date de dernière délivrance.
 
-    ``stale`` couvre deux cas : délivrance ancienne, et statut imprimé
-    (« En att », « Cessé », « Refusé ») — dans les deux, la ligne ne s'écrit
-    pas comme un médicament courant.
+    - délivrée : ``delay_days`` calculé contre la date du document, ``stale``
+      au-delà du seuil ;
+    - **« En att » sans date de délivrance** : ``pending`` — le renouvellement
+      est demandé, la ligne n'a jamais été délivrée. Ce n'est pas un arrêt ;
+    - un statut imprimé (« Cessé », « Refusé ») sans délivrance : ``stale``.
+
+    Un statut ne pèse JAMAIS contre une délivrance récente : le DSQ du
+    2026-11-12 portait « En att » sur vitamine D3 et B12 pour un
+    renouvellement daté du 11/11, alors que la délivrance du 11/05 figurait à
+    la ligne précédente — et les deux se sont retrouvées « non renouvelées ».
     """
     date_doc = _date_document(extraction_stockee)
     reference = None
@@ -4119,18 +4131,27 @@ def _marquer_delais(extraction_stockee: dict) -> None:
     for entry in extraction_stockee.get("med_list") or []:
         if not isinstance(entry, dict):
             continue
-        jours = None
         valeur = str(entry.get("last_fill") or "").strip()
+        statut = str(entry.get("status") or "").strip()
+        jours = None
         if reference and valeur:
             try:
                 jours = (reference - datetime.strptime(valeur, "%Y-%m-%d").date()).days
             except ValueError:
                 jours = None
         entry["delay_days"] = jours
-        entry["stale"] = bool(
-            (jours is not None and jours >= MED_DELAI_NON_RENOUVELE)
-            or str(entry.get("status") or "").strip()
-        )
+        attente = bool(re.search(r"en\s*att", statut, re.IGNORECASE))
+        if attente:
+            # Renouvellement demandé : la date récente dit que le médicament a
+            # bien été servi ; une date ancienne est celle de l'ordonnance.
+            entry["pending"] = jours is None or jours >= MED_DELAI_EN_ATTENTE
+            entry["stale"] = False
+        elif valeur:
+            entry["pending"] = False
+            entry["stale"] = bool(jours is not None and jours >= MED_DELAI_NON_RENOUVELE)
+        else:
+            entry["pending"] = False
+            entry["stale"] = bool(statut)
 
 
 def _date_document(extraction_stockee: dict) -> str:
@@ -4297,6 +4318,20 @@ def _documents_context(
         "(2025-12-17). » Aucun jugement : jamais « cessé », jamais "
         "« probablement arrêté »."
     )
+    #: Prescrit mais jamais délivré (« En att » sans date de délivrance) : ce
+    #: n'est ni un arrêt ni un renouvellement manqué — la ligne n'a simplement
+    #: pas encore été servie.
+    entete_en_attente = (
+        "Lines PRESCRIBED BUT NOT DISPENSED YET (status \"En att\", no recent "
+        "dispensation): do NOT put them in the current list. Write them "
+        "in ONE sentence right after the list: \"Awaiting dispensation: "
+        "polyethylene glycol 3350.\""
+        if anglais else
+        "Lignes PRESCRITES MAIS PAS ENCORE DÉLIVRÉES (statut « En att », sans "
+        "délivrance récente) : ne les mets PAS dans la liste courante. "
+        "Écris-les en UNE phrase juste après la liste : « En attente de "
+        "délivrance : polyéthylène glycol 3350. »"
+    )
     #: Plusieurs listes (DSQ + séjour en cours) : la liste d'hospitalisation
     #: est la référence, les écarts s'écrivent en prose.
     entete_plusieurs = (
@@ -4379,8 +4414,12 @@ def _documents_context(
             reconciliees = []
         if reconciliees:
             titre_doc = str(document.title or "").strip()
-            courantes = [entry for entry in reconciliees if not entry.get("stale")]
+            courantes = [
+                entry for entry in reconciliees
+                if not entry.get("stale") and not entry.get("pending")
+            ]
             anciennes = [entry for entry in reconciliees if entry.get("stale")]
+            attente = [entry for entry in reconciliees if entry.get("pending")]
             if courantes:
                 # Plusieurs listes : le titre du document les distingue ; une
                 # seule liste garde l'en-tête simple (rien à comparer).
@@ -4397,6 +4436,10 @@ def _documents_context(
                     f"{entry.get('last_fill') or entry.get('status') or '?'}"
                     for entry in anciennes
                 )
+                blocs.append("")
+            if attente:
+                blocs.append(entete_en_attente)
+                blocs.extend(f"- {entry['line']}" for entry in attente)
                 blocs.append("")
         divergences = str(extraction_stockee.get("med_divergences") or "").strip()
         if reference_id and document.id == reference_id:

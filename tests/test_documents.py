@@ -256,9 +256,35 @@ class TestDerniereDelivrance(unittest.TestCase):
         self.assertFalse(lignes[0]["stale"])
         self.assertEqual(lignes[1]["delay_days"], 406)
         self.assertTrue(lignes[1]["stale"])
-        # Jamais délivrée : le statut imprimé suffit, sans date.
+        # Jamais délivrée : « En att » n'est pas un arrêt, c'est une attente.
         self.assertIsNone(lignes[2]["delay_days"])
-        self.assertTrue(lignes[2]["stale"])
+        self.assertTrue(lignes[2]["pending"])
+        self.assertFalse(lignes[2]["stale"])
+
+    def test_statut_ne_pese_pas_contre_une_delivrance_recente(self):
+        # DSQ du 2026-11-12 : vitamine D3 « En att » pour un renouvellement
+        # daté du 11/11, alors que la délivrance du 11/05 est à la ligne
+        # au-dessus. Ce n'est pas « non renouvelé », c'est servi.
+        from app import main
+
+        stockee = {
+            "documents": [{"id": "d1", "kind": "medications", "role": "dsq",
+                           "date": "2026-11-12", "pages": [1]}],
+            "med_list": [
+                {"line": "Vitamine D3 10 000 UI po qsem",
+                 "last_fill": "2026-11-11", "status": "En att"},
+                # Même statut, mais la date est celle de l'ordonnance : le
+                # médicament n'a jamais été délivré.
+                {"line": "Polyéthylène glycol 3350 17 g po die",
+                 "last_fill": "2026-06-23", "status": "En att"},
+            ],
+        }
+        main._marquer_delais(stockee)
+        recente, ancienne = stockee["med_list"]
+        self.assertFalse(recente["stale"])
+        self.assertFalse(recente["pending"])
+        self.assertTrue(ancienne["pending"])
+        self.assertFalse(ancienne["stale"])
 
 
 if __name__ == "__main__":

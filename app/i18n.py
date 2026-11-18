@@ -464,6 +464,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Pages illisibles : {pages} — reprenez-les",
         "Unreadable pages: {pages} — retake them",
     ),
+    "doc.fill_info": (
+        "délivré le {date} · il y a {days} j",
+        "dispensed {date} · {days} d ago",
+    ),
+    "doc.fill_date": ("délivré le {date}", "dispensed {date}"),
+    "doc.fill_pending": ("en attente de délivrance", "awaiting dispensation"),
     "doc.other_doc": (
         "autre",
         "other",

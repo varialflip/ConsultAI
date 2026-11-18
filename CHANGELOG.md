@@ -2,6 +2,29 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-18 — Documents : une ligne non délivrée n'est plus un médicament courant
+
+*Le DSQ date chaque ligne ; la note les présentait toutes comme actuelles.
+Cyclobenzaprine, délivrée 406 jours plus tôt en 14 comprimés, figurait entre
+l'apixaban et le pantoprazole.*
+
+- **Dernière délivrance et statut lus** : `last_fill` et `status` par ligne de
+  `med_list`, repris des colonnes « Dernière délivrance » et « Statut » du DSQ.
+  Le délai est calculé en code contre la date du document, jamais par le
+  modèle.
+- **Au-delà de 180 jours**, ou dès qu'un statut est imprimé (« En att »,
+  « Cessé »), la ligne sort de la liste courante : la note l'écrit en une
+  phrase juste après la liste — « Non renouvelés : cyclobenzaprine
+  (2025-10-02), dimenhydrinate (2025-12-17) ». Aucun jugement : « cessé » ne
+  s'écrit jamais à la place de la date.
+- **Onglet Documents** : le délai s'affiche sous la ligne, en ambre quand il
+  dépasse le seuil.
+- **Dose doublée, règle renforcée** : « 1 co 2 fois par jour » de 75 mg
+  sortait `150 mg po bid` sur quatre lectures consécutives (apixaban 5 mg →
+  10 mg sur l'une d'elles). La règle dit maintenant que la fréquence ne
+  multiplie jamais la dose et que « ½ comprimé » de 10 mg donne 5 mg. Vérifié
+  sur deux lectures : 75 mg po bid, 5 mg po bid.
+
 ## 2026-11-16 — Documents seuls : la note se génère sans dictée
 
 *La revue du dossier précède la dictée : les photos et PDF lus, il fallait

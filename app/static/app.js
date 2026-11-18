@@ -9354,6 +9354,27 @@
         // texte des items d'historique ou de laboratoire.
         champ.addEventListener('input', () => scheduleDocumentReview(doc, entete));
         zone.appendChild(champ);
+        // Dernière délivrance : un fait imprimé sur le DSQ (colonnes
+        // « Dernière délivrance » et « Statut »), qui décide de la place de
+        // la ligne dans la note. Affiché seulement quand il existe.
+        const details = [];
+        if (entry.last_fill) {
+          const jours = Number(entry.delay_days);
+          details.push(Number.isFinite(jours)
+            ? T('doc.fill_info', { date: entry.last_fill, days: jours })
+            : T('doc.fill_date', { date: entry.last_fill }));
+        }
+        if (entry.status) {
+          details.push(/^en\s*att/i.test(entry.status) ? T('doc.fill_pending') : entry.status);
+        }
+        if (details.length) {
+          const info = document.createElement('div');
+          info.className = entry.stale
+            ? 'text-[10px] font-medium text-amber-600'
+            : 'text-[10px] text-slate-400';
+          info.textContent = details.join(' · ');
+          zone.appendChild(info);
+        }
         ligne.append(case_, zone);
         ul.appendChild(ligne);
       });

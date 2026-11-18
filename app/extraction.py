@@ -278,6 +278,12 @@ si le nom commercial diffère : compare la colonne « Dernière délivrance » d
 document. La plus récente REMPLACE l'autre — une seule ligne, celle de la date \
 la plus récente. Des dates identiques signifient une association : garde les \
 deux.
+- **Dernière délivrance.** Recopie dans ``last_fill`` la date imprimée dans la \
+colonne « Dernière délivrance » (``AAAA-MM-JJ``) — la date de l'ordonnance ne \
+la remplace pas. Un statut imprimé dans la colonne « Statut » (« En att », \
+« Cessé », « Refusé ») se recopie tel quel dans ``status``. Colonne absente ou \
+vide : les deux champs restent vides. Cette date est un FAIT, jamais un arrêt : \
+n'en déduis rien, ne la commente pas dans la ligne.
 - **Posologie complète.** Une posologie en deux temps s'écrit en entier sur la \
 même ligne : ``½ co (= 0,05 mg) matin et dîner, puis 1 co au coucher`` → \
 ``Clonidine 0,05 mg po bid et 0,1 mg po hs``. Une condition (« si \
@@ -288,6 +294,10 @@ semaines`` — jamais ``die`` en plus de ``prn``. Une fourchette s'écrit en dos
 ADMINISTRÉE, ses deux bornes comprises : ``1 à 2 co de 500 mg`` → ``500 à \
 1000 mg``. « aux 6 heures » → ``q6h``, même avec « au besoin » : ``q6h prn``. \
 Un maximum imprimé se garde : ``max 6 co/jour``.
+- **La fréquence ne multiplie JAMAIS la dose.** ``1 co 2 fois par jour`` de \
+75 mg → ``75 mg po bid`` — jamais ``150 mg``. La dose écrite est celle d'UNE \
+prise ; seule une quantité supérieure à 1 dans la même prise multiplie \
+(``2 co de 500 mg`` → ``1000 mg``). ``½ comprimé`` de 10 mg → ``5 mg``.
 - **Dose administrée** : quantité × force, espace avant l'unité, virgule \
 décimale et espace des milliers (``650 mg``, ``12,5 mg``, ``10 000 UI`` ; \
 jamais ``10000``). Injectable : volume × concentration → ``210 mg``, voie \
@@ -333,7 +343,8 @@ indentation ni saut de ligne (JSON compact, sur une seule ligne) :
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
   "items": [{"id": "i1", "document_id": "d1", "kind": "…", "text": "…",
              "fields": {}, "source_page": 1}],
-  "med_list": [{"group": "…", "line": "…", "sources": ["i1", "i2"]}],
+  "med_list": [{"group": "…", "line": "…", "sources": ["i1", "i2"],
+                "last_fill": "2025-10-02", "status": ""}],
   "coverage": [{"page": 1, "document_id": "d1", "note": ""}],
   "unreadable": [{"page": 3, "reason": "…"}],
   "observations": [{"text": "…", "pages": [1, 2]}]
@@ -484,6 +495,12 @@ instruction such as "adjust the dose according to INR") produces no line.
 even when the brand name differs: compare the "Dernière délivrance" column of \
 the document. The most recent REPLACES the other — one line, the one with the \
 latest date. Identical dates mean a combination: keep both.
+- **Last dispensed.** Copy the printed "Dernière délivrance" date into \
+``last_fill`` (``YYYY-MM-DD``) — the prescription date does not replace it. A \
+status printed in the "Statut" column ("En att", "Cessé", "Refusé") is copied \
+as-is into ``status``. Missing or empty column: both fields stay empty. That \
+date is a FACT, never a stop: infer nothing from it, do not comment on it in \
+the line.
 - **Complete directions.** A two-part schedule is written in full on the same \
 line: ``½ tab (= 0.05 mg) morning and supper, then 1 tab at bedtime`` → \
 ``Clonidine 0.05 mg PO BID and 0.1 mg PO HS``. A condition ("if constipated", \
@@ -494,6 +511,10 @@ together with ``PRN``. A range is written as an ADMINISTERED dose, both \
 bounds included: ``1 to 2 tabs of 500 mg`` → ``500 to 1000 mg``. "every 6 \
 hours" → ``q6h``, even with "as needed": ``q6h PRN``. A printed maximum is \
 kept: ``max 6 tabs/day``.
+- **Frequency NEVER multiplies the dose.** ``1 tab twice a day`` of 75 mg \
+→ ``75 mg PO BID`` — never ``150 mg``. The written dose is the one for a \
+SINGLE intake; only a quantity above 1 in the same intake multiplies \
+(``2 tabs of 500 mg`` → ``1000 mg``). ``½ tab`` of 10 mg → ``5 mg``.
 - **Administered dose**: quantity × strength, space before the unit, decimal \
 point and a space in thousands (``650 mg``, ``12.5 mg``, ``10 000 IU``; never \
 ``10000``). Injectable: volume × concentration → ``210 mg``, route ``SC``; \
@@ -537,7 +558,8 @@ line break (compact JSON, on a single line):
                  "pages": [1, 2], "title": "…", "confidence": 0.0}],
   "items": [{"id": "i1", "document_id": "d1", "kind": "…", "text": "…",
              "fields": {}, "source_page": 1}],
-  "med_list": [{"group": "…", "line": "…", "sources": ["i1", "i2"]}],
+  "med_list": [{"group": "…", "line": "…", "sources": ["i1", "i2"],
+                "last_fill": "2025-10-02", "status": ""}],
   "coverage": [{"page": 1, "document_id": "d1", "note": ""}],
   "unreadable": [{"page": 3, "reason": "…"}],
   "observations": [{"text": "…", "pages": [1, 2]}]
@@ -610,8 +632,14 @@ _SCHEMA = {
                     "group": {"type": "STRING"},
                     "line": {"type": "STRING"},
                     "sources": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    #: Date IMPRIMÉE de la dernière délivrance (DSQ) et statut
+                    #: de la colonne « Statut » (« En att », « Cessé »). Des
+                    #: faits, jamais une conclusion — et le seul moyen de voir
+                    #: qu'un médicament n'a pas été délivré depuis un an.
+                    "last_fill": {"type": "STRING"},
+                    "status": {"type": "STRING"},
                 },
-                "required": ["line", "sources", "group"],
+                "required": ["line", "sources", "group", "last_fill", "status"],
             },
         },
         #: Prescripteur imprimé en tête de la liste (médecin + permis, ou
@@ -1049,6 +1077,22 @@ def _inclus_par_defaut(kind: str, champs: dict) -> bool:
     return True
 
 
+def _date_iso(valeur: object) -> str:
+    """
+    Date ``AAAA-MM-JJ``, ou chaîne vide.
+
+    Le modèle écrit aussi bien ``2025-10-02`` que ``2025/10/02`` (la forme
+    imprimée sur le DSQ) : on ramène les deux à la forme ISO, une seule fois.
+    """
+    brut = str(valeur or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", brut):
+        return brut
+    m = re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", brut)
+    if m:
+        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    return ""
+
+
 def _normalize(payload: dict, count: int) -> dict:
     """
     Valide la réponse et la complète avec l'état de revue.
@@ -1082,15 +1126,7 @@ def _normalize(payload: dict, count: int) -> dict:
         doc["kind"] = kind
         role = str(doc.get("role") or "autre").strip().lower()
         doc["role"] = role if role in ROLES else "autre"
-        date_brute = str(doc.get("date") or "").strip()
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_brute):
-            doc["date"] = date_brute
-        else:
-            annee = re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", date_brute)
-            doc["date"] = (
-                f"{annee.group(1)}-{int(annee.group(2)):02d}-{int(annee.group(3)):02d}"
-                if annee else ""
-            )
+        doc["date"] = _date_iso(doc.get("date"))
         doc["pages"] = pages
         doc["title"] = str(doc.get("title") or "")[:200]
         try:
@@ -1314,6 +1350,11 @@ def _normalize(payload: dict, count: int) -> dict:
             "group": re.sub(r"\s+", " ", str(entry.get("group") or "")).strip()[:60],
             "line": ligne,
             "sources": sources,
+            # Dernière délivrance imprimée (DSQ) et statut de la colonne
+            # « Statut » : des FAITS, portés jusqu'à la note. L'écart en jours
+            # est calculé en code (main.py), jamais par le modèle.
+            "last_fill": _date_iso(entry.get("last_fill")),
+            "status": re.sub(r"\s+", " ", str(entry.get("status") or "")).strip()[:40],
             # L'unité d'arbitrage est désormais la LIGNE, pas l'item : c'est
             # elle qui entre dans la note, et une case la coche.
             "included": True,

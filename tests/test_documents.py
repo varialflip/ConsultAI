@@ -216,5 +216,50 @@ class TestNormalisation(unittest.TestCase):
         self.assertEqual(extraction._normalize(charge, 1)["documents"][0]["pages"], [2])
 
 
+class TestDerniereDelivrance(unittest.TestCase):
+    """Le DSQ date chaque ligne ; l'écart décide de sa place dans la note."""
+
+    def test_date_imprimee_ramenee_en_iso(self):
+        # Le DSQ imprime 2025/10/02 ; le modèle peut recopier l'un ou l'autre.
+        self.assertEqual(extraction._date_iso("2025/10/02"), "2025-10-02")
+        self.assertEqual(extraction._date_iso("2025-10-02"), "2025-10-02")
+        self.assertEqual(extraction._date_iso(""), "")
+
+    def test_champs_gardes_par_la_normalisation(self):
+        charge = _payload(
+            documents=[{"id": "d1", "kind": "medications", "role": "dsq",
+                        "date": "2026-11-12", "pages": [1]}],
+            med_list=[{"group": "autres", "line": "Cyclobenzaprine 5 mg po hs prn",
+                       "sources": [], "last_fill": "2025/10/02", "status": ""}],
+        )
+        ligne = extraction._normalize(charge, 1)["med_list"][0]
+        self.assertEqual(ligne["last_fill"], "2025-10-02")
+        self.assertEqual(ligne["status"], "")
+
+    def test_delai_calcule_contre_la_date_du_document(self):
+        from app import main
+
+        stockee = {
+            "documents": [{"id": "d1", "kind": "medications", "role": "dsq",
+                           "date": "2026-11-12", "pages": [1]}],
+            "med_list": [
+                {"line": "Apixaban 5 mg po bid", "last_fill": "2026-11-11", "status": ""},
+                {"line": "Cyclobenzaprine 5 mg po hs prn", "last_fill": "2025-10-02",
+                 "status": ""},
+                {"line": "Polyéthylène glycol 17 g po die", "last_fill": "",
+                 "status": "En att"},
+            ],
+        }
+        main._marquer_delais(stockee)
+        lignes = stockee["med_list"]
+        self.assertEqual(lignes[0]["delay_days"], 1)
+        self.assertFalse(lignes[0]["stale"])
+        self.assertEqual(lignes[1]["delay_days"], 406)
+        self.assertTrue(lignes[1]["stale"])
+        # Jamais délivrée : le statut imprimé suffit, sans date.
+        self.assertIsNone(lignes[2]["delay_days"])
+        self.assertTrue(lignes[2]["stale"])
+
+
 if __name__ == "__main__":
     unittest.main()

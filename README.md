@@ -1681,6 +1681,19 @@ invention » (ils ne figurent pas dans la dictée) — et un garde-fou quand auc
 dictée n'accompagne les documents. L'audit « Validation » reçoit le même bloc,
 sinon il signalerait la liste du médecin comme une invention.
 
+**Une ligne non délivrée n'est pas un médicament courant.** Le DSQ imprime,
+pour chaque ligne, la **dernière délivrance**, le **délai** et la **quantité** ;
+sa propre note de bas de page dit que la colonne sert à repérer les médicaments
+« qui pourraient ne plus être pris par l'usager ». La lecture recopie la date
+(`last_fill`) et le statut imprimé (`status`, « En att ») ; **le code** calcule
+l'écart contre la date du document, jamais le modèle. Au-delà de **180 jours**
+— ou dès qu'un statut est imprimé — la ligne ne s'écrit plus dans la liste
+courante : la note la reçoit à part et l'écrit en une phrase juste après la
+liste, avec sa date — « Non renouvelés : cyclobenzaprine (2025-10-02),
+dimenhydrinate (2025-12-17) ». La date est un fait, pas une conclusion :
+« cessé » ne s'écrit jamais à sa place. Dans l'onglet, la ligne porte son délai
+en ambre.
+
 **Deux listes : fusionnées à l'import.** Quand un second document porte une
 liste de médicaments (le DSQ et la liste du séjour en cours), une passe de
 fusion choisit la liste **la plus récente** — la date du document tranche, pas

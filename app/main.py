@@ -4081,8 +4081,56 @@ def _stored_extraction(document: Document) -> dict:
 
 def _document_payload(document: Document) -> dict:
     payload = document.to_dict()
-    payload["extraction"] = _stored_extraction(document)
+    extraction_stockee = _stored_extraction(document)
+    # Délai depuis la dernière délivrance : calculé à la lecture, pour que
+    # l'onglet et la note répondent de la même règle.
+    _marquer_delais(extraction_stockee)
+    payload["extraction"] = extraction_stockee
     return payload
+
+
+#: Au-delà de ce délai depuis la dernière délivrance, une ligne ne s'écrit plus
+#: dans la liste courante de la note : elle part dans la phrase « Non
+#: renouvelés ». Mesuré sur un DSQ réel (imprimé le 2026-11-12) : 406, 330 et
+#: 211 jours pour trois lignes, 1 jour pour toutes les autres.
+MED_DELAI_NON_RENOUVELE = 180
+
+
+def _marquer_delais(extraction_stockee: dict) -> None:
+    """
+    Ajoute ``delay_days`` et ``stale`` à chaque ligne de médicament.
+
+    L'écart se calcule entre la dernière délivrance imprimée et la date du
+    document (celle que le DSQ porte en tête), jamais « aujourd'hui » : la
+    ligne reste vraie quelle que soit la date de relecture. Le modèle recopie
+    une date ; l'arithmétique se fait ici.
+
+    ``stale`` couvre deux cas : délivrance ancienne, et statut imprimé
+    (« En att », « Cessé », « Refusé ») — dans les deux, la ligne ne s'écrit
+    pas comme un médicament courant.
+    """
+    date_doc = _date_document(extraction_stockee)
+    reference = None
+    if date_doc:
+        try:
+            reference = datetime.strptime(date_doc, "%Y-%m-%d").date()
+        except ValueError:
+            reference = None
+    for entry in extraction_stockee.get("med_list") or []:
+        if not isinstance(entry, dict):
+            continue
+        jours = None
+        valeur = str(entry.get("last_fill") or "").strip()
+        if reference and valeur:
+            try:
+                jours = (reference - datetime.strptime(valeur, "%Y-%m-%d").date()).days
+            except ValueError:
+                jours = None
+        entry["delay_days"] = jours
+        entry["stale"] = bool(
+            (jours is not None and jours >= MED_DELAI_NON_RENOUVELE)
+            or str(entry.get("status") or "").strip()
+        )
 
 
 def _date_document(extraction_stockee: dict) -> str:
@@ -4228,6 +4276,27 @@ def _documents_context(
         "Divergences avec l'autre liste (à écrire en prose juste après la "
         "liste des médicaments, sans titre ni énumération) : {texte}"
     )
+    #: Lignes dont la dernière délivrance est ancienne (ou jamais délivrées) :
+    #: elles ne s'écrivent pas comme des médicaments courants. La date qui les
+    #: suit est un fait ; « cessé » serait une conclusion que le DSQ ne dit pas.
+    entete_non_renouveles = (
+        "Lines whose LAST DISPENSATION is old, or that were never dispensed: "
+        "do NOT put them in the current list. Write them in ONE sentence, "
+        "right after the last line of the list (before any closing sentence "
+        "from the template), in this order, with the date in parentheses "
+        "(\"pending\" when the status says so): \"Not renewed: "
+        "cyclobenzaprine (2025-10-02), dimenhydrinate (2025-12-17).\" No "
+        "judgement: never \"stopped\", never \"probably discontinued\"."
+        if anglais else
+        "Lignes dont la DERNIÈRE DÉLIVRANCE est ancienne, ou qui n'ont jamais "
+        "été délivrées : ne les mets PAS dans la liste courante. Écris-les en "
+        "UNE seule phrase, juste après la dernière ligne de la liste (avant "
+        "toute phrase de clôture du gabarit), dans cet ordre, avec la date "
+        "entre parenthèses (« en attente » quand le statut le dit) : « Non "
+        "renouvelés : cyclobenzaprine (2025-10-02), dimenhydrinate "
+        "(2025-12-17). » Aucun jugement : jamais « cessé », jamais "
+        "« probablement arrêté »."
+    )
     #: Plusieurs listes (DSQ + séjour en cours) : la liste d'hospitalisation
     #: est la référence, les écarts s'écrivent en prose.
     entete_plusieurs = (
@@ -4277,6 +4346,7 @@ def _documents_context(
         extraction_stockee = _stored_extraction(document)
         if not extraction_stockee:
             continue
+        _marquer_delais(extraction_stockee)
         if not str(medecin_famille.get("name") or "").strip():
             # Données antérieures à la résolution : on garde l'en-tête du
             # document, faute de mieux.
@@ -4309,14 +4379,25 @@ def _documents_context(
             reconciliees = []
         if reconciliees:
             titre_doc = str(document.title or "").strip()
-            # Plusieurs listes : le titre du document les distingue ; une seule
-            # liste garde l'en-tête simple (rien à comparer).
-            if listes > 1 and not reference_id and titre_doc:
-                blocs.append(f"[{titre_doc}] {entete_liste}")
-            else:
-                blocs.append(entete_liste)
-            blocs.extend(entry["line"] for entry in reconciliees)
-            blocs.append("")
+            courantes = [entry for entry in reconciliees if not entry.get("stale")]
+            anciennes = [entry for entry in reconciliees if entry.get("stale")]
+            if courantes:
+                # Plusieurs listes : le titre du document les distingue ; une
+                # seule liste garde l'en-tête simple (rien à comparer).
+                if listes > 1 and not reference_id and titre_doc:
+                    blocs.append(f"[{titre_doc}] {entete_liste}")
+                else:
+                    blocs.append(entete_liste)
+                blocs.extend(entry["line"] for entry in courantes)
+                blocs.append("")
+            if anciennes:
+                blocs.append(entete_non_renouveles)
+                blocs.extend(
+                    f"- {entry['line']} — "
+                    f"{entry.get('last_fill') or entry.get('status') or '?'}"
+                    for entry in anciennes
+                )
+                blocs.append("")
         divergences = str(extraction_stockee.get("med_divergences") or "").strip()
         if reference_id and document.id == reference_id:
             # La fusion décidée à l'import remplace la comparaison locale.

@@ -2,6 +2,23 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-19 — Note : les pages du dossier peuvent remplacer le texte relu
+
+*Essai grandeur nature : le modèle de rédaction reçoit le PDF, pas la liste
+réconciliée. L'arbitrage se fait à la relecture de la note.*
+
+- **Réglage « Envoyer les pages à la note »** (Gemini seulement, panneau →
+  Note, désactivé par défaut) : les documents de la consultation sont joints
+  tels quels à la génération, et le bloc de texte n'est plus construit — ni
+  liste relue, ni médecin de famille, ni écarts.
+- Le modèle voit ce que la page imprime : deux ordonnances du même médicament,
+  la colonne « Dernière délivrance », les dosages tels qu'écrits.
+- **Repli** : fournisseur incapable de lire un PDF, ou plus de 15 Mo de pages
+  → retour au bloc de texte relu, journalisé.
+- Coût : chaque régénération renvoie les pages (~250 jetons par page) —
+  mesuré sur le dossier du 2026-11-18 : 10 713 jetons de prompt au lieu
+  d'environ 9 000.
+
 ## 2026-11-18 — Documents : une ligne non délivrée n'est plus un médicament courant
 
 *Le DSQ date chaque ligne ; la note les présentait toutes comme actuelles.

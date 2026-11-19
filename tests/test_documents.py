@@ -328,5 +328,36 @@ class TestDerniereDelivrance(unittest.TestCase):
         self.assertFalse(ancienne["stale"])
 
 
+class TestPagesALaNote(unittest.TestCase):
+    """Réglage « Envoyer les pages à la note » : le PDF remplace le texte."""
+
+    def test_sans_piece_jointe_le_prompt_reste_une_chaine(self):
+        from app import llm
+
+        self.assertEqual(llm._gemini_user_contents("consigne"), "consigne")
+
+    def test_les_pages_precedent_le_texte(self):
+        from app import llm
+
+        contenu = llm._gemini_user_contents(
+            "consigne", None, [(b"%PDF-1.4", "application/pdf")],
+        )
+        self.assertEqual(len(contenu), 2)
+        self.assertEqual(contenu[-1], "consigne")
+
+    def test_plafond_de_taille_rend_la_liste_vide(self):
+        from unittest import mock
+
+        from app import main
+
+        faux = mock.Mock(id=1, filename="x.pdf", mime_type="application/pdf")
+        with mock.patch.object(main.documents_service, "for_consultation",
+                               return_value=[faux]), \
+             mock.patch.object(main.documents_service, "absolute_path",
+                               return_value=__file__), \
+             mock.patch.object(main, "MAX_PAGES_INLINE", 10):
+            self.assertEqual(main._documents_attachments(None, 1), [])
+
+
 if __name__ == "__main__":
     unittest.main()

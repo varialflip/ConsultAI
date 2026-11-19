@@ -1675,11 +1675,19 @@ les lise). La note reçoit ces lignes **sans libellé de catégorie** — le
 regroupement appartient au gabarit. Mesuré : ~10 s pour deux pages, ~14 s pour
 quatre.
 
-**Rien ne repart en image à la génération.** Les éléments cochés entrent dans
-la note en texte, avec une consigne qui les exempte de la règle « aucune
-invention » (ils ne figurent pas dans la dictée) — et un garde-fou quand aucune
-dictée n'accompagne les documents. L'audit « Validation » reçoit le même bloc,
-sinon il signalerait la liste du médecin comme une invention.
+**Rien ne repart en image à la génération — par défaut.** Les éléments cochés
+entrent dans la note en texte, avec une consigne qui les exempte de la règle
+« aucune invention » (ils ne figurent pas dans la dictée) — et un garde-fou
+quand aucune dictée n'accompagne les documents. L'audit « Validation » reçoit
+le même bloc, sinon il signalerait la liste du médecin comme une invention.
+
+**Réglage « Envoyer les pages à la note »** (Gemini seulement, panneau → Note).
+Au lieu du bloc de texte, les documents du dossier sont joints tels quels : le
+modèle voit la mise en page — deux ordonnances du même médicament, colonne
+« Dernière délivrance » — et rien n'est coché. L'arbitrage se fait alors à la
+relecture de la note, et chaque régénération renvoie les pages (~250 jetons par
+page). Au-delà de 15 Mo, la note retombe sur le texte relu : une note sans
+médicaments serait pire qu'une note avec la liste relue.
 
 **Une ligne non délivrée n'est pas un médicament courant.** Le DSQ imprime,
 pour chaque ligne, la **dernière délivrance**, le **délai**, la **quantité** et

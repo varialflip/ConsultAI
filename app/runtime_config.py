@@ -655,6 +655,18 @@ SETTINGS: Tuple[Setting, ...] = (
     ),
     *_cap_audio("gemini", "gemini"),
     *_cap_bypass("gemini", "gemini"),
+    # Les PAGES à la génération de la note, au lieu du bloc de texte relu : le
+    # modèle voit la mise en page (deux ordonnances du même médicament, colonne
+    # « Dernière délivrance ») au lieu d'une liste déjà réconciliée. Réservé à
+    # Gemini, seul fournisseur qui lit un PDF — et chaque régénération renvoie
+    # les pages.
+    Setting(
+        "gemini_note_pages", "choice", "group.note",
+        default=lambda: "false", choices=ON_OFF,
+        label_key="set.cap.note_pages.label",
+        help_key="set.cap.note_pages.help",
+        only_for=("llm_provider", "gemini"),
+    ),
 
     # --- Anthropic Claude ---
     Setting(

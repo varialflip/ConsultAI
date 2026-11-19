@@ -1727,6 +1727,26 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "attached — the note is generated as before, from the transcript "
         "alone. Protects latency and cost on a very long dictation.",
     ),
+    "set.cap.note_pages.label": (
+        "Envoyer les pages à la note (au lieu du texte relu)",
+        "Send the pages to the note (instead of the reviewed text)",
+    ),
+    "set.cap.note_pages.help": (
+        "Les documents du dossier sont joints tels quels à la génération : "
+        "le modèle voit la mise en page — deux ordonnances du même "
+        "médicament, colonne « Dernière délivrance » — au lieu d'une liste "
+        "déjà réconciliée. L'onglet Documents n'alimente alors plus la note : "
+        "rien n'est coché, l'arbitrage se fait à la relecture. Chaque "
+        "régénération renvoie les pages (~250 jetons par page). Au-delà de "
+        "la limite d'envoi en ligne, la note retombe sur le texte relu.",
+        "The dossier's documents are attached as-is: the model sees the "
+        "layout — two orders of the same drug, the « Dernière délivrance » "
+        "column — instead of an already reconciled list. The Documents tab "
+        "no longer feeds the note: nothing is ticked, the arbitration "
+        "happens at review time. Every regeneration re-sends the pages "
+        "(~250 tokens per page). Beyond the inline upload limit, the note "
+        "falls back to the reviewed text.",
+    ),
     "set.cap.bypass_stt.label": (
         "Ignorer la reconnaissance vocale (audio direct)",
         "Skip speech recognition (direct audio)",

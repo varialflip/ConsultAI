@@ -2823,6 +2823,7 @@ def _generate_and_publish(
     n_transcript: Optional[str] = None,
     conf_map: Optional[dict] = None,
     documents_block: str = "",
+    documents: Optional[List[Tuple[bytes, str]]] = None,
 ) -> dict:
     """
     Génère la note en continu et diffuse les morceaux en direct (SSE).
@@ -2900,6 +2901,7 @@ def _generate_and_publish(
         med_hints=med_hints,
         conf_map=conf_map,
         documents_block=documents_block,
+        documents=documents,
     )
 
     raw = ""
@@ -3509,6 +3511,22 @@ async def api_generate(
             med_hints = []
             logger.exception("Hints méds indisponibles — génération sans candidats")
 
+    # Réglage « Envoyer les pages à la note » : le PDF part tel quel, et le
+    # bloc de texte n'est plus construit — ni liste relue, ni médecin de
+    # famille, ni écarts : ce que la page imprime fait foi, et le médecin
+    # relit la note. Réservé à Gemini, seul fournisseur qui lit un PDF.
+    documents_block = _documents_context(db, payload.consultation_id, template_row.language)
+    documents_pieces: List[Tuple[bytes, str]] = []
+    if (runtime_config.value("gemini_note_pages") == "true"
+            and llm.active_provider() == "gemini"):
+        documents_pieces = _documents_attachments(db, payload.consultation_id)
+        if documents_pieces:
+            documents_block = ""
+            logger.info(
+                "Note : %d page(s) jointe(s) au lieu du bloc de texte (%d octets)",
+                len(documents_pieces), sum(len(d) for d, _ in documents_pieces),
+            )
+
     try:
         result = await run_in_threadpool(
             _generate_and_publish,
@@ -3524,7 +3542,8 @@ async def api_generate(
             med_hints,
             n_transcript,
             conf_map,
-            _documents_context(db, payload.consultation_id, template_row.language),
+            documents_block,
+            documents_pieces,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -4263,6 +4282,42 @@ def _refresh_med_merge(db: Session, consultation: Consultation) -> None:
         contenu["family_doctor"] = medecin or None
         consultation.med_merged_json = json.dumps(contenu, ensure_ascii=False)
     db.commit()
+
+
+#: Limite d'envoi « en ligne » d'une requête Gemini : au-delà, le service
+#: refuse la pièce jointe. Marge gardée sous les 20 Mo documentés.
+MAX_PAGES_INLINE = 15 * 1024 * 1024
+
+
+def _documents_attachments(db: Session, consultation_id: Optional[int]) -> List[Tuple[bytes, str]]:
+    """
+    Les pages des documents, telles quelles, pour la note.
+
+    Réglage « Envoyer les pages à la note » : le modèle reçoit le PDF au lieu
+    du bloc de texte relu, et voit donc la mise en page (deux ordonnances du
+    même médicament, colonne « Dernière délivrance »). Au-delà de la limite
+    d'envoi en ligne, on rend une liste vide : l'appelant retombe sur le texte
+    relu — une note sans médicaments serait pire qu'une note avec la liste
+    relue.
+    """
+    if not consultation_id:
+        return []
+    pieces: List[Tuple[bytes, str]] = []
+    total = 0
+    for document in documents_service.for_consultation(db, consultation_id):
+        try:
+            with open(documents_service.absolute_path(document), "rb") as fichier:
+                donnees = fichier.read()
+        except OSError:
+            logger.warning("Note : document %s illisible, ignoré", document.id)
+            continue
+        if total + len(donnees) > MAX_PAGES_INLINE:
+            logger.warning(
+                "Note : pages trop lourdes (%d octets lus), retour au texte relu", total)
+            return []
+        pieces.append((donnees, document.mime_type))
+        total += len(donnees)
+    return pieces
 
 
 def _documents_context(

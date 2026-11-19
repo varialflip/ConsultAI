@@ -167,6 +167,15 @@ _USER_PROMPT_LABELS = {
             "de reconnaissance vocale, ne la recopie pas : cette note est "
             "établie à partir des documents."
         ),
+        "documents_pages": (
+            "LES PAGES CI-JOINTES SONT LES DOCUMENTS DU DOSSIER — lues sur "
+            "des photographies et des PDF pendant la revue du dossier. Ce ne "
+            "sont PAS des données inventées : elles ne figurent pas dans la "
+            "dictée et doivent pourtant paraître dans la note, fidèlement, "
+            "dans la rubrique correspondante (médicaments, antécédents, "
+            "résultats, imagerie). Transcris-les telles qu'elles sont "
+            "imprimées, sans les compléter ni les interpréter."
+        ),
         "documents": (
             "DOCUMENTS FOURNIS PAR LE MÉDECIN — lus sur des photographies et "
             "des PDF pendant la revue du dossier, puis relus et validés par "
@@ -225,6 +234,14 @@ _USER_PROMPT_LABELS = {
             "reason, history, examination, plan or result. If the layout "
             "contains a dictation or speech-recognition mention, do not copy "
             "it: this note is built from the documents."
+        ),
+        "documents_pages": (
+            "THE ATTACHED PAGES ARE THE DOSSIER'S DOCUMENTS — read from "
+            "photographs and PDFs during chart review. They are NOT invented "
+            "data: they do not appear in the dictation and yet must appear in "
+            "the note, faithfully, under the matching heading (medications, "
+            "history, results, imaging). Transcribe them as printed, without "
+            "completing or interpreting them."
         ),
         "documents": (
             "DOCUMENTS SUPPLIED BY THE PHYSICIAN — read from photographs and "
@@ -345,6 +362,7 @@ def build_user_prompt(
     med_hints: Optional[List[dict]] = None,
     geriatric_hints: Optional[List[dict]] = None,
     documents_block: str = "",
+    documents_pages: bool = False,
 ) -> str:
     """
     Assemble le message utilisateur.
@@ -416,13 +434,17 @@ def build_user_prompt(
             f"{documents_block.strip()}\n"
             "DOCUMENTS>>>"
         )
+    # Pages jointes au message (réglage « Envoyer les pages à la note ») : le
+    # bloc de texte est alors vide, et c'est la page qui porte le contenu.
+    if documents_pages:
+        parts.append(libelles["documents_pages"])
 
     # Documents SANS dictée (photos prises pendant la revue du dossier, note
     # générée avant d'avoir dicté) : sans ce garde-fou, le modèle remplit les
     # rubriques vides du gabarit par invention — motif, histoire, examen. Une
     # note qui n'affirme que ce que les documents portent est la seule
     # acceptable.
-    if documents_block.strip() and not transcript.strip():
+    if (documents_block.strip() or documents_pages) and not transcript.strip():
         parts.append(libelles["documents_only"])
 
     # Vide seulement en contournement du STT (audio envoyé seul) : dans tous
@@ -1091,6 +1113,7 @@ def complete(
     json_mode: bool = False,
     provider: Optional[str] = None,
     audio: Optional[Tuple[bytes, str]] = None,
+    documents: Optional[List[Tuple[bytes, str]]] = None,
 ) -> Completion:
     """
     Interroge le modèle configuré et normalise la réponse.
@@ -1112,7 +1135,8 @@ def complete(
         max_tokens = max(max_tokens, _openrouter_max_tokens())
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
     if provider == "gemini":
-        return _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio)
+        return _complete_gemini(system, user, model, temperature, max_tokens, json_mode,
+                                audio=audio, documents=documents)
     if provider == "anthropic":
         return _complete_anthropic(system, user, model, temperature, max_tokens, json_mode)
     if provider == "openai":
@@ -2247,7 +2271,29 @@ def _element_deja_porte(element: str, reference: str, seuil: float = 1.0) -> boo
     return partages >= seuil
 
 
-def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None) -> Completion:
+def _gemini_user_contents(user: str, audio=None, documents=None):
+    """
+    Message utilisateur Gemini : les pièces jointes d'abord, le texte ensuite.
+
+    L'audio vient en tête (il forme avec la consigne système le préfixe mis en
+    cache, voir CHANGELOG 2026-08-27), puis les pages du dossier quand la note
+    les reçoit au lieu du bloc de texte. Sans pièce jointe, la chaîne est
+    rendue telle quelle : le préfixe mis en cache reste identique.
+    """
+    from google.genai import types
+
+    parts = []
+    if audio is not None:
+        parts.append(types.Part.from_bytes(data=audio[0], mime_type=audio[1]))
+    for data, mime in documents or []:
+        parts.append(types.Part.from_bytes(data=data, mime_type=mime))
+    if not parts:
+        return user
+    return [*parts, user]
+
+
+def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None,
+                     documents=None) -> Completion:
     from google.genai import types
 
     client = get_client("gemini")
@@ -2273,14 +2319,7 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     else:
         config_kwargs["top_p"] = 0.95
 
-    contents = user
-    if audio is not None:
-        audio_bytes, mime_type = audio
-        # L'audio en TÊTE du message : avec la consigne système, il forme le
-        # préfixe [consigne système + audio] partagé entre la mise en forme et
-        # l'audit « Validation » — réutilisé d'une passe à l'autre par le cache
-        # de préfixe implicite de Gemini (voir CHANGELOG 2026-08-27).
-        contents = [types.Part.from_bytes(data=audio_bytes, mime_type=mime_type), user]
+    contents = _gemini_user_contents(user, audio, documents)
 
     try:
         response = _gemini_appel(
@@ -2323,7 +2362,8 @@ def _complete_gemini(system, user, model, temperature, max_tokens, json_mode, au
     )
 
 
-def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None, on_stream_started=None, on_thought=None):
+def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=None,
+                   on_stream_started=None, on_thought=None, documents=None):
     """
     Version en continu de ``_complete_gemini`` : rend chaque fragment de texte
     au fil de l'eau, puis rend un ``Completion`` complet (usage, motif d'arrêt)
@@ -2363,14 +2403,7 @@ def _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audi
     else:
         config_kwargs["top_p"] = 0.95
 
-    contents = user
-    if audio is not None:
-        audio_bytes, mime_type = audio
-        # L'audio en TÊTE du message : avec la consigne système, il forme le
-        # préfixe [consigne système + audio] partagé entre la mise en forme et
-        # l'audit « Validation » — réutilisé d'une passe à l'autre par le cache
-        # de préfixe implicite de Gemini (voir CHANGELOG 2026-08-27).
-        contents = [types.Part.from_bytes(data=audio_bytes, mime_type=mime_type), user]
+    contents = _gemini_user_contents(user, audio, documents)
 
     config = types.GenerateContentConfig(**config_kwargs)
     sans_thinking = False
@@ -2824,6 +2857,7 @@ def complete_stream(
     json_mode: bool = False,
     provider: Optional[str] = None,
     audio: Optional[Tuple[bytes, str]] = None,
+    documents: Optional[List[Tuple[bytes, str]]] = None,
     on_stream_started: Optional[Callable[[], None]] = None,
     on_thought: Optional[Callable[[str], None]] = None,
     reasoning_off: bool = False,
@@ -2848,7 +2882,9 @@ def complete_stream(
     max_tokens = _clamp_max_tokens(provider, model, max_tokens)
 
     if provider == "gemini":
-        gen = _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio, on_stream_started=on_stream_started, on_thought=on_thought)
+        gen = _stream_gemini(system, user, model, temperature, max_tokens, json_mode, audio=audio,
+                             on_stream_started=on_stream_started, on_thought=on_thought,
+                             documents=documents)
     elif provider == "anthropic":
         gen = _stream_anthropic(system, user, model, temperature, max_tokens, json_mode, on_stream_started=on_stream_started, on_thought=on_thought)
     elif provider == "openai":
@@ -2887,6 +2923,7 @@ def generate_note_stream(
     med_hints: Optional[List[dict]] = None,
     conf_map: Optional[dict] = None,
     documents_block: str = "",
+    documents: Optional[List[Tuple[bytes, str]]] = None,
 ):
     """
     Version en continu de ``generate_note``.
@@ -2955,6 +2992,7 @@ def generate_note_stream(
             conf_map=conf_map,
         ),
         documents_block=documents_block,
+        documents_pages=bool(documents),
     )
     if audio_to_send is not None:
         if audio_only:
@@ -3007,6 +3045,7 @@ def generate_note_stream(
             max_tokens=budget,
             provider=provider,
             audio=audio_to_send,
+            documents=documents,
             on_stream_started=on_stream_started,
             on_thought=on_thought,
         )
@@ -3513,6 +3552,7 @@ def generate_note(
     confiance: Optional[List[str]] = None,
     med_hints: Optional[List[dict]] = None,
     documents_block: str = "",
+    documents: Optional[List[Tuple[bytes, str]]] = None,
 ) -> dict:
     """
     Met la transcription en forme et retourne
@@ -3599,6 +3639,7 @@ def generate_note(
         max_tokens=settings.gemini_max_output_tokens,
         provider=provider,
         audio=audio_to_send,
+        documents=documents,
     )
     elapsed_seconds = time.monotonic() - t0
 

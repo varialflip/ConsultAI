@@ -1741,6 +1741,12 @@
           mime_type: ligne.mimeType || 'audio/webm',
         },
       });
+      // On note la session neuve dans la copie locale AVANT d'envoyer : un
+      // second onglet qui rechargerait entre-temps verrait une session vivante
+      // et ne rejouerait pas les mêmes fragments une deuxième fois.
+      await bestEffort(() => audioStore.patchSession(ligne.localId, {
+        serverSessionId: session.session_id,
+      }), 'session récupérée');
       for (let index = 0; index < fragments.length; index += 1) {
         const form = new FormData();
         form.append('seq', String(index));

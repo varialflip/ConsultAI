@@ -854,6 +854,12 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "{count} chunk(s) could not be sent. The dictation is still kept in "
         "the browser: retry with “Retry”.",
     ),
+    "dictation.reopen_failed": (
+        "La dictée n'a pas pu reprendre : le serveur a fermé sa session. "
+        "L'audio déjà envoyé est conservé — terminez, puis reprenez.",
+        "The dictation could not resume: the server closed its session. Audio "
+        "already sent is kept — finish, then start again.",
+    ),
     "dictation.recording_waiting": (
         "Enregistrement — {count} passage(s) en attente de transcription.",
         "Recording — {count} passage(s) waiting to be transcribed.",

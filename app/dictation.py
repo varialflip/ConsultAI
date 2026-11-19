@@ -575,9 +575,10 @@ def cleanup_abandoned(username: str, db: Session, origin_tab: str = "") -> None:
     enregistrait) depuis ``_STALE_AFTER`` secondes est réputée orpheline. Deux
     cas :
 
-      * rien à conserver (moins de ``_MIN_AUDIO_SECONDS`` d'audio reçus, ou —
-        pour les fournisseurs qui produisent une transcription — aucune tranche
-        transcrite) : la session est supprimée, et le brouillon s'il est vide ;
+      * rien à conserver (moins de ``_MIN_AUDIO_SECONDS`` d'audio reçus) : la
+        session est supprimée, et le brouillon s'il est vide. L'ABSENCE de
+        transcription n'est pas un critère : une dictée peut précéder sa
+        transcription, et l'audio est justement ce qu'il faut garder ;
       * du contenu : l'audio rejoint le brouillon comme un enregistrement
         (exactement ce qu'un « Terminer » ferait — voir main.py,
         finish_dictation), le brouillon est marqué « abandonnée » (s'il n'a
@@ -592,11 +593,6 @@ def cleanup_abandoned(username: str, db: Session, origin_tab: str = "") -> None:
     now = time.time()
     archived = 0
     removed = 0
-    # Le fournisseur actif contourne-t-il le STT (audio envoyé seul au modèle,
-    # sans transcription) ? Dans ce cas « rien de transcrit » est l'état NORMAL
-    # d'une dictée : l'absence de contenu ne se juge que sur l'audio.
-    opts = llm.audio_settings(llm.active_provider())
-    transcript_expected = not (opts["bypass_stt"] and not opts["keep_transcript"])
     try:
         entries = os.listdir(_root())
     except OSError:
@@ -620,8 +616,12 @@ def cleanup_abandoned(username: str, db: Session, origin_tab: str = "") -> None:
             session = load_session(entry, username)
         except (SessionNotFound, OSError, ValueError, KeyError):
             continue
-        if session.received_seconds < _MIN_AUDIO_SECONDS or (
-                transcript_expected and not (session.parts or session.offset_seconds > 0)):
+        # L'AUDIO est le seul critère. Une session peut porter plusieurs
+        # minutes de dictée sans qu'aucune tranche n'ait encore été transcrite
+        # (reconnaissance en retard, ou en panne) : l'effacer alors perdrait
+        # de la parole dictée. Le 2026-11-19, 15 s reçues sans tranche ont été
+        # supprimées comme « sans contenu » alors que le micro avait parlé.
+        if session.received_seconds < _MIN_AUDIO_SECONDS:
             _delete_empty(username, session, db)
             removed += 1
             continue

@@ -2,6 +2,22 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-19 — Dictée : un fragment manquant ne bloque plus la suite
+
+*Le serveur n'accepte qu'une suite continue de numéros ; le client réessayait
+le même numéro indéfiniment. Un seul trou arrêtait la dictée entière — 361
+tentatives en 14 minutes sur la session du matin — puis la session était
+ramassée comme abandonnée et le client bouclait sur des 404.*
+
+- **409** : le client lit `X-Expected-Seq`, retire de la file les fragments
+  déjà reçus et **renumérote** le reste à partir du numéro attendu. L'audio ne
+  change pas, seule sa place dans la suite — le serveur concatène dans l'ordre
+  d'arrivée.
+- **404** : session disparue côté serveur → ouverture d'une session neuve et
+  renvoi de la file depuis zéro, au lieu de boucler.
+- Les erreurs HTTP portent désormais leur statut et le numéro attendu :
+  `api()` les transmettait en texte seul, et l'appelant ne pouvait rien décider.
+
 ## 2026-11-19 — Note : les pages du dossier peuvent remplacer le texte relu
 
 *Essai grandeur nature : le modèle de rédaction reçoit le PDF, pas la liste

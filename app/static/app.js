@@ -351,7 +351,18 @@
 
     if (!response.ok) {
       const detail = (payload && payload.detail) || T('net.http_error', { status: response.status });
-      throw new Error(detail);
+      const erreur = new Error(detail);
+      // Le statut et le numéro attendu doivent survivre jusqu'à l'appelant :
+      // c'est ce qui permet à la file de dictée de se RECALER sur un 409 au
+      // lieu de réessayer le même fragment indéfiniment (voir pumpQueue).
+      erreur.status = response.status;
+      // Number(null) vaut 0 : sans ce garde, toute erreur sans en-tête
+      // annoncerait « le serveur attend le fragment 0 ».
+      const entete = response.headers.get('X-Expected-Seq');
+      if (entete !== null && entete.trim() !== '' && Number.isFinite(Number(entete))) {
+        erreur.expectedSeq = Number(entete);
+      }
+      throw erreur;
     }
     return payload;
   }
@@ -1639,6 +1650,42 @@
    * cas d'échec on garde donc le fragment en tête de file et on réessaie,
    * avec un délai qui double à chaque tentative.
    */
+  /**
+   * Recale la file sur le numéro attendu par le serveur (409).
+   *
+   * Le serveur n'accepte qu'une suite continue de numéros : il rend le sien
+   * dans ``X-Expected-Seq``. Les fragments qu'il a déjà sortent de la file et
+   * le reste est RENUMÉROTÉ à partir de ce numéro — l'audio ne change pas,
+   * seule sa place dans la suite. Sans cela le client réessayait le même
+   * numéro indéfiniment : une dictée entière restait bloquée sur un fragment
+   * manquant, jusqu'à ce que la session soit ramassée comme abandonnée.
+   */
+  function recalerFile(passage, attendu) {
+    while (passage.queue.length && passage.queue[0].seq < attendu) passage.queue.shift();
+    let numero = attendu;
+    passage.queue.forEach((item) => { item.seq = numero; numero += 1; });
+    passage.seq = numero;
+    passage.failures = 0;
+    console.warn(`Dictée : séquence recalée sur ${attendu} — ${passage.queue.length} fragment(s) à renvoyer`);
+  }
+
+  /**
+   * Session serveur disparue (404) : on en ouvre une neuve et on renvoie la
+   * file depuis zéro. L'audio, lui, est toujours dans la file du navigateur.
+   */
+  function rouvrirSession(passage) {
+    passage.sessionId = null;
+    let numero = 0;
+    passage.queue.forEach((item) => { item.seq = numero; numero += 1; });
+    passage.seq = numero;
+    passage.failures = 0;
+    console.warn(`Dictée : session serveur disparue — réouverture, ${passage.queue.length} fragment(s) à renvoyer`);
+    startLivePassage(passage).catch((err) => {
+      console.warn('Réouverture de la dictée impossible :', err);
+      toast(T('dictation.reopen_failed'), 'error', 9000);
+    });
+  }
+
   function pumpQueue(passage = dictation) {
     if (!passage || passage.sending || !passage.sessionId || !passage.queue.length) {
       updateDictationStatus();
@@ -1654,6 +1701,16 @@
         applyDictationParts(session, passage);
       })
       .catch((err) => {
+        // 409 : le serveur attend un autre numéro — on recale au lieu de
+        // réessayer le même fragment jusqu'à l'abandon de la session.
+        if (err && err.status === 409 && Number.isFinite(err.expectedSeq)) {
+          recalerFile(passage, err.expectedSeq);
+          return;
+        }
+        if (err && err.status === 404) {
+          rouvrirSession(passage);
+          return;
+        }
         passage.failures += 1;
         console.warn(`Fragment ${item.seq} non transmis :`, err);
         clearTimeout(passage.retryHandle);

@@ -860,6 +860,10 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "The dictation could not resume: the server closed its session. Audio "
         "already sent is kept — finish, then start again.",
     ),
+    "dictation.recovered": (
+        "Dictée récupérée : {seconds} s remises dans la consultation.",
+        "Dictation recovered: {seconds} s restored to the consultation.",
+    ),
     "dictation.recording_waiting": (
         "Enregistrement — {count} passage(s) en attente de transcription.",
         "Recording — {count} passage(s) waiting to be transcribed.",

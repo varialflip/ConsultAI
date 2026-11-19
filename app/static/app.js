@@ -1686,6 +1686,77 @@
     });
   }
 
+  /**
+   * Récupère les dictées restées dans le navigateur.
+   *
+   * Chaque fragment est écrit dans IndexedDB au moment où il est produit —
+   * mais rien ne le relisait : un onglet rechargé perdait sa file, et une
+   * session serveur disparue (nettoyage, 404) laissait l'audio local orphelin.
+   * Au démarrage, si la session serveur n'existe plus — ou n'a jamais existé —
+   * on en ouvre une neuve, on renvoie les fragments et on conclut : l'audio
+   * redevient un enregistrement de la consultation. Une session encore vivante
+   * n'est jamais renvoyée, pour ne pas doubler la dictée.
+   */
+  async function recoverLocalSessions() {
+    let lignes = [];
+    try {
+      lignes = await audioStore.listSessions();
+    } catch (_) {
+      return; // IndexedDB indisponible : rien à récupérer
+    }
+    for (const ligne of lignes) {
+      if (!ligne || !ligne.localId || !ligne.consultationId) continue;
+      let fragments = [];
+      try {
+        fragments = await audioStore.chunks(ligne.localId);
+      } catch (_) {
+        continue;
+      }
+      if (!fragments.length) {
+        await bestEffort(() => audioStore.remove(ligne.localId), 'nettoyage');
+        continue;
+      }
+      if (ligne.serverSessionId) {
+        let vivante = true;
+        try {
+          await api(`/api/dictation/${ligne.serverSessionId}`);
+        } catch (err) {
+          vivante = !(err && err.status === 404);
+        }
+        if (vivante) continue;
+      }
+      await rejouerFragmentsLocaux(ligne, fragments);
+    }
+  }
+
+  /** Renvoie les fragments d'une session morte, sous une session neuve. */
+  async function rejouerFragmentsLocaux(ligne, fragments) {
+    const secondes = fragments.length * dictationConfig.chunkSeconds;
+    try {
+      const session = await api('/api/dictation', {
+        method: 'POST',
+        body: {
+          consultation_id: ligne.consultationId,
+          template_id: null,
+          mime_type: ligne.mimeType || 'audio/webm',
+        },
+      });
+      for (let index = 0; index < fragments.length; index += 1) {
+        const form = new FormData();
+        form.append('seq', String(index));
+        form.append('duration_ms', String(dictationConfig.chunkSeconds * 1000));
+        form.append('file', fragments[index].blob, 'fragment');
+        await api(`/api/dictation/${session.session_id}/chunk`, { method: 'POST', body: form });
+      }
+      await api(`/api/dictation/${session.session_id}/finish`, { method: 'POST' });
+      await bestEffort(() => audioStore.remove(ligne.localId), 'nettoyage');
+      console.info(`Dictée récupérée : ${Math.round(secondes)} s, consultation ${ligne.consultationId}`);
+      toast(T('dictation.recovered', { seconds: Math.round(secondes) }), 'success', 9000);
+    } catch (err) {
+      console.warn('Récupération de la dictée impossible :', err);
+    }
+  }
+
   function pumpQueue(passage = dictation) {
     if (!passage || passage.sending || !passage.sessionId || !passage.queue.length) {
       updateDictationStatus();
@@ -9816,6 +9887,11 @@
     // Un brouillon « abandonnée » qui attend dans la liste se signale par un
     // toast dismissable à chaque chargement, tant qu'il existe.
     refreshAbandonedState().catch((err) => console.warn('Brouillons abandonnés :', err));
+
+    // Audio resté dans le navigateur (onglet rechargé, session serveur
+    // disparue) : on le remonte comme un enregistrement plutôt que de
+    // le laisser pourrir dans IndexedDB.
+    recoverLocalSessions().catch((err) => console.warn('Récupération des dictées :', err));
 
     // Le réseau revient : les files repartent sans attendre le prochain
     // fragment, qui pourrait ne jamais venir si le médecin est en pause.

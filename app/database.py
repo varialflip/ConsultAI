@@ -2292,25 +2292,32 @@ def migrate_general_prompt_meds_favor_suggestions(db: Session) -> int:
     les tirets « noms déformés » devenus en double. Un fragment retravaillé
     par le médecin est laissé intact et signalé."""
     touches = 0
-    for cle, ancienne, nouvelle, prefixe_ligne in (
+    for cle, ancienne, nouvelle, prefixe_ligne, marqueur in (
         (
             "general_prompt_fr",
             _FAVOR_SUGGESTIONS_OLD_FR,
             _FAVOR_SUGGESTIONS_NEW_FR,
             "- **Les noms déformés",
+            "REMPLACE entièrement le terme dicté",
         ),
         (
             "general_prompt_en",
             _FAVOR_SUGGESTIONS_OLD_EN,
             _FAVOR_SUGGESTIONS_NEW_EN,
             "- **Drug names deformed",
+            "FULLY replaces the dictated term",
         ),
     ):
         row = db.get(AppSetting, cle)
         if row is None or not row.value.strip():
             continue
         mod = False
-        if nouvelle in row.value:
+        # Le défaut livré porte déjà la règle finale (phrase « REMPLACE
+        # entièrement »), mais dans une formulation qui ne coïncide pas avec
+        # le fragment complet de la migration : la comparer à `nouvelle` seule
+        # laissait donc réinsérer la phrase, en double, à chaque fois qu'une
+        # consigne était remise au défaut. Le témoin suffit.
+        if nouvelle in row.value or marqueur in row.value:
             continue  # déjà en place — idempotent
         if ancienne in row.value:
             row.value = row.value.replace(ancienne, nouvelle)
@@ -2352,14 +2359,23 @@ def migrate_general_prompt_meds_resolution(db: Session) -> int:
     sert d'ancrage et doit y figurer EXACTEMENT ; une ligne retravaillée est
     laissée intacte et signalée au journal."""
     touches = 0
-    for cle, ancienne, nouvelle, appliquee in (
-        ("general_prompt_fr", _MEDS_RESOLUTION_OLD_FR, _MEDS_RESOLUTION_NEW_FR, _MEDS_APPLY_HINTS_NEW_FR),
-        ("general_prompt_en", _MEDS_RESOLUTION_OLD_EN, _MEDS_RESOLUTION_NEW_EN, _MEDS_APPLY_HINTS_NEW_EN),
+    for cle, ancienne, nouvelle, appliquee, prefixe in (
+        ("general_prompt_fr", _MEDS_RESOLUTION_OLD_FR, _MEDS_RESOLUTION_NEW_FR,
+         _MEDS_APPLY_HINTS_NEW_FR, "- **Les noms déformés"),
+        ("general_prompt_en", _MEDS_RESOLUTION_OLD_EN, _MEDS_RESOLUTION_NEW_EN,
+         _MEDS_APPLY_HINTS_NEW_EN, "- **Drug names deformed"),
     ):
         row = db.get(AppSetting, cle)
         if row is None or not row.value.strip():
             continue
-        if nouvelle in row.value or appliquee in row.value:
+        # La règle a plusieurs formulations selon l'époque : celle du module
+        # livré et celle que cette migration insère. Ce qui compte, c'est
+        # qu'elle soit PRÉSENTE. Le test par préfixe manquait : une consigne
+        # remise au défaut livré recevait donc une SECONDE copie à chaque
+        # redémarrage, si bien que le défaut ne pouvait jamais être propre.
+        if (nouvelle in row.value or appliquee in row.value
+                or any(ligne.startswith(prefixe)
+                       for ligne in row.value.split("\n"))):
             continue  # déjà en place — idempotent
         if ancienne not in row.value:
             logger.info(

@@ -16,6 +16,11 @@ ne se voit qu'après coup.*
   Infobulle : « Brouillon vide — ni audio, ni document, ni texte ».
 - Un brouillon qui a reçu ne serait-ce qu'un PDF, quelques secondes d'audio ou
   un texte reste sur le fond normal.
+- Le même vert couvre le **panneau Note** tant que la note ouverte est vide.
+  C'est là qu'il sert : « + nouvelle » ne crée pas de brouillon — celui-ci
+  n'existe qu'au premier fragment, document ou caractère —, donc la liste ne
+  peut pas le montrer. Le panneau, lui, est vert dès l'ouverture et le reste
+  jusqu'au premier contenu : plus de dictée lancée dans la note de la veille.
 
 ## 2026-11-19 — Dictée : un fragment manquant ne bloque plus la suite
 

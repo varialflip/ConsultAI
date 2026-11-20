@@ -4167,6 +4167,35 @@
     [$('btnClearTranscript'), $('btnClearTranscriptMobile')].forEach((el) => {
       if (el) el.disabled = busy || Boolean(pipeline.failed);
     });
+
+    refreshEmptyNoteCue();
+  }
+
+  /**
+   * Repère « note vide » : le panneau Note prend un fond vert clair tant que
+   * rien n'y a été déposé — ni audio, ni document, ni texte.
+   *
+   * C'est le garde-fou contre la dictée dans le brouillon de la veille : la
+   * couleur dit « ici, tu pars de zéro », et s'efface dès le premier fragment,
+   * le premier document ou le premier caractère. Même règle que ``is_empty``
+   * côté serveur (app/main.py), mais évaluée sur l'état de travail — qui
+   * existe AVANT le brouillon, celui-ci n'étant créé qu'au premier contenu,
+   * donc absent de la liste des brouillons tant qu'on n'a rien déposé.
+   */
+  function refreshEmptyNoteCue() {
+    const panneau = $('paneNote');
+    if (!panneau) return;
+    const pendingDocuments = $('documentsPending')
+      && !$('documentsPending').classList.contains('hidden');
+    const vide = !$('transcript').value.trim()
+      && !(Boolean(state.consultationId) && state.recordingsCount > 0)
+      && !(state.documents || []).length
+      && !$('markdownEditor').value.trim()
+      && !pendingDocuments
+      && !recordingBusy()
+      && !state.importing;
+    panneau.classList.toggle('bg-emerald-50', vide);
+    panneau.classList.toggle('bg-white', !vide);
   }
 
   /**
@@ -9855,6 +9884,9 @@
     $('tabEdit').addEventListener('click', showEditor);
 
     $('markdownEditor').addEventListener('input', scheduleSave);
+    // La frappe à la main fait aussi sortir la note de « vide » : le repère
+    // vert doit s'effacer au premier caractère, sans attendre une génération.
+    $('markdownEditor').addEventListener('input', refreshEmptyNoteCue);
     Object.values(META_ELEMENTS).forEach((id) => {
       $(id).addEventListener('input', scheduleSave);
     });

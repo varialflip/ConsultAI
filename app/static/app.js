@@ -4183,8 +4183,6 @@
    * donc absent de la liste des brouillons tant qu'on n'a rien déposé.
    */
   function refreshEmptyNoteCue() {
-    const panneau = $('paneNote');
-    if (!panneau) return;
     const pendingDocuments = $('documentsPending')
       && !$('documentsPending').classList.contains('hidden');
     const vide = !$('transcript').value.trim()
@@ -4194,8 +4192,16 @@
       && !pendingDocuments
       && !recordingBusy()
       && !state.importing;
-    panneau.classList.toggle('bg-emerald-50', vide);
-    panneau.classList.toggle('bg-white', !vide);
+    // Les DEUX panneaux : sur mobile un seul est visible à la fois, et c'est
+    // « Dictée » qui s'ouvre par défaut — teinter la seule note ne montrait
+    // rien à l'écran au moment de lancer l'enregistrement. Le repère suit donc
+    // l'état de la note, pas le panneau qu'on regarde.
+    ['paneNote', 'paneDictee'].forEach((id) => {
+      const panneau = $(id);
+      if (!panneau) return;
+      panneau.classList.toggle('bg-emerald-50', vide);
+      panneau.classList.toggle('bg-white', !vide);
+    });
   }
 
   /**

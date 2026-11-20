@@ -2,6 +2,21 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-20 — Brouillons : le vert clair signale une ligne vraiment vide
+
+*Deux brouillons du même gabarit se ressemblent trait pour trait dans « Mes
+brouillons ». Ouvrir celui de la veille et y dicter une consultation entière
+ne se voit qu'après coup.*
+
+- La liste porte désormais `is_empty`, décidé par le serveur : statut
+  **`brouillon`**, et **ni audio, ni document, ni texte**. Une seule règle,
+  calculée en deux compteurs groupés pour toute la page.
+- Ces lignes s'affichent sur un **fond vert clair** ; le survol est neutralisé
+  pour que la couleur reste lisible. « Abandonnée » garde son rouge pâle.
+  Infobulle : « Brouillon vide — ni audio, ni document, ni texte ».
+- Un brouillon qui a reçu ne serait-ce qu'un PDF, quelques secondes d'audio ou
+  un texte reste sur le fond normal.
+
 ## 2026-11-19 — Dictée : un fragment manquant ne bloque plus la suite
 
 *Le serveur n'accepte qu'une suite continue de numéros ; le client réessayait

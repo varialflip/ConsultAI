@@ -1228,6 +1228,11 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
         "Raison de consultation non précisée",
         "Reason for consultation not specified",
     ),
+    # Infobulle de la ligne verte : un brouillon qui n'a encore rien reçu.
+    "drafts.empty_hint": (
+        "Brouillon vide — ni audio, ni document, ni texte",
+        "Empty draft — no audio, no document, no text",
+    ),
     # Statut affiché dans la liste des brouillons. Les valeurs en base sont
     # sans accent (« genere », « finalise ») : on affiche le libellé, jamais la
     # valeur brute.

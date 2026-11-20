@@ -5311,7 +5311,10 @@
    */
   function renderDraftItem(draft) {
     const item = document.createElement('li');
-    item.className = 'px-5 py-3 border-b border-slate-100 hover:bg-slate-50 transition '
+    // Le survol est posé plus bas : une ligne qui porte déjà une couleur
+    // d'état (vert « vide », rouge « abandonnée ») ne doit pas virer au gris
+    // sous le curseur.
+    item.className = 'px-5 py-3 border-b border-slate-100 transition '
       + 'flex items-start gap-3';
 
     const name = draft.reason || draft.title || T('drafts.unnamed_patient');
@@ -5339,7 +5342,16 @@
       </button>
     `;
     if (draft.status === 'abandonnee') {
-      item.classList.add('bg-red-50/50');
+      item.classList.add('bg-red-50/50', 'hover:bg-slate-50');
+    } else if (draft.is_empty) {
+      // Vert clair : brouillon réellement vide (ni audio, ni document, ni
+      // texte). Le repère distingue d'un coup d'œil la note qu'on vient
+      // d'ouvrir de celle où l'on a déjà dicté — et de la ligne abandonnée,
+      // qui reste rouge pâle.
+      item.classList.add('bg-emerald-50');
+      item.title = T('drafts.empty_hint');
+    } else {
+      item.classList.add('hover:bg-slate-50');
     }
     return item;
   }

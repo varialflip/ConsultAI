@@ -71,7 +71,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
 from markupsafe import Markup
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -3869,8 +3869,44 @@ def list_consultations(
         .limit(limit)
     ).all()
     retention_hours = int(runtime_config.value_float("consultation_retention_hours", 12.0))
+
+    # « Vraiment vide » : la ligne n'a ni audio, ni document, ni texte — on
+    # vient de la créer et rien n'y a encore été déposé. L'interface s'en sert
+    # pour peindre la ligne en vert clair (app/static/app.js), ce qui évite de
+    # dicter dans un brouillon resté ouvert la veille en croyant dicter dans
+    # une note neuve. La règle vit ici, pas dans l'interface : deux compteurs
+    # groupés suffisent pour toute la page.
+    ids = [row.id for row in rows]
+    documents_par_brouillon = dict(
+        db.execute(
+            select(Document.consultation_id, func.count())
+            .where(Document.consultation_id.in_(ids))
+            .group_by(Document.consultation_id)
+        ).all()
+    ) if ids else {}
+    audios_par_brouillon = dict(
+        db.execute(
+            select(Recording.consultation_id, func.count())
+            .where(Recording.consultation_id.in_(ids))
+            .group_by(Recording.consultation_id)
+        ).all()
+    ) if ids else {}
+
+    consultations = []
+    for row in rows:
+        data = row.to_dict(include_body=False)
+        data["is_empty"] = bool(
+            row.status == "brouillon"
+            and not (row.audio_seconds or 0)
+            and not audios_par_brouillon.get(row.id)
+            and not documents_par_brouillon.get(row.id)
+            and not (row.raw_transcript or "").strip()
+            and not (row.generated_markdown or "").strip()
+        )
+        consultations.append(data)
+
     return {
-        "consultations": [row.to_dict(include_body=False) for row in rows],
+        "consultations": consultations,
         "retention_hours": retention_hours,
     }
 

@@ -2,6 +2,33 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-20 — Documents : la liste se lit, et le scan ne fournit que des antécédents
+
+*Un DSQ photographié était recopié ligne par ligne : « En att » passait pour un
+médicament courant, une délivrance ancienne pour un traitement actif, et les
+diagnostics d'une vieille consultation atterrissaient dans l'Impression — ou
+devenaient des maladies révolues.*
+
+- **Pages envoyées à la note** (`gemini_note_pages`) : le message qui les
+  accompagne porte maintenant les règles de lecture d'un DSQ — seule la colonne
+  « Dernière délivrance » fait date (« Ord. » n'est ni un début ni un arrêt),
+  « En att » n'est ni un médicament courant ni un arrêt, deux lignes du même
+  médicament n'en font qu'une, une ligne qui n'est plus couverte s'écrit en une
+  phrase « Non renouvelés : … (date) », un cours avec sa fin imprimée est
+  terminé, et plusieurs listes se tranchent par la date.
+- **Un document du dossier ne remplit jamais l'Impression ni le Plan** : il
+  décrit ce qui précède la rencontre. Un diagnostic qui y est imprimé est un
+  problème CONNU — aux antécédents, au présent et daté, jamais « résolu »,
+  « guéri » ni « antécédent de » quand le document ne le dit pas. L'ancienneté
+  du document ne le rend jamais résolu.
+- **En-tête du DSQ** : le médecin de famille et son numéro de pratique sont
+  recueillis comme tels (`family_doctor`) ; une clinique GAP imprimée en plus
+  reste une clinique (`prescriber`, type `clinique`) et n'évince plus le médecin
+  nommé.
+- Consigne générale FR de l'instance de test remise au défaut livré : le
+  paragraphe « noms déformés » n'y figure plus deux fois, et la règle « aucun
+  changement purement typographique signalé » est rétablie.
+
 ## 2026-11-20 — Brouillons : le vert clair signale une ligne vraiment vide
 
 *Deux brouillons du même gabarit se ressemblent trait pour trait dans « Mes

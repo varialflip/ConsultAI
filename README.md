@@ -1587,6 +1587,19 @@ est dans la barre d'outils, à gauche du micro.
 par élément pour l'historique, le laboratoire et l'imagerie) → on dicte → on
 génère la note.
 
+**Ce que la note en fait.** Un document du dossier remplit sa rubrique —
+médicaments, antécédents, résultats, imagerie — et **jamais l'Impression ni le
+Plan** : il décrit ce qui précède la rencontre. Une consultation ou un résumé de
+séjour photographié ne fournit donc que des **antécédents** : ses diagnostics
+s'écrivent au présent, datés par l'année du document, et ne deviennent
+« résolus » que si la page le dit. Une liste de médicaments imprimée se **lit** :
+seule la colonne « Dernière délivrance » fait date, « En att » n'est ni un
+traitement courant ni un arrêt, deux lignes du même médicament n'en font qu'une,
+et une ligne qui n'est plus couverte s'écrit en une phrase « Non renouvelés :
+… (date) » après la liste. L'en-tête du DSQ donne le **médecin de famille et son
+numéro de pratique** ; une clinique GAP imprimée en plus reste une clinique et
+n'évince jamais le médecin nommé.
+
 **Plusieurs pages, sans rouvrir la caméra.** Le bouton caméra ouvre un
 **aperçu intégré** (`getUserMedia`) : un seul flux, autant de prises qu'on veut,
 chacune ajoutée à la file ; une croix retire une prise pour la reprendre. La

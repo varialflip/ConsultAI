@@ -152,18 +152,20 @@ dossier et les coordonnées ne sont PAS du contenu clinique : ne les extrais \
 pas comme élément, ne les recopie nulle part. L'application ne collecte pas \
 l'identité du patient.
 
-**EXCEPTION — le prescripteur.** Le médecin ou la clinique imprimés en tête de \
-la liste de médicaments (« Groupe méd. : », « P.L. », en-tête de clinique) \
-sont utiles : recueille-les dans ``prescriber`` — ``name``, ``license`` (le \
-numéro imprimé près du nom, souvent suivi de « M.D. ») et ``type`` \
-(``medecin`` ou ``clinique``). Si c'est une clinique, ``name`` est son nom \
-suivi de « (GAP) ». Le nom du patient, lui, reste interdit.
+**EXCEPTION — le médecin de famille et la clinique GAP.** L'en-tête de la \
+liste de médicaments (« Groupe méd. : », « P.L. », en-tête de clinique) porte \
+le MÉDECIN DE FAMILLE et son numéro de pratique : recueille ce nom tel \
+qu'imprimé dans ``family_doctor``, avec le numéro dans ``license``. Un DSQ \
+peut imprimer EN PLUS une clinique GAP (« Clinique … (GAP) ») : elle va dans \
+``prescriber``, ``type`` = ``clinique``, son nom suivi de « (GAP) ». Ne les \
+confonds pas — une clinique n'est jamais le médecin de famille, et un médecin \
+nommé ne devient jamais une clinique. Le nom du patient reste interdit.
 
 **Le médecin de famille NOMMÉ.** Quand un document nomme explicitement le \
 médecin de famille (« MDF : », « Médecin de famille : », « Médecin \
-traitant : »), recueille-le dans ``family_doctor``, mêmes champs que \
-``prescriber``. C'est lui qui fait foi, même si un autre document n'imprime \
-qu'une clinique « (GAP) » ou aucun médecin.
+traitant : »), recueille-le aussi dans ``family_doctor`` — nom imprimé et \
+numéro de pratique. C'est lui qui fait foi ; une clinique « (GAP) » n'est \
+jamais un nom de médecin.
 
 ## 4. TRANSCRIPTION FIDÈLE
 Transcris ce qui est IMPRIMÉ, sans corriger, sans compléter, sans traduire. \
@@ -208,10 +210,14 @@ de vie quotidienne (AVQ, AVD, habitudes, situation de vie) — celles-là vont e
 ``other``. Un constat d'examen rattaché à un problème reste UN item, et un \
 problème cité deux fois n'en fait qu'un, celui qui en dit le plus.
 
-Dans une ``consultation`` ou un ``resume_discharge``, les diagnostics de \
-l'impression (ou de la conclusion) sont des ANTÉCÉDENTS : ils précèdent la \
-rencontre d'aujourd'hui. Le plan, les recommandations et les prescriptions \
-n'en sont pas.
+Dans une ``consultation`` ou un ``resume_discharge``, un diagnostic de \
+l'impression (ou de la conclusion) est un PROBLÈME CONNU du patient : il \
+figure dans les antécédents, jamais dans l'impression ni dans le plan de la \
+note d'aujourd'hui — un document du dossier ne décrit que ce qui précède la \
+rencontre. Rédige-le au présent, daté par l'année du document (« connue pour \
+une maladie d'Alzheimer depuis 2024 »), et ne le présente comme résolu, guéri \
+ou remplacé que si le document le dit. Le plan, les recommandations et les \
+prescriptions d'un document ne s'extraient pas.
 
 **labs** — un item par analyte : ``text``, ``fields`` = {``analyte``, \
 ``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \
@@ -400,12 +406,19 @@ number and contact details are NOT clinical content: do not extract them as \
 items and do not copy them anywhere. The application does not collect patient \
 identity.
 
-**EXCEPTION — the prescriber.** The physician or clinic printed at the top of \
-the medication list ("Groupe méd. :", "P.L.", clinic letterhead) is useful: \
-collect it in ``prescriber`` — ``name``, ``license`` (the number printed next \
-to the name, often followed by "M.D.") and ``type`` (``medecin`` or \
-``clinique``). If it is a clinic, ``name`` is its name followed by "(GAP)". \
-The patient's name, however, remains forbidden.
+**EXCEPTION — the family physician and the GAP clinic.** The header of the \
+medication list ("Groupe méd. :", "P.L.", clinic letterhead) carries the \
+FAMILY PHYSICIAN and their practice number: record that name as printed in \
+``family_doctor``, with the number in ``license``. A DSQ may ALSO print a GAP \
+clinic ("Clinique … (GAP)"): it goes in ``prescriber``, ``type`` = \
+``clinique``, its name followed by "(GAP)". Never confuse the two — a clinic \
+is never the family physician, and a named physician never becomes a clinic. \
+The patient's name remains forbidden.
+
+**The NAMED family physician.** When a document explicitly names the family \
+physician ("MDF :", "Médecin de famille :", "Médecin traitant :"), record \
+that too in ``family_doctor`` — printed name and practice number. It takes \
+precedence; a "(GAP)" clinic is never a physician's name.
 
 ## 4. FAITHFUL TRANSCRIPTION
 Transcribe what is PRINTED, without correcting, completing or translating. An \
@@ -448,9 +461,13 @@ identifier, a section heading, or daily-life data (ADL, IADL, habits, living \
 situation) — those go to ``other``. An examination finding attached to a \
 problem stays ONE item, and a problem stated twice is one item, the fuller one.
 
-In a ``consultation`` or a ``resume_discharge``, the diagnoses of the \
-impression (or conclusion) are HISTORY: they precede today's encounter. The \
-plan, recommendations and prescriptions are not.
+In a ``consultation`` or a ``resume_discharge``, a diagnosis from the \
+impression (or conclusion) is a KNOWN PROBLEM of the patient: it belongs in \
+past medical history, never in today's impression or plan — a dossier document \
+only describes what precedes the encounter. Write it in the present, dated by \
+the document's year ("known to have Alzheimer disease since 2024"), and \
+present it as resolved, cured or superseded only if the document says so. The \
+plan, recommendations and prescriptions of a document are not extracted.
 
 **labs** — one item per analyte: ``text``, ``fields`` = {``analyte``, \
 ``value``, ``unit``, ``reference``, ``flag``, ``date``, ``pertinence``}. \

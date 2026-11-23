@@ -2,6 +2,24 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-23 — Documents : « Mettre en forme » ne réclame plus de dictée en mode pages
+
+*Une consultation bâtie sur un PDF — 12 pages de CT et d'angioscan — refusait
+de partir : « La transcription est vide : rien à mettre en forme », alors que
+la note avait tout ce qu'il fallait.*
+
+- **Mode « Envoyer les pages à la note »** : les pages jointes comptent
+  désormais comme source au même titre que la dictée, l'audio ou le bloc de
+  texte relu. Le garde-fou de génération ne regarde plus seulement
+  `documents_block`, vidé par construction dans ce mode — le PDF partait bien
+  au modèle, mais l'appel était refusé avant.
+- Les pages ne comptent que pour un fournisseur qui sait les lire (Gemini) :
+  avec un autre fournisseur, elles ne partent pas et la génération reste
+  refusée quand il n'y a rien d'autre.
+- Côté écran, « Mettre en forme » s'active sur la seule présence d'un document
+  quand ce mode est effectif (`llm_note_pages` dans `/api/config`) : plus de
+  message « cochez des éléments de documents » alors que rien ne se coche.
+
 ## 2026-11-20 — Documents : la liste se lit, et le scan ne fournit que des antécédents
 
 *Un DSQ photographié était recopié ligne par ligne : « En att » passait pour un

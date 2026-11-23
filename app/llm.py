@@ -586,6 +586,13 @@ def active_provider() -> str:
 #: reste (panneau, dictée, génération).
 _AUDIO_CAPABLE_PROVIDERS = ("gemini", "qwen_omni", "custom", "openrouter")
 
+#: Fournisseurs qui savent lire un document tel quel (PDF ou image joint à la
+#: requête). Gemini est le seul aujourd'hui : les autres ne reçoivent que le
+#: bloc de texte relu, donc des pages jointes n'y sont PAS une source — voir
+#: ``generate_note``/``generate_note_stream``, qui refusent une génération sans
+#: aucune source réelle.
+_DOCUMENT_CAPABLE_PROVIDERS = ("gemini",)
+
 
 def audio_settings(provider: Optional[str] = None) -> Dict[str, object]:
     """
@@ -3025,10 +3032,24 @@ def generate_note_stream(
     opts = audio_settings(provider)
     transcript_clean = (transcript or "").strip()
     audio_only = opts["bypass_stt"] and audio is not None
+    # Les pages d'un document ne partent que vers un fournisseur qui sait les
+    # lire (Gemini) : ailleurs elles sont ignorées par ``complete_stream`` et
+    # ne constituent donc pas une source.
+    documents_to_send = (
+        documents if (documents and provider in _DOCUMENT_CAPABLE_PROVIDERS) else None
+    )
     # Des documents seuls suffisent : c'est le cas « photos prises pendant la
     # revue du dossier, dictée pas encore faite ». Refuser ici obligerait à
-    # dicter pour rien.
-    if not transcript_clean and not audio_only and not (documents_block or "").strip():
+    # dicter pour rien. Les pages jointes comptent comme source au même titre
+    # que le bloc de texte relu — en mode « Envoyer les pages à la note »,
+    # ``documents_block`` est vide par construction, alors que le modèle
+    # reçoit bel et bien le dossier.
+    if (
+        not transcript_clean
+        and not audio_only
+        and not (documents_block or "").strip()
+        and not documents_to_send
+    ):
         raise GenerationError("La transcription est vide : rien à mettre en forme.")
 
     model_name = model or active_model()
@@ -3065,7 +3086,7 @@ def generate_note_stream(
             conf_map=conf_map,
         ),
         documents_block=documents_block,
-        documents_pages=bool(documents),
+        documents_pages=bool(documents_to_send),
     )
     if audio_to_send is not None:
         if audio_only:
@@ -3118,7 +3139,7 @@ def generate_note_stream(
             max_tokens=budget,
             provider=provider,
             audio=audio_to_send,
-            documents=documents,
+            documents=documents_to_send,
             on_stream_started=on_stream_started,
             on_thought=on_thought,
         )
@@ -3650,10 +3671,24 @@ def generate_note(
     opts = audio_settings(provider)
     transcript_clean = (transcript or "").strip()
     audio_only = opts["bypass_stt"] and audio is not None
+    # Les pages d'un document ne partent que vers un fournisseur qui sait les
+    # lire (Gemini) : ailleurs elles sont ignorées par ``complete`` et ne
+    # constituent donc pas une source.
+    documents_to_send = (
+        documents if (documents and provider in _DOCUMENT_CAPABLE_PROVIDERS) else None
+    )
     # Des documents seuls suffisent : c'est le cas « photos prises pendant la
     # revue du dossier, dictée pas encore faite ». Refuser ici obligerait à
-    # dicter pour rien.
-    if not transcript_clean and not audio_only and not (documents_block or "").strip():
+    # dicter pour rien. Les pages jointes comptent comme source au même titre
+    # que le bloc de texte relu — en mode « Envoyer les pages à la note »,
+    # ``documents_block`` est vide par construction, alors que le modèle
+    # reçoit bel et bien le dossier.
+    if (
+        not transcript_clean
+        and not audio_only
+        and not (documents_block or "").strip()
+        and not documents_to_send
+    ):
         raise GenerationError("La transcription est vide : rien à mettre en forme.")
 
     model_name = model or active_model()
@@ -3692,6 +3727,7 @@ def generate_note(
             langue,
         ),
         documents_block=documents_block,
+        documents_pages=bool(documents_to_send),
     )
 
     if audio_to_send is not None:
@@ -3712,7 +3748,7 @@ def generate_note(
         max_tokens=settings.gemini_max_output_tokens,
         provider=provider,
         audio=audio_to_send,
-        documents=documents,
+        documents=documents_to_send,
     )
     elapsed_seconds = time.monotonic() - t0
 

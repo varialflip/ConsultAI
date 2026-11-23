@@ -1004,6 +1004,10 @@
     // peut s'activer sans transcription, voir updateActionButtons().
     llmBypassStt: false,
     llmBypassSttKeepTranscript: false,
+    // « Envoyer les pages à la note » : un document joint suffit à générer,
+    // rien n'est coché — voir documentsReady(). Effectif seulement quand le
+    // fournisseur sait lire les pages (le serveur le décide).
+    llmNotePages: false,
     // « Validation » : préférence usager (serveur), capacité du fournisseur.
     secondPass: false,
     verificationCapable: true,
@@ -4108,8 +4112,13 @@
    * documents seuls suffisent à générer une note (revue du dossier avant la
    * dictée) : on regarde ce qui entrera réellement dans la note, pas la simple
    * présence d'un fichier.
+   *
+   * Exception : « Envoyer les pages à la note » (Gemini). Là, le PDF part tel
+   * quel et rien n'est coché — un document joint est donc une source à lui
+   * seul, comme le dit le serveur (voir _note_pages_on dans main.py).
    */
   function documentsReady() {
+    if (state.llmNotePages && (state.documents || []).length) return true;
     return (state.documents || []).some((doc) => {
       const extraction = doc.extraction || {};
       const items = extraction.items || [];
@@ -7793,6 +7802,7 @@
     state.isAdmin = Boolean(config.is_admin);
     state.llmBypassStt = Boolean(config.llm_bypass_stt);
     state.llmBypassSttKeepTranscript = Boolean(config.llm_bypass_stt_keep_transcript);
+    state.llmNotePages = Boolean(config.llm_note_pages);
     // « Validation » : capable = fournisseur audio ; interrupteur GLOBAL du
     // panneau d'administration (plus de bascule par usager).
     state.verificationCapable = Boolean(config.verification_capable);

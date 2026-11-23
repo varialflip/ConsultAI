@@ -1533,6 +1533,10 @@ async def api_config(request: Request):
         # generateNote côté app.js.
         "llm_bypass_stt": audio_opts["bypass_stt"],
         "llm_bypass_stt_keep_transcript": audio_opts["keep_transcript"],
+        # « Envoyer les pages à la note » : actif ET fournisseur capable de
+        # lire un PDF. Le client s'en sert pour activer « Mettre en forme » sur
+        # un dossier dont rien n'est encore coché (voir documentsReady).
+        "llm_note_pages": _note_pages_on(),
         "gemini_backend": "vertex" if settings.gemini_use_vertex else "api_key",
         # « Validation » : capable (fournisseur audio) et interrupteur GLOBAL
         # du panneau (plus de préférence par usager).
@@ -3517,8 +3521,7 @@ async def api_generate(
     # relit la note. Réservé à Gemini, seul fournisseur qui lit un PDF.
     documents_block = _documents_context(db, payload.consultation_id, template_row.language)
     documents_pieces: List[Tuple[bytes, str]] = []
-    if (runtime_config.value("gemini_note_pages") == "true"
-            and llm.active_provider() == "gemini"):
+    if _note_pages_on():
         documents_pieces = _documents_attachments(db, payload.consultation_id)
         if documents_pieces:
             documents_block = ""
@@ -4323,6 +4326,21 @@ def _refresh_med_merge(db: Session, consultation: Consultation) -> None:
 #: Limite d'envoi « en ligne » d'une requête Gemini : au-delà, le service
 #: refuse la pièce jointe. Marge gardée sous les 20 Mo documentés.
 MAX_PAGES_INLINE = 15 * 1024 * 1024
+
+
+def _note_pages_on() -> bool:
+    """
+    « Envoyer les pages à la note » effectivement actif.
+
+    Le réglage seul ne suffit pas : les pages ne partent que vers un
+    fournisseur qui sait les lire (Gemini). Ailleurs, la note reste bâtie sur
+    le bloc de texte relu — et le client ne doit pas croire qu'un document
+    joint suffit à générer.
+    """
+    return (
+        runtime_config.value("gemini_note_pages") == "true"
+        and llm.active_provider() == "gemini"
+    )
 
 
 def _documents_attachments(db: Session, consultation_id: Optional[int]) -> List[Tuple[bytes, str]]:

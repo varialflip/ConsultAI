@@ -4501,32 +4501,27 @@ def _documents_context(
         "do NOT put them in the current list. Write them in ONE sentence, "
         "right after the last line of the list (before any closing sentence "
         "from the template), in this order, with the date in parentheses "
-        "(\"pending\" when the status says so): \"Not renewed: "
-        "cyclobenzaprine (2025-10-02), dimenhydrinate (2025-12-17).\" No "
-        "judgement: never \"stopped\", never \"probably discontinued\"."
+        "(\"pending\" when the status says so). No judgement: never "
+        "\"stopped\", never \"probably discontinued\"."
         if anglais else
         "Lignes dont la DERNIÈRE DÉLIVRANCE est ancienne, ou qui n'ont jamais "
         "été délivrées : ne les mets PAS dans la liste courante. Écris-les en "
         "UNE seule phrase, juste après la dernière ligne de la liste (avant "
         "toute phrase de clôture du gabarit), dans cet ordre, avec la date "
-        "entre parenthèses (« en attente » quand le statut le dit) : « Non "
-        "renouvelés : cyclobenzaprine (2025-10-02), dimenhydrinate "
-        "(2025-12-17). » Aucun jugement : jamais « cessé », jamais "
-        "« probablement arrêté »."
+        "entre parenthèses (« en attente » quand le statut le dit). Aucun "
+        "jugement : jamais « cessé », jamais « probablement arrêté »."
     )
     #: Prescrit mais jamais délivré (« En att » sans date de délivrance) : ce
     #: n'est ni un arrêt ni un renouvellement manqué — la ligne n'a simplement
     #: pas encore été servie.
     entete_en_attente = (
         "Lines PRESCRIBED BUT NOT DISPENSED YET (status \"En att\", no recent "
-        "dispensation): do NOT put them in the current list. Write them "
-        "in ONE sentence right after the list: \"Awaiting dispensation: "
-        "polyethylene glycol 3350.\""
+        "dispensation): do NOT put them in the current list. Write them in ONE "
+        "separate sentence right after the list, the name alone."
         if anglais else
         "Lignes PRESCRITES MAIS PAS ENCORE DÉLIVRÉES (statut « En att », sans "
         "délivrance récente) : ne les mets PAS dans la liste courante. "
-        "Écris-les en UNE phrase juste après la liste : « En attente de "
-        "délivrance : polyéthylène glycol 3350. »"
+        "Écris-les en UNE phrase distincte juste après la liste, le nom seul."
     )
     #: Plusieurs listes (DSQ + séjour en cours) : la liste d'hospitalisation
     #: est la référence, les écarts s'écrivent en prose.

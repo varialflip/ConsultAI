@@ -17,6 +17,13 @@ nom, pourtant connu.*
   lui est destiné ») et ne donne **aucun libellé d'exemple** — un exemple dans
   un prompt est une donnée que le modèle peut recopier sans qu'on puisse le
   repérer.
+- Même nettoyage dans les blocs voisins qui portaient des valeurs
+  illustratives : « Non renouvelés : cyclobenzaprine (2025-10-02) »,
+  « En attente de délivrance : polyéthylène glycol 3350 », « pour 7 jours »,
+  « terminé le 22 juin 2026 » sont remplacés par la règle de forme (le nom,
+  puis sa date entre parenthèses, dans l'ordre de la liste). Les noms de
+  colonnes imprimés sur le DSQ et les statuts qu'il contient restent, eux :
+  ce sont des faits du document, pas des exemples.
 - Si la dictée nomme explicitement un autre médecin de famille, la dictée
   l'emporte : un seul nom, jamais deux.
 - « Validation » et la revue clinique reçoivent le même en-tête : le nom, absent

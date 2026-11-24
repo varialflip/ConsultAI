@@ -1768,6 +1768,20 @@ médecin de famille, la dictée l'emporte — un seul nom. En mode texte (pages 
 envoyées), le médecin connu de la lecture accompagne le bloc de documents :
 là, ce bloc est la lecture elle-même.
 
+**Le statut des documents se règle dans la consigne système, une fois.**
+Lorsqu'elle est écrite pour une dictée seule, la règle de la dernière passe —
+« un élément qui ne figure pas dans la dictée est retiré » — fait de chaque
+fait venu des pages une invention à retirer, et le message utilisateur devait
+le démentir à chaque bloc. Quand des pages accompagnent la requête, la
+consigne système porte donc un dernier paragraphe qui délimite son champ : les
+documents du dossier sont des sources, et la règle s'entend de la dictée **et**
+des documents. C'est ce qui a permis de ramener le bloc des pages de 3 090 à
+2 016 caractères (message utilisateur : 8 905 → 7 831). La règle de dose y est
+énoncée une fois : la dose écrite est celle **prise** à chaque administration —
+la fraction ou le nombre pris multiplie la force du comprimé, les unités prises
+ensemble s'additionnent, et la posologie imprimée fait foi sur la dose comme sur
+la voie.
+
 **Rétention.** Les documents s'effacent avec le brouillon — suppression
 manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers
 sans ligne correspondante tourne à chaque purge. `DOCUMENTS_DIR` (défaut

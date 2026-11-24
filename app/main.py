@@ -3240,16 +3240,7 @@ async def api_generate(
         and runtime_config.value("second_pass_enabled") == "true"
     )
 
-    # Consigne système partagée entre la mise en forme et l'audit « Validation »
-    # (la MÊME chaîne, pour que [consigne système + audio] soit un préfixe
-    # commun réutilisé par le cache implicite de Gemini — voir CHANGELOG
-    # 2026-08-27).
     langue = i18n.normalize(template_row.language or runtime_config.language())
-    system_prompt = llm.build_system_prompt(
-        template_row.system_instructions,
-        runtime_config.general_prompt(langue),
-        langue,
-    )
 
     active_provider = llm.active_provider()
     audio_opts = llm.audio_settings(active_provider)
@@ -3531,6 +3522,20 @@ async def api_generate(
                 "Note : %d page(s) jointe(s) au lieu du bloc de texte (%d octets)",
                 len(documents_pieces), sum(len(d) for d, _ in documents_pieces),
             )
+
+    # Consigne système partagée entre la mise en forme et l'audit « Validation »
+    # (la MÊME chaîne, pour que [consigne système + audio] soit un préfixe
+    # commun réutilisé par le cache implicite de Gemini — voir CHANGELOG
+    # 2026-08-27). Quand des pages accompagnent la requête, elle porte un
+    # dernier paragraphe qui délimite la règle « ce qui ne figure pas dans la
+    # dictée est retiré » : les documents en font partie. C'est ce cadrage qui
+    # dispense le message utilisateur de le démentir à chaque bloc.
+    system_prompt = llm.build_system_prompt(
+        template_row.system_instructions,
+        runtime_config.general_prompt(langue),
+        langue,
+        documents=bool(documents_pieces),
+    )
 
     try:
         result = await run_in_threadpool(

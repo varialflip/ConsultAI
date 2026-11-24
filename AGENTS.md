@@ -140,8 +140,16 @@ même commit** :
   recopier tel quel dans la note, et qu'aucun contrôle ne rattrape ensuite. On
   désigne la cible par sa fonction (« le champ du gabarit qui lui est
   destiné ») et on laisse le gabarit, ou le bloc de faits, porter les valeurs ;
-  les faits (`ENTETE_DOSSIER`, médicaments, documents) restent dans des blocs
+  les faits (bloc de documents, consigne d'en-tête) restent dans des blocs
   séparés, jamais mêlés à la consigne.
+- **Une consigne contradictoire se recadre, elle ne se dément pas** (2026-11-24,
+  `build_system_prompt(documents=True)`) : quand une règle de la consigne
+  générale est écrite pour un cas qui n'est plus le cas (documents joints vs
+  dictée seule), la correction va dans le prompt système, en dernier, sous
+  forme de délimitation de champ — jamais dans le message utilisateur sous
+  forme d'exceptions répétées. Le bloc de pages avait atteint 3 090 caractères
+  pour compenser trois fois la même règle ; il en fait 2 016 depuis. Un test
+  plafonne sa taille (`tests/test_family_doctor_prompt.py`).
 - L'identité du patient (nom, numéro de dossier) n'est **ni collectée ni
   stockée** (dénominalisation) : toute extraction de métadonnées ou champ de
   gabarit doit le respecter (`{{PATIENT}}` / `{{DOSSIER}}` conservés pour la

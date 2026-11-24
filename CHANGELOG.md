@@ -2,6 +2,33 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-24 — Pages jointes : le statut des documents se règle dans la consigne, pas en la démentant
+
+*Une note bâtie sur un DSQ donnait « Amitriptyline 10 mg po hs » là où la
+posologie imprimée dit un demi-comprimé de 10 mg — 5 mg. Le prompt des pages
+s'allongeait d'une exception à chaque erreur : 3 090 caractères pour 8 règles,
+et la dernière ajoutée n'avait rien corrigé.*
+
+- **La consigne système délimite la règle, une fois.** Quand des pages
+  accompagnent la requête, elle porte un dernier paragraphe : les documents du
+  dossier font partie des sources, et « ce qui ne figure pas dans la dictée est
+  retiré » s'entend de la dictée ET des documents. C'est ce paragraphe qui
+  remplace les trois démentis que le message utilisateur devait répéter.
+- **Le bloc des pages est ramené de 3 090 à 2 016 caractères** : en-tête du
+  médecin de famille, règle d'Impression/Plan, et les huit règles de lecture
+  du DSQ, sans les rappels de provenance. Le message utilisateur passe de
+  8 905 à 7 831 caractères (12 431 jetons au total, contre 12 564).
+- **La dose écrite est celle PRISE** : la fraction ou le nombre pris multiplie
+  la force du comprimé, les unités prises ensemble s'additionnent, et la
+  posologie imprimée fait foi sur la dose comme sur la voie.
+- Vérifié sur la même page, même gabarit, même dictée : « Amitriptyline 5 mg
+  po HS » (au lieu de 10 mg), « Duloxetine 90 mg po die (1x 60 mg + 1x
+  30 mg) » (au lieu de 60 mg), et le champ du médecin de famille rempli depuis
+  l'en-tête imprimé, sans aucune donnée venue de la lecture.
+- Test de non-régression : `tests/test_family_doctor_prompt.py` — cadre
+  présent avec les documents, absent sans eux, placé en dernier, et bloc de
+  pages plafonné à 2 300 caractères.
+
 ## 2026-11-24 — Médecin de famille : la note le lit sur la page, pas dans la lecture
 
 *Le DSQ imprime le médecin de famille, et la note le perdait : le champ du

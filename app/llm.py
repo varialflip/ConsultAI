@@ -59,6 +59,7 @@ def build_system_prompt(
     template_instructions: str,
     general_prompt: str = "",
     language: Optional[str] = None,
+    documents: bool = False,
 ) -> str:
     """
     Assemble les deux niveaux de consignes, du plus spécifique au plus impératif.
@@ -70,6 +71,13 @@ def build_system_prompt(
     prompt, après celles du gabarit : elle doit l'emporter sur un gabarit
     qu'on n'a pas forcément pensé à mettre à jour, ou qui contredirait par
     erreur une règle censée s'appliquer à toutes les notes.
+
+    ``documents`` — des pages du dossier accompagnent la requête : le prompt
+    porte alors un dernier paragraphe qui DÉLIMITE le champ de la règle
+    « un élément qui ne figure pas dans la dictée est retiré ». Sans lui, cette
+    règle — écrite pour une dictée seule — faisait de chaque fait venu des
+    pages une invention à retirer, et le message utilisateur devait le
+    démentir trois fois (bloc de pages, en-tête, liste de médicaments).
 
     Les gabarits et la consigne générale sont recopiés **tels quels**, dans la
     langue où le médecin les a écrits. C'est voulu : ce sont ses textes, et un
@@ -87,12 +95,26 @@ def build_system_prompt(
             "CONSIGNES GÉNÉRALES DU MÉDECIN — PRIORITAIRES",
             "Elles s'appliquent à toutes les notes. En cas de contradiction "
             "avec ce qui précède, ce sont elles qui font foi.",
+            "CHAMP DES CONSIGNES CI-DESSUS",
+            "Les documents du dossier joints à cette requête font partie des "
+            "sources. Ce qu'ils portent — médicament, dose, date, antécédent, "
+            "résultat, en-tête imprimé — est un fait du dossier, jamais une "
+            "invention. La règle qui exige qu'un élément figure dans la dictée "
+            "s'entend donc de la dictée ET des documents joints : seul ce qui "
+            "ne figure ni dans l'une ni dans les autres est retiré.",
         ),
         "en": (
             "INSTRUCTIONS SPECIFIC TO THE SELECTED TEMPLATE",
             "THE PHYSICIAN'S GENERAL INSTRUCTIONS — THESE TAKE PRECEDENCE",
             "They apply to every note. In case of conflict with anything "
             "above, these prevail.",
+            "SCOPE OF THE INSTRUCTIONS ABOVE",
+            "The dossier documents attached to this request are sources. What "
+            "they carry — medication, dose, date, history, result, printed "
+            "header — is a fact of the dossier, never an invention. The rule "
+            "requiring an item to appear in the dictation therefore means the "
+            "dictation AND the attached documents: only what appears in "
+            "neither is removed.",
         ),
     }[langue]
 
@@ -113,6 +135,14 @@ def build_system_prompt(
             "===========================================================\n"
             f"{en_tete[2]}\n"
             f"{general}\n"
+        )
+
+    if documents:
+        parts.append(
+            "===========================================================\n"
+            f"{en_tete[3]}\n"
+            "===========================================================\n"
+            f"{en_tete[4]}\n"
         )
 
     return "\n".join(parts)
@@ -168,22 +198,14 @@ _USER_PROMPT_LABELS = {
             "établie à partir des documents."
         ),
         "documents_pages": (
-            "LES PAGES CI-JOINTES SONT LES DOCUMENTS DU DOSSIER — lues sur "
-            "des photographies et des PDF pendant la revue du dossier. Ce ne "
-            "sont PAS des données inventées : elles ne figurent pas dans la "
-            "dictée et doivent pourtant paraître dans la note, fidèlement, "
-            "dans la rubrique correspondante (médicaments, antécédents, "
-            "résultats, imagerie). Recopie-les comme elles sont imprimées, "
+            "LES PAGES CI-JOINTES SONT LES DOCUMENTS DU DOSSIER — place dans "
+            "la rubrique correspondante ce qu'elles portent, tel qu'imprimé, "
             "sans rien ajouter.\n"
-            "EN-TÊTE IMPRIMÉ — quand ces pages nomment le médecin de famille "
-            "avec son numéro de pratique, écris-les dans le champ du gabarit "
-            "prévu pour le médecin de famille, numéro compris : ce fait vient "
-            "de la page, il ne figure pas dans la dictée et n'est pas une "
-            "invention. Si la dictée nomme explicitement un autre médecin de "
-            "famille pour cette consultation, la dictée l'emporte : un seul "
-            "nom. Une clinique reste une clinique et ne devient jamais un "
-            "médecin nommé. Le champ du gabarit ne disparaît pas : il porte "
-            "ce nom.\n"
+            "L'EN-TÊTE IMPRIMÉ nomme le médecin de famille et son numéro de "
+            "pratique : écris-les dans le champ du gabarit prévu pour lui. Si "
+            "la dictée nomme explicitement un autre médecin de famille, la "
+            "dictée l'emporte : un seul nom. Une clinique reste une "
+            "clinique.\n"
             "Un document du dossier ne remplit JAMAIS l'Impression ni le "
             "Plan : il décrit ce qui précède la rencontre. Un diagnostic lu "
             "dans une consultation ou un résumé de séjour est un problème "
@@ -193,33 +215,28 @@ _USER_PROMPT_LABELS = {
             "résolu.\n"
             "LISTE DE MÉDICAMENTS IMPRIMÉE (DSQ) — elle se LIT, elle ne se "
             "recopie pas :\n"
-            "- Seule la colonne « Dernière délivrance » fait date. La "
-            "colonne « Ord. » est la date de l'ordonnance : ni un début ni un "
-            "arrêt. Une ligne sans « Dernière délivrance » n'a pas été "
+            "- La dose écrite est celle PRISE à chaque administration : la "
+            "fraction ou le nombre pris multiplie la force du comprimé ou de "
+            "la capsule, et les unités prises ensemble s'additionnent. La "
+            "posologie imprimée fait foi sur la dose comme sur la voie.\n"
+            "- Seule « Dernière délivrance » fait date ; « Ord. » n'est ni un "
+            "début ni un arrêt ; une ligne qui n'en porte aucune n'a pas été "
             "servie.\n"
-            "- « En att » = prescrit, pas encore délivré : ni un médicament "
-            "courant, ni un arrêt. Une délivrance récente de la même ligne "
-            "l'emporte toujours sur ce statut. « Cessé » et « Refusé » sont "
-            "des arrêts.\n"
-            "- Deux lignes du même médicament (deux codes, deux "
-            "conditionnements, une page qui recouvre la précédente) = UN "
-            "seul médicament : garde la délivrance la plus récente, avec sa "
-            "posologie.\n"
-            "- Une ligne dont la dernière délivrance ne couvre plus le délai "
-            "— quantité délivrée insuffisante pour les unités par jour et "
-            "les jours écoulés — ou qui n'a jamais été délivrée ne s'écrit "
-            "PAS dans la liste courante. Mets-la en UNE phrase après la "
-            "liste : le nom, puis sa date entre parenthèses, dans l'ordre de "
-            "la liste. Jamais « cessé », jamais « probablement arrêté ».\n"
-            "- Prescrit mais jamais délivré (« En att » sans délivrance) → "
-            "UNE phrase distincte après la liste, le nom seul.\n"
-            "- Un cours dont la fin est imprimée sur le document est "
-            "terminé : ce n'est pas une ordonnance non renouvelée.\n"
-            "- Plusieurs listes (deux DSQ, ou DSQ et liste du séjour en "
-            "cours) : celle qui s'applique aujourd'hui est la plus récente "
-            "par sa date, ou la liste de l'hospitalisation en cours. Écris "
-            "ensuite en prose, sans titre ni énumération, ce qui diffère de "
-            "l'autre : ajouté, cessé, dose changée."
+            "- « En att » : prescrit, pas délivré — ni un médicament courant "
+            "ni un arrêt ; une délivrance récente l'emporte. « Cessé » et "
+            "« Refusé » sont des arrêts.\n"
+            "- Deux lignes du même médicament = un seul médicament : la "
+            "délivrance la plus récente, avec sa posologie.\n"
+            "- Couverture insuffisante pour le délai écoulé, ou jamais "
+            "délivrée : hors de la liste courante, en une phrase après elle — "
+            "le nom, puis la date entre parenthèses. Jamais « cessé ».\n"
+            "- Prescrit mais jamais délivré : une phrase distincte après la "
+            "liste, le nom seul.\n"
+            "- Fin de cours imprimée = cours terminé, pas une ordonnance non "
+            "renouvelée.\n"
+            "- Plusieurs listes : celle qui s'applique aujourd'hui est la plus "
+            "récente par sa date, ou celle de l'hospitalisation en cours ; les "
+            "écarts s'écrivent en prose, sans titre ni énumération."
         ),
         "documents": (
             "DOCUMENTS FOURNIS PAR LE MÉDECIN — lus sur des photographies et "
@@ -281,21 +298,13 @@ _USER_PROMPT_LABELS = {
             "it: this note is built from the documents."
         ),
         "documents_pages": (
-            "THE ATTACHED PAGES ARE THE DOSSIER'S DOCUMENTS — read from "
-            "photographs and PDFs during chart review. They are NOT invented "
-            "data: they do not appear in the dictation and yet must appear in "
-            "the note, faithfully, under the matching heading (medications, "
-            "history, results, imaging). Copy them as printed, adding "
-            "nothing.\n"
-            "PRINTED HEADER — when these pages name the family physician with "
-            "their practice number, write them into the layout field meant for "
-            "the family physician, number included: that fact comes from the "
-            "page, it does not appear in the dictation and is not an "
-            "invention. If the dictation explicitly names another family "
-            "physician for this consultation, the dictation prevails: one "
-            "name. A clinic stays a clinic and never becomes a named "
-            "physician. The layout field does not disappear: it carries this "
-            "name.\n"
+            "THE ATTACHED PAGES ARE THE DOSSIER'S DOCUMENTS — put what they "
+            "carry under the matching heading, as printed, adding nothing.\n"
+            "THE PRINTED HEADER names the family physician and their practice "
+            "number: write them into the layout field meant for the family "
+            "physician. If the dictation explicitly names another family "
+            "physician, the dictation prevails: one name. A clinic stays a "
+            "clinic.\n"
             "A dossier document NEVER fills the Impression or the Plan: it "
             "describes what precedes the encounter. A diagnosis read in a "
             "consultation or discharge summary is a KNOWN problem — it goes "
@@ -303,33 +312,27 @@ _USER_PROMPT_LABELS = {
             "\"resolved\", \"cured\" or \"history of\" when the document does "
             "not say so; the age of the document never makes it resolved.\n"
             "PRINTED MEDICATION LIST (DSQ) — it is READ, not copied:\n"
-            "- Only the \"Dernière délivrance\" (last dispensed) column is a "
-            "date. The \"Ord.\" column is the prescription date: neither a "
-            "start nor a stop. A line with no \"Dernière délivrance\" was "
-            "never dispensed.\n"
-            "- \"En att\" = prescribed, not yet dispensed: neither a current "
-            "medication nor a stop. A recent dispensation on the same line "
-            "always outweighs that status. \"Cessé\" and \"Refusé\" are "
-            "stops.\n"
-            "- Two lines for the same medication (two codes, two package "
-            "sizes, one page overlaying another) = ONE medication: keep the "
-            "most recent dispensation and its dosage.\n"
-            "- A line whose last dispensation no longer covers the interval "
-            "— quantity dispensed insufficient for the units per day and the "
-            "elapsed days — or that was never dispensed is NOT written in the "
-            "current list. Put it in ONE sentence after the list: the name, "
-            "then its date in parentheses, in the list's order. Never "
-            "\"stopped\", never \"probably discontinued\".\n"
-            "- Prescribed but never dispensed (\"En att\" with no "
-            "dispensation) → ONE separate sentence after the list, the name "
-            "alone.\n"
-            "- A course whose end is printed on the document is finished: it "
-            "is not an unrenewed prescription.\n"
-            "- Several lists (two DSQs, or a DSQ and the current inpatient "
-            "list): the one that applies today is the most recent by date, or "
-            "the current inpatient list. Then state in prose, no heading and "
-            "no bullets, what differs from the other: added, stopped, dose "
-            "changed."
+            "- The dose written is the one TAKEN at each administration: the "
+            "fraction or number taken multiplies the tablet's or capsule's "
+            "strength, and units taken together add up. The printed "
+            "directions prevail over the dose as over the route.\n"
+            "- Only \"Dernière délivrance\" is a date; \"Ord.\" is neither a "
+            "start nor a stop; a line carrying neither was never dispensed.\n"
+            "- \"En att\": prescribed, not dispensed — neither a current "
+            "medication nor a stop; a recent dispensation outweighs it. "
+            "\"Cessé\" and \"Refusé\" are stops.\n"
+            "- Two lines for the same medication = ONE medication: the most "
+            "recent dispensation, with its dosage.\n"
+            "- Coverage short of the elapsed interval, or never dispensed: "
+            "outside the current list, in one sentence after it — the name, "
+            "then the date in parentheses. Never \"stopped\".\n"
+            "- Prescribed but never dispensed: a separate sentence after the "
+            "list, the name alone.\n"
+            "- Printed course end = finished course, not an unrenewed "
+            "prescription.\n"
+            "- Several lists: the one that applies today is the most recent by "
+            "date, or the current inpatient list; differences are stated in "
+            "prose, no heading and no bullets."
         ),
         "documents": (
             "DOCUMENTS SUPPLIED BY THE PHYSICIAN — read from photographs and "

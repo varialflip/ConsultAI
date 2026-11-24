@@ -2,6 +2,28 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-24 — Médecin de famille du DSQ : il arrive à la note, dans tous les modes
+
+*Le DSQ imprime le médecin de famille, l'application le résout — et la note le
+perdait : le champ « Médecin de famille » du gabarit disparaissait du document.
+Sur les brouillons récents, 5 notes sur 6 bâties sur un DSQ n'avaient pas le
+nom, pourtant connu.*
+
+- **L'en-tête du dossier part séparément du bloc de documents.** Ce bloc est
+  vidé par « Envoyer les pages à la note » : le nom du médecin n'avait alors
+  plus aucun chemin vers le modèle. Il accompagne maintenant **toutes** les
+  générations, pages jointes ou texte relu, dictée ou non.
+- La consigne désigne le champ **par sa fonction** (« le champ du gabarit qui
+  lui est destiné ») et ne donne **aucun libellé d'exemple** — un exemple dans
+  un prompt est une donnée que le modèle peut recopier sans qu'on puisse le
+  repérer.
+- Si la dictée nomme explicitement un autre médecin de famille, la dictée
+  l'emporte : un seul nom, jamais deux.
+- « Validation » et la revue clinique reçoivent le même en-tête : le nom, absent
+  de la dictée, ne leur est plus signalé comme une invention.
+- Test de non-régression : `tests/test_dossier_header.py` (en-tête présent en
+  mode pages et en dictée seule, absent sans médecin, consigne sans exemple).
+
 ## 2026-11-23 — Documents : « Mettre en forme » ne réclame plus de dictée en mode pages
 
 *Une consultation bâtie sur un PDF — 12 pages de CT et d'angioscan — refusait

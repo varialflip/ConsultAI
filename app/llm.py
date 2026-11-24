@@ -223,6 +223,19 @@ _USER_PROMPT_LABELS = {
             "fidèlement, dans la rubrique correspondante. Transcris-les telles "
             "quelles, sans les compléter ni les interpréter :"
         ),
+        "dossier": (
+            "ENTÊTE DU DOSSIER — lu sur les documents du dossier par "
+            "l'application elle-même : c'est un FAIT, pas une invention, et il "
+            "ne figure pas dans la dictée :"
+        ),
+        "dossier_field": (
+            "Écris ce médecin dans le champ du gabarit qui lui est destiné, "
+            "numéro de pratique compris. Si la dictée nomme explicitement un "
+            "autre médecin de famille pour cette consultation, la dictée "
+            "l'emporte : un seul nom. Une clinique reste une clinique et ne "
+            "devient jamais un médecin nommé. Le champ du gabarit ne disparaît "
+            "pas : il porte ce nom."
+        ),
         "closing": (
             "Produis maintenant la note clinique complète en Markdown, en "
             "respectant scrupuleusement la mise en page exigée et sans "
@@ -323,6 +336,19 @@ _USER_PROMPT_LABELS = {
             "and yet must appear in the note, faithfully, under the matching "
             "heading. Transcribe them as they are, without completing or "
             "interpreting them:"
+        ),
+        "dossier": (
+            "DOSSIER HEADER — read on the dossier's documents by the "
+            "application itself: this is a FACT, not an invention, and it does "
+            "not appear in the dictation:"
+        ),
+        "dossier_field": (
+            "Write this physician in the layout field meant for them, practice "
+            "number included. If the dictation explicitly names another family "
+            "physician for this consultation, the dictation prevails: one "
+            "name. A clinic stays a clinic and never becomes a named "
+            "physician. The layout field does not disappear: it carries this "
+            "name."
         ),
         "closing": (
             "Now produce the complete clinical note in Markdown, following the "
@@ -436,6 +462,7 @@ def build_user_prompt(
     geriatric_hints: Optional[List[dict]] = None,
     documents_block: str = "",
     documents_pages: bool = False,
+    dossier_block: str = "",
 ) -> str:
     """
     Assemble le message utilisateur.
@@ -511,6 +538,19 @@ def build_user_prompt(
     # bloc de texte est alors vide, et c'est la page qui porte le contenu.
     if documents_pages:
         parts.append(libelles["documents_pages"])
+
+    # En-tête du dossier (médecin de famille imprimé sur le DSQ), résolu par
+    # l'application et non par le modèle. Il part SÉPARÉMENT du bloc de texte :
+    # ce dernier est vidé en mode « Envoyer les pages à la note », et le nom du
+    # médecin disparaissait alors de la requête — la note le perdait.
+    if dossier_block.strip():
+        parts.append(
+            f"{libelles['dossier']}\n"
+            "<<<ENTETE_DOSSIER\n"
+            f"{dossier_block.strip()}\n"
+            "ENTETE_DOSSIER>>>\n"
+            f"{libelles['dossier_field']}"
+        )
 
     # Documents SANS dictée (photos prises pendant la revue du dossier, note
     # générée avant d'avoir dicté) : sans ce garde-fou, le modèle remplit les
@@ -3004,6 +3044,7 @@ def generate_note_stream(
     conf_map: Optional[dict] = None,
     documents_block: str = "",
     documents: Optional[List[Tuple[bytes, str]]] = None,
+    dossier_block: str = "",
 ):
     """
     Version en continu de ``generate_note``.
@@ -3087,6 +3128,7 @@ def generate_note_stream(
         ),
         documents_block=documents_block,
         documents_pages=bool(documents_to_send),
+        dossier_block=dossier_block,
     )
     if audio_to_send is not None:
         if audio_only:
@@ -3647,6 +3689,7 @@ def generate_note(
     med_hints: Optional[List[dict]] = None,
     documents_block: str = "",
     documents: Optional[List[Tuple[bytes, str]]] = None,
+    dossier_block: str = "",
 ) -> dict:
     """
     Met la transcription en forme et retourne
@@ -3728,6 +3771,7 @@ def generate_note(
         ),
         documents_block=documents_block,
         documents_pages=bool(documents_to_send),
+        dossier_block=dossier_block,
     )
 
     if audio_to_send is not None:

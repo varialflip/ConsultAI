@@ -2828,6 +2828,7 @@ def _generate_and_publish(
     conf_map: Optional[dict] = None,
     documents_block: str = "",
     documents: Optional[List[Tuple[bytes, str]]] = None,
+    dossier_block: str = "",
 ) -> dict:
     """
     Génère la note en continu et diffuse les morceaux en direct (SSE).
@@ -2906,6 +2907,7 @@ def _generate_and_publish(
         conf_map=conf_map,
         documents_block=documents_block,
         documents=documents,
+        dossier_block=dossier_block,
     )
 
     raw = ""
@@ -3044,7 +3046,7 @@ async def _run_second_pass(
         # la liste de médicaments du médecin serait signalée comme une
         # invention (elle n'est ni dans l'audio ni dans la transcription).
         with SessionLocal() as doc_db:
-            documents_block = _documents_context(doc_db, consultation_id, langue)
+            documents_block = _documents_audit_block(doc_db, consultation_id, langue)
         resultat, usage_passe = llm.verify_note_stream(
             note_markdown,
             langue=langue,
@@ -3154,7 +3156,7 @@ async def _run_clinical_review(
             })
 
         with SessionLocal() as doc_db:
-            documents_block = _documents_context(doc_db, consultation_id, langue)
+            documents_block = _documents_audit_block(doc_db, consultation_id, langue)
         resultat, usage_revue = llm.review_note_stream(
             note_markdown,
             langue=langue,
@@ -3516,10 +3518,13 @@ async def api_generate(
             logger.exception("Hints méds indisponibles — génération sans candidats")
 
     # Réglage « Envoyer les pages à la note » : le PDF part tel quel, et le
-    # bloc de texte n'est plus construit — ni liste relue, ni médecin de
-    # famille, ni écarts : ce que la page imprime fait foi, et le médecin
-    # relit la note. Réservé à Gemini, seul fournisseur qui lit un PDF.
+    # bloc de texte n'est plus construit — ni liste relue, ni écarts : ce que
+    # la page imprime fait foi, et le médecin relit la note. Réservé à Gemini,
+    # seul fournisseur qui lit un PDF. L'en-tête du dossier (médecin de
+    # famille) reste envoyé dans les deux modes : c'est un fait résolu ici, et
+    # en mode pages il n'a plus aucun autre chemin vers le modèle.
     documents_block = _documents_context(db, payload.consultation_id, template_row.language)
+    dossier_block = _dossier_header(db, payload.consultation_id, template_row.language)
     documents_pieces: List[Tuple[bytes, str]] = []
     if _note_pages_on():
         documents_pieces = _documents_attachments(db, payload.consultation_id)
@@ -3529,6 +3534,8 @@ async def api_generate(
                 "Note : %d page(s) jointe(s) au lieu du bloc de texte (%d octets)",
                 len(documents_pieces), sum(len(d) for d, _ in documents_pieces),
             )
+    if dossier_block:
+        logger.info("Note : en-tête du dossier envoyé (%s)", dossier_block.replace("\n", " | "))
 
     try:
         result = await run_in_threadpool(
@@ -3547,6 +3554,7 @@ async def api_generate(
             conf_map,
             documents_block,
             documents_pieces,
+            dossier_block,
         )
     except GenerationError as exc:
         logger.warning("Génération refusée pour %s : %s", user.username, exc)
@@ -4374,6 +4382,68 @@ def _documents_attachments(db: Session, consultation_id: Optional[int]) -> List[
     return pieces
 
 
+def _dossier_header(
+    db: Session, consultation_id: Optional[int], language: str = "fr"
+) -> str:
+    """
+    En-tête du dossier, en TEXTE, pour la génération de la note.
+
+    Le médecin de famille imprimé sur le DSQ est un FAIT que l'application a
+    déjà résolu (``_resoudre_medecin_famille``, médecin nommé > clinique, puis
+    document le plus récent). Il est envoyé à part du bloc de documents, en
+    permanence : ce bloc est vidé en mode « Envoyer les pages à la note », et
+    le nom du médecin disparaissait alors de la requête — la note le perdait,
+    alors que le gabarit porte un champ pour lui.
+
+    Aucun exemple de libellé n'est donné au modèle : le champ est désigné par
+    « celui qui lui est destiné », c'est le gabarit qui en porte le nom.
+    """
+    if not consultation_id:
+        return ""
+    medecin: dict = {}
+    brouillon = db.get(Consultation, consultation_id)
+    if brouillon is not None and brouillon.med_merged_json:
+        try:
+            fusion = json.loads(brouillon.med_merged_json) or {}
+        except ValueError:
+            fusion = {}
+        medecin = fusion.get("family_doctor") or {}
+    if not str(medecin.get("name") or "").strip():
+        # Données antérieures à la fusion (ou fusion jamais calculée) : la
+        # résolution se refait ici sur les lectures conservées.
+        extraits = []
+        for document in documents_service.for_consultation(db, consultation_id):
+            extraction_stockee = _stored_extraction(document)
+            if extraction_stockee:
+                extraits.append((document, extraction_stockee))
+        medecin = _resoudre_medecin_famille(extraits)
+    nom = str(medecin.get("name") or "").strip()
+    if not nom:
+        return ""
+    permis = str(medecin.get("license") or "").strip()
+    anglais = (language or "").strip().lower().startswith("en")
+    libelle = "Family physician" if anglais else "Médecin de famille"
+    ligne = f"{libelle} : {nom}"
+    if permis:
+        ligne += f" — {permis}"
+    return ligne
+
+
+def _documents_audit_block(
+    db: Session, consultation_id: Optional[int], language: str = "fr"
+) -> str:
+    """
+    Bloc de documents destiné aux relectures (« Validation », revue clinique).
+
+    Elles doivent voir l'en-tête du dossier comme la génération : sans lui,
+    le nom du médecin de famille — présent dans la note, absent de la dictée —
+    se ferait signaler comme une invention.
+    """
+    entete = _dossier_header(db, consultation_id, language)
+    corps = _documents_context(db, consultation_id, language)
+    return "\n\n".join(partie for partie in (entete, corps) if partie)
+
+
 def _documents_context(
     db: Session, consultation_id: Optional[int], language: str = "fr"
 ) -> str:
@@ -4415,13 +4485,6 @@ def _documents_context(
         "les règles du gabarit — aucun titre de catégorie ne s'écrit. "
         "L'ordre ci-dessous n'est qu'un défaut : l'ordre de préférence du "
         "GABARIT l'emporte."
-    )
-    entete_prescripteur = (
-        "Family physician printed on the document header (use it for the "
-        "family-physician field): {valeur}"
-        if anglais else
-        "Médecin de famille imprimé en tête du document (à utiliser pour le "
-        "champ du même nom) : {valeur}"
     )
     entete_divergences = (
         "Divergences with the other list (write them as prose right after the "
@@ -4491,17 +4554,9 @@ def _documents_context(
         except ValueError:
             fusion = {}
     reference_id = fusion.get("reference_id")
-    # Un seul médecin de famille pour la consultation : la fusion l'a résolu
-    # (médecin nommé > clinique, puis document le plus récent). Sans fusion
-    # (données antérieures), on retombe sur l'en-tête de chaque document.
-    medecin_famille = fusion.get("family_doctor") or {}
-    if str(medecin_famille.get("name") or "").strip():
-        nom = str(medecin_famille["name"]).strip()
-        permis = str(medecin_famille.get("license") or "").strip()
-        blocs.append(
-            entete_prescripteur.format(valeur=f"{nom} — permis {permis}" if permis else nom)
-        )
-        blocs.append("")
+    # Le médecin de famille n'est plus écrit ici : il part avec l'en-tête du
+    # dossier (``_dossier_header``), qui accompagne TOUTES les générations —
+    # y compris en mode « Envoyer les pages à la note », où ce bloc-ci est vidé.
     listes = 0
     for document in documents:
         stockee = _stored_extraction(document)
@@ -4515,15 +4570,6 @@ def _documents_context(
         if not extraction_stockee:
             continue
         _marquer_delais(extraction_stockee)
-        if not str(medecin_famille.get("name") or "").strip():
-            # Données antérieures à la résolution : on garde l'en-tête du
-            # document, faute de mieux.
-            prescripteur = extraction_stockee.get("prescriber") or {}
-            nom_prescripteur = str(prescripteur.get("name") or "").strip()
-            if nom_prescripteur:
-                permis = str(prescripteur.get("license") or "").strip()
-                valeur = f"{nom_prescripteur} — permis {permis}" if permis else nom_prescripteur
-                blocs.append(entete_prescripteur.format(valeur=valeur))
         items = extraction_stockee.get("items", [])
         par_id = {item.get("id"): item for item in items}
         # Liste réconciliée : une ligne dont TOUTES les sources sont décochées

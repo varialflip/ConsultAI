@@ -134,6 +134,14 @@ même commit** :
   `__version__` aligné dans le même commit.
 - La langue des commentaires et du code est le **français** ; les textes
   d'interface passent par `app/i18n.py` (fr / en).
+- **Aucun exemple dans les prompts** (2026-11-24) : une consigne envoyée au
+  modèle ne porte jamais de libellé illustratif (« Médecin de famille »,
+  « … (GAP) », « prénom nom »…). Un exemple est une donnée que le modèle peut
+  recopier tel quel dans la note, et qu'aucun contrôle ne rattrape ensuite. On
+  désigne la cible par sa fonction (« le champ du gabarit qui lui est
+  destiné ») et on laisse le gabarit, ou le bloc de faits, porter les valeurs ;
+  les faits (`ENTETE_DOSSIER`, médicaments, documents) restent dans des blocs
+  séparés, jamais mêlés à la consigne.
 - L'identité du patient (nom, numéro de dossier) n'est **ni collectée ni
   stockée** (dénominalisation) : toute extraction de métadonnées ou champ de
   gabarit doit le respecter (`{{PATIENT}}` / `{{DOSSIER}}` conservés pour la

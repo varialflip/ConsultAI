@@ -2,34 +2,34 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
-## 2026-11-24 — Médecin de famille du DSQ : il arrive à la note, dans tous les modes
+## 2026-11-24 — Médecin de famille : la note le lit sur la page, pas dans la lecture
 
-*Le DSQ imprime le médecin de famille, l'application le résout — et la note le
-perdait : le champ « Médecin de famille » du gabarit disparaissait du document.
-Sur les brouillons récents, 5 notes sur 6 bâties sur un DSQ n'avaient pas le
-nom, pourtant connu.*
+*Le DSQ imprime le médecin de famille, et la note le perdait : le champ du
+gabarit disparaissait du document. Sur les brouillons récents, 5 notes sur 6
+bâties sur un DSQ n'avaient pas le nom.*
 
-- **L'en-tête du dossier part séparément du bloc de documents.** Ce bloc est
-  vidé par « Envoyer les pages à la note » : le nom du médecin n'avait alors
-  plus aucun chemin vers le modèle. Il accompagne maintenant **toutes** les
-  générations, pages jointes ou texte relu, dictée ou non.
-- La consigne désigne le champ **par sa fonction** (« le champ du gabarit qui
-  lui est destiné ») et ne donne **aucun libellé d'exemple** — un exemple dans
-  un prompt est une donnée que le modèle peut recopier sans qu'on puisse le
-  repérer.
-- Même nettoyage dans les blocs voisins qui portaient des valeurs
-  illustratives : « Non renouvelés : cyclobenzaprine (2025-10-02) »,
-  « En attente de délivrance : polyéthylène glycol 3350 », « pour 7 jours »,
-  « terminé le 22 juin 2026 » sont remplacés par la règle de forme (le nom,
-  puis sa date entre parenthèses, dans l'ordre de la liste). Les noms de
-  colonnes imprimés sur le DSQ et les statuts qu'il contient restent, eux :
-  ce sont des faits du document, pas des exemples.
+- **La génération ne dépend pas de la lecture des documents.** En mode
+  « Envoyer les pages à la note », la consigne dit de lire l'en-tête imprimé et
+  d'en tirer le médecin de famille et son numéro de pratique. Elle ne transporte
+  aucune valeur : que la lecture des documents ait tourné, échoué ou jamais eu
+  lieu, la page suffit — c'était précisément le défaut, une note privée de son
+  en-tête parce qu'une passe AMONT n'avait pas fourni le nom.
+- En mode texte (pages non envoyées), le médecin connu de la lecture accompagne
+  le bloc de documents comme avant : là, ce bloc EST la lecture, il n'y a pas
+  d'autre source.
+- La consigne désigne le champ **par sa fonction** et ne donne **aucun libellé
+  d'exemple** — un exemple est une donnée que le modèle peut recopier sans
+  qu'on puisse la repérer.
 - Si la dictée nomme explicitement un autre médecin de famille, la dictée
   l'emporte : un seul nom, jamais deux.
-- « Validation » et la revue clinique reçoivent le même en-tête : le nom, absent
-  de la dictée, ne leur est plus signalé comme une invention.
-- Test de non-régression : `tests/test_dossier_header.py` (en-tête présent en
-  mode pages et en dictée seule, absent sans médecin, consigne sans exemple).
+- Même nettoyage des valeurs illustratives voisines (« Non renouvelés :
+  cyclobenzaprine (2025-10-02) », « En attente de délivrance : polyéthylène
+  glycol 3350 », « pour 7 jours », « terminé le 22 juin 2026 ») au profit de la
+  règle de forme. Les noms de colonnes du DSQ et ses statuts restent : ce sont
+  des faits du document, pas des exemples.
+- Test de non-régression : `tests/test_family_doctor_prompt.py` (consigne
+  présente avec les pages, absente en mode texte, sans valeur d'exemple, et
+  aucun paramètre d'en-tête à la génération).
 
 ## 2026-11-23 — Documents : « Mettre en forme » ne réclame plus de dictée en mode pages
 

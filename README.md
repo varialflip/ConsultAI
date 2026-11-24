@@ -1756,16 +1756,17 @@ rang égal le document le plus récent tranche. Le DSQ reste la réponse usuelle
 mais un médecin privé nommé dans une vieille consultation n'est plus effacé
 par un DSQ qui n'imprime qu'une clinique.
 
-**… et envoyé à la note dans les deux modes.** Ce nom part **hors du bloc de
-documents**, dans un en-tête de dossier qui accompagne toutes les générations :
-le bloc de texte est vidé par « Envoyer les pages à la note », et le médecin
-disparaissait alors de la requête — le gabarit gardait son champ « Médecin de
-famille », la note le perdait. La consigne ne nomme aucun libellé d'exemple
-(un exemple est une donnée que le modèle peut recopier) : elle désigne le champ
-par sa fonction et laisse le gabarit en porter le nom. Quand la dictée nomme
-explicitement un autre médecin de famille, la dictée l'emporte — un seul nom.
-Les relectures (« Validation », revue clinique) reçoivent le même en-tête, sinon
-elles signaleraient ce nom comme une invention.
+**… et lu sur la page, pas dans la lecture.** En mode « Envoyer les pages à la
+note », le médecin de famille est lu sur l'**en-tête imprimé** de la page : la
+consigne le demande, sans transporter aucune valeur. La note ne dépend donc pas
+de la passe de lecture des documents — celle-ci peut n'avoir jamais tourné,
+avoir échoué ou avoir laissé l'en-tête de côté, et le champ du gabarit restait
+vide. La consigne ne nomme aucun libellé d'exemple (un exemple est une donnée
+que le modèle peut recopier) : elle désigne le champ par sa fonction et laisse
+le gabarit en porter le nom. Quand la dictée nomme explicitement un autre
+médecin de famille, la dictée l'emporte — un seul nom. En mode texte (pages non
+envoyées), le médecin connu de la lecture accompagne le bloc de documents :
+là, ce bloc est la lecture elle-même.
 
 **Rétention.** Les documents s'effacent avec le brouillon — suppression
 manuelle et purge de rétention, fichiers compris ; un nettoyage des fichiers

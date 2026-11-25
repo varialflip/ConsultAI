@@ -572,7 +572,7 @@ cinq onglets :
 | Onglet | Contenu |
 |---|---|
 | Dictée | Service de reconnaissance vocale (sous-onglet par service : clé, modèle, langue), retrait des longues pauses, temps réel de la dictée (mode, VAD) |
-| Note | Modèle de langage (sous-onglet par fournisseur : clé, modèle, rapide, température, audio, raisonnement), consigne générale fr/en, affichage du raisonnement |
+| Note | Modèle de langage (sous-onglet par fournisseur : clé, modèle, rapide, température, audio, raisonnement), consigne générale fr/en, consigne des documents fr/en, affichage du raisonnement |
 | Comptes et accès | Inscription automatique, attributs du nom affiché et de l'avatar, comptes et groupes |
 | Données et sauvegarde | Purge des dossiers après délai, rotation des sauvegardes, export/import et restauration (§ 9) |
 | Statistiques | Usage et coûts par fournisseur |
@@ -970,7 +970,8 @@ est retirée du document.
 ### 7.5 La langue du gabarit pilote la chaîne
 
 Le champ **Langue** d'un gabarit n'est pas une étiquette : il décide des
-consignes envoyées au modèle, de la consigne générale employée, du code de
+consignes envoyées au modèle, de la consigne générale employée, de la consigne
+des documents employée, du code de
 langue transmis au service vocal, de l'envoi ou non du lexique francophone, et
 de la langue de rédaction de la note.
 
@@ -1599,6 +1600,15 @@ et une ligne qui n'est plus couverte s'écrit en une phrase « Non renouvelés :
 … (date) » après la liste. L'en-tête du DSQ donne le **médecin de famille et son
 numéro de pratique** ; une clinique GAP imprimée en plus reste une clinique et
 n'évince jamais le médecin nommé.
+
+**La consigne des pages se règle dans le panneau.** Le texte envoyé avec les
+pages — en-tête imprimé, Impression et Plan, lecture de la liste du DSQ — est
+une consigne par langue, éditable sous **Documents du dossier**
+(`documents_prompt_fr` / `documents_prompt_en`, défauts dans
+`app/default_prompts.py`). Vidée, elle retombe sur le texte livré ; la langue du
+gabarit décide de la version employée. Le mode sans pages (« Envoyer les pages à
+la note » désactivé) envoie un bloc de texte déjà relu et garde sa propre
+introduction, plus courte : les deux modes ne transportent pas le même contenu.
 
 **Plusieurs pages, sans rouvrir la caméra.** Le bouton caméra ouvre un
 **aperçu intégré** (`getUserMedia`) : un seul flux, autant de prises qu'on veut,

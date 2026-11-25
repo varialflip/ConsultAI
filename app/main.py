@@ -4496,8 +4496,8 @@ def _documents_context(
     # Le médecin de famille, quand il est connu de la lecture, accompagne le
     # bloc de texte : en mode « Envoyer les pages à la note » ce bloc est vidé,
     # mais les pages portent l'en-tête imprimé et la consigne y renvoie
-    # (voir llm, documents_pages) — la note n'est jamais tributaire d'une
-    # lecture qui n'aurait pas eu lieu.
+    # (voir la consigne des documents, runtime_config.documents_prompt) — la
+    # note n'est jamais tributaire d'une lecture qui n'aurait pas eu lieu.
     medecin_famille = fusion.get("family_doctor") or {}
     if str(medecin_famille.get("name") or "").strip():
         nom = str(medecin_famille["name"]).strip()

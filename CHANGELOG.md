@@ -2,6 +2,27 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-25 — La consigne des pages jointes se règle dans le panneau
+
+*Les règles de lecture des documents photographiés vivaient dans `app/llm.py` :
+quarante lignes de texte, en français et en anglais, qu'aucun réglage ne
+montrait. On les voyait à l'œuvre sans pouvoir les corriger.*
+
+- **Nouvelle section « Documents du dossier »** dans l'onglet Note : deux
+  consignes (`documents_prompt_fr` / `documents_prompt_en`), une par langue,
+  comme la consigne générale. La langue du gabarit décide de la version
+  employée ; vider le champ rétablit le texte livré.
+- **Défauts inchangés** : le texte est recopié à l'identique de `app/llm.py`
+  vers `app/default_prompts.py` (2 016 caractères en français, 1 898 en
+  anglais). Tant que le champ n'est pas modifié, la requête envoyée au modèle
+  est la même qu'avant.
+- **Seul le mode pages est concerné** (« Envoyer les pages à la note ») : le
+  bloc de texte relu garde sa propre introduction, plus courte, parce qu'il ne
+  transporte pas la page mais une lecture déjà réconciliée.
+- **Test de non-régression** : `tests/test_family_doctor_prompt.py` vérifie que
+  le texte réglé est bien celui qui part, et que les défauts restent sous le
+  plafond de taille.
+
 ## 2026-11-24 — Pages jointes : le statut des documents se règle dans la consigne, pas en la démentant
 
 *Une note bâtie sur un DSQ donnait « Amitriptyline 10 mg po hs » là où la

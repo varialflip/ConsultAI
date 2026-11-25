@@ -18,6 +18,14 @@ et la règle de la voix dictée vivent maintenant ICI, dans un champ que
 le panneau d'administration montre et laisse modifier. Rien ne doit rester
 invisible pour qui règle cette application.
 
+LA CONSIGNE DES PAGES JOINTES EST ICI AUSSI
+-------------------------------------------
+``DOCUMENTS_PROMPT_FR`` / ``DOCUMENTS_PROMPT_EN`` portent les règles envoyées
+avec les pages jointes (« Envoyer les pages à la note »), éditables dans le
+panneau sous « Documents du dossier ». Le bloc de texte relu garde sa propre
+consigne d'introduction, dans ``app/llm.py`` : les deux modes ne reçoivent pas
+le même contenu et ne peuvent pas partager le même texte.
+
 STRUCTURE (réécriture du 2026-08-24)
 ------------------------------------
 Les deux versions suivent la même structure, sections 0 à 6 : proportionnalité,
@@ -384,9 +392,102 @@ Always finish with the items-to-verify section, never omitted:
 - This section must never exceed in length the clinical body of the report; group further rather than adding explanations.
 """
 
+#: Consigne envoyée avec les PAGES jointes (« Envoyer les pages à la note »).
+#: Elle ne vaut que pour ce mode : le bloc de texte relu a sa propre
+#: introduction dans ``app/llm.py``, plus courte, parce qu'il ne transporte pas
+#: la page mais une lecture déjà réconciliée. Le texte est recopié tel quel
+#: dans la requête — d'où le soin à y porter : une valeur d'exemple y serait
+#: une donnée que le modèle peut recopier dans la note.
+DOCUMENTS_PROMPT_FR = (
+    "LES PAGES CI-JOINTES SONT LES DOCUMENTS DU DOSSIER — place dans "
+    "la rubrique correspondante ce qu'elles portent, tel qu'imprimé, "
+    "sans rien ajouter.\n"
+    "L'EN-TÊTE IMPRIMÉ nomme le médecin de famille et son numéro de "
+    "pratique : écris-les dans le champ du gabarit prévu pour lui. Si "
+    "la dictée nomme explicitement un autre médecin de famille, la "
+    "dictée l'emporte : un seul nom. Une clinique reste une "
+    "clinique.\n"
+    "Un document du dossier ne remplit JAMAIS l'Impression ni le "
+    "Plan : il décrit ce qui précède la rencontre. Un diagnostic lu "
+    "dans une consultation ou un résumé de séjour est un problème "
+    "CONNU — il va aux antécédents, au présent et daté, jamais "
+    "« résolu », « guéri » ni « antécédent de » quand le document ne "
+    "le dit pas ; l'ancienneté du document ne le rend jamais "
+    "résolu.\n"
+    "LISTE DE MÉDICAMENTS IMPRIMÉE (DSQ) — elle se LIT, elle ne se "
+    "recopie pas :\n"
+    "- La dose écrite est celle PRISE à chaque administration : la "
+    "fraction ou le nombre pris multiplie la force du comprimé ou de "
+    "la capsule, et les unités prises ensemble s'additionnent. La "
+    "posologie imprimée fait foi sur la dose comme sur la voie.\n"
+    "- Seule « Dernière délivrance » fait date ; « Ord. » n'est ni un "
+    "début ni un arrêt ; une ligne qui n'en porte aucune n'a pas été "
+    "servie.\n"
+    "- « En att » : prescrit, pas délivré — ni un médicament courant "
+    "ni un arrêt ; une délivrance récente l'emporte. « Cessé » et "
+    "« Refusé » sont des arrêts.\n"
+    "- Deux lignes du même médicament = un seul médicament : la "
+    "délivrance la plus récente, avec sa posologie.\n"
+    "- Couverture insuffisante pour le délai écoulé, ou jamais "
+    "délivrée : hors de la liste courante, en une phrase après elle — "
+    "le nom, puis la date entre parenthèses. Jamais « cessé ».\n"
+    "- Prescrit mais jamais délivré : une phrase distincte après la "
+    "liste, le nom seul.\n"
+    "- Fin de cours imprimée = cours terminé, pas une ordonnance non "
+    "renouvelée.\n"
+    "- Plusieurs listes : celle qui s'applique aujourd'hui est la plus "
+    "récente par sa date, ou celle de l'hospitalisation en cours ; les "
+    "écarts s'écrivent en prose, sans titre ni énumération."
+)
+
+DOCUMENTS_PROMPT_EN = (
+    "THE ATTACHED PAGES ARE THE DOSSIER'S DOCUMENTS — put what they "
+    "carry under the matching heading, as printed, adding nothing.\n"
+    "THE PRINTED HEADER names the family physician and their practice "
+    "number: write them into the layout field meant for the family "
+    "physician. If the dictation explicitly names another family "
+    "physician, the dictation prevails: one name. A clinic stays a "
+    "clinic.\n"
+    "A dossier document NEVER fills the Impression or the Plan: it "
+    "describes what precedes the encounter. A diagnosis read in a "
+    "consultation or discharge summary is a KNOWN problem — it goes "
+    "to past medical history, in the present and dated, never "
+    "\"resolved\", \"cured\" or \"history of\" when the document does "
+    "not say so; the age of the document never makes it resolved.\n"
+    "PRINTED MEDICATION LIST (DSQ) — it is READ, not copied:\n"
+    "- The dose written is the one TAKEN at each administration: the "
+    "fraction or number taken multiplies the tablet's or capsule's "
+    "strength, and units taken together add up. The printed "
+    "directions prevail over the dose as over the route.\n"
+    "- Only \"Dernière délivrance\" is a date; \"Ord.\" is neither a "
+    "start nor a stop; a line carrying neither was never dispensed.\n"
+    "- \"En att\": prescribed, not dispensed — neither a current "
+    "medication nor a stop; a recent dispensation outweighs it. "
+    "\"Cessé\" and \"Refusé\" are stops.\n"
+    "- Two lines for the same medication = ONE medication: the most "
+    "recent dispensation, with its dosage.\n"
+    "- Coverage short of the elapsed interval, or never dispensed: "
+    "outside the current list, in one sentence after it — the name, "
+    "then the date in parentheses. Never \"stopped\".\n"
+    "- Prescribed but never dispensed: a separate sentence after the "
+    "list, the name alone.\n"
+    "- Printed course end = finished course, not an unrenewed "
+    "prescription.\n"
+    "- Several lists: the one that applies today is the most recent by "
+    "date, or the current inpatient list; differences are stated in "
+    "prose, no heading and no bullets."
+)
+
 PROMPTS = {"fr": GENERAL_PROMPT_FR, "en": GENERAL_PROMPT_EN}
+
+DOCUMENT_PROMPTS = {"fr": DOCUMENTS_PROMPT_FR, "en": DOCUMENTS_PROMPT_EN}
 
 
 def general_prompt(language: str) -> str:
     """Consigne livrée pour la langue demandée, français par défaut."""
     return PROMPTS.get(language, GENERAL_PROMPT_FR)
+
+
+def documents_prompt(language: str) -> str:
+    """Consigne livrée des pages jointes, français par défaut."""
+    return DOCUMENT_PROMPTS.get(language, DOCUMENTS_PROMPT_FR)

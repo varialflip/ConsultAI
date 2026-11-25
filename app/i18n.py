@@ -1633,6 +1633,7 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "sect.silence": ("Retrait des pauses", "Pause trimming"),
     "sect.realtime": ("Temps réel", "Realtime"),
     "sect.prompts": ("Consigne générale", "General instruction"),
+    "sect.documents": ("Documents du dossier", "Dossier documents"),
     "sect.med_grounding": ("Correction des médicaments", "Medication correction"),
 
     # --- Textes partagés entre fournisseurs de modèle de langage -------------
@@ -2774,6 +2775,29 @@ _STRINGS: Dict[str, Tuple[str, str]] = {
     "set.general_prompt_en.label": (
         "Consigne générale (gabarits en anglais)",
         "General instruction (English templates)",
+    ),
+    "set.documents_prompt.help": (
+        "Envoyée avec les pages quand « Envoyer les pages à la note » est "
+        "actif, à la place de la consigne livrée : c'est ici que se règle la "
+        "lecture des documents photographiés (en-tête imprimé, Impression et "
+        "Plan, liste de médicaments). La langue du gabarit décide de la "
+        "version employée ; vider le champ rétablit la consigne livrée. Le "
+        "mode sans pages garde sa propre introduction.",
+        "Sent with the pages when “Send the pages to the note” is enabled, in "
+        "place of the delivered instruction: this is where the reading of "
+        "photographed documents is tuned (printed header, Impression and "
+        "Plan, medication list). The template's language decides which "
+        "version is used; clearing the field restores the delivered "
+        "instruction. The page-less mode keeps its own introduction.",
+    ),
+    # Une consigne par langue : les libellés se distinguent, l'aide est partagée.
+    "set.documents_prompt_fr.label": (
+        "Consigne des documents (gabarits en français)",
+        "Document instruction (French templates)",
+    ),
+    "set.documents_prompt_en.label": (
+        "Consigne des documents (gabarits en anglais)",
+        "Document instruction (English templates)",
     ),
     "choice.on": ("Activé", "Enabled"),
     "choice.off": ("Désactivé", "Disabled"),

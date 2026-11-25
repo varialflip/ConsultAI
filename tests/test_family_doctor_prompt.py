@@ -24,7 +24,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from app import llm
+from app import default_prompts, llm, runtime_config
 
 
 def _user_prompt(**kwargs) -> str:
@@ -43,15 +43,24 @@ class PagesPromptTest(unittest.TestCase):
         self.assertIn("médecin de famille", prompt)
 
     def test_bloc_pages_reste_court(self):
-        bloc = llm._USER_PROMPT_LABELS["fr"]["documents_pages"]
+        bloc = default_prompts.DOCUMENTS_PROMPT_FR
         self.assertLess(len(bloc), 2300, "le bloc de pages regonfle")
 
     def test_aucune_valeur_d_exemple(self):
         """Ni nom, ni numéro, ni libellé cité : une valeur d'exemple est une
         donnée que le modèle peut recopier dans la note."""
-        paragraphe = llm._USER_PROMPT_LABELS["fr"]["documents_pages"]
+        paragraphe = default_prompts.DOCUMENTS_PROMPT_FR
         for interdit in ("MABY", "GAP", "20387", "« Médecin", "prénom", "Dr ", "Dre "):
             self.assertNotIn(interdit, paragraphe)
+
+    def test_la_consigne_des_pages_vient_du_panneau(self):
+        """Le texte réglé dans « Documents du dossier » est celui qui part —
+        une constante du code ne doit pas reprendre la main."""
+        with mock.patch.object(
+            runtime_config, "documents_prompt", return_value="CONSIGNE RÉGLÉE"
+        ):
+            prompt = _user_prompt(documents_pages=True)
+        self.assertIn("CONSIGNE RÉGLÉE", prompt)
 
     def test_pas_d_entete_en_mode_texte(self):
         prompt = _user_prompt(

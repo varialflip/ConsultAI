@@ -892,6 +892,23 @@ SETTINGS: Tuple[Setting, ...] = (
         help_key="set.general_prompt.help", section="sect.prompts",
     ),
 
+    # --- Consigne des pages jointes -----------------------------------------
+    # Une consigne par langue, comme la consigne générale : la langue du
+    # GABARIT décide. Elle n'est envoyée qu'avec les pages (« Envoyer les
+    # pages à la note ») ; le bloc de texte relu garde sa propre introduction,
+    # dans llm.py, parce qu'il ne transporte pas la page mais une lecture
+    # déjà réconciliée.
+    Setting(
+        "documents_prompt_fr", "textarea", "group.note",
+        default=lambda: default_prompts.DOCUMENTS_PROMPT_FR,
+        help_key="set.documents_prompt.help", section="sect.documents",
+    ),
+    Setting(
+        "documents_prompt_en", "textarea", "group.note",
+        default=lambda: default_prompts.DOCUMENTS_PROMPT_EN,
+        help_key="set.documents_prompt.help", section="sect.documents",
+    ),
+
     # =========================================================================
     # --- Comptes et accès ----------------------------------------------------
     # =========================================================================
@@ -1058,6 +1075,18 @@ def general_prompt(language: str) -> str:
     prévue, sans détection automatique depuis l'audio ni depuis le texte.
     """
     cle = "general_prompt_en" if i18n.normalize(language) == "en" else "general_prompt_fr"
+    return value(cle)
+
+
+def documents_prompt(language: str) -> str:
+    """
+    Consigne des pages jointes pour la langue demandée.
+
+    Même règle que la consigne générale : la langue du GABARIT décide, jamais
+    la préférence d'interface. Vide en base = consigne livrée (``value``
+    retombe sur le défaut du module).
+    """
+    cle = "documents_prompt_en" if i18n.normalize(language) == "en" else "documents_prompt_fr"
     return value(cle)
 
 

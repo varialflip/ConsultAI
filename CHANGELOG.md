@@ -2,6 +2,23 @@
 
 Changements livrés, entrées datées. À maintenir à chaque version publiée
 
+## 2026-11-25 — « Texte simple » : les médicaments restent une liste, sans colonnes
+
+*Le bouton « Texte simple » avait hérité du rendu en deux colonnes de la
+rubrique Médicaments. Collé dans un champ qui n'aligne rien, ce rendu perd sa
+seconde colonne et brouille l'ordre de lecture : une liste de puces se lit
+toujours, des colonnes non.*
+
+- **Liste des médicaments linéaire** (`markdownToPlainText`) : les puces de la
+  rubrique « Médicaments » sortent une par ligne, dans l'ordre du modèle, sans
+  rembourrage ni espaces insécables. Le bouton « Aligné » conserve, lui, les
+  deux colonnes.
+- **Tableaux de médicaments** (« | Médicaments || ») : même traitement — une
+  puce par cellule pour une grille (lecture colonne par colonne, ordre du
+  gabarit) ou par rangée quand les colonnes sont des champs liés par « : ».
+- **Autres tableaux inchangés** : les résultats d'investigation gardent leur
+  alignement ASCII dans « Texte simple ».
+
 ## 2026-11-25 — La consigne des pages jointes se règle dans le panneau
 
 *Les règles de lecture des documents photographiés vivaient dans `app/llm.py` :

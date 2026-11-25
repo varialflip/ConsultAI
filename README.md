@@ -961,7 +961,7 @@ est retirée du document.
 | Bouton | Contenu |
 |---|---|
 | **Mise en forme** | HTML + texte, pour Word ou un DME qui accepte le HTML |
-| **Texte** | Texte seul, rendu linéaire simple (sections soulignées, tableaux en ASCII) |
+| **Texte** | Texte seul, rendu linéaire simple (sections soulignées, tableaux en ASCII ; la rubrique Médicaments reste une liste de puces, jamais des colonnes) |
 | **Aligné** | Texte seul avec listes alignées : puces et numérotées au retrait suspendu, numéros élargis à une colonne, indentation conservée en champ riche (espaces insécables) — idéal pour le dossier électronique. Les tableaux Markdown y sont rendus en liste pointée sur deux colonnes : un en-tête de rubrique (p. ex. « Médicaments ») est conservé en titre, et selon le tableau chaque cellule ou chaque rangée devient une puce |
 | **Markdown** | Le Markdown brut, tel qu'il est dans l'éditeur |
 

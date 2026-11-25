@@ -4716,8 +4716,12 @@
    *
    * Le cadre et les filets Unicode ont été retirés : mal rendus dans le
    * dossier médical.
+   *
+   * `enColonnes = false` donne la variante linéaire du « Texte simple » : une
+   * puce par médicament, sans colonnes (le champ de destination n'a pas de
+   * mise en forme et des colonnes n'y survivent pas).
    */
-  function renderBulletTable(rows) {
+  function renderBulletTable(rows, enColonnes = true) {
     if (!rows.length) return [];
     const entetes = (rows[0] || []).filter((c) => c && c.trim());
     //: Libellé unique ou répété → grille ; libellés distincts → rangées de champs.
@@ -4738,7 +4742,9 @@
         if (rangee) items.push(rangee);
       });
     }
-    const sortie = items.length ? renderMedsColumns(items) : [];
+    const sortie = !items.length
+      ? []
+      : enColonnes ? renderMedsColumns(items) : items.map((item) => `• ${item}`);
     if (!titre) return sortie;
     return [titre, '─'.repeat(Math.max(titre.length, 3)), ...sortie];
   }
@@ -4916,37 +4922,34 @@
    * Version « Texte » historique : listes sans alinéa renforcé, ni repli aligné
    * ni numérotées élargies — rendu linéaire simple (espaces ordinaires). C'est
    * le comportement d'origine ; la version alignée vit dans markdownToAligned.
+   *
+   * Les médicaments y restent une liste de puces, jamais des colonnes : le
+   * champ de destination ne porte aucune mise en forme et n'aligne rien. Les
+   * tableaux des autres rubriques (résultats) gardent leur alignement ASCII.
    */
   function markdownToPlainText(markdown) {
     const lignes = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
     const out = [];
     let tableau = [];
-    //: Cellules « Médicaments » en attente de mise en colonnes, et indicateur
-    //: de rubrique. On ne peut pas décider de l'alignement ligne à ligne : il
-    //: faut d'abord voir toute la liste pour la couper en deux moitiés.
-    const meds = [];
-    let inMeds = false;
 
     const viderTableau = () => {
       if (tableau.length) {
-        out.push(...renderPlainTable(tableau));
+        //: Un tableau de médicaments (en-tête « Médicaments ») redevient une
+        //: liste de puces : en texte simple, la rubrique ne tient pas en
+        //: colonnes. Un test sur l'en-tête suffit à le distinguer des tableaux
+        //: de résultats, qui gardent leur alignement.
+        const entetes = (tableau[0] || []).filter((c) => c && c.trim());
+        const meds = entetes.length > 0 && MEDS_HEADING_RE.test(entetes[0]);
+        out.push(...(meds ? renderBulletTable(tableau, false) : renderPlainTable(tableau)));
         tableau = [];
-      }
-    };
-
-    const viderMeds = () => {
-      if (meds.length) {
-        out.push(...renderMedsColumns(meds));
-        meds.length = 0;
       }
     };
 
     lignes.forEach((brute) => {
       const ligne = brute.replace(/\s+$/, '');
 
-      // --- Tableaux : accumulés puis alignés d'un bloc ---
+      // --- Tableaux : accumulés puis rendus d'un bloc ---
       if (/^\s*\|/.test(ligne)) {
-        viderMeds();
         if (!TABLE_SEPARATOR.test(ligne)) tableau.push(splitTableRow(ligne));
         return;
       }
@@ -4956,9 +4959,6 @@
       if (titre) {
         const niveau = titre[1].length;
         const texte = stripInlineMarkdown(titre[2]).replace(/[:\s]+$/, '');
-        viderMeds();
-        //: Rubrique « Médicaments » de niveau 2 → rendue sur deux colonnes.
-        inMeds = niveau === 2 && MEDS_HEADING_RE.test(texte);
         if (out.length) out.push('');
         if (niveau === 1) {
           out.push(texte, '═'.repeat(Math.max(texte.length, 3)));
@@ -4974,7 +4974,6 @@
 
       // --- Filet horizontal ---
       if (/^\s*([-*_])\1{2,}\s*$/.test(ligne)) {
-        viderMeds();
         out.push('', '─'.repeat(60), '');
         return;
       }
@@ -4983,20 +4982,11 @@
       const puce = ligne.match(/^(\s*)[-*+]\s+(.*)$/);
       if (puce) {
         const creux = '  '.repeat(Math.floor(puce[1].length / 2));
-        const contenu = stripInlineMarkdown(puce[2]);
-        if (inMeds && puce[1].length === 0) {
-          //: Puces de premier niveau de la rubrique : accumulées, elles seront
-          //: rendues deux par rangée (lecture verticale) à la fin de la rubrique.
-          meds.push(contenu);
-        } else {
-          if (inMeds) viderMeds();
-          out.push(`${creux}• ${contenu}`);
-        }
+        out.push(`${creux}• ${stripInlineMarkdown(puce[2])}`);
         return;
       }
       const numero = ligne.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
       if (numero) {
-        viderMeds();
         const creux = '  '.repeat(Math.floor(numero[1].length / 2));
         out.push(`${creux}${numero[2]}. ${stripInlineMarkdown(numero[3])}`);
         return;
@@ -5005,21 +4995,14 @@
       // --- Citation ---
       const citation = ligne.match(/^\s*>\s?(.*)$/);
       if (citation) {
-        viderMeds();
         out.push(`  | ${stripInlineMarkdown(citation[1])}`);
         return;
       }
 
-      //: Dans la rubrique Médicaments, les lignes vides ne coupent pas la
-      //: liste : on continue d'accumuler jusqu'au prochain contenu réel.
-      if (inMeds && ligne === '') return;
-
-      viderMeds();
       out.push(stripInlineMarkdown(ligne));
     });
 
     viderTableau();
-    viderMeds();
 
     // Deux sauts de ligne consécutifs au maximum : au-delà, le DME étire la
     // note sur des écrans inutiles.
